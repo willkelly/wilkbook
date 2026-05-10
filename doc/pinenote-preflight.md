@@ -263,6 +263,11 @@ load a kernel, DTB, initrd, and label-based root argument from a removable or
 already prepared experimental location, then boot once without changing the
 persistent environment.
 
+Before any temporary boot attempt, complete the backup and rescue checklist in
+`doc/pinenote-gate6-runbook.md`. Treat that runbook as the Gate 6 entry
+condition; it does not authorize flashing, repartitioning, bootloader writes, or
+persistent boot-selection changes.
+
 Safe manual principles:
 
 - Confirm the device edition, serial console, power recovery, and known-good

@@ -21,6 +21,8 @@ initial no-credentials, service-level D-Bus-free networking baseline.
   boot-bundle, and helper inspection scripts.
 - `doc/build-only-workflow.md` with the build-only workflow and safety notes.
 - `doc/pinenote-preflight.md` with the validation ladder and pass/fail gates.
+- `doc/pinenote-gate6-runbook.md` with the backup and rescue checklist before
+  any hardware-adjacent preflight.
 - `doc/pinenote-flavors.md` with flavor definitions and current size
   measurements.
 
