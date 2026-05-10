@@ -55,6 +55,27 @@ Existing backed-up artifacts:
 | `info.txt` | present in both copies | Partition map, kernel/cmdline, firmware listing, machine ID. |
 | `README.md`, `SHA256SUMS` | present in both copies | Backup explanation and hashes. |
 
+A read-only supplement also exists in both backup roots:
+
+- `/home/wkelly/pinenote-backup/2026-05-10`
+- `/mnt/nastyboy/main/wkelly/pinenote-backup/2026-05-10`
+
+The supplement fills the pre-Gate-6 gaps that were safe to fill from stock
+Debian over SSH. Both copies verify with their `SHA256SUMS`, and matching files
+have the same SHA-256 hashes and apparent sizes.
+
+Supplement artifacts:
+
+| File | Status | Notes |
+| --- | --- | --- |
+| `uboot_p1.img` | present in both copies | Full 64 MiB `uboot` partition, read-only backup. |
+| `logo_p4.img` | present in both copies | Full 64 MiB `logo` partition, read-only backup. |
+| `current-inventory.txt` | present in both copies | Current partition map, cmdline, VCOM, EBC, DRM/input, and service state. |
+| `dpkg-query.txt` | present in both copies | Stock Debian package inventory. |
+| `pinenote-dbus-introspection.txt` | present in both copies | `org.pinenote.ebc`, `.pen`, `.usb`, and `.misc` D-Bus API inventory. |
+| `service-units.txt` | present in both copies | Relevant stock systemd unit definitions. |
+| `ssh-host-keys.txt`, `ssh-host-key-fingerprints.txt` | present in both copies | Public SSH host keys/fingerprints only; no private keys or passwords. |
+
 ## Backup sufficiency checklist
 
 ### Must have before any reinstall or `os2` experiment
@@ -74,21 +95,27 @@ Existing backed-up artifacts:
 
 ### Should have before any reinstall or persistent slot work
 
-- Full raw backup of `uboot` (`/dev/mmcblk0p1`, 64 MiB), not only
-  `mmcblk0_first16M.img`.
-- Raw backup of `logo` (`/dev/mmcblk0p4`, 64 MiB).
+- Full raw backup of `uboot` (`/dev/mmcblk0p1`, 64 MiB): satisfied by
+  `2026-05-10/uboot_p1.img`.
+- Raw backup of `logo` (`/dev/mmcblk0p4`, 64 MiB): satisfied by
+  `2026-05-10/logo_p4.img`.
 - Inventory of stock Debian packages related to PineNote support, including:
   `pinenote-basic-support`, `pinenote-dbus-service`,
-  `pinenote-gnome-extension`, and the installed PineNote kernel packages.
+  `pinenote-gnome-extension`, and the installed PineNote kernel packages:
+  satisfied by `2026-05-10/dpkg-query.txt`.
 - Systemd service inventory for PineNote, D-Bus, NetworkManager, Bluetooth,
-  GDM, and SSH.
+  GDM, and SSH: satisfied by `2026-05-10/current-inventory.txt` and
+  `2026-05-10/service-units.txt`.
 - D-Bus introspection output for `org.pinenote.ebc`, `org.pinenote.pen`,
-  `org.pinenote.usb`, and `org.pinenote.misc`.
-- EBC module parameter dump from `/sys/module/rockchip_ebc/parameters`.
+  `org.pinenote.usb`, and `org.pinenote.misc`: satisfied by
+  `2026-05-10/pinenote-dbus-introspection.txt`.
+- EBC module parameter dump from `/sys/module/rockchip_ebc/parameters`:
+  satisfied by `2026-05-10/current-inventory.txt`.
 - DRM and input-device inventory, including `card0-DPI-1` mode and pen/touch
-  device names.
+  device names: satisfied by `2026-05-10/current-inventory.txt`.
 - SSH access note with hostname/IP, username, and host-key fingerprint. Do not
-  store private keys or passwords in this repository.
+  store private keys or passwords in this repository. Public host keys and
+  fingerprints are in the 2026-05-10 supplement.
 
 ### Optional but useful
 
