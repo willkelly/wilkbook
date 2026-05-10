@@ -268,6 +268,10 @@ Before any temporary boot attempt, complete the backup and rescue checklist in
 condition; it does not authorize flashing, repartitioning, bootloader writes, or
 persistent boot-selection changes.
 
+Use `doc/pinenote-gate6-temporary-boot.md` for host-side artifact preparation
+and stop points. That document records the current prepared bundle but still does
+not authorize writing to `os2` or booting hardware.
+
 Safe manual principles:
 
 - Confirm the device edition, serial console, power recovery, and known-good

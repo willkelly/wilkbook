@@ -23,6 +23,8 @@ initial no-credentials, service-level D-Bus-free networking baseline.
 - `doc/pinenote-preflight.md` with the validation ladder and pass/fail gates.
 - `doc/pinenote-gate6-runbook.md` with the backup and rescue checklist before
   any hardware-adjacent preflight.
+- `doc/pinenote-gate6-temporary-boot.md` with the prepared host-side Gate 6
+  artifacts and stop points before hardware execution.
 - `doc/pinenote-flavors.md` with flavor definitions and current size
   measurements.
 

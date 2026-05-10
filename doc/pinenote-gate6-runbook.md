@@ -75,6 +75,7 @@ Supplement artifacts:
 | `pinenote-dbus-introspection.txt` | present in both copies | `org.pinenote.ebc`, `.pen`, `.usb`, and `.misc` D-Bus API inventory. |
 | `service-units.txt` | present in both copies | Relevant stock systemd unit definitions. |
 | `ssh-host-keys.txt`, `ssh-host-key-fingerprints.txt` | present in both copies | Public SSH host keys/fingerprints only; no private keys or passwords. |
+| `uboot-env-printenv.txt` | present in both copies | Device-tree model/compatible strings plus read-only `fw_printenv` attempt. |
 
 ## Backup sufficiency checklist
 
@@ -116,6 +117,9 @@ Supplement artifacts:
 - SSH access note with hostname/IP, username, and host-key fingerprint. Do not
   store private keys or passwords in this repository. Public host keys and
   fingerprints are in the 2026-05-10 supplement.
+- U-Boot environment text dump if readable. Current read-only `fw_printenv`
+  output is backed up in `2026-05-10/uboot-env-printenv.txt`, but it reports
+  `Cannot initialize environment`; rely on `uboot_env_p3.img` for raw backup.
 
 ### Optional but useful
 
