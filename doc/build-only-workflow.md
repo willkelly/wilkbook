@@ -75,7 +75,31 @@ device.
 
 Validation has built the slim `raw-with-offset` artifact successfully. It is an
 MBR disk image with one active Linux partition, not proof of PineNote hardware
-boot and not a full-device image to write over eMMC.
+boot and not a full-device image to write over eMMC. Use
+`pinenote/scripts/preflight/extract-rootfs-from-raw.sh` to extract the single
+ext4 partition into a direct rootfs artifact, then validate it with
+`pinenote/scripts/preflight/inspect-rootfs-image.sh`; the validated rootfs must
+have no partition table and label `PNGuixRoot`. Pair that rootfs with a matched
+boot bundle from `pinenote/scripts/preflight/stage-boot-bundle-from-rootfs.sh`,
+which extracts kernel, initrd, DTB, and Guix boot arguments from the same rootfs
+image.
+The extraction helper also normalizes the embedded
+`/boot/extlinux/extlinux.conf` to use `root=LABEL=PNGuixRoot`, so the same
+artifact can be inspected for a later, explicitly approved inactive-slot
+placement.
+
+For USB-C-only bring-up without UART, prefer the `usb-console` flavor over
+`slim`:
+
+```sh
+guix system image -t raw-with-offset -L . --target=aarch64-linux-gnu \
+  pinenote/systems/pinenote-usb-console.scm
+```
+
+That flavor adds a USB CDC-ACM gadget and an auto-login `reader` getty on
+`ttyGS0`, plus passwordless `sudo` for `reader`, so a successful boot should
+create a host-side `/dev/ttyACM*` console over the existing USB-C cable with a
+usable rescue shell.
 
 ## First-Boot Logic
 

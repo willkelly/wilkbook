@@ -9,6 +9,7 @@ with two slots expected for A/B testing on 128 GB storage.
 | Flavor | Entrypoint | Purpose |
 | --- | --- | --- |
 | slim | `pinenote/systems/pinenote-slim.scm` | Smallest current PineNote boot target: PineNote kernel, waveform/EBC/diagnostics services, and local helper packages only. |
+| usb-console | `pinenote/systems/pinenote-usb-console.scm` | Slim target plus a USB CDC-ACM gadget, auto-login `reader` getty on `ttyGS0`, and passwordless `sudo` for `reader`, intended for USB-C-only Gate 6 recovery/observation. |
 | networked | `pinenote/systems/pinenote-networked.scm` | Slim target plus `dhcpcd` and `wpa_supplicant` for an initial Wi-Fi/DHCP size baseline. The `wpa_supplicant` D-Bus control interface is disabled, and no network credentials are embedded. |
 | minimal | `pinenote/systems/pinenote-minimal.scm` | Bring-up target with PineNote services plus Guix `%base-packages`, but without the Guix daemon service. |
 | dev | `pinenote/systems/pinenote-dev.scm` | Development comparison target that restores `%base-services`, including the Guix service. Keep this out of release boot slots unless explicitly needed. |
@@ -26,16 +27,20 @@ Measured with `guix system build -L . --target=aarch64-linux-gnu ...` and
 | dev | 1799.5 MiB | 469,258,730 bytes |
 
 The tarball image is a safe rootfs-size proxy. The `raw-with-offset` image path
-is only a build artifact for later manual placement into a confirmed OS slot; it
-is not hardware-boot validated and must not be written as a full-device image.
-The slim `raw-with-offset` image currently builds successfully as a 1.1 GiB MBR
-disk image with one active Linux partition starting at sector 2048.
+is only a build intermediate; it is not hardware-boot validated and must not be
+written as a full-device image. The slim `raw-with-offset` image currently
+builds successfully as a 1.1 GiB MBR disk image with one active Linux partition
+starting at sector 2048. Gate 6 host-side prep extracts that partition into a
+direct ext4 rootfs artifact labelled `PNGuixRoot` before considering any manual
+placement into a confirmed OS slot.
 
 ## Measurement Commands
 
 ```sh
 guix system build -L . --target=aarch64-linux-gnu \
   pinenote/systems/pinenote-slim.scm
+guix system build -L . --target=aarch64-linux-gnu \
+  pinenote/systems/pinenote-usb-console.scm
 guix system build -L . --target=aarch64-linux-gnu \
   pinenote/systems/pinenote-networked.scm
 guix system build -L . --target=aarch64-linux-gnu \
