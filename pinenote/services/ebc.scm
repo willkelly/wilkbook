@@ -5,6 +5,7 @@
   #:use-module (pinenote packages ebc-test)
   #:use-module (pinenote packages firmware)
   #:export (pinenote-waveform-service-type
+            pinenote-brcm-firmware-service-type
             pinenote-ebc-modprobe-service-type
             pinenote-ebc-params-service-type
             pinenote-ebc-test-service-type
@@ -15,10 +16,10 @@
 
 (define (pinenote-waveform-shepherd-service _config)
   (list
-   (shepherd-service
-    (provision '(pinenote-waveform))
-    (requirement '(root-file-system udev))
-    (documentation "Install the PineNote waveform from a local partition or state file.")
+    (shepherd-service
+     (provision '(pinenote-waveform))
+     (requirement '(root-file-system))
+     (documentation "Install the PineNote waveform from a local partition or state file.")
     (one-shot? #t)
     (start
      #~(lambda _
@@ -34,6 +35,28 @@
                              pinenote-waveform-shepherd-service)))
    (default-value #f)
    (description "Copy a locally supplied PineNote waveform into the rockchip_ebc firmware path.")))
+
+(define (pinenote-brcm-firmware-shepherd-service _config)
+  (list
+    (shepherd-service
+     (provision '(pinenote-brcm-firmware))
+     (requirement '(root-file-system))
+     (documentation "Install locally supplied PineNote Broadcom Wi-Fi/Bluetooth firmware.")
+    (one-shot? #t)
+    (start
+     #~(lambda _
+         (zero? (system* #$(file-append pinenote-firmware-support
+                                        "/bin/pinenote-install-brcm-firmware")))))
+    (stop #~(const #t)))))
+
+(define pinenote-brcm-firmware-service-type
+  (service-type
+   (name 'pinenote-brcm-firmware)
+   (extensions
+    (list (service-extension shepherd-root-service-type
+                             pinenote-brcm-firmware-shepherd-service)))
+   (default-value #f)
+   (description "Copy locally supplied AP6255/BCM43455 firmware into the brcm firmware path.")))
 
 (define (pinenote-ebc-modprobe-etc-files _config)
   (list `("modprobe.d/rockchip_ebc.conf"
