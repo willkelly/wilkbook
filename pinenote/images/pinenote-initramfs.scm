@@ -29,22 +29,29 @@ partition and loading PineNote display modules from the initrd.")
                           qemu-networking?
                           volatile-root?
                           (on-error 'debug))
-  (let ((display-module-directory
+  (let ((linux-modules*
+         `(,@linux-modules
+           ,@(file-system-modules file-systems)))
+        (helper-packages
+         (file-system-packages file-systems
+                               #:volatile-root? volatile-root?))
+        (display-module-directory
          ((@@ (gnu system linux-initrd) flat-linux-module-directory)
           linux
           %pinenote-display-initrd-modules)))
     (raw-initrd file-systems
                 #:linux linux
-                #:linux-modules linux-modules
+                #:linux-modules linux-modules*
                 #:mapped-devices mapped-devices
-                #:helper-packages '()
+                #:helper-packages helper-packages
                 #:keyboard-layout keyboard-layout
                 #:qemu-networking? qemu-networking?
                 #:volatile-root? volatile-root?
                 #:on-error on-error
                 #:pre-mount
                 #~(begin
-                    (use-modules (gnu build linux-modules)
+                    (use-modules (gnu build file-systems)
+                                 (gnu build linux-modules)
                                  ((guix build utils) #:select (mkdir-p))
                                  (ice-9 ftw)
                                  (ice-9 rdelim)
@@ -55,6 +62,12 @@ partition and loading PineNote display modules from the initrd.")
                     (define firmware-directory "/lib/firmware/rockchip")
                     (define firmware-file
                       (string-append firmware-directory "/ebc.wbf"))
+
+                    (define (pinenote-initrd-log message . arguments)
+                      (apply format #t
+                             (string-append "PineNote initrd: " message "~%")
+                             arguments)
+                      (force-output))
 
                     (define (copy-prefix source destination bytes)
                       (call-with-input-file source
@@ -110,6 +123,7 @@ partition and loading PineNote display modules from the initrd.")
                                                     device
                                                     (loop (cdr entries))))))))))))
 
+                    (pinenote-initrd-log "pre-mount diagnostics starting")
                     (let ((waveform-device
                            (find-partition-by-partname "waveform")))
                       (if waveform-device
@@ -117,14 +131,42 @@ partition and loading PineNote display modules from the initrd.")
                             (mkdir-p firmware-directory)
                             (copy-prefix waveform-device firmware-file waveform-bytes)
                             (chmod firmware-file #o644)
-                            (format #t "installed PineNote waveform firmware from ~a into initrd~%"
-                                    waveform-device))
-                          (format (current-error-port)
-                                  "warning: PineNote waveform partition not found; EBC console may stay unavailable~%")))
+                            (pinenote-initrd-log
+                             "installed waveform firmware from ~a"
+                             waveform-device))
+                          (pinenote-initrd-log
+                           "warning: waveform partition not found; EBC console may stay unavailable")))
 
-                    (load-linux-modules-from-directory
-                     '#$%pinenote-display-initrd-modules
-                     #$display-module-directory)
+                    (pinenote-initrd-log "loading EBC display modules")
+                    (catch #t
+                      (lambda ()
+                        (load-linux-modules-from-directory
+                         '#$%pinenote-display-initrd-modules
+                         #$display-module-directory)
+                        (pinenote-initrd-log "loaded EBC display modules"))
+                      (lambda (key . _)
+                        (pinenote-initrd-log
+                         "warning: EBC display module load failed: ~a"
+                         key)))
+                    (let ((root-device (find-partition-by-label "PNGuixRoot")))
+                      (if root-device
+                          (pinenote-initrd-log
+                           "PNGuixRoot is visible before Guix root mount at ~a"
+                           root-device)
+                          (begin
+                            (pinenote-initrd-log
+                             "PNGuixRoot is not visible before Guix root mount")
+                            (when (file-exists? "/proc/partitions")
+                              (call-with-input-file "/proc/partitions"
+                                (lambda (port)
+                                  (let loop ()
+                                    (let ((line (read-line port)))
+                                      (unless (eof-object? line)
+                                        (pinenote-initrd-log
+                                         "partition: ~a" line)
+                                        (loop))))))))))
+                    (pinenote-initrd-log
+                     "handoff to Guix root mount for PNGuixRoot")
                     #t))))
 
 (define pinenote-kernel-arguments
