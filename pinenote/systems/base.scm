@@ -32,6 +32,7 @@
 
 (define %pinenote-bringup-services
   (list (service pinenote-waveform-service-type)
+        (service pinenote-brcm-firmware-service-type)
         (service pinenote-ebc-modprobe-service-type)
         (service pinenote-ebc-params-service-type)
         (service pinenote-diagnostics-service-type)
@@ -61,6 +62,7 @@
     (timezone "Etc/UTC")
     (locale "en_US.utf8")
     (kernel linux-pinenote)
+    (initrd pinenote-initrd)
     (kernel-arguments pinenote-kernel-arguments)
     (initrd-modules '())
     (bootloader

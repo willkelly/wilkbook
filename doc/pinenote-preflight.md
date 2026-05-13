@@ -11,6 +11,8 @@ helper behavior, but they do not prove PineNote hardware correctness.
 - A generic ARM64 Guix operating-system can be constructed for QEMU `virt`.
 - The selected PineNote kernel source checkout contains the expected config,
   DT, EBC, PMIC, Wi-Fi, touch, pen, and storage support markers.
+- The PineNote initrd can be constructed with the EBC display module set and
+  read-only waveform-partition extraction hook.
 - A PineNote boot bundle has the expected static file and kernel argument shape.
 - Read-only helper commands can run on a host, and hardware-targeted helpers can
   be inspected without executing writes to real paths.
@@ -23,6 +25,8 @@ helper behavior, but they do not prove PineNote hardware correctness.
   waveform, or `rockchip_ebc` behavior is correct.
 - Static bundle inspection does not prove that firmware paths, DTB compatibility,
   or the device boot order are correct on hardware.
+- The initrd EBC hook only reads the local `waveform` partition and loads display
+  modules; it cannot prove that the e-ink panel will refresh without hardware.
 - Kernel source inspection does not build the kernel, compute the Guix source
   hash, prove that a DTB was produced, or prove that EBC works on hardware.
 
@@ -55,6 +59,8 @@ Pass gate:
 
 - All commands complete successfully.
 - No private waveform or firmware blob is required.
+- Broadcom Wi-Fi/Bluetooth helpers may be present, but they only map locally
+  supplied files from `/state/firmware/brcm`; no AP6255/BCM43455 blob is bundled.
 
 Fail gate:
 

@@ -9,7 +9,8 @@ initial no-credentials, service-level D-Bus-free networking baseline.
 
 - `channels.scm` and `.guix-channel` for channel-style development.
 - `pinenote/packages/` with scaffold packages for the PineNote kernel,
-  firmware support, boot reference docs, diagnostics, and EBC test placeholder.
+  local firmware installation support, boot reference docs, diagnostics, and EBC
+  test placeholder.
 - `pinenote/services/` with Shepherd service definitions for waveform install,
   EBC parameter application, diagnostics, state metadata, and one-shot EBC test.
 - `pinenote/images/` with conservative partition/image notes and shared labels.
@@ -59,6 +60,13 @@ guix build -d -L . linux-pinenote --target=aarch64-linux-gnu
 guix system build -d -L . --target=aarch64-linux-gnu \
   pinenote/systems/pinenote-slim.scm
 ```
+
+Firmware helpers deliberately do not bundle PineNote blobs. The initrd now tries
+to read the local `waveform` partition before mounting root so `rockchip_ebc`
+can bind early enough for a tty0/fbcon diagnostic console. The runtime waveform
+helper performs the same local extraction after root, and the Broadcom helper
+only installs AP6255/BCM43455 files if they have already been supplied under
+`/state/firmware/brcm`.
 
 Before any kernel build or boot-bundle work, inspect the selected PineNote
 kernel source checkout. This does not build the kernel or prove hardware boot:

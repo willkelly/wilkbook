@@ -55,6 +55,11 @@ guix system build -d -L . --target=aarch64-linux-gnu \
   pinenote/systems/pinenote-slim.scm
 ```
 
+The PineNote systems use a custom Guix initrd wrapper that reads the local
+`waveform` partition into `/lib/firmware/rockchip/ebc.wbf` before loading the
+EBC display modules. This is a read-only diagnostic path for UART-less boot
+debugging; it does not bundle waveform data or write PineNote storage.
+
 Before any kernel package build, inspect the selected PineNote kernel source
 checkout. This only checks source identity and expected PineNote support markers;
 it does not build the kernel or prove hardware boot:
