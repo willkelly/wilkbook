@@ -2,7 +2,7 @@
 set -eu
 
 usage() {
-  printf 'usage: %s ROOTFS_IMAGE BOOT_BUNDLE_DIRECTORY\n' "$0" >&2
+  printf 'usage: %s ROOTFS_IMAGE\n' "$0" >&2
 }
 
 fail() {
@@ -12,23 +12,6 @@ fail() {
 
 pass() {
   printf 'PASS: %s\n' "$1"
-}
-
-note() {
-  printf 'NOTE: %s\n' "$1"
-}
-
-resolve_directory() {
-  directory=$1
-  (CDPATH= cd -P "$directory" && pwd -P)
-}
-
-require_inside_opencode() {
-  path=$1
-  case $path in
-    "$opencode_root"/*) ;;
-    *) fail "boot bundle directory must resolve under $opencode_root" ;;
-  esac
 }
 
 extract_first_field() {
@@ -94,39 +77,33 @@ dump_rootfs_file() {
   fi
 }
 
-if [ "$#" -ne 2 ]; then
+replace_rootfs_file() {
+  source=$1
+  target=$2
+  debugfs -w -R "rm $target" "$rootfs_image" >/dev/null 2>&1 || true
+  debugfs -w -R "write $source $target" "$rootfs_image" >/dev/null 2>&1 || \
+    fail "could not write $target into $rootfs_image"
+}
+
+if [ "$#" -ne 1 ]; then
   usage
   exit 2
 fi
 
 rootfs_image=$1
-requested_bundle=$2
 
 if [ ! -f "$rootfs_image" ]; then
   fail "rootfs image is not a regular file: $rootfs_image"
 fi
-
-opencode_root=$(resolve_directory /tmp/opencode) || fail "cannot resolve /tmp/opencode"
-parent=$(dirname "$requested_bundle")
-basename=$(basename "$requested_bundle")
-
-case $basename in
-  ''|'.'|'..') fail "boot bundle basename is unsafe: $basename" ;;
-esac
-
-parent_root=$(resolve_directory "$parent") || fail "boot bundle parent does not exist: $parent"
-bundle=$parent_root/$basename
-require_inside_opencode "$bundle"
-
-if [ -e "$bundle" ] || [ -L "$bundle" ]; then
-  fail "boot bundle path already exists; refusing to reuse it: $bundle"
+if [ -b "$rootfs_image" ]; then
+  fail "refusing block-device input: $rootfs_image"
 fi
 
-script_dir=$(CDPATH= cd -P "$(dirname "$0")" && pwd -P)
-"$script_dir/inspect-rootfs-image.sh" "$rootfs_image" >/dev/null
+tune2fs -l "$rootfs_image" >/dev/null 2>&1 || \
+  fail "tune2fs could not read an ext filesystem"
 
 extlinux_config=$(debugfs -R 'cat /boot/extlinux/extlinux.conf' "$rootfs_image" 2>/dev/null) || \
-  fail "could not read /boot/extlinux/extlinux.conf from $rootfs_image"
+  fail "could not read /boot/extlinux/extlinux.conf from rootfs"
 
 kernel_path=$(extract_first_field KERNEL "$extlinux_config")
 if [ -z "$kernel_path" ]; then
@@ -173,25 +150,29 @@ esac
 
 append_args=$(normalize_append_root "$append_args")
 
-mkdir -- "$bundle"
-mkdir -- "$bundle/extlinux"
+tmpdir=$(mktemp -d /tmp/opencode/pinenote-static-boot.XXXXXX)
+trap 'rm -rf "$tmpdir"' EXIT HUP INT TERM
 
-dump_rootfs_file "$kernel_path" "$bundle/extlinux/Image"
-dump_rootfs_file "$initrd_path" "$bundle/extlinux/initrd.cpio.gz"
-dump_rootfs_file "$fdt_path" "$bundle/extlinux/rk3566-pinenote-v1.2.dtb"
-printf '%s\n' "$extlinux_config" > "$bundle/extlinux/source-extlinux.conf"
+dump_rootfs_file "$kernel_path" "$tmpdir/Image"
+dump_rootfs_file "$initrd_path" "$tmpdir/initrd.cpio.gz"
+dump_rootfs_file "$fdt_path" "$tmpdir/rk3566-pinenote-v1.2.dtb"
 
-cat > "$bundle/extlinux/extlinux.conf" <<EOF
-# Generated from a validated PNGuixRoot rootfs image for static preflight only.
-# Do not install automatically and do not persist U-Boot environment changes.
+cat > "$tmpdir/extlinux.conf" <<EOF
+# Generated from a validated PNGuixRoot rootfs image for PineNote Gate 6.
+# Keep boot payloads at short /boot paths for stock U-Boot/extlinux loading.
 LABEL pinenote-guix-preflight
-  MENU LABEL Guix PineNote slim preflight
-  KERNEL Image
-  FDT rk3566-pinenote-v1.2.dtb
-  INITRD initrd.cpio.gz
+  MENU LABEL Guix PineNote USB console preflight
+  KERNEL /boot/Image
+  FDT /boot/rk3566-pinenote-v1.2.dtb
+  INITRD /boot/initrd.cpio.gz
   APPEND $append_args
 EOF
 
-pass "staged rootfs-matched boot bundle under $bundle"
-pass "extracted Image, PineNote DTB, initrd, and generated extlinux.conf"
-note "run: pinenote/scripts/preflight/inspect-boot-bundle.sh $bundle"
+replace_rootfs_file "$tmpdir/Image" /boot/Image
+replace_rootfs_file "$tmpdir/initrd.cpio.gz" /boot/initrd.cpio.gz
+replace_rootfs_file "$tmpdir/rk3566-pinenote-v1.2.dtb" /boot/rk3566-pinenote-v1.2.dtb
+replace_rootfs_file "$tmpdir/extlinux.conf" /boot/extlinux/extlinux.conf
+
+pass "embedded Image, PineNote DTB, and initrd under /boot"
+pass "rewrote extlinux.conf to short /boot paths with root=LABEL=PNGuixRoot"
+sha256sum "$rootfs_image"

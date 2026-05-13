@@ -61,4 +61,22 @@ if printf '%s\n' "$extlinux_config" | grep -q 'root=/dev/mmcblk'; then
 fi
 pass "embedded extlinux.conf avoids root=/dev/mmcblk"
 
+printf '%s\n' "$extlinux_config" | grep -q '^[[:space:]]*KERNEL[[:space:]][[:space:]]*/boot/Image$' || \
+  fail "embedded extlinux.conf does not use KERNEL /boot/Image"
+pass "embedded extlinux.conf uses KERNEL /boot/Image"
+
+printf '%s\n' "$extlinux_config" | grep -q '^[[:space:]]*FDT[[:space:]][[:space:]]*/boot/rk3566-pinenote-v1.2.dtb$' || \
+  fail "embedded extlinux.conf does not use FDT /boot/rk3566-pinenote-v1.2.dtb"
+pass "embedded extlinux.conf uses FDT /boot/rk3566-pinenote-v1.2.dtb"
+
+printf '%s\n' "$extlinux_config" | grep -q '^[[:space:]]*INITRD[[:space:]][[:space:]]*/boot/initrd.cpio.gz$' || \
+  fail "embedded extlinux.conf does not use INITRD /boot/initrd.cpio.gz"
+pass "embedded extlinux.conf uses INITRD /boot/initrd.cpio.gz"
+
+for required in /boot/Image /boot/rk3566-pinenote-v1.2.dtb /boot/initrd.cpio.gz; do
+  debugfs -R "stat $required" "$rootfs_image" >/dev/null 2>&1 || \
+    fail "missing embedded boot payload: $required"
+  pass "found embedded boot payload $required"
+done
+
 sha256sum "$rootfs_image"

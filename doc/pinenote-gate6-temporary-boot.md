@@ -26,10 +26,18 @@ Safe host-side preparation completed:
 - After separate explicit operator approval, replaced inactive `os2` with the
   validated `usb-console` `PNGuixRoot` rootfs and verified the written byte
   range plus embedded USB console service references.
+- After separate explicit operator approval, attempted OS2 boot. It stalled at
+  the stock `PineNote is booting...` display, exposed no `/dev/ttyACM*`, and
+  stock Debian `os1` recovered afterward.
+- Prepared a revised host-side-only `usb-console` artifact with static
+  `/boot/Image`, `/boot/rk3566-pinenote-v1.2.dtb`, `/boot/initrd.cpio.gz`, and
+  matching embedded `/boot/extlinux/extlinux.conf` paths. This revised artifact
+  has not been written to `os2`.
 
 No PineNote U-Boot environment, partition table, waveform, firmware path, `os1`,
 or `data` partition was modified. `os2` currently contains the verified
-`usb-console` `PNGuixRoot` rootfs. Reboot has not been attempted.
+passwordless-sudo `usb-console` `PNGuixRoot` rootfs from the failed boot attempt;
+the revised static-boot artifact is staged only under `/tmp/opencode`.
 
 ## Prepared host-side artifacts
 
@@ -88,7 +96,7 @@ planning only:
 # Do not install automatically and do not persist U-Boot environment changes.
 LABEL pinenote-guix-preflight
   MENU LABEL Guix PineNote slim preflight
-  LINUX Image
+  KERNEL Image
   FDT rk3566-pinenote-v1.2.dtb
   INITRD initrd.cpio.gz
   APPEND root=LABEL=PNGuixRoot gnu.system=/gnu/store/vfpialj7b776qnfc401sqn5lb723f9pb-system gnu.load=/gnu/store/vfpialj7b776qnfc401sqn5lb723f9pb-system/boot ignore_loglevel rw rootwait earlycon console=tty0 console=ttyS2,1500000n8 fw_devlink=off
@@ -152,7 +160,7 @@ Current `os2` state after approved write:
 | USB console services | `pinenote-usb-acm-gadget` and `term-ttyGS0` service files present |
 | Passwordless sudo | `reader ALL=(ALL) NOPASSWD: ALL` present in sudoers |
 | Rescue root | stock Debian `os1` remains mounted at `/` from `/dev/mmcblk0p5` |
-| Reboot status | not attempted |
+| Reboot status | attempted once; stalled before final root mount/userspace evidence |
 
 USB-C-accessible artifact previously installed on `os2`, then replaced before
 reboot with the passwordless-sudo artifact below:
@@ -194,8 +202,44 @@ Its SHA-256 is:
 ```
 
 This passwordless-sudo artifact was written to `os2` after separate explicit
-approval and verified by reading back the written byte range. Rebooting into OS2
-requires a separate explicit approval.
+approval and verified by reading back the written byte range. The OS2 boot
+attempt stalled before any USB ACM, SSH, or Guix logs appeared; subsequent
+inspection showed `PNGuixRoot` mount count `0`, so the likely failure point is
+before final root mount, Shepherd, and the USB gadget service.
+
+Revised static-boot artifact prepared host-side only and not written to `os2`:
+
+```text
+/tmp/opencode/pinenote-rootfs-artifacts/pinenote-usb-console-sudo-staticboot-PNGuixRoot-20260510.ext4
+```
+
+It keeps the same size, ext4 label `PNGuixRoot`, passwordless sudo, and USB ACM
+service content, but embeds the boot payloads at short stock-U-Boot-friendly
+paths and rewrites embedded extlinux to:
+
+```text
+KERNEL /boot/Image
+FDT /boot/rk3566-pinenote-v1.2.dtb
+INITRD /boot/initrd.cpio.gz
+APPEND root=LABEL=PNGuixRoot ...
+```
+
+Its SHA-256 is:
+
+```text
+a6c0a32548550de02fe30a82c2f8c1cff34ba2c84118aa5aaa1aeff706120216
+```
+
+Matched static boot bundle staged for inspection only:
+
+```text
+/tmp/opencode/pinenote-gate6-rootfs-boot-bundle-usb-console-sudo-staticboot-20260510
+```
+
+Static rootfs inspection, static boot-bundle inspection, and a generic ARM64 QEMU
+rootfs smoke reached the `pinenote-usb-console login:` prompt. QEMU remains only
+generic ARM64/rootfs confidence, not PineNote hardware validation. Rewriting
+`os2` with this revised artifact requires separate explicit approval.
 
 Current USB-C-only finding: the host-connected USB-C cable does not expose a
 U-Boot console or CDC-ACM device. U-Boot has fastboot, rockusb, UMS, and USB boot

@@ -73,27 +73,28 @@ The validated rootfs artifact now also normalizes the embedded
 an explicitly approved OS2 placement as well as for the external matched boot
 bundle.
 
-The initial slim rootfs was written to `os2` and verified, but was not rebooted
-because it had no confirmed USB-C console, Wi-Fi credentials, SSH path, or
-keyboard path. It has since been replaced on `os2` by
-`pinenote/systems/pinenote-usb-console.scm`, which exposes a CDC-ACM gadget and
-auto-login `reader` console on `ttyGS0` after Shepherd starts. The next stop
-point is reboot approval.
+The initial slim rootfs was written to `os2` and verified, then replaced by the
+USB-console rootfs. A separately approved OS2 boot attempt stalled at the stock
+`PineNote is booting...` display with no USB ACM, SSH, or Guix logs; stock
+Debian `os1` recovered afterward, and `PNGuixRoot` mount count remained `0`.
+The current next stop point is approval before rewriting `os2` with the revised
+static-boot USB-console artifact.
 
 ## USB-C-only first-boot path
 
-This is the preferred no-UART path. The OS2 write boundary has been crossed only
-after explicit operator approval; the reboot boundary has not:
+This is the preferred no-UART path. The OS2 write and first reboot boundaries
+were crossed only after explicit operator approval; any further `os2` rewrite or
+reboot still requires separate approval:
 
 1. Keep stock Debian `os1` as the rescue system and control plane.
 2. Verify backups and confirm `/dev/mmcblk0p6` (`os2`) is unmounted and
    expendable.
 3. Stop for explicit approval to write only the inactive `os2` partition.
-4. Write the validated USB-console `PNGuixRoot` rootfs artifact to `os2` from
-   stock Debian.
+4. Write the validated static-boot USB-console `PNGuixRoot` rootfs artifact to
+   `os2` from stock Debian.
 5. Re-read `os2` metadata and embedded `/boot/extlinux/extlinux.conf`; confirm
    label `PNGuixRoot`, `root=LABEL=PNGuixRoot`, and no `root=/dev/mmcblk`.
-6. Stop again before reboot. This is the current state.
+6. Stop again before reboot.
 7. Reboot only after explicit approval, with the expectation that unchanged U-Boot
    can still return to stock Debian `os1` if the `os2` boot fails.
 
@@ -165,11 +166,11 @@ usb start
 sysboot ${pn_bootdev} ${pn_bootpart} any ${scriptaddr} /extlinux/extlinux.conf
 ```
 
-Do not use `sysboot` against `/boot/extlinux/extlinux.conf` inside `os2` for the
-Gate 6 label-root test: the Guix-generated source file inside the rootfs uses
-the filesystem UUID from image construction. For an explicitly approved `os2`
-experiment, use the manual `booti` block below so the boot arguments still use
-`root=LABEL=PNGuixRoot`.
+For the revised static-boot artifact, `/boot/extlinux/extlinux.conf` inside
+`os2` is rewritten to load `/boot/Image`, `/boot/rk3566-pinenote-v1.2.dtb`, and
+`/boot/initrd.cpio.gz` with `root=LABEL=PNGuixRoot`. Do not use `sysboot`
+against older rootfs artifacts whose embedded extlinux still points at generated
+source paths or image UUIDs.
 
 ## Manual `booti` fallback
 
@@ -186,21 +187,20 @@ usb start
 load ${pn_bootdev} ${pn_bootpart} ${kernel_addr_r} /extlinux/Image
 load ${pn_bootdev} ${pn_bootpart} ${fdt_addr_r} /extlinux/rk3566-pinenote-v1.2.dtb
 load ${pn_bootdev} ${pn_bootpart} ${ramdisk_addr_r} /extlinux/initrd.cpio.gz
-setenv bootargs 'root=LABEL=PNGuixRoot gnu.system=/gnu/store/vfpialj7b776qnfc401sqn5lb723f9pb-system gnu.load=/gnu/store/vfpialj7b776qnfc401sqn5lb723f9pb-system/boot ignore_loglevel rw rootwait earlycon console=tty0 console=ttyS2,1500000n8 fw_devlink=off'
+setenv bootargs 'root=LABEL=PNGuixRoot gnu.system=/gnu/store/jsh9vxynmzvxzz6xwafb7g39dmz8b8q2-system gnu.load=/gnu/store/jsh9vxynmzvxzz6xwafb7g39dmz8b8q2-system/boot ignore_loglevel rw rootwait earlycon console=tty0 console=ttyS2,1500000n8 fw_devlink=off'
 booti ${kernel_addr_r} ${ramdisk_addr_r}:${filesize} ${fdt_addr_r}
 ```
 
-For an explicitly approved `os2` experiment where the rootfs is already on
-`/dev/mmcblk0p6`, the rootfs contains the source paths used to create the matched
-bundle:
+For an explicitly approved `os2` experiment where the revised static-boot rootfs
+is already on `/dev/mmcblk0p6`, load the short embedded `/boot` payloads:
 
 ```text
 setenv pn_bootdev mmc
 setenv pn_bootpart 0:6
-ext4load ${pn_bootdev} ${pn_bootpart} ${kernel_addr_r} /gnu/store/43g0m3k4gi9fcfnlbgi041z0fb3vic78-linux-pinenote-6.6.30-pinenote/Image
-ext4load ${pn_bootdev} ${pn_bootpart} ${fdt_addr_r} /gnu/store/43g0m3k4gi9fcfnlbgi041z0fb3vic78-linux-pinenote-6.6.30-pinenote/lib/dtbs/rockchip/rk3566-pinenote-v1.2.dtb
-ext4load ${pn_bootdev} ${pn_bootpart} ${ramdisk_addr_r} /gnu/store/pbik33rj0zlan135fk5bpbf63r3hhgqr-raw-initrd/initrd.cpio.gz
-setenv bootargs 'root=LABEL=PNGuixRoot gnu.system=/gnu/store/vfpialj7b776qnfc401sqn5lb723f9pb-system gnu.load=/gnu/store/vfpialj7b776qnfc401sqn5lb723f9pb-system/boot ignore_loglevel rw rootwait earlycon console=tty0 console=ttyS2,1500000n8 fw_devlink=off'
+ext4load ${pn_bootdev} ${pn_bootpart} ${kernel_addr_r} /boot/Image
+ext4load ${pn_bootdev} ${pn_bootpart} ${fdt_addr_r} /boot/rk3566-pinenote-v1.2.dtb
+ext4load ${pn_bootdev} ${pn_bootpart} ${ramdisk_addr_r} /boot/initrd.cpio.gz
+setenv bootargs 'root=LABEL=PNGuixRoot gnu.system=/gnu/store/jsh9vxynmzvxzz6xwafb7g39dmz8b8q2-system gnu.load=/gnu/store/jsh9vxynmzvxzz6xwafb7g39dmz8b8q2-system/boot ignore_loglevel rw rootwait earlycon console=tty0 console=ttyS2,1500000n8 fw_devlink=off'
 booti ${kernel_addr_r} ${ramdisk_addr_r}:${filesize} ${fdt_addr_r}
 ```
 

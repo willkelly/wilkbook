@@ -145,7 +145,7 @@ cat > "$bundle/extlinux/extlinux.conf" <<EOF
 # Generated for static preflight only; do not install automatically.
 LABEL pinenote-guix-preflight
   MENU LABEL Guix PineNote slim preflight
-  LINUX Image
+  KERNEL Image
   FDT rk3566-pinenote-v1.2.dtb
   INITRD initrd.cpio.gz
   APPEND $kernel_args root=LABEL=PNGuixRoot

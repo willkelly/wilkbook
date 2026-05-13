@@ -20,18 +20,43 @@ extract_first_field() {
   printf '%s\n' "$config" | sed -n "s/^[[:space:]]*$field[[:space:]][[:space:]]*//p" | sed -n '1p'
 }
 
+normalize_append_root() {
+  append=$1
+  normalized=
+  found=false
+
+  for argument in $append; do
+    case $argument in
+      root=*)
+        argument=root=LABEL=PNGuixRoot
+        found=true
+        ;;
+    esac
+    normalized=${normalized:+$normalized }$argument
+  done
+
+  if [ "$found" != true ]; then
+    fail "source APPEND arguments lack root=; refusing ambiguous boot args"
+  fi
+
+  printf '%s\n' "$normalized"
+}
+
 normalize_extlinux_root() {
   extlinux_config=$(debugfs -R 'cat /boot/extlinux/extlinux.conf' "$rootfs_image" 2>/dev/null) || \
     fail "could not read /boot/extlinux/extlinux.conf from extracted rootfs"
 
   kernel_path=$(extract_first_field KERNEL "$extlinux_config")
+  if [ -z "$kernel_path" ]; then
+    kernel_path=$(extract_first_field LINUX "$extlinux_config")
+  fi
   initrd_path=$(extract_first_field INITRD "$extlinux_config")
   fdt_path=$(extract_first_field FDT "$extlinux_config")
   fdt_dir=$(extract_first_field FDTDIR "$extlinux_config")
   append_args=$(extract_first_field APPEND "$extlinux_config")
 
   if [ -z "$kernel_path" ]; then
-    fail "source extlinux.conf does not name KERNEL"
+    fail "source extlinux.conf does not name KERNEL or LINUX"
   fi
   if [ -z "$initrd_path" ]; then
     fail "source extlinux.conf does not name INITRD"
@@ -57,9 +82,7 @@ normalize_extlinux_root() {
     *' root=/dev/mmcblk'*) fail "source APPEND arguments contain forbidden raw eMMC root path" ;;
   esac
 
-  append_args=$(printf '%s\n' "$append_args" | \
-    sed 's/\(^\|[[:space:]]\)root=[^[:space:]]*/ root=LABEL=PNGuixRoot/' | \
-    sed 's/^[[:space:]]*//')
+  append_args=$(normalize_append_root "$append_args")
 
   normalized_extlinux=$(mktemp /tmp/opencode/pinenote-extlinux.XXXXXX)
   {
@@ -97,7 +120,7 @@ if [ ! -f "$raw_image" ]; then
   fail "raw image is not a regular file: $raw_image"
 fi
 
-if [ -e "$rootfs_image" ]; then
+if [ -e "$rootfs_image" ] || [ -L "$rootfs_image" ]; then
   fail "output already exists: $rootfs_image"
 fi
 
@@ -137,10 +160,12 @@ dd if="$raw_image" of="$rootfs_image" bs=512 skip="$start_sector" \
   count="$sector_count" status=none
 e2label "$rootfs_image" PNGuixRoot
 normalize_extlinux_root
+script_dir=$(CDPATH= cd -P "$(dirname "$0")" && pwd -P)
+"$script_dir/embed-static-boot-in-rootfs.sh" "$rootfs_image" >/dev/null
 
 pass "extracted rootfs image to $rootfs_image"
 pass "filesystem label set to PNGuixRoot"
-pass "embedded extlinux.conf uses root=LABEL=PNGuixRoot"
+pass "embedded extlinux.conf uses root=LABEL=PNGuixRoot and short /boot paths"
 pass "start sector: $start_sector"
 pass "sector count: $sector_count"
 sha256sum "$rootfs_image"
