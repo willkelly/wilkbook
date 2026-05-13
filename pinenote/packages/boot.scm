@@ -27,7 +27,7 @@
                 (display "  LINUX /extlinux/Image\n" port)
                 (display "  FDT /extlinux/rk3566-pinenote-v1.2.dtb\n" port)
                 (display "  INITRD /extlinux/uInitrd.img\n" port)
-                (display "  APPEND ignore_loglevel rw root=LABEL=PNGuixRoot rootwait earlycon console=tty0 console=ttyS2,1500000n8 fw_devlink=off\n" port)))))))
+                (display "  APPEND ignore_loglevel rw root=PNGuixRoot rootwait earlycon console=tty0 console=ttyS2,1500000n8 fw_devlink=off\n" port)))))))
     (home-page "https://github.com/PNDeb/pinenote-debian-image")
     (synopsis "Reference PineNote extlinux stanza")
     (description

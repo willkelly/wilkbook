@@ -52,9 +52,9 @@ pass "ext filesystem metadata is readable"
 extlinux_config=$(debugfs -R 'cat /boot/extlinux/extlinux.conf' "$rootfs_image" 2>/dev/null) || \
   fail "could not read /boot/extlinux/extlinux.conf"
 
-printf '%s\n' "$extlinux_config" | grep -q 'root=LABEL=PNGuixRoot' || \
-  fail "embedded extlinux.conf does not use root=LABEL=PNGuixRoot"
-pass "embedded extlinux.conf uses root=LABEL=PNGuixRoot"
+printf '%s\n' "$extlinux_config" | grep -q 'root=PNGuixRoot' || \
+  fail "embedded extlinux.conf does not use root=PNGuixRoot"
+pass "embedded extlinux.conf uses root=PNGuixRoot"
 
 if printf '%s\n' "$extlinux_config" | grep -q 'root=/dev/mmcblk'; then
   fail "embedded extlinux.conf contains forbidden root=/dev/mmcblk path"

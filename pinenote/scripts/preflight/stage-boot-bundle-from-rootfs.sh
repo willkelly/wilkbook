@@ -45,7 +45,7 @@ normalize_append_root() {
   for argument in $append; do
     case $argument in
       root=*)
-        argument=root=LABEL=PNGuixRoot
+        argument=root=PNGuixRoot
         found=true
         ;;
     esac

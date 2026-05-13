@@ -81,10 +81,10 @@ if [ -z "$extlinux" ]; then
 fi
 pass "found extlinux.conf at $extlinux"
 
-if grep -q 'root=LABEL=PNGuixRoot' "$extlinux"; then
-  pass "extlinux.conf uses root=LABEL=PNGuixRoot"
+if grep -q 'root=PNGuixRoot' "$extlinux"; then
+  pass "extlinux.conf uses root=PNGuixRoot"
 else
-  fail "extlinux.conf does not use root=LABEL=PNGuixRoot"
+  fail "extlinux.conf does not use root=PNGuixRoot"
 fi
 
 if grep -q 'root=/dev/mmcblk' "$extlinux"; then

@@ -148,7 +148,7 @@ LABEL pinenote-guix-preflight
   KERNEL Image
   FDT rk3566-pinenote-v1.2.dtb
   INITRD initrd.cpio.gz
-  APPEND $kernel_args root=LABEL=PNGuixRoot
+  APPEND $kernel_args root=PNGuixRoot
 EOF
 
 pass "staged boot bundle under $bundle"

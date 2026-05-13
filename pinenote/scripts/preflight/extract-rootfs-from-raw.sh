@@ -28,7 +28,7 @@ normalize_append_root() {
   for argument in $append; do
     case $argument in
       root=*)
-        argument=root=LABEL=PNGuixRoot
+        argument=root=PNGuixRoot
         found=true
         ;;
     esac
@@ -136,12 +136,13 @@ fi
 partition_table=$(partx -g -o START,SECTORS,TYPE "$raw_image") || \
   fail "could not read raw image partition table"
 
-partition_count=$(printf '%s\n' "$partition_table" | sed '/^[[:space:]]*$/d' | wc -l)
-if [ "$partition_count" -ne 1 ]; then
-  fail "expected exactly one partition, found $partition_count"
+linux_partition_table=$(printf '%s\n' "$partition_table" | awk '$3 == "0x83" { print }')
+linux_partition_count=$(printf '%s\n' "$linux_partition_table" | sed '/^[[:space:]]*$/d' | wc -l)
+if [ "$linux_partition_count" -ne 1 ]; then
+  fail "expected exactly one Linux root partition, found $linux_partition_count"
 fi
 
-set -- $partition_table
+set -- $linux_partition_table
 start_sector=$1
 sector_count=$2
 partition_type=$3
@@ -165,7 +166,7 @@ script_dir=$(CDPATH= cd -P "$(dirname "$0")" && pwd -P)
 
 pass "extracted rootfs image to $rootfs_image"
 pass "filesystem label set to PNGuixRoot"
-pass "embedded extlinux.conf uses root=LABEL=PNGuixRoot and short /boot paths"
+pass "embedded extlinux.conf uses root=PNGuixRoot and short /boot paths"
 pass "start sector: $start_sector"
 pass "sector count: $sector_count"
 sha256sum "$rootfs_image"

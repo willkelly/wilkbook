@@ -28,7 +28,7 @@ normalize_append_root() {
   for argument in $append; do
     case $argument in
       root=*)
-        argument=root=LABEL=PNGuixRoot
+        argument=root=PNGuixRoot
         found=true
         ;;
     esac
@@ -174,5 +174,5 @@ replace_rootfs_file "$tmpdir/rk3566-pinenote-v1.2.dtb" /boot/rk3566-pinenote-v1.
 replace_rootfs_file "$tmpdir/extlinux.conf" /boot/extlinux/extlinux.conf
 
 pass "embedded Image, PineNote DTB, and initrd under /boot"
-pass "rewrote extlinux.conf to short /boot paths with root=LABEL=PNGuixRoot"
+pass "rewrote extlinux.conf to short /boot paths with root=PNGuixRoot"
 sha256sum "$rootfs_image"
