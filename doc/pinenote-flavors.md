@@ -28,11 +28,9 @@ Measured with `guix system build -L . --target=aarch64-linux-gnu ...` and
 
 The tarball image is a safe rootfs-size proxy. The `raw-with-offset` image path
 is only a build intermediate; it is not hardware-boot validated and must not be
-written as a full-device image. The slim `raw-with-offset` image currently
-builds successfully as a 1.1 GiB MBR disk image with one active Linux partition
-starting at sector 2048. Gate 6 host-side prep extracts that partition into a
-direct ext4 rootfs artifact labelled `PNGuixRoot` before considering any manual
-placement into a confirmed OS slot.
+written as a full-device image. Gate 6 host-side prep extracts the single Linux
+root partition from that disk image into a direct ext4 rootfs artifact labelled
+`PNGuixRoot` before considering any manual placement into a confirmed OS slot.
 
 ## Measurement Commands
 
