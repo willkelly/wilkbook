@@ -56,6 +56,13 @@
         (apply log message arguments)
         #f)
 
+      ;; Activation services run before login/session environment variables are
+      ;; available.  Point kmod at the booted Guix kernel module tree explicitly;
+      ;; otherwise it falls back to /lib/modules and cannot find PineNote gadget
+      ;; modules.
+      (setenv "LINUX_MODULE_DIRECTORY"
+              "/run/current-system/kernel/lib/modules")
+
       (for-each (lambda (module)
                   (let ((status
                          (system* #$(file-append kmod "/bin/modprobe")
