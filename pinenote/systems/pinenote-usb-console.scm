@@ -32,7 +32,7 @@ reader ALL=(ALL) NOPASSWD: ALL
   (operating-system
     (inherit (make-pinenote-operating-system
               #:host-name "pinenote-usb-console"
-              #:packages %pinenote-local-packages
+              #:packages (append %pinenote-local-packages %base-packages)
               #:services pinenote-usb-console-services))
     (sudoers-file pinenote-usb-console-sudoers)))
 

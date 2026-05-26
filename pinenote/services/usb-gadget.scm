@@ -193,10 +193,12 @@
               "-c"
               (string-append
                "exec </dev/ttyGS0 >/dev/ttyGS0 2>&1\n"
-               "stty sane 115200 cs8 -cstopb -parenb -ixon -ixoff -crtscts clocal cread || true\n"
+               "stty sane -echo 115200 cs8 -cstopb -parenb -ixon -ixoff -crtscts clocal cread || true\n"
+               "export PATH=/run/current-system/profile/bin:/run/current-system/profile/sbin:/run/setuid-programs\n"
                "export TERM=vt100 HOME=/root USER=root LOGNAME=root SHELL="
                #$(file-append bash-minimal "/bin/bash")
                "\n"
+               "export PS1='pinenote-acm# '\n"
                "cd /root 2>/dev/null || cd /\n"
                "printf '\\r\\nPineNote Guix ACM root shell ready\\r\\n'\n"
                "exec "
