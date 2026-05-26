@@ -189,16 +189,24 @@
     (respawn? #t)
     (start
      #~(make-forkexec-constructor
-        (list #$(file-append util-linux "/sbin/agetty")
-              "--noclear"
-              "--local-line=always"
-              "--autologin"
-              "reader"
-              "--login-program"
-              #$(file-append shadow "/bin/login")
-              "ttyGS0"
-              "115200"
-              "vt100")))
+        (list #$(program-file
+                 "pinenote-usb-acm-agetty"
+                 #~(begin
+                     (let wait-for-tty ()
+                       (unless (file-exists? "/dev/ttyGS0")
+                         (sleep 1)
+                         (wait-for-tty)))
+                     (execl #$(file-append util-linux "/sbin/agetty")
+                            "agetty"
+                            "--noclear"
+                            "--local-line=always"
+                            "--autologin"
+                            "reader"
+                            "--login-program"
+                            #$(file-append shadow "/bin/login")
+                            "ttyGS0"
+                            "115200"
+                            "vt100"))))))
     (stop #~(make-kill-destructor)))))
 
 (define pinenote-usb-acm-console-service-type
