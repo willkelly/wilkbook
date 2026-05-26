@@ -1,7 +1,7 @@
 (define-module (pinenote services usb-gadget)
   #:use-module (gnu services)
   #:use-module (gnu services shepherd)
-  #:use-module (gnu packages bash)
+  #:use-module (gnu packages admin)
   #:use-module (gnu packages linux)
   #:use-module (guix gexp)
   #:export (pinenote-usb-acm-gadget-service-type
@@ -180,41 +180,25 @@
    (default-value #f)
    (description "Create a temporary PineNote USB CDC-ACM console gadget.")))
 
-(define pinenote-usb-acm-console-program
-  (program-file
-   "pinenote-usb-acm-console"
-   #~(begin
-       (let wait-for-tty ()
-         (unless (file-exists? "/dev/ttyGS0")
-           (sleep 1)
-           (wait-for-tty)))
-       (execl #$(file-append bash-minimal "/bin/bash")
-              "bash"
-              "-c"
-              (string-append
-               "exec </dev/ttyGS0 >/dev/ttyGS0 2>&1\n"
-               "stty sane -echo 115200 cs8 -cstopb -parenb -ixon -ixoff -crtscts clocal cread || true\n"
-               "export PATH=/run/current-system/profile/bin:/run/current-system/profile/sbin:/run/setuid-programs\n"
-               "export TERM=vt100 HOME=/root USER=root LOGNAME=root SHELL="
-               #$(file-append bash-minimal "/bin/bash")
-               "\n"
-               "export PS1='pinenote-acm# '\n"
-               "cd /root 2>/dev/null || cd /\n"
-               "printf '\\r\\nPineNote Guix ACM root shell ready\\r\\n'\n"
-               "exec "
-               #$(file-append bash-minimal "/bin/bash")
-               " -i\n")))))
-
 (define (pinenote-usb-acm-console-shepherd-service _config)
   (list
    (shepherd-service
     (provision '(pinenote-usb-acm-console))
     (requirement '(pinenote-usb-acm-gadget))
-    (documentation "Run a bring-up shell on the PineNote USB ACM gadget.")
+    (documentation "Run a login console on the PineNote USB ACM gadget.")
     (respawn? #t)
     (start
      #~(make-forkexec-constructor
-        (list #$pinenote-usb-acm-console-program)))
+        (list #$(file-append util-linux "/sbin/agetty")
+              "--noclear"
+              "--local-line=always"
+              "--autologin"
+              "reader"
+              "--login-program"
+              #$(file-append shadow "/bin/login")
+              "ttyGS0"
+              "115200"
+              "vt100")))
     (stop #~(make-kill-destructor)))))
 
 (define pinenote-usb-acm-console-service-type
@@ -224,4 +208,4 @@
     (list (service-extension shepherd-root-service-type
                              pinenote-usb-acm-console-shepherd-service)))
    (default-value #f)
-   (description "Start a temporary root shell on the PineNote USB ACM console.")))
+   (description "Start a temporary login console on the PineNote USB ACM gadget.")))
