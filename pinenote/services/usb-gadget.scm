@@ -201,8 +201,9 @@
                             "-c"
                             (string-append
                              "exec </dev/ttyGS0 >/dev/ttyGS0 2>&1\n"
+                             "# Guix setuid wrappers must win, and stty needs PATH before first use.\n"
+                             "export PATH=/run/setuid-programs:/run/current-system/profile/bin:/run/current-system/profile/sbin\n"
                              "stty sane -echo 115200 cs8 -cstopb -parenb -ixon -ixoff -crtscts clocal cread || true\n"
-                             "export PATH=/run/current-system/profile/bin:/run/current-system/profile/sbin:/run/setuid-programs\n"
                              "export TERM=vt100 HOME=/home/reader USER=reader LOGNAME=reader SHELL="
                              #$(file-append bash-minimal "/bin/bash")
                              "\n"
