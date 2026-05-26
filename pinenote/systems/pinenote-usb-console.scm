@@ -19,6 +19,14 @@ reader ALL=(ALL) NOPASSWD: ALL
           (list (service pinenote-usb-acm-gadget-service-type)
                 (service agetty-service-type
                          (agetty-configuration
+                          (tty "ttyS2")
+                          (baud-rate "115200")
+                          (term "vt100")
+                          (auto-login "reader")
+                          (local-line 'always)
+                          (no-clear? #t)))
+                (service agetty-service-type
+                         (agetty-configuration
                           (tty "ttyGS0")
                           (baud-rate "115200")
                           (term "vt100")

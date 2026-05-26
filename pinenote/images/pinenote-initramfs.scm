@@ -175,7 +175,7 @@ partition and loading PineNote display modules from the initrd.")
     "rootwait"
     "earlycon"
      "console=tty0"
-     "console=ttyS2,1500000n8"
+     "console=ttyS2,115200n8"
      "fw_devlink=off"
      "rockchip_ebc.direct_mode=0"
      "rockchip_ebc.auto_refresh=1"
