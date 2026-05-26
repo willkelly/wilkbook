@@ -1,7 +1,7 @@
 (define-module (pinenote services usb-gadget)
   #:use-module (gnu services)
   #:use-module (gnu services shepherd)
-  #:use-module (gnu packages admin)
+  #:use-module (gnu packages bash)
   #:use-module (gnu packages linux)
   #:use-module (guix gexp)
   #:export (pinenote-usb-acm-gadget-service-type
@@ -190,23 +190,31 @@
     (start
      #~(make-forkexec-constructor
         (list #$(program-file
-                 "pinenote-usb-acm-agetty"
+                 "pinenote-usb-acm-reader-console"
                  #~(begin
                      (let wait-for-tty ()
                        (unless (file-exists? "/dev/ttyGS0")
                          (sleep 1)
                          (wait-for-tty)))
-                     (execl #$(file-append util-linux "/sbin/agetty")
-                            "agetty"
-                            "--noclear"
-                            "--local-line=always"
-                            "--autologin"
-                            "reader"
-                            "--login-program"
-                            #$(file-append shadow "/bin/login")
-                            "ttyGS0"
-                            "115200"
-                            "vt100"))))))
+                     (execl #$(file-append bash-minimal "/bin/bash")
+                            "bash"
+                            "-c"
+                            (string-append
+                             "exec </dev/ttyGS0 >/dev/ttyGS0 2>&1\n"
+                             "stty sane -echo 115200 cs8 -cstopb -parenb -ixon -ixoff -crtscts clocal cread || true\n"
+                             "export PATH=/run/current-system/profile/bin:/run/current-system/profile/sbin:/run/setuid-programs\n"
+                             "export TERM=vt100 HOME=/home/reader USER=reader LOGNAME=reader SHELL="
+                             #$(file-append bash-minimal "/bin/bash")
+                             "\n"
+                             "export PS1='pinenote-acm$ '\n"
+                             "cd /home/reader 2>/dev/null || cd /\n"
+                             "printf '\\r\\nPineNote Guix ACM reader shell ready\\r\\n'\n"
+                             "exec "
+                             #$(file-append bash-minimal "/bin/bash")
+                             " -i\n")))))
+        #:user "reader"
+        #:group "users"
+        #:supplementary-groups '("wheel" "tty" "dialout")))
     (stop #~(make-kill-destructor)))))
 
 (define pinenote-usb-acm-console-service-type
@@ -216,4 +224,4 @@
     (list (service-extension shepherd-root-service-type
                              pinenote-usb-acm-console-shepherd-service)))
    (default-value #f)
-   (description "Start a temporary login console on the PineNote USB ACM gadget.")))
+   (description "Start a temporary reader shell on the PineNote USB ACM gadget.")))
