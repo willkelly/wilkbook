@@ -16,26 +16,17 @@ reader ALL=(ALL) NOPASSWD: ALL
 
 (define pinenote-usb-console-services
   (append %pinenote-bringup-services
-          (list (service pinenote-usb-acm-gadget-service-type)
-                (service agetty-service-type
-                         (agetty-configuration
-                          (tty "ttyS2")
+           (list (service pinenote-usb-acm-gadget-service-type)
+                 (service pinenote-usb-acm-console-service-type)
+                 (service agetty-service-type
+                          (agetty-configuration
+                           (tty "ttyS2")
                           (baud-rate "115200")
                           (term "vt100")
-                          (auto-login "reader")
-                          (local-line 'always)
-                          (no-clear? #t)))
-                (service agetty-service-type
-                         (agetty-configuration
-                          (tty "ttyGS0")
-                          (baud-rate "115200")
-                          (term "vt100")
-                          (auto-login "reader")
-                          (local-line 'always)
-                          (no-clear? #t)
-                          (shepherd-requirement
-                           '(pinenote-usb-acm-gadget)))))
-          %base-services-without-guix))
+                           (auto-login "reader")
+                           (local-line 'always)
+                           (no-clear? #t))))
+           %base-services-without-guix))
 
 (define pinenote-usb-console-operating-system
   (operating-system
