@@ -164,10 +164,10 @@
     (one-shot? #t)
     (modules '((ice-9 ftw)
                (ice-9 rdelim)))
-     (start
-      #~(lambda _
-          #$(pinenote-usb-acm-gadget-program)))
-     (stop #~(const #t)))))
+    (start
+     #~(lambda _
+         #$(pinenote-usb-acm-gadget-program)))
+    (stop #~(const #t)))))
 
 (define pinenote-usb-acm-gadget-service-type
   (service-type
@@ -177,8 +177,8 @@
                              pinenote-usb-acm-gadget-activation)
           (service-extension shepherd-root-service-type
                              pinenote-usb-acm-gadget-shepherd-service)))
-    (default-value #f)
-    (description "Create a temporary PineNote USB CDC-ACM console gadget.")))
+   (default-value #f)
+   (description "Create a temporary PineNote USB CDC-ACM console gadget.")))
 
 (define pinenote-usb-acm-console-program
   (program-file
