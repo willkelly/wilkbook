@@ -7,7 +7,8 @@
 
 (define (pinenote-usb-acm-gadget-program)
   #~(begin
-      (use-modules (ice-9 ftw))
+      (use-modules (ice-9 ftw)
+                   (ice-9 rdelim))
 
       (define (write-file path value)
         (call-with-output-file path
@@ -24,6 +25,17 @@
                                      (lambda (entry)
                                        (not (member entry '("." "..")))))))
                (and (pair? entries) (car entries)))))
+
+      (define (read-first-line path)
+        (and (file-exists? path)
+             (call-with-input-file path
+               (lambda (port)
+                 (let ((line (read-line port)))
+                   (and (not (eof-object? line)) line))))))
+
+      (define (gadget-bound-udc gadget-root)
+        (let ((udc (read-first-line (string-append gadget-root "/UDC"))))
+          (and udc (not (string=? udc "")) udc)))
 
       (define (log message . arguments)
         (apply format #t
@@ -95,7 +107,12 @@
                           (first-directory "/sys/class/udc"))))
             (if (not udc)
                 (fail "no USB device controller found")
-                (begin
+                (let ((bound-udc (gadget-bound-udc gadget-root)))
+                  (if bound-udc
+                      (begin
+                        (log "gadget is already bound to UDC ~a" bound-udc)
+                        #t)
+                      (begin
                   (log "binding to UDC ~a" udc)
                   (ensure-directory gadget-root)
 
@@ -131,7 +148,7 @@
 
                   (write-file (string-append gadget-root "/UDC") udc)
                   (log "bound CDC-ACM function as /dev/ttyGS0")
-                  #t))))))
+                  #t))))))))
 
 (define (pinenote-usb-acm-gadget-activation _config)
   (pinenote-usb-acm-gadget-program))
@@ -142,8 +159,9 @@
      (provision '(pinenote-usb-acm-gadget))
      (requirement '(root-file-system))
      (documentation "Expose a temporary USB CDC-ACM gadget as /dev/ttyGS0.")
-     (one-shot? #t)
-     (modules '((ice-9 ftw)))
+      (one-shot? #t)
+      (modules '((ice-9 ftw)
+                 (ice-9 rdelim)))
      (start
       #~(lambda _
           #$(pinenote-usb-acm-gadget-program)))
