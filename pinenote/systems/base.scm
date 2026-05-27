@@ -18,6 +18,7 @@
   #:use-module (pinenote services ebc)
   #:use-module (pinenote services state)
   #:export (%pinenote-local-packages
+            %pinenote-firmware
             %pinenote-bringup-services
             %base-services-without-guix
             %pinenote-base-services
@@ -30,9 +31,12 @@
         pinenote-ebc-test
         pinenote-extlinux-reference))
 
+(define %pinenote-firmware
+  (list pinenote-broadcom-wifi-firmware
+        pinenote-broadcom-bt-firmware))
+
 (define %pinenote-bringup-services
   (list (service pinenote-waveform-service-type)
-        (service pinenote-brcm-firmware-service-type)
         (service pinenote-ebc-modprobe-service-type)
         (service pinenote-ebc-params-service-type)
         (service pinenote-diagnostics-service-type)
@@ -62,6 +66,7 @@
     (timezone "Etc/UTC")
     (locale "en_US.utf8")
     (kernel linux-pinenote)
+    (firmware %pinenote-firmware)
     (initrd pinenote-initrd)
     (kernel-arguments pinenote-kernel-arguments)
     (initrd-modules '())

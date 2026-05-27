@@ -1,8 +1,78 @@
 (define-module (pinenote packages firmware)
+  #:use-module (guix build-system copy)
   #:use-module (guix build-system trivial)
+  #:use-module (guix download)
   #:use-module (guix gexp)
   #:use-module (guix licenses)
   #:use-module (guix packages))
+
+(define-public pinenote-broadcom-wifi-firmware
+  (package
+    (name "pinenote-broadcom-wifi-firmware")
+    (version "20260410")
+    (source
+     (origin
+       (method url-fetch)
+       (uri (string-append "https://cdn.kernel.org/pub/linux/kernel/firmware/"
+                           "linux-firmware-" version ".tar.xz"))
+       (sha256
+        (base32 "0y71y41bykla8xhclihfriwjms578bl0panxrvn0jswzspb2x0dp"))))
+    (build-system copy-build-system)
+    (arguments
+     (list
+      #:phases
+      #~(modify-phases %standard-phases
+          (replace 'install
+            (lambda _
+              (let ((brcm (string-append #$output "/lib/firmware/brcm"))
+                    (source "."))
+                (mkdir-p brcm)
+                (copy-file (string-append source "/cypress/cyfmac43455-sdio.bin")
+                           (string-append brcm "/brcmfmac43455-sdio.bin"))
+                (copy-file (string-append source "/cypress/cyfmac43455-sdio.bin")
+                           (string-append brcm "/brcmfmac43455-sdio.pine64,pinenote-v1.2.bin"))
+                (copy-file (string-append source "/cypress/cyfmac43455-sdio.clm_blob")
+                           (string-append brcm "/brcmfmac43455-sdio.clm_blob"))
+                (copy-file (string-append source "/brcm/brcmfmac43455-sdio.AW-CM256SM.txt")
+                           (string-append brcm "/brcmfmac43455-sdio.pine64,pinenote-v1.2.txt"))))))))
+    (home-page "https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git")
+    (synopsis "Broadcom Wi-Fi firmware for PineNote")
+    (description
+     "Install the BCM43455 SDIO firmware, CLM blob, and PineNote v1.2 NVRAM
+file names requested by brcmfmac on PineNote.")
+    (license #f)))
+
+(define-public pinenote-broadcom-bt-firmware
+  (let ((commit "cdf61dc691a49ff01a124752bd04194907f0f9cd"))
+    (package
+      (name "pinenote-broadcom-bt-firmware")
+      (version "0-cdf61dc")
+      (source
+       (origin
+         (method url-fetch)
+         (uri (string-append "https://github.com/RPi-Distro/bluez-firmware/archive/"
+                             commit ".tar.gz"))
+         (sha256
+          (base32 "03z72vm24jp0d75i08vx0jb1b9gh8lwg3dj47sfi52qscw1p00jy"))))
+      (build-system copy-build-system)
+      (arguments
+       (list
+        #:install-plan
+        #~'(("debian/firmware/broadcom/BCM4345C0.hcd" "lib/firmware/brcm/"))
+        #:phases
+        #~(modify-phases %standard-phases
+            (add-after 'install 'add-pinenote-alias
+              (lambda _
+                (with-directory-excursion (string-append #$output "/lib/firmware/brcm")
+                  (copy-file "BCM4345C0.hcd"
+                             "BCM4345C0.pine64,pinenote-v1.2.hcd")))))))
+      (home-page "https://github.com/RPi-Distro/bluez-firmware")
+      (synopsis "Broadcom Bluetooth firmware for PineNote")
+      (description
+       "Install the BCM4345C0 Bluetooth patch file under the generic name and
+the PineNote v1.2 device-specific alias requested by the kernel Bluetooth
+driver.")
+      (license #f))))
 
 (define-public pinenote-firmware-support
   (package
