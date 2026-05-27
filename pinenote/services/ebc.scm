@@ -98,7 +98,7 @@
    (shepherd-service
     (provision '(pinenote-ebc-test))
     (requirement '(pinenote-waveform pinenote-ebc-params))
-    (documentation "Run the read-only PineNote EBC test placeholder once.")
+    (documentation "Run the read-only PineNote EBC status report once.")
     (one-shot? #t)
     (start
      #~(lambda _

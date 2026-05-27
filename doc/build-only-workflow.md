@@ -12,7 +12,7 @@ Evaluate the channel modules:
 guix repl -L . -- /dev/stdin < /tmp/check-pinenote-modules.scm
 ```
 
-Build the placeholder user-space packages for the PineNote target:
+Build the user-space helper packages for the PineNote target:
 
 ```sh
 guix build -L . pinenote-ebc-test --target=aarch64-linux-gnu
@@ -119,7 +119,8 @@ The Shepherd services are one-shot bring-up hooks:
   values when sysfs exposes those parameters, and fails if the parameter
   directory is absent.
 - `pinenote-diagnostics` records read-only boot diagnostics.
-- `pinenote-ebc-test` runs a read-only placeholder test once.
+- `pinenote-ebc-test` runs a read-only EBC report once; its explicit
+  `--draw-smoke` mode performs a reversible framebuffer smoke test manually.
 
 The waveform is never bundled in this repository.
 

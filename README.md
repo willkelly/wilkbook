@@ -9,8 +9,8 @@ initial no-credentials, service-level D-Bus-free networking baseline.
 
 - `channels.scm` and `.guix-channel` for channel-style development.
 - `pinenote/packages/` with scaffold packages for the PineNote kernel,
-  local firmware installation support, boot reference docs, diagnostics, and EBC
-  test placeholder.
+  local firmware installation support, boot reference docs, diagnostics, and an
+  explicit EBC framebuffer smoke test.
 - `pinenote/services/` with Shepherd service definitions for waveform install,
   EBC parameter application, diagnostics, state metadata, and one-shot EBC test.
 - `pinenote/images/` with conservative partition/image notes and shared labels.

@@ -137,10 +137,10 @@ pass "ran read-only diagnostics helper on host"
 "$ebc_test_helper" > "$fixture/output/ebc-test.out"
 pass "ran read-only EBC test helper on host"
 
-if grep -q 'No framebuffer, DRM, EBC, partition, or bootloader writes are performed.' "$fixture/output/ebc-test.out"; then
-  pass "EBC test helper reports non-destructive behavior"
+if grep -q 'No framebuffer, DRM, EBC, partition, or bootloader writes are performed unless --draw-smoke is passed.' "$fixture/output/ebc-test.out"; then
+  pass "EBC test helper reports default non-destructive behavior"
 else
-  fail "EBC test helper did not report non-destructive behavior"
+  fail "EBC test helper did not report default non-destructive behavior"
 fi
 
 pass "mock PineNote service preflight complete"
