@@ -23,7 +23,7 @@ was extracted from the validated `PNGuixRoot` rootfs, so its `gnu.system`,
 The matched `extlinux.conf` uses:
 
 ```text
-APPEND root=LABEL=PNGuixRoot gnu.system=/gnu/store/vfpialj7b776qnfc401sqn5lb723f9pb-system gnu.load=/gnu/store/vfpialj7b776qnfc401sqn5lb723f9pb-system/boot ignore_loglevel rw rootwait earlycon console=tty0 console=ttyS2,1500000n8 fw_devlink=off
+APPEND root=PNGuixRoot gnu.system=/gnu/store/vfpialj7b776qnfc401sqn5lb723f9pb-system gnu.load=/gnu/store/vfpialj7b776qnfc401sqn5lb723f9pb-system/boot ignore_loglevel rw rootwait earlycon console=tty0 console=ttyS2,1500000n8 fw_devlink=off
 ```
 
 ## Stop before opening the serial session
@@ -69,7 +69,7 @@ stock Debian and kept limited to the inactive OS slot unless a verified U-Boot
 USB-console or `fastboot boot` flow is proven separately.
 
 The validated rootfs artifact now also normalizes the embedded
-`/boot/extlinux/extlinux.conf` to `root=LABEL=PNGuixRoot`, so it is suitable for
+`/boot/extlinux/extlinux.conf` to `root=PNGuixRoot`, so it is suitable for
 an explicitly approved OS2 placement as well as for the external matched boot
 bundle.
 
@@ -93,7 +93,7 @@ reboot still requires separate approval:
 4. Write the validated static-boot USB-console `PNGuixRoot` rootfs artifact to
    `os2` from stock Debian.
 5. Re-read `os2` metadata and embedded `/boot/extlinux/extlinux.conf`; confirm
-   label `PNGuixRoot`, `root=LABEL=PNGuixRoot`, and no `root=/dev/mmcblk`.
+   label `PNGuixRoot`, `root=PNGuixRoot`, and no `root=/dev/mmcblk`.
 6. Stop again before reboot.
 7. Reboot only after explicit approval, with the expectation that unchanged U-Boot
    can still return to stock Debian `os1` if the `os2` boot fails.
@@ -168,7 +168,7 @@ sysboot ${pn_bootdev} ${pn_bootpart} any ${scriptaddr} /extlinux/extlinux.conf
 
 For the revised static-boot artifact, `/boot/extlinux/extlinux.conf` inside
 `os2` is rewritten to load `/boot/Image`, `/boot/rk3566-pinenote-v1.2.dtb`, and
-`/boot/initrd.cpio.gz` with `root=LABEL=PNGuixRoot`. Do not use `sysboot`
+`/boot/initrd.cpio.gz` with `root=PNGuixRoot`. Do not use `sysboot`
 against older rootfs artifacts whose embedded extlinux still points at generated
 source paths or image UUIDs.
 
@@ -187,7 +187,7 @@ usb start
 load ${pn_bootdev} ${pn_bootpart} ${kernel_addr_r} /extlinux/Image
 load ${pn_bootdev} ${pn_bootpart} ${fdt_addr_r} /extlinux/rk3566-pinenote-v1.2.dtb
 load ${pn_bootdev} ${pn_bootpart} ${ramdisk_addr_r} /extlinux/initrd.cpio.gz
-setenv bootargs 'root=LABEL=PNGuixRoot gnu.system=/gnu/store/jsh9vxynmzvxzz6xwafb7g39dmz8b8q2-system gnu.load=/gnu/store/jsh9vxynmzvxzz6xwafb7g39dmz8b8q2-system/boot ignore_loglevel rw rootwait earlycon console=tty0 console=ttyS2,1500000n8 fw_devlink=off'
+setenv bootargs 'root=PNGuixRoot gnu.system=/gnu/store/jsh9vxynmzvxzz6xwafb7g39dmz8b8q2-system gnu.load=/gnu/store/jsh9vxynmzvxzz6xwafb7g39dmz8b8q2-system/boot ignore_loglevel rw rootwait earlycon console=tty0 console=ttyS2,1500000n8 fw_devlink=off'
 booti ${kernel_addr_r} ${ramdisk_addr_r}:${filesize} ${fdt_addr_r}
 ```
 
@@ -200,7 +200,7 @@ setenv pn_bootpart 0:6
 ext4load ${pn_bootdev} ${pn_bootpart} ${kernel_addr_r} /boot/Image
 ext4load ${pn_bootdev} ${pn_bootpart} ${fdt_addr_r} /boot/rk3566-pinenote-v1.2.dtb
 ext4load ${pn_bootdev} ${pn_bootpart} ${ramdisk_addr_r} /boot/initrd.cpio.gz
-setenv bootargs 'root=LABEL=PNGuixRoot gnu.system=/gnu/store/jsh9vxynmzvxzz6xwafb7g39dmz8b8q2-system gnu.load=/gnu/store/jsh9vxynmzvxzz6xwafb7g39dmz8b8q2-system/boot ignore_loglevel rw rootwait earlycon console=tty0 console=ttyS2,1500000n8 fw_devlink=off'
+setenv bootargs 'root=PNGuixRoot gnu.system=/gnu/store/jsh9vxynmzvxzz6xwafb7g39dmz8b8q2-system gnu.load=/gnu/store/jsh9vxynmzvxzz6xwafb7g39dmz8b8q2-system/boot ignore_loglevel rw rootwait earlycon console=tty0 console=ttyS2,1500000n8 fw_devlink=off'
 booti ${kernel_addr_r} ${ramdisk_addr_r}:${filesize} ${fdt_addr_r}
 ```
 

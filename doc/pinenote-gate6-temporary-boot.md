@@ -99,7 +99,7 @@ LABEL pinenote-guix-preflight
   KERNEL Image
   FDT rk3566-pinenote-v1.2.dtb
   INITRD initrd.cpio.gz
-  APPEND root=LABEL=PNGuixRoot gnu.system=/gnu/store/vfpialj7b776qnfc401sqn5lb723f9pb-system gnu.load=/gnu/store/vfpialj7b776qnfc401sqn5lb723f9pb-system/boot ignore_loglevel rw rootwait earlycon console=tty0 console=ttyS2,1500000n8 fw_devlink=off
+  APPEND root=PNGuixRoot gnu.system=/gnu/store/vfpialj7b776qnfc401sqn5lb723f9pb-system gnu.load=/gnu/store/vfpialj7b776qnfc401sqn5lb723f9pb-system/boot ignore_loglevel rw rootwait earlycon console=tty0 console=ttyS2,1500000n8 fw_devlink=off
 ```
 
 Current `raw-with-offset` image artifact:
@@ -125,7 +125,7 @@ Current direct rootfs artifact extracted from that image:
 
 It is a 1,137,762,304-byte ext4 filesystem image with no partition table,
 filesystem label `PNGuixRoot`, and embedded `/boot/extlinux/extlinux.conf` using
-`root=LABEL=PNGuixRoot`. Its SHA-256 is:
+`root=PNGuixRoot`. Its SHA-256 is:
 
 ```text
 26c1645ce3ccb3f87bc3a09db137c30217c026bbecf45bb70d874f6e4b6e11b1
@@ -156,7 +156,7 @@ Current `os2` state after approved write:
 | Target | `/dev/mmcblk0p6`, partition label `os2` |
 | Written byte-range SHA-256 | `6164ed64e68f5ae1f979514de36f63cab451402405edf6e938e861e669e71f1f` |
 | Filesystem | ext4, label `PNGuixRoot` |
-| Embedded boot config | `/boot/extlinux/extlinux.conf` uses `root=LABEL=PNGuixRoot` |
+| Embedded boot config | `/boot/extlinux/extlinux.conf` uses `root=PNGuixRoot` |
 | USB console services | `pinenote-usb-acm-gadget` and `term-ttyGS0` service files present |
 | Passwordless sudo | `reader ALL=(ALL) NOPASSWD: ALL` present in sudoers |
 | Rescue root | stock Debian `os1` remains mounted at `/` from `/dev/mmcblk0p5` |
@@ -170,7 +170,7 @@ reboot with the passwordless-sudo artifact below:
 ```
 
 It is a 1,137,963,008-byte ext4 filesystem image with label `PNGuixRoot`, no
-partition table, and embedded `root=LABEL=PNGuixRoot`. Its SHA-256 is:
+partition table, and embedded `root=PNGuixRoot`. Its SHA-256 is:
 
 ```text
 9b447db116771b703e999c2bd8f688b20a0e3a4380e5a8abb58ca0eac02fe84c
@@ -189,7 +189,7 @@ Passwordless-sudo artifact now installed on `os2`:
 ```
 
 It is a 1,137,963,008-byte ext4 filesystem image with label `PNGuixRoot`, no
-partition table, embedded `root=LABEL=PNGuixRoot`, and sudoers content:
+partition table, embedded `root=PNGuixRoot`, and sudoers content:
 
 ```text
 reader ALL=(ALL) NOPASSWD: ALL
@@ -221,7 +221,7 @@ paths and rewrites embedded extlinux to:
 KERNEL /boot/Image
 FDT /boot/rk3566-pinenote-v1.2.dtb
 INITRD /boot/initrd.cpio.gz
-APPEND root=LABEL=PNGuixRoot ...
+APPEND root=PNGuixRoot ...
 ```
 
 Its SHA-256 is:

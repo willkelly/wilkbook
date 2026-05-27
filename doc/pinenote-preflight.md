@@ -201,7 +201,7 @@ pinenote/scripts/preflight/inspect-boot-bundle.sh "$bundle"
 
 The staging helper refuses output directories outside `/tmp/opencode`, creates
 only a local fixture, and generates an `extlinux.conf` from the Guix system boot
-parameters plus `root=LABEL=PNGuixRoot`. The staged directory is for static
+parameters plus `root=PNGuixRoot`. The staged directory is for static
 inspection; it is not a deployment artifact.
 
 The inspector checks for:
@@ -210,7 +210,7 @@ The inspector checks for:
 - `rk3566-pinenote*.dtb`.
 - `uInitrd.img` or a documented initrd filename.
 - `extlinux.conf`.
-- `root=LABEL=PNGuixRoot`.
+- `root=PNGuixRoot`.
 - Absence of a raw eMMC root path in `extlinux.conf`.
 - Absence of forbidden deployment-oriented strings in the bundle.
 
@@ -282,7 +282,8 @@ Safe manual principles:
 
 - Confirm the device edition, serial console, power recovery, and known-good
   rescue path before testing.
-- Use label-based root selection: `root=LABEL=PNGuixRoot`.
+- Use Guix initrd label shorthand: `root=PNGuixRoot`, not the Linux
+  `LABEL=` root form.
 - Keep all environment edits in RAM for the current session only.
 - Do not alter persistent boot selection, partition layout, bootloader storage,
   or device contents during preflight.

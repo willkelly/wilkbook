@@ -89,7 +89,7 @@ boot bundle from `pinenote/scripts/preflight/stage-boot-bundle-from-rootfs.sh`,
 which extracts kernel, initrd, DTB, and Guix boot arguments from the same rootfs
 image.
 The extraction helper also normalizes the embedded
-`/boot/extlinux/extlinux.conf` to use `root=LABEL=PNGuixRoot`, so the same
+`/boot/extlinux/extlinux.conf` to use `root=PNGuixRoot`, so the same
 artifact can be inspected for a later, explicitly approved inactive-slot
 placement.
 

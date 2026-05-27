@@ -29,8 +29,8 @@ Current stock-Debian kernel arguments use the raw root device:
 root=/dev/mmcblk0p5 ignore_loglevel rw rootwait earlycon console=tty0 console=ttyS2,1500000n8 fw_devlink=off quiet loglevel=3 systemd.show_status=auto rd.udev.log_level=3 splash plymouth.ignore-serial-consoles vt.global_cursor_default=0
 ```
 
-The Guix preflight target should continue to use label-based root selection:
-`root=LABEL=PNGuixRoot`.
+The Guix preflight target should continue to use Guix initrd label shorthand:
+`root=PNGuixRoot`, not the Linux `LABEL=` root form.
 
 ## Existing backup roots
 
