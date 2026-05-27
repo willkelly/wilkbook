@@ -1,5 +1,6 @@
 (define-module (pinenote systems base)
   #:use-module (gnu bootloader)
+  #:use-module ((gnu packages linux) #:select (wireless-regdb))
   #:use-module (pinenote images pinenote-bootloader)
   #:use-module ((gnu services) #:select (service service-kind))
   #:use-module (gnu services base)
@@ -33,7 +34,9 @@
 
 (define %pinenote-firmware
   (list pinenote-broadcom-wifi-firmware
-        pinenote-broadcom-bt-firmware))
+        pinenote-broadcom-bt-firmware
+        pinenote-ebc-default-screen
+        wireless-regdb))
 
 (define %pinenote-bringup-services
   (list (service pinenote-waveform-service-type)

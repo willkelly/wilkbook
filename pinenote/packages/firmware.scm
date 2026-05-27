@@ -71,8 +71,41 @@ file names requested by brcmfmac on PineNote.")
       (description
        "Install the BCM4345C0 Bluetooth patch file under the generic name and
 the PineNote v1.2 device-specific alias requested by the kernel Bluetooth
-driver.")
+       driver.")
       (license #f))))
+
+(define-public pinenote-ebc-default-screen
+  (package
+    (name "pinenote-ebc-default-screen")
+    (version "0.1.0")
+    (source #f)
+    (build-system trivial-build-system)
+    (arguments
+     (list
+      #:builder
+      #~(begin
+          (use-modules (rnrs io ports))
+          (let ((destination (string-append #$output
+                                            "/lib/firmware/rockchip/"
+                                            "rockchip_ebc_default_screen.bin")))
+          (mkdir #$output)
+          (mkdir (string-append #$output "/lib"))
+          (mkdir (string-append #$output "/lib/firmware"))
+          (mkdir (string-append #$output "/lib/firmware/rockchip"))
+          (call-with-port (open-file-output-port destination)
+            (lambda (port)
+              (let loop ((remaining (/ (* 1872 1404) 2)))
+                (unless (zero? remaining)
+                  (put-u8 port #xff)
+                  (loop (- remaining 1))))))))))
+    (home-page "https://github.com/m-weigand/linux/tree/branch_pinenote_6-6-30")
+    (synopsis "Generated PineNote EBC off-screen seed")
+    (description
+     "Install a generated all-white 1872x1404 4bpp off-screen buffer under the
+name requested by the downstream PineNote Rockchip EBC driver.  This matches the
+driver's built-in fallback when the file is absent and avoids bundling the stock
+Debian screen image from device backups.")
+    (license public-domain)))
 
 (define-public pinenote-firmware-support
   (package
