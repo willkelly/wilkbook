@@ -66,6 +66,101 @@
           (sleep 1)
           (wait-for-udc name (- attempts 1)))))
 
+      (define (wait-for-line path expected attempts)
+        (let ((line (read-first-line path)))
+          (cond
+           ((and line (string=? line expected)) #t)
+           ((zero? attempts) #f)
+           (else
+            (sleep 1)
+            (wait-for-line path expected (- attempts 1))))))
+
+      (define (usb-role-switches)
+        (if (file-exists? "/sys/class/usb_role")
+            (scandir "/sys/class/usb_role"
+                     (lambda (entry)
+                       (not (member entry '("." "..")))))
+            '()))
+
+      (define (role-switch-path role-switch)
+        (string-append "/sys/class/usb_role/" role-switch "/role"))
+
+      (define (role-switch-device? role-switch)
+        (let ((role (read-first-line (role-switch-path role-switch))))
+          (and role (string=? role "device"))))
+
+      (define (target-role-switch? role-switch)
+        (or (string-contains role-switch "fcc00000.usb")
+            (let ((path (string-append "/sys/class/usb_role/" role-switch)))
+              (catch #t
+                (lambda ()
+                  (string-contains (readlink path) "fcc00000.usb"))
+                (lambda _ #f)))))
+
+      (define (target-role-switches role-switches)
+        (cond
+         ((null? role-switches) '())
+         ((target-role-switch? (car role-switches))
+          (cons (car role-switches)
+                (target-role-switches (cdr role-switches))))
+         (else (target-role-switches (cdr role-switches)))))
+
+      (define (all-role-switches-device? role-switches)
+        (cond
+         ((null? role-switches) #t)
+         ((role-switch-device? (car role-switches))
+          (all-role-switches-device? (cdr role-switches)))
+         (else #f)))
+
+      (define (wait-for-role-switch-device role-switches attempts)
+        (cond
+         ((all-role-switches-device? role-switches) #t)
+         ((zero? attempts) #f)
+         (else
+          (sleep 1)
+          (wait-for-role-switch-device role-switches (- attempts 1)))))
+
+      (define (set-role-switches-to-device role-switches)
+        (for-each
+         (lambda (role-switch)
+           (let ((path (role-switch-path role-switch)))
+             (log "setting USB role switch ~a to device" role-switch)
+             (write-file-if-exists path "device")))
+         role-switches))
+
+      (define (set-dwc3-device-mode)
+        (let ((mode-path "/sys/kernel/debug/usb/fcc00000.usb/mode"))
+          (if (not (file-exists? mode-path))
+              (begin
+                (log "DWC3 debugfs mode path is unavailable")
+                #f)
+              (begin
+                (write-file-if-exists mode-path "device")
+                (if (wait-for-line mode-path "device" 15)
+                    #t
+                    (begin
+                      (log "DWC3 mode did not settle to device; last mode was ~s"
+                           (read-first-line mode-path))
+                      #f))))))
+
+      (define (prepare-usb-device-role)
+        (let* ((available-role-switches (usb-role-switches))
+               (role-switches (target-role-switches available-role-switches)))
+          (when (and (not (null? available-role-switches))
+                     (null? role-switches))
+            (log "no USB role switch matched fcc00000.usb; available switches: ~s"
+                 available-role-switches))
+          (set-role-switches-to-device role-switches)
+          (if (not (wait-for-role-switch-device role-switches 15))
+              (begin
+                (log "target USB role switches did not report device role: ~s"
+                     (map (lambda (role-switch)
+                            (cons role-switch
+                                  (read-first-line (role-switch-path role-switch))))
+                          role-switches))
+                #f)
+              (set-dwc3-device-mode))))
+
       (define (fail message . arguments)
         (apply log message arguments)
         #f)
@@ -92,29 +187,27 @@
           (system* #$(file-append util-linux "/bin/mount")
                    "-t" "debugfs" "none" "/sys/kernel/debug")))
 
-      (write-file-if-exists "/sys/kernel/debug/usb/fcc00000.usb/mode"
-                            "peripheral")
-      (write-file-if-exists "/sys/kernel/debug/usb/fcc00000.usb/mode"
-                            "device")
+      (if (not (prepare-usb-device-role))
+          (fail "USB device role is not ready; not binding gadget")
+          (begin
+            (unless (file-exists? "/sys/kernel/config/usb_gadget")
+              (when (file-exists? "/sys/kernel/config")
+                (system* #$(file-append util-linux "/bin/mount")
+                         "-t" "configfs" "none" "/sys/kernel/config")))
 
-      (unless (file-exists? "/sys/kernel/config/usb_gadget")
-        (when (file-exists? "/sys/kernel/config")
-          (system* #$(file-append util-linux "/bin/mount")
-                   "-t" "configfs" "none" "/sys/kernel/config")))
-
-      (if (not (file-exists? "/sys/kernel/config/usb_gadget"))
-          (fail "configfs usb_gadget path is unavailable")
-          (let* ((gadget-root "/sys/kernel/config/usb_gadget/pinenote-acm")
-                 (udc (or (wait-for-udc "fcc00000.usb" 10)
-                          (first-directory "/sys/class/udc"))))
-            (if (not udc)
-                (fail "no USB device controller found")
-                (let ((bound-udc (gadget-bound-udc gadget-root)))
-                  (if bound-udc
-                      (begin
-                        (log "gadget is already bound to UDC ~a" bound-udc)
-                        #t)
-                      (begin
+            (if (not (file-exists? "/sys/kernel/config/usb_gadget"))
+                (fail "configfs usb_gadget path is unavailable")
+                (let* ((gadget-root "/sys/kernel/config/usb_gadget/pinenote-acm")
+                       (udc (or (wait-for-udc "fcc00000.usb" 10)
+                                (first-directory "/sys/class/udc"))))
+                  (if (not udc)
+                      (fail "no USB device controller found")
+                      (let ((bound-udc (gadget-bound-udc gadget-root)))
+                        (if bound-udc
+                            (begin
+                              (log "gadget is already bound to UDC ~a" bound-udc)
+                              #t)
+                            (begin
                   (log "binding to UDC ~a" udc)
                   (ensure-directory gadget-root)
 
@@ -150,10 +243,7 @@
 
                   (write-file (string-append gadget-root "/UDC") udc)
                   (log "bound CDC-ACM function as /dev/ttyGS0")
-                  #t))))))))
-
-(define (pinenote-usb-acm-gadget-activation _config)
-  (pinenote-usb-acm-gadget-program))
+                  #t))))))))))
 
 (define (pinenote-usb-acm-gadget-shepherd-service _config)
   (list
@@ -173,9 +263,7 @@
   (service-type
    (name 'pinenote-usb-acm-gadget)
    (extensions
-    (list (service-extension activation-service-type
-                             pinenote-usb-acm-gadget-activation)
-          (service-extension shepherd-root-service-type
+    (list (service-extension shepherd-root-service-type
                              pinenote-usb-acm-gadget-shepherd-service)))
    (default-value #f)
    (description "Create a temporary PineNote USB CDC-ACM console gadget.")))
