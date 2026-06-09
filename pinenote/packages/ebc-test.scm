@@ -83,7 +83,7 @@
                 (display "ls -1 /dev/dri 2>/dev/null || true\n" port)
                 (display "echo 'No framebuffer, DRM, EBC, partition, or bootloader writes are performed unless --draw-smoke is passed.'\n" port)))
             (chmod script #o555)))))
-    (home-page "https://github.com/m-weigand/linux/tree/branch_pinenote_6-6-30")
+    (home-page "https://github.com/m-weigand/linux/tree/branch_pinenote_6-12-11")
     (synopsis "Conservative PineNote EBC bring-up placeholder")
     (description
       "Install a small pinenote-ebc-test command that reports the EBC and DRM

@@ -4,6 +4,7 @@
   #:use-module (guix gexp)
   #:export (%pinenote-display-initrd-modules
             pinenote-initrd
+            pinenote-initrd-6.6
             pinenote-initramfs-note
             pinenote-kernel-arguments))
 
@@ -15,13 +16,21 @@ partition and loading PineNote display modules from the initrd.")
 (define %pinenote-display-initrd-modules
   ;; Keep these out of operating-system 'initrd-modules': Guix loads that list
   ;; before the pre-mount hook, but rockchip_ebc needs waveform firmware first.
+  '("tps65185"
+    "panel-simple"
+    "rockchipdrm"
+    "rockchip_ebc"))
+
+(define %pinenote-display-initrd-modules-6.6
+  ;; Linux 6.6 downstream names the TPS65185 module with the legacy suffix.
   '("tps65185-regulator"
     "panel-simple"
     "rockchipdrm"
     "rockchip_ebc"))
 
-(define* (pinenote-initrd file-systems
-                          #:key
+(define* (pinenote-initrd* display-initrd-modules
+                           file-systems
+                           #:key
                           (linux linux-libre)
                           (linux-modules '())
                           (mapped-devices '())
@@ -38,7 +47,7 @@ partition and loading PineNote display modules from the initrd.")
         (display-module-directory
          ((@@ (gnu system linux-initrd) flat-linux-module-directory)
           linux
-          %pinenote-display-initrd-modules)))
+          display-initrd-modules)))
     (raw-initrd file-systems
                 #:linux linux
                 #:linux-modules linux-modules*
@@ -141,7 +150,7 @@ partition and loading PineNote display modules from the initrd.")
                     (catch #t
                       (lambda ()
                         (load-linux-modules-from-directory
-                         '#$%pinenote-display-initrd-modules
+                         '#$display-initrd-modules
                          #$display-module-directory)
                         (pinenote-initrd-log "loaded EBC display modules"))
                       (lambda (key . _)
@@ -169,13 +178,52 @@ partition and loading PineNote display modules from the initrd.")
                      "handoff to Guix root mount for PNGuixRoot")
                     #t))))
 
+
+(define* (pinenote-initrd file-systems
+                          #:key
+                          (linux linux-libre)
+                          (linux-modules '())
+                          (mapped-devices '())
+                          (keyboard-layout #f)
+                          qemu-networking?
+                          volatile-root?
+                          (on-error 'debug))
+  (pinenote-initrd* %pinenote-display-initrd-modules
+                    file-systems
+                    #:linux linux
+                    #:linux-modules linux-modules
+                    #:mapped-devices mapped-devices
+                    #:keyboard-layout keyboard-layout
+                    #:qemu-networking? qemu-networking?
+                    #:volatile-root? volatile-root?
+                    #:on-error on-error))
+
+(define* (pinenote-initrd-6.6 file-systems
+                              #:key
+                              (linux linux-libre)
+                              (linux-modules '())
+                              (mapped-devices '())
+                              (keyboard-layout #f)
+                              qemu-networking?
+                              volatile-root?
+                              (on-error 'debug))
+  (pinenote-initrd* %pinenote-display-initrd-modules-6.6
+                    file-systems
+                    #:linux linux
+                    #:linux-modules linux-modules
+                    #:mapped-devices mapped-devices
+                    #:keyboard-layout keyboard-layout
+                    #:qemu-networking? qemu-networking?
+                    #:volatile-root? volatile-root?
+                    #:on-error on-error))
+
 (define pinenote-kernel-arguments
   '("ignore_loglevel"
      "rw"
     "rootwait"
     "earlycon"
      "console=tty0"
-     "console=ttyS2,115200n8"
+     "console=ttyS2,1500000n8"
      "fw_devlink=off"
      "rockchip_ebc.direct_mode=0"
      "rockchip_ebc.auto_refresh=1"

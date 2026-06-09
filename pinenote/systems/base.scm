@@ -62,15 +62,17 @@
 (define* (make-pinenote-operating-system
           #:key
           (host-name "pinenote-guix")
+          (kernel linux-pinenote)
+          (initrd pinenote-initrd)
           (packages (append %pinenote-local-packages %base-packages))
           (services %pinenote-base-services))
   (operating-system
     (host-name host-name)
     (timezone "Etc/UTC")
     (locale "en_US.utf8")
-    (kernel linux-pinenote)
+    (kernel kernel)
     (firmware %pinenote-firmware)
-    (initrd pinenote-initrd)
+    (initrd initrd)
     (kernel-arguments pinenote-kernel-arguments)
     (initrd-modules '())
     (bootloader

@@ -98,7 +98,7 @@ the PineNote v1.2 device-specific alias requested by the kernel Bluetooth
                 (unless (zero? remaining)
                   (put-u8 port #xff)
                   (loop (- remaining 1))))))))))
-    (home-page "https://github.com/m-weigand/linux/tree/branch_pinenote_6-6-30")
+    (home-page "https://github.com/m-weigand/linux/tree/branch_pinenote_6-12-11")
     (synopsis "Generated PineNote EBC off-screen seed")
     (description
      "Install a generated all-white 1872x1404 4bpp off-screen buffer under the
