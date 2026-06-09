@@ -130,29 +130,20 @@ Fail gate:
 
 ## Gate 3: Kernel Source Inspection
 
-The `linux-pinenote` package pins the intended source identity to commit
-`6bf9085fb0a7c44ca7e6b92eeedfef817bd7d931` from
-`https://github.com/m-weigand/linux`, with Guix `base32` hash
-`0n1drcm98ljif528sfx9jxyvmc80zg28s47x91pn6dns4d7xlvjd`. It inherits Guix's
-Linux package and runs the source tree's `pinenote_defconfig` directly, while
-keeping the standard Guix kernel build and install phases.
-
-Prepare a disposable source checkout outside the repository, then inspect it
-without building the kernel:
+The `linux-pinenote` package now uses Guix's current `linux-libre` source plus
+repo-local PineNote forward-port patches. Inspect the patched source that Guix
+would build, not a separately pinned downstream checkout:
 
 ```sh
-git clone https://github.com/m-weigand/linux /tmp/opencode/mw-linux
-git -C /tmp/opencode/mw-linux fetch origin \
-  6bf9085fb0a7c44ca7e6b92eeedfef817bd7d931
-git -C /tmp/opencode/mw-linux switch --detach \
-  6bf9085fb0a7c44ca7e6b92eeedfef817bd7d931
-pinenote/scripts/preflight/inspect-kernel-source.sh /tmp/opencode/mw-linux
+guix build --source -L . -e '(@ (pinenote packages kernel) linux-pinenote)'
+# If desired, unpack the printed source tarball under /tmp/opencode and inspect it:
+pinenote/scripts/preflight/inspect-kernel-source.sh /tmp/opencode/linux-pinenote-source
 ```
 
-If a local checkout already exists, first confirm that it is not being used for
-unrelated work, then run only the inspector against that path. The inspector is
-read-only: it does not run `make`, build a kernel, fetch, checkout, or write to
-the source tree.
+For local forward-port work, it is also acceptable to inspect the disposable
+patched kernel tree used to generate `pinenote/patches/linux-pinenote-7.0-forward-port.patch`.
+The inspector is read-only: it does not run `make`, build a kernel, fetch,
+checkout, or write to the source tree.
 
 The inspector checks for:
 
@@ -163,28 +154,19 @@ The inspector checks for:
 - PineNote defconfig symbols for EBC, TPS65185, CYTTSP5, BRCMFMAC,
   I2C HID, and Rockchip DesignWare MMC.
 - DTS/DTSI markers for PineNote compatibility, the EBC node, TPS65185 PMIC,
-  and Wacom HID-over-I2C pen support.
-- Git commit identity when the path is a git checkout.
-
-By default, a git checkout fails this gate if `HEAD` is not
-`6bf9085fb0a7c44ca7e6b92eeedfef817bd7d931`. For exploratory inspection of a
-different commit, make the exception explicit:
-
-```sh
-PINENOTE_KERNEL_ALLOW_DIFFERENT_COMMIT=1 \
-  pinenote/scripts/preflight/inspect-kernel-source.sh /path/to/linux
-```
+  WS8100 pen, and Wacom HID-over-I2C pen support.
+- Git commit identity as informational context when the path is a git checkout.
 
 Pass gate:
 
 - The script exits with status 0.
-- The printed commit is the pinned PineNote reference, or a different commit was
-  intentionally allowed and documented.
+- The inspected source is the Guix-derived patched source or the documented
+  disposable forward-port tree used to generate the local patch.
 
 Fail gate:
 
 - Any required source artifact, defconfig symbol, or DTS/DTSI marker is missing.
-- A git checkout is at a different commit without the explicit override.
+- The inspected source is unrelated to the Guix source plus local patch workflow.
 
 ## Gate 4: Boot-Bundle Inspection
 

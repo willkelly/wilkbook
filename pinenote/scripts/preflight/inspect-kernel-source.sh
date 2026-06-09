@@ -1,11 +1,8 @@
 #!/bin/sh
 set -eu
 
-expected_commit=6bf9085fb0a7c44ca7e6b92eeedfef817bd7d931
-
 usage() {
   printf 'usage: %s KERNEL_SOURCE_DIRECTORY\n' "$0" >&2
-  printf 'optional env: PINENOTE_KERNEL_ALLOW_DIFFERENT_COMMIT=1\n' >&2
 }
 
 fail() {
@@ -58,13 +55,6 @@ fi
 if git -C "$source_dir" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   current_commit=$(git -C "$source_dir" rev-parse HEAD)
   note "git commit: $current_commit"
-  if [ "$current_commit" = "$expected_commit" ]; then
-    pass "kernel source commit matches pinned PineNote reference"
-  elif [ "${PINENOTE_KERNEL_ALLOW_DIFFERENT_COMMIT:-}" = 1 ]; then
-    warn "kernel source commit differs from pinned reference: expected $expected_commit"
-  else
-    fail "kernel source commit differs from pinned reference: expected $expected_commit"
-  fi
 else
   warn "kernel source path is not a git checkout; commit identity was not verified"
 fi
@@ -85,6 +75,7 @@ require_contains arch/arm64/boot/dts/rockchip/rk3566-pinenote-v1.2.dts 'model = 
 require_contains arch/arm64/boot/dts/rockchip/rk3566-pinenote-v1.2.dts 'compatible = "pine64,pinenote-v1.2", "pine64,pinenote", "rockchip,rk3566"' 'PineNote compatibility'
 require_contains arch/arm64/boot/dts/rockchip/rk3566-pinenote.dtsi '&ebc {' 'EBC node'
 require_contains arch/arm64/boot/dts/rockchip/rk3566-pinenote.dtsi 'compatible = "ti,tps65185"' 'EBC PMIC'
+require_contains arch/arm64/boot/dts/rockchip/rk3566-pinenote.dtsi 'compatible = "pine64,pinenote-ws8100-pen"' 'WS8100 pen'
 require_contains arch/arm64/boot/dts/rockchip/rk3566-pinenote.dtsi 'compatible = "wacom,w9013", "hid-over-i2c"' 'Wacom pen HID'
 
 warn "kernel source inspection does not build the kernel or prove PineNote hardware boot"

@@ -79,15 +79,13 @@ We should not copy the Debian build method, but we should treat it as the practi
 
 ### PineNote kernel references
 
-Start with the pinned PineNote kernel tree rather than upstream purity:
+Start with Guix's current `linux-libre` source and carry the PineNote downstream display/pen support as explicit local patches:
 
 ```text
-m-weigand/linux branch_pinenote_6-6-30
-commit 6bf9085fb0a7c44ca7e6b92eeedfef817bd7d931
-Guix base32 0n1drcm98ljif528sfx9jxyvmc80zg28s47x91pn6dns4d7xlvjd
+Guix linux-libre source + pinenote/patches/linux-pinenote-7.0-forward-port.patch
 ```
 
-Keep hrdl's kernel tree as a later experiment because it contains more experimental EBC responsiveness/per-pixel scheduling ideas.
+Keep m-weigand's and hrdl's kernel trees as reference sources for forward-porting and later experiments because they contain downstream EBC and responsiveness/per-pixel scheduling ideas.
 
 ### WinkShell reference
 
@@ -364,16 +362,14 @@ pinenote-guix/
 Source:
 
 ```text
-m-weigand/linux branch_pinenote_6-6-30
-commit 6bf9085fb0a7c44ca7e6b92eeedfef817bd7d931
-Guix base32 0n1drcm98ljif528sfx9jxyvmc80zg28s47x91pn6dns4d7xlvjd
+Guix linux-libre source + pinenote/patches/linux-pinenote-7.0-forward-port.patch
 ```
 
 Guix package state:
 
-- `linux-pinenote` inherits Guix `linux-libre`,
-- the package source is pinned to the commit and hash above,
-- its configure phase runs the in-tree `pinenote_defconfig` directly,
+- `linux-pinenote` inherits the current Guix `linux-libre`,
+- the package appends the repo-local PineNote forward-port patch to the inherited source patches,
+- its configure phase runs the carried `pinenote_defconfig` directly,
 - Guix's standard kernel phases own the full build and install of the kernel
   image, modules, and DTBs.
 
@@ -624,7 +620,7 @@ guix build -L . pinenote-ebc-test \
 ### Compute kernel package derivation
 
 ```sh
-guix build -d -L . linux-pinenote \
+guix build -d -L . -e '(@ (pinenote packages kernel) linux-pinenote)' \
   --target=aarch64-linux-gnu
 ```
 
@@ -810,8 +806,8 @@ Clone or bookmark:
 
 ```sh
 git clone https://github.com/PNDeb/pinenote-debian-image
-git clone --branch branch_pinenote_6-6-30 https://github.com/m-weigand/linux
-git -C linux checkout 6bf9085fb0a7c44ca7e6b92eeedfef817bd7d931
+git clone https://github.com/m-weigand/linux
+# Use as reference only; forward-port into pinenote/patches/ against Guix linux-libre.
 git clone https://github.com/hmpthcs/WinkShell
 ```
 
@@ -861,7 +857,7 @@ guix build -L . pinenote-ebc-test --target=aarch64-linux-gnu
 ### Step 4: compute kernel derivation, then cross-build deliberately
 
 ```sh
-guix build -d -L . linux-pinenote --target=aarch64-linux-gnu
+guix build -d -L . -e '(@ (pinenote packages kernel) linux-pinenote)' --target=aarch64-linux-gnu
 ```
 
 Only after the derivation gate succeeds and a full kernel realization is

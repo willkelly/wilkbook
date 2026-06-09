@@ -51,12 +51,14 @@ guix system vm -L . --target=aarch64-linux-gnu \
 The generic QEMU smoke VM has reached the `pinenote-qemu-smoke login:` prompt;
 use the VM launcher path as the validated QEMU gate.
 
-The `linux-pinenote` package is pinned and configured to use the in-tree
+The `linux-pinenote` package inherits the current Guix `linux-libre` source and
+applies the local PineNote forward-port patches before running
 `pinenote_defconfig`. Start with derivation computation before full realization;
 see `doc/pinenote-flavors.md` for the flavor matrix and current sizes:
 
 ```sh
-guix build -d -L . linux-pinenote --target=aarch64-linux-gnu
+guix build -d -L . -e '(@ (pinenote packages kernel) linux-pinenote)' \
+  --target=aarch64-linux-gnu
 guix system build -d -L . --target=aarch64-linux-gnu \
   pinenote/systems/pinenote-slim.scm
 ```
@@ -114,10 +116,10 @@ kernel has not exposed `/sys/module/rockchip_ebc/parameters`.
   `/extlinux/rk3566-pinenote-v1.2.dtb`, `/extlinux/uInitrd.img`, and kernel
   arguments `ignore_loglevel rw rootwait earlycon console=tty0
   console=ttyS2,1500000n8 fw_devlink=off`.
-- Pine64 documentation identifies `https://github.com/m-weigand/linux` branch
-  `branch_pinenote_6-6-30`, `pinenote_defconfig`, uncompressed
-  `arch/arm64/boot/Image`, and `rk3566-pinenote-v1.2.dtb` as the stable kernel
-  reference shape.
+- Pine64/downstream references identify `pinenote_defconfig`, uncompressed
+  `arch/arm64/boot/Image`, and `rk3566-pinenote-v1.2.dtb` as the kernel
+  artifact shape; this channel carries the PineNote-specific pieces as local
+  patches on top of Guix `linux-libre`.
 
 ## Non-Goals
 
