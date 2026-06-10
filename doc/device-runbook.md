@@ -138,9 +138,8 @@ Stop before any temporary boot attempt if any of these are true:
 - The target command would persistently alter boot order, U-Boot environment,
   partition layout, or eMMC contents.
 - The operator has not explicitly approved a hardware-facing write step.
-- The serial/U-Boot command sequence in
-  `doc/pinenote-gate6-serial-uboot.md` has not been checked against the actual
-  U-Boot discovery output.
+- The serial/U-Boot procedure in `doc/hardware-deploy.md` has not been
+  checked against the actual U-Boot discovery output.
 
 ## Read-only commands used for inventory
 

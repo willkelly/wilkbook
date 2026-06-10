@@ -9,7 +9,8 @@ with two slots expected for A/B testing on 128 GB storage.
 | Flavor | Entrypoint | Purpose |
 | --- | --- | --- |
 | slim | `pinenote/systems/pinenote-slim.scm` | Smallest current PineNote boot target: PineNote kernel, waveform/EBC/diagnostics services, and local helper packages only. |
-| usb-console | `pinenote/systems/pinenote-usb-console.scm` | Slim target plus a USB CDC-ACM gadget, auto-login `reader` getty on `ttyGS0`, and passwordless `sudo` for `reader`, intended for USB-C-only Gate 6 recovery/observation. |
+| usb-console | `pinenote/systems/pinenote-usb-console.scm` | Slim target plus a USB CDC-ACM gadget, auto-login `reader` getty on `ttyGS0` and UART `ttyS2`, and passwordless `sudo` for `reader`. Carries the forward-ported `linux-pinenote` kernel; this is the kernel-currency track (see `doc/status.md` for open issues). |
+| usb-console-linux-6-6 | `pinenote/systems/pinenote-usb-console-linux-6-6.scm` | Same as usb-console but with the hardware-validated m-weigand 6.6.30 kernel and matching initrd. The fully working baseline flavor. |
 | networked | `pinenote/systems/pinenote-networked.scm` | Slim target plus `dhcpcd` and `wpa_supplicant` for an initial Wi-Fi/DHCP size baseline. The `wpa_supplicant` D-Bus control interface is disabled, and no network credentials are embedded. |
 | minimal | `pinenote/systems/pinenote-minimal.scm` | Bring-up target with PineNote services plus Guix `%base-packages`, but without the Guix daemon service. |
 | dev | `pinenote/systems/pinenote-dev.scm` | Development comparison target that restores `%base-services`, including the Guix service. Keep this out of release boot slots unless explicitly needed. |
@@ -17,7 +18,9 @@ with two slots expected for A/B testing on 128 GB storage.
 ## Current Measurements
 
 Measured with `guix system build -L . --target=aarch64-linux-gnu ...` and
-`guix size --sort=self` after the PineNote kernel build succeeded.
+`guix size --sort=self` after the PineNote kernel build succeeded. These
+numbers predate the Broadcom firmware packages and the usb-console flavors;
+re-measure before relying on them (tracked in `ROADMAP.md`).
 
 | Flavor | System closure | Compressed tarball rootfs proxy |
 | --- | ---: | ---: |

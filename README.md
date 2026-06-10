@@ -1,132 +1,81 @@
 # wilkbook
 
-Guix channel-style scaffold for first, non-destructive PineNote bring-up system
-flavors. The current focus is build reproducibility, size tracking, first-boot
-waveform handling, Shepherd service wiring, read-only EBC diagnostics, and an
-initial no-credentials, service-level D-Bus-free networking baseline.
+A Guix channel that builds a small operating system for the Pine64 PineNote
+e-ink tablet. The goals, in order:
 
-## What Is Here
+1. **Kernel currency** — track recent kernels by carrying the downstream
+   PineNote display/pen stack as explicit patches, with working (non-free)
+   firmware.
+2. **Easy image building** — one command from checkout to a deployable
+   rootfs artifact.
+3. **E-ink userland** — eventually a reading-first device: an EBC-aware
+   render harness, then a KOReader spin or a MuPDF-based renderer.
 
-- `channels.scm` and `.guix-channel` for channel-style development.
-- `pinenote/packages/` with scaffold packages for the PineNote kernel,
-  local firmware installation support, boot reference docs, diagnostics, and an
-  explicit EBC framebuffer smoke test.
-- `pinenote/services/` with Shepherd service definitions for waveform install,
-  EBC parameter application, diagnostics, state metadata, and one-shot EBC test.
-- `pinenote/images/` with conservative partition/image notes and shared labels.
-- `pinenote/systems/` with slim, networked, minimal, dev, and generic QEMU
-  smoke operating-system entrypoints.
-- `pinenote/systems/qemu-aarch64-smoke.scm` as a generic ARM64 QEMU smoke
-  entrypoint that does not emulate PineNote hardware.
-- `pinenote/scripts/preflight/` with non-destructive kernel-source,
-  boot-bundle, and helper inspection scripts.
-- `doc/build-only-workflow.md` with the build-only workflow and safety notes.
-- `doc/pinenote-preflight.md` with the validation ladder and pass/fail gates.
-- `doc/pinenote-gate6-runbook.md` with the backup and rescue checklist before
-  any hardware-adjacent preflight.
-- `doc/pinenote-gate6-temporary-boot.md` with the prepared host-side Gate 6
-  artifacts and stop points before hardware execution.
-- `doc/pinenote-flavors.md` with flavor definitions and current size
-  measurements.
+See `ROADMAP.md` for direction and `doc/status.md` for what is currently
+proven on hardware.
 
-## Build Commands
+## Status (2026-06)
 
-From this repository:
+- The **6.6.30 m-weigand kernel flavor works entirely** on the device:
+  display, Wi-Fi, Bluetooth, USB console. Build it with
+  `make rootfs-usb-console-linux-6-6`.
+- The **forward-ported 7.0 kernel** (Guix `linux-libre` + local patch) boots
+  to Guix userspace on the experimental `os2` slot. Open issues: Wi-Fi
+  firmware is blocked by linux-libre's deblobbing, the USB gadget fails at
+  `ep0out` (UART console works), and nothing has been drawn on the panel
+  yet. Details in `doc/status.md` and `doc/kernel-forward-port.md`.
+
+## Quick start
 
 ```sh
-guix build -L . pinenote-ebc-test --target=aarch64-linux-gnu
-guix build -L . pinenote-diagnostics --target=aarch64-linux-gnu
-guix build -L . pinenote-firmware-support --target=aarch64-linux-gnu
+make help                              # list targets
+make rootfs-usb-console-linux-6-6     # known-good baseline image -> rootfs
+make rootfs-usb-console               # kernel-currency track
+make kernel-drv                       # cheap gate: compute kernel derivation
+make qemu-smoke                       # generic ARM64 userspace check
 ```
 
-Build and run the generic ARM64 QEMU smoke VM when you want a preflight check
-that does not depend on PineNote kernel, DTB, waveform, or EBC services:
+Deployment to the device is deliberately manual: the extracted `PNGuixRoot`
+rootfs is written to the inactive `os2` partition only, observed over UART,
+with stock Debian on `os1` as the rescue path. See `doc/hardware-deploy.md`.
 
-```sh
-guix system vm -L . --target=aarch64-linux-gnu \
-  pinenote/systems/qemu-aarch64-smoke.scm
-/gnu/store/...-run-vm.sh -M virt -cpu max -nographic -no-reboot
-```
+## Layout
 
-The generic QEMU smoke VM has reached the `pinenote-qemu-smoke login:` prompt;
-use the VM launcher path as the validated QEMU gate.
+- `pinenote/packages/` — the two kernel packages (`linux-pinenote` forward
+  port, `linux-pinenote-6.6.30` baseline), Broadcom Wi-Fi/BT firmware
+  packages, firmware helper scripts, EBC test and diagnostics tools.
+- `pinenote/patches/` — the kernel forward-port patch (EBC driver, WS8100
+  pen, PineNote DTS, `pinenote_defconfig`).
+- `pinenote/services/` — Shepherd services: waveform install, EBC modprobe
+  options and parameters, diagnostics, USB CDC-ACM gadget console.
+- `pinenote/images/` — initrd wrappers (pre-root waveform extraction and
+  display module loading), extlinux bootloader config, kernel arguments,
+  partition labels.
+- `pinenote/systems/` — flavor entrypoints (see `doc/pinenote-flavors.md`).
+- `pinenote/scripts/preflight/` — non-destructive inspection and extraction
+  helpers.
+- `doc/` — `building.md`, `hardware-deploy.md`, `status.md`,
+  `kernel-forward-port.md`, `device-runbook.md` (device inventory and
+  backup ledger), `pinenote-flavors.md`, and `archive/` for historical
+  documents.
 
-The `linux-pinenote` package inherits the current Guix `linux-libre` source and
-applies the local PineNote forward-port patches before running
-`pinenote_defconfig`. Start with derivation computation before full realization;
-see `doc/pinenote-flavors.md` for the flavor matrix and current sizes:
+## Firmware and waveform policy
 
-```sh
-guix build -d -L . -e '(@ (pinenote packages kernel) linux-pinenote)' \
-  --target=aarch64-linux-gnu
-guix system build -d -L . --target=aarch64-linux-gnu \
-  pinenote/systems/pinenote-slim.scm
-```
+- The per-device EBC **waveform is never bundled**. The initrd and a
+  first-boot service extract it from the device's own `waveform` partition
+  (fallback: `/state/firmware/ebc.wbf`) into
+  `/lib/firmware/rockchip/ebc.wbf`, failing visibly if absent.
+- Broadcom Wi-Fi/BT firmware is packaged from public sources
+  (linux-firmware, RPi-Distro bluez-firmware) under the names brcmfmac and
+  the BT driver request on the PineNote. Note that the linux-libre-based
+  kernel refuses to load the Wi-Fi blobs regardless (see
+  `doc/kernel-forward-port.md`).
+- VCOM calibration, waveform, U-Boot, and partition-table backups are
+  recorded in `doc/device-runbook.md` before any hardware work.
 
-Firmware helpers deliberately do not bundle PineNote blobs. The initrd now tries
-to read the local `waveform` partition before mounting root so `rockchip_ebc`
-can bind early enough for a tty0/fbcon diagnostic console. The runtime waveform
-helper performs the same local extraction after root, and the Broadcom helper
-only installs AP6255/BCM43455 files if they have already been supplied under
-`/state/firmware/brcm`.
+## Safety model
 
-Before any kernel build or boot-bundle work, inspect the selected PineNote
-kernel source checkout. This does not build the kernel or prove hardware boot:
-
-```sh
-pinenote/scripts/preflight/inspect-kernel-source.sh /path/to/linux
-```
-
-The eventual first image target should be a label-based ext4 root filesystem
-with root label `PNGuixRoot`, intended for a manually selected experimental OS
-slot after the exact device edition and partition labels are confirmed.
-
-For the full non-destructive validation ladder, including boot-bundle inspection
-and mock helper checks, see `doc/pinenote-preflight.md`.
-
-## Safety Notes
-
-This repository intentionally contains no hardware deployment automation. It
-does not create whole-device images, modify partition layouts, alter persistent
-boot selection, or bundle private waveform or firmware blobs.
-
-The waveform support follows the PNDeb behavior conceptually: first boot reads
-from `/dev/disk/by-partlabel/waveform` and installs the data at
-`/lib/firmware/rockchip/ebc.wbf` for `rockchip_ebc`. If that source is absent,
-the helper may use `/state/firmware/ebc.wbf`. The destination is fixed and not
-caller-overridable. If neither source exists, it fails visibly and does not try
-to drive the panel.
-
-The `rockchip_ebc` modprobe options are installed into the operating system by
-`pinenote-ebc-modprobe-service-type`, which populates
-`/etc/modprobe.d/rockchip_ebc.conf`. The copy in `pinenote-firmware-support` is
-kept as package documentation; package inclusion alone is not treated as `/etc`
-configuration. The parameter application service also fails visibly if the
-kernel has not exposed `/sys/module/rockchip_ebc/parameters`.
-
-## Confirmed References
-
-- PNDeb `pinenote-debian-image` uses a debos pipeline and extracts waveform
-  data from `/dev/disk/by-partlabel/waveform` into the firmware path used by
-  `rockchip_ebc`.
-- PNDeb `rockchip_ebc` options used here are `direct_mode=0`,
-  `auto_refresh=1`, `refresh_threshold=60`, `split_area_limit=0`,
-  `panel_reflection=1`, `prepare_prev_before_a2=0`, and `dclk_select=0`.
-- PNDeb extlinux references `/extlinux/Image`,
-  `/extlinux/rk3566-pinenote-v1.2.dtb`, `/extlinux/uInitrd.img`, and kernel
-  arguments `ignore_loglevel rw rootwait earlycon console=tty0
-  console=ttyS2,1500000n8 fw_devlink=off`.
-- Pine64/downstream references identify `pinenote_defconfig`, uncompressed
-  `arch/arm64/boot/Image`, and `rk3566-pinenote-v1.2.dtb` as the kernel
-  artifact shape; this channel carries the PineNote-specific pieces as local
-  patches on top of Guix `linux-libre`.
-
-## Non-Goals
-
-- No Wayland, wlroots, browser, MuPDF, Waydroid, or full reader shell yet.
-- No system D-Bus requirement in slim or networked bring-up flavors; add it
-  later only for concrete desktop, mobile, or PineNote control services.
-- No on-device package management in release-slot flavors.
-- No private waveform blobs or redistributed firmware dumps.
-- No full-device image or persistent boot-selection workflow until hardware
-  edition, partition labels, rescue path, and target slot are confirmed.
+Builds never touch the device. Deployment writes only the `os2` slot after
+the backup checklist passes, never the bootloader, partition table,
+`waveform`, or `os1` rescue system, and never persists U-Boot environment or
+boot-order changes.
