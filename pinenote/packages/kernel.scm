@@ -32,6 +32,22 @@
 (define %linux-pinenote-version
   (string-append (package-version %linux-pinenote-base) "-pinenote"))
 
+;; Built-in support for QEMU's generic ARM64 "virt" machine so the exact
+;; hardware kernel image can be smoke-tested off-device (virtio root disk,
+;; PL011 console).  Built-in rather than modular so the initrd needs no
+;; QEMU-specific module list.  Harmless on PineNote hardware.
+(define %pinenote-qemu-virt-config-lines
+  (list "CONFIG_PCI_HOST_GENERIC=y"
+        "CONFIG_VIRTIO_PCI=y"
+        "CONFIG_VIRTIO_MMIO=y"
+        "CONFIG_VIRTIO_BLK=y"
+        "CONFIG_VIRTIO_NET=y"
+        "CONFIG_VIRTIO_CONSOLE=y"
+        "CONFIG_HW_RANDOM_VIRTIO=y"
+        "CONFIG_SERIAL_AMBA_PL011=y"
+        "CONFIG_SERIAL_AMBA_PL011_CONSOLE=y"
+        "CONFIG_RTC_DRV_PL031=y"))
+
 (define %linux-pinenote-patches
   (list (local-file "../patches/linux-pinenote-7.0-forward-port.patch")))
 
@@ -55,6 +71,12 @@
             (replace 'configure
               (lambda _
                 (invoke "make" "pinenote_defconfig")
+                (let ((port (open-file ".config" "a")))
+                  (for-each (lambda (line)
+                              (display line port)
+                              (newline port))
+                            '#$%pinenote-qemu-virt-config-lines)
+                  (close-port port))
                 (invoke "make" "olddefconfig")))))))
     (home-page
      "https://github.com/m-weigand/linux/tree/branch_pinenote_6-12-11")
@@ -91,6 +113,12 @@ or mutate bootloader state.")
                   (("# CONFIG_KEXEC_CORE=y") "CONFIG_KEXEC_CORE=y")
                   (("# CONFIG_CRASH_CORE=y") "CONFIG_CRASH_CORE=y"))
                 (invoke "make" "pinenote_defconfig")
+                (let ((port (open-file ".config" "a")))
+                  (for-each (lambda (line)
+                              (display line port)
+                              (newline port))
+                            '#$%pinenote-qemu-virt-config-lines)
+                  (close-port port))
                 (invoke "make" "olddefconfig")))))))
     (home-page
      (string-append "https://github.com/m-weigand/linux/tree/"

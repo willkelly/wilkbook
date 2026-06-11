@@ -91,6 +91,32 @@ The VM launcher has reached the `pinenote-qemu-smoke login:` prompt; treat
 that as the validated QEMU gate. The `qcow2-gpt` image path fails while
 copying Syslinux `.c32` modules and is not used.
 
+## QEMU with the real PineNote artifacts
+
+The PineNote kernels build with QEMU `virt` support (virtio disk/net and a
+PL011 console are built in; see `%pinenote-qemu-virt-config-lines` in
+`pinenote/packages/kernel.scm`), so the exact kernel, initrd, and rootfs
+that would be written to the device can be booted off-device:
+
+```sh
+make qemu-virt ROOTFS=/tmp/opencode/pinenote-rootfs-artifacts/<artifact>.ext4 \
+     [WAVEFORM=/path/to/local/waveform.bin]
+```
+
+This stages a boot bundle from the rootfs, builds a synthetic GPT disk that
+mimics the PineNote layout (a 2 MiB partition GPT-named `waveform`, the
+rootfs in a partition named `os2`), and boots QEMU with the bundle's exact
+Guix boot arguments, only steering the console from `ttyS2` to `ttyAMA0`.
+
+What it tests for real: the hardware kernel image boots, the initrd finds
+the waveform partition by PARTNAME and installs `ebc.wbf`, root mounts by
+the `PNGuixRoot` label, Shepherd starts, and the one-shot services run
+(including their failure paths — the EBC parameter service can be
+exercised because `rockchip_ebc` loads even without the hardware).
+What it cannot test: EBC rendering, USB dwc3 gadget behavior, Wi-Fi/BT
+firmware on real hardware, or anything RK3566-specific. `WAVEFORM` may
+point at a local waveform backup; it is never bundled or committed.
+
 ## Validation ladder
 
 Run before any hardware deployment, stopping at the first failure:

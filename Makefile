@@ -56,3 +56,18 @@ qemu-smoke:
 	$(GUIX) system vm $(GUIX_FLAGS) pinenote/systems/qemu-aarch64-smoke.scm
 	@echo "Run the printed launcher with:"
 	@echo "  guix shell qemu -- <launcher> -M virt -cpu max -nographic -no-reboot"
+
+# Boot the real PineNote kernel/initrd/rootfs in QEMU virt with a synthetic
+# PineNote-layout disk (waveform partition + PNGuixRoot). Usage:
+#   make qemu-virt ROOTFS=/tmp/opencode/pinenote-rootfs-artifacts/...ext4 \
+#        [WAVEFORM=/path/to/waveform.bin]
+qemu-virt:
+	@test -n "$(ROOTFS)" || { echo "usage: make qemu-virt ROOTFS=<rootfs.ext4> [WAVEFORM=<file>]"; exit 2; }
+	@set -e; \
+	stamp=$$(date +%Y%m%d-%H%M%S); \
+	bundle=/tmp/opencode/pinenote-virt-bundle-$$stamp; \
+	disk=/tmp/opencode/pinenote-virt-disk-$$stamp.img; \
+	guix shell e2fsprogs gptfdisk qemu -- sh -c "\
+	  pinenote/scripts/preflight/stage-boot-bundle-from-rootfs.sh '$(ROOTFS)' \"$$bundle\" && \
+	  pinenote/scripts/qemu/make-virt-disk.sh '$(ROOTFS)' \"$$disk\" $(WAVEFORM) && \
+	  pinenote/scripts/qemu/run-pinenote-virt.sh \"$$bundle\" \"$$disk\""
