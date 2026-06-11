@@ -40,22 +40,44 @@ track with the open issues below.
   A role-switch-gated gadget service ("v3") was deployed but its boot result
   was not captured (session ended with the device needing a manual
   power-cycle).
+- 2026-06-10 bracketing experiment: the identical configfs ACM recipe run
+  on stock os1 (6.12) binds, enumerates on the host as 0525:a4a7, and
+  passes data both ways with zero dwc3 errors. The dwc3, usb2phy, and
+  wusb3801/type-C DT nodes are identical (modulo phandle renumbering)
+  between the working 6.12 DTB and our 7.0 DTB. The regression is
+  therefore in kernel driver code between 6.12 and 7.0 (dwc3 core,
+  inno-usb2 phy, or role-switch timing), not in DT and not in our
+  userspace sequence.
 - No EBC/display success has been recorded on any 7.0 boot, even though the
   initrd installs the waveform from p2 and the `rockchip_ebc` parameters are
   on the command line. Not yet root-caused; comparing rockchip_ebc
   probe/bind between 6.6 and 7.0 UART logs is the obvious next diagnostic.
 
-## Immediate next session
+## Current os2 contents
 
-1. Manually power-cycle (device was left stuck before the U-Boot menu),
-   confirm `os1` rescue still boots.
-2. Select OS2 and capture UART logs for the deployed-but-untested v3 gadget
-   service: look for the `ep0out` failure and whether the host enumerates
-   `/dev/ttyACM0` (0525:a4a7).
-3. Capture the post-reboot p6 readback evidence per the write protocol.
-4. Build and deploy the vanilla-source usb-console image
-   (`make rootfs-usb-console`) and check whether brcmfmac now loads
-   `brcmfmac43455-sdio.pine64,pinenote-v1.2.bin` over UART/dmesg.
+Written and readback-verified 2026-06-10 from os1 (device on USB-C power,
+no reboot performed):
+
+- Artifact: `pinenote-usb-console-PNGuixRoot-20260610.ext4` (usb-console
+  flavor, vanilla-source `linux-pinenote` 7.0.11, v3 role-gated gadget
+  service), 1,501,614,080 bytes.
+- SHA-256 (artifact and p6 readback):
+  `1b6b8ed250494897bbb2152e9922fd3bb07eb20288b994f168eae937cb625ff8`.
+- Note: this replaced the never-boot-tested v3 gadget rootfs, so the next
+  os2 boot tests two changes at once relative to the last observed boot:
+  the v3 gadget service and the vanilla kernel.
+
+## Immediate next session (once charged enough for the UART adapter)
+
+1. Connect UART (1500000 8N1), start capture, power-cycle, confirm `os1`
+   still boots.
+2. Select OS2 and watch for: boot to Shepherd, v3 gadget binding without
+   `dwc3 ep0out` failure, host enumeration of `/dev/ttyACM0` (0525:a4a7).
+3. Check whether brcmfmac loads
+   `brcmfmac43455-sdio.pine64,pinenote-v1.2.bin` now that the kernel is
+   vanilla-based (dmesg over UART or ACM shell).
+4. Look for any rockchip_ebc probe/bind activity vs the 6.6 UART logs
+   (display is still unproven on 7.0).
 
 ## Device facts
 

@@ -4,6 +4,41 @@ Keeping the kernel current is a core goal of this project. The PineNote needs
 a downstream display/pen stack that has never been mainlined, so every kernel
 update means carrying those changes forward.
 
+## The working reference: stock os1 (Debian, 6.12-pinenote)
+
+Stock Debian on `os1` runs a 6.12 PineNote kernel with everything working;
+it is the cheapest oracle for "is our build doing the right thing"
+(harvested read-only over SSH, 2026-06-10):
+
+- Healthy EBC probe signature to expect in dmesg: several deferred
+  `rockchip_ebc_probe start` lines, then
+  `Loaded 4-bit PVI waveform version 0x19`,
+  `Initialized rockchip-ebc 0.3.0 for fdec0000.ebc`, and an
+  `fb0: rockchip-ebcdrm frame buffer device`. If a 7.0 boot lacks the
+  waveform line, the failure is before/at waveform load, not in DRM.
+- brcmfmac first requests `brcmfmac43455-sdio.pine64,pinenote-v1.2.bin`
+  (Debian doesn't ship it; -2), then falls back to
+  `brcmfmac43455-sdio.bin`, which loads. BT loads plain
+  `brcm/BCM4345C0.hcd`. Our firmware packages cover both names.
+- Its live `rockchip_ebc` parameters match our modprobe options; useful
+  extra defaults: `default_waveform=4`, `refresh_waveform=4`,
+  `diff_mode=Y`.
+- USB config parity: 6.12 uses `USB_DWC3_DUAL_ROLE=y`,
+  `USB_CONFIGFS=m`+`CONFIGFS_ACM=y`, `F_ACM/U_SERIAL/LIBCOMPOSITE=m`,
+  `USB_ROLE_SWITCH=y` — identical resolution to our built 7.0 config, so
+  the `ep0out` gadget failure is runtime (role timing/DT/driver
+  regression), not a config gap.
+- Gadget bracketing (2026-06-10): our exact configfs ACM recipe, run live
+  on os1's 6.12, binds to `fcc00000.usb`, enumerates as 0525:a4a7, and
+  passes data with no dwc3 errors; and the dwc3/usb2phy/type-C DT nodes
+  are identical (modulo phandles) between the 6.12 DTB and ours. The
+  `ep0out` failure is a 6.12→7.0 kernel driver regression. Next angles:
+  diff `drivers/usb/dwc3/` (especially ep0/gadget) and
+  `phy-rockchip-inno-usb2` between those versions, or test an
+  intermediate kernel.
+- 6.12 runs `GPIO_ROCKCHIP=m` with early initrd loading; our `=y` achieves
+  the same probe ordering more bluntly.
+
 ## The two kernel packages
 
 Both live in `pinenote/packages/kernel.scm`:
