@@ -1,14 +1,18 @@
 (define-module (pinenote packages kernel)
-  #:use-module ((gnu packages) #:select (specification->package))
   #:use-module (guix git-download)
   #:use-module ((guix licenses) #:prefix license:)
   #:use-module (guix gexp)
   #:use-module (guix packages)
   #:use-module (guix utils)
-  #:use-module (gnu packages linux))
+  #:use-module (gnu packages linux)
+  #:use-module ((nongnu packages linux) #:prefix nongnu:))
 
-(define %linux-pinenote-base
-  (specification->package "linux-libre"))
+;; Vanilla kernel.org source via the nonguix channel.  linux-libre cannot be
+;; the base: its deblob pass disables non-free firmware loading outright
+;; (request paths become /*(DEBLOBBED)*/), which blocks the PineNote's
+;; Broadcom Wi-Fi even when the firmware files are present.  See
+;; doc/kernel-forward-port.md.
+(define %linux-pinenote-base nongnu:linux)
 
 (define %linux-pinenote-6.6-version "6.6.30-pinenote")
 
@@ -56,15 +60,17 @@
      "https://github.com/m-weigand/linux/tree/branch_pinenote_6-12-11")
     (synopsis "PineNote-oriented Linux kernel")
     (description
-     "PineNote kernel package using Guix's current linux-libre source with a
-local forward-port of the downstream PineNote EBC display stack, WS8100 pen
-driver, and pinenote_defconfig derived from m-weigand/linux.  The package
-inherits Guix's standard Linux build and install phases, replacing only
-configuration so a full build runs the PineNote defconfig and installs the
-kernel image, modules, and device-tree blobs through the normal Guix kernel
-package layout.  The expected hardware-facing artifacts are the uncompressed
-arch/arm64/boot/Image and rockchip/rk3566-pinenote-v1.2.dtb; this package does
-not flash, repartition, or mutate bootloader state.")
+     "PineNote kernel package using vanilla kernel.org sources (via the
+nonguix channel) with a local forward-port of the downstream PineNote EBC
+display stack, WS8100 pen driver, and pinenote_defconfig derived from
+m-weigand/linux.  The vanilla base keeps non-free firmware loading intact for
+the Broadcom Wi-Fi/Bluetooth chip.  The package inherits the standard Linux
+build and install phases, replacing only configuration so a full build runs
+the PineNote defconfig and installs the kernel image, modules, and device-tree
+blobs through the normal Guix kernel package layout.  The expected
+hardware-facing artifacts are the uncompressed arch/arm64/boot/Image and
+rockchip/rk3566-pinenote-v1.2.dtb; this package does not flash, repartition,
+or mutate bootloader state.")
     (license license:gpl2)))
 
 

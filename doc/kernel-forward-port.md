@@ -11,9 +11,11 @@ Both live in `pinenote/packages/kernel.scm`:
 - `linux-pinenote-6.6.30` — the m-weigand PineNote tree, pinned by commit.
   Hardware-validated end to end (display, Wi-Fi, BT, USB gadget). Kept as the
   known-good baseline and for isolating regressions in newer kernels.
-- `linux-pinenote` — Guix's current `linux-libre` source plus
+- `linux-pinenote` — vanilla kernel.org sources (nonguix's `linux` package,
+  which tracks the same version as Guix's `linux-libre`) plus
   `pinenote/patches/linux-pinenote-7.0-forward-port.patch`, configured with
-  `pinenote_defconfig`. This is the kernel-currency track.
+  `pinenote_defconfig`. This is the kernel-currency track. The channel
+  therefore depends on nonguix (see `.guix-channel` / `channels.scm`).
 
 ## What the forward-port patch carries
 
@@ -25,7 +27,7 @@ Both live in `pinenote/packages/kernel.scm`:
 
 ## Refreshing the patch for a new kernel
 
-1. Check the current Guix `linux-libre` version the package inherits:
+1. Check the current vanilla kernel version the package inherits:
    `guix build --source -L . -e '(@ (pinenote packages kernel) linux-pinenote)'`
 2. In a disposable tree, unpack that source and apply the existing patch.
    Resolve rejects against the m-weigand/hrdl trees as reference
@@ -62,24 +64,26 @@ Record anything that took a hardware session to discover:
   (`earlycon console=tty0 console=ttyS2,1500000n8 fw_devlink=off` plus the
   `rockchip_ebc` parameters).
 
-## The linux-libre firmware problem
+## Why the base is vanilla, not linux-libre (history)
 
-linux-libre's deblob pass does not just omit firmware files — it disables
-non-free firmware *loading* by rewriting request paths to
-`/*(DEBLOBBED)*/`. Consequences observed on hardware:
+The forward-port originally sat on Guix's `linux-libre`. That can never
+support the PineNote's Wi-Fi: the deblob pass does not just omit firmware
+files, it disables non-free firmware *loading* by rewriting request paths to
+`/*(DEBLOBBED)*/`. Observed on hardware:
 
-- brcmfmac Wi-Fi firmware is rejected at runtime even when the files are
+- brcmfmac Wi-Fi firmware was rejected at runtime even with the files
   present under the exact requested names. Packaging firmware
-  (`pinenote-broadcom-wifi-firmware`) cannot fix this, and partially
+  (`pinenote-broadcom-wifi-firmware`) could not fix it, and partially
   restoring the driver in the forward-port patch (firmware name strings plus
-  the `request_firmware`/`firmware_request_nowarn` call sites) was tried and
-  still hits "Missing Free firmware (non-Free firmware loading is
-  disabled)" — the loading machinery itself is gated, not just the names.
-- The Bluetooth `BCM4345C0.hcd` path survived (loads on 7.0) once the
-  PineNote v1.2 device alias was provided.
+  the `request_firmware`/`firmware_request_nowarn` call sites) still hit
+  "Missing Free firmware (non-Free firmware loading is disabled)" — the
+  loading machinery itself is gated, not just the names.
+- The Bluetooth `BCM4345C0.hcd` path survived once the PineNote v1.2 device
+  alias was provided.
 
-For full hardware support the forward-port needs to move from `linux-libre`
-to vanilla kernel.org sources (a custom origin in `kernel.scm`, conceptually
-what the nonguix channel does for its `linux` package). That keeps the same
-inherit-and-patch structure; only the source origin changes. This is tracked
-in `ROADMAP.md`.
+On 2026-06-10 the package moved to nonguix's `linux` (vanilla kernel.org
+source, same version as linux-libre), and the deblob-restoration hunks
+(brcmfmac `sdio.c`/`firmware.c`, `btbcm.c`) were dropped from the
+forward-port patch — vanilla sources never lost those paths. If the patch is
+ever regenerated from a linux-libre-derived tree again, keep those three
+files out of it.

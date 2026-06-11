@@ -8,11 +8,11 @@ Three tracks, in priority order. Current hardware truth lives in
 Goal: stay close to current mainline kernels while carrying the PineNote
 display/pen stack as explicit patches, with working firmware.
 
-- [ ] Move `linux-pinenote` from the `linux-libre` base to vanilla
-      kernel.org sources. linux-libre's deblob actively disables non-free
-      firmware loading, which is why brcmfmac Wi-Fi can never work on the
-      current base (see `doc/kernel-forward-port.md`). Same
-      inherit-and-patch structure, different source origin.
+- [x] Move `linux-pinenote` from the `linux-libre` base to vanilla
+      kernel.org sources (2026-06-10: rebased onto nonguix's `linux`,
+      deblob-restoration hunks dropped from the patch; see
+      `doc/kernel-forward-port.md`). Wi-Fi firmware loading on the vanilla
+      base still needs hardware confirmation.
 - [ ] Get EBC display output working on the forward-ported kernel. 6.6
       works entirely; 7.0 boots but has shown nothing on the panel yet.
       Compare rockchip_ebc probe/bind between 6.6 and 7.0 UART logs.

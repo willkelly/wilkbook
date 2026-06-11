@@ -6,7 +6,7 @@ detailed evidence lives in session logs, not in git.
 
 ## Summary
 
-| Area | 6.6.30 (m-weigand) | 7.0 forward-port (linux-libre) |
+| Area | 6.6.30 (m-weigand) | 7.0 forward-port (vanilla via nonguix) |
 | --- | --- | --- |
 | Boots to Guix userspace on os2 | yes | yes (needs `CONFIG_GPIO_ROCKCHIP=y`) |
 | Waveform install (initrd, from partition) | yes | yes |
@@ -14,7 +14,7 @@ detailed evidence lives in session logs, not in git.
 | UART console (ttyS2, 1500000) | yes | yes |
 | USB ACM gadget console (ttyGS0) | yes | gadget binds; `dwc3: failed to enable ep0out`, host never sees ttyACM |
 | Bluetooth firmware (BCM4345C0.hcd) | yes | loads |
-| Wi-Fi firmware (brcmfmac43455) | yes | blocked: linux-libre deblob rejects non-free firmware loading |
+| Wi-Fi firmware (brcmfmac43455) | yes | untested since vanilla-source rebase (was blocked by linux-libre deblob) |
 
 The `pinenote-usb-console-linux-6-6` flavor is the fully working baseline.
 The `pinenote-usb-console` flavor (7.0 forward-port) is the kernel-currency
@@ -26,14 +26,13 @@ track with the open issues below.
   available": regulators, sdhci vmmc, dwc3 extcon, EBC temperature channel).
   Building the GPIO driver in (`CONFIG_GPIO_ROCKCHIP=y`) fixed it; 7.0.x now
   reaches Shepherd with root mounted from `PNGuixRoot`.
-- Wi-Fi cannot work on a linux-libre base: the deblob pass disables non-free
-  firmware loading (`/*(DEBLOBBED)*/` request paths in brcmfmac). The
-  forward-port patch already tried restoring the `brcmfmac43455-sdio` names
-  and the `request_firmware`/`firmware_request_nowarn` call paths, and the
-  kernel still rejects the load ("Missing Free firmware (non-Free firmware
-  loading is disabled)") with the files present in the rootfs. Moving the
-  forward-port onto vanilla kernel sources is the planned fix (see
-  `ROADMAP.md`).
+- Wi-Fi could not work on the original linux-libre base: the deblob pass
+  disables non-free firmware loading (`/*(DEBLOBBED)*/` request paths in
+  brcmfmac), and restoring the names/call paths in the patch was not
+  enough. As of 2026-06-10 `linux-pinenote` builds from vanilla kernel.org
+  sources via nonguix instead (host-side: derivation computes, patch
+  applies cleanly). Wi-Fi firmware loading on the vanilla base has not yet
+  been confirmed on hardware.
 - Bluetooth firmware (`BCM4345C0.pine64,pinenote-v1.2.hcd`) loads despite the
   deblob, after the device-specific alias was added.
 - The USB gadget reaches configfs binding but fails at
@@ -54,6 +53,9 @@ track with the open issues below.
    service: look for the `ep0out` failure and whether the host enumerates
    `/dev/ttyACM0` (0525:a4a7).
 3. Capture the post-reboot p6 readback evidence per the write protocol.
+4. Build and deploy the vanilla-source usb-console image
+   (`make rootfs-usb-console`) and check whether brcmfmac now loads
+   `brcmfmac43455-sdio.pine64,pinenote-v1.2.bin` over UART/dmesg.
 
 ## Device facts
 

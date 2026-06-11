@@ -19,11 +19,13 @@ proven on hardware.
 - The **6.6.30 m-weigand kernel flavor works entirely** on the device:
   display, Wi-Fi, Bluetooth, USB console. Build it with
   `make rootfs-usb-console-linux-6-6`.
-- The **forward-ported 7.0 kernel** (Guix `linux-libre` + local patch) boots
-  to Guix userspace on the experimental `os2` slot. Open issues: Wi-Fi
-  firmware is blocked by linux-libre's deblobbing, the USB gadget fails at
-  `ep0out` (UART console works), and nothing has been drawn on the panel
-  yet. Details in `doc/status.md` and `doc/kernel-forward-port.md`.
+- The **forward-ported 7.0 kernel** boots to Guix userspace on the
+  experimental `os2` slot. It now builds from vanilla kernel.org sources
+  (via the nonguix channel) so non-free firmware can load — the earlier
+  linux-libre base gated firmware loading entirely. Open issues: Wi-Fi
+  firmware on the vanilla base awaits hardware confirmation, the USB gadget
+  fails at `ep0out` (UART console works), and nothing has been drawn on the
+  panel yet. Details in `doc/status.md` and `doc/kernel-forward-port.md`.
 
 ## Quick start
 
@@ -67,8 +69,8 @@ with stock Debian on `os1` as the rescue path. See `doc/hardware-deploy.md`.
   `/lib/firmware/rockchip/ebc.wbf`, failing visibly if absent.
 - Broadcom Wi-Fi/BT firmware is packaged from public sources
   (linux-firmware, RPi-Distro bluez-firmware) under the names brcmfmac and
-  the BT driver request on the PineNote. Note that the linux-libre-based
-  kernel refuses to load the Wi-Fi blobs regardless (see
+  the BT driver request on the PineNote. The kernel builds from vanilla
+  sources via nonguix because linux-libre refuses to load these blobs (see
   `doc/kernel-forward-port.md`).
 - VCOM calibration, waveform, U-Boot, and partition-table backups are
   recorded in `doc/device-runbook.md` before any hardware work.
