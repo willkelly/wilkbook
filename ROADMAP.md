@@ -39,6 +39,13 @@ Goal: one command from checkout to deployable artifact.
       helper if the packages make it redundant.
 - [ ] Eventually: A/B slot awareness (os1/os2) in the image tooling rather
       than manual dd.
+- [ ] Off-device testing ladder: `make qemu-virt` boots the real
+      kernel/initrd/rootfs with a synthetic waveform/os2 disk; `dummy_hcd`
+      and `vkms` modules stand in for the UDC and a DRM device. A QEMU
+      device model for the EBC register interface (probe `rockchip_ebc`
+      itself, render Y4 frames to a host window) is the known next rung —
+      days-to-weeks of QEMU C work, pick up only if display debugging
+      demands it. Full RK3566 emulation is a non-goal.
 
 ## 3. E-ink userland
 

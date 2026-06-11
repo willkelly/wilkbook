@@ -117,6 +117,20 @@ What it cannot test: EBC rendering, USB dwc3 gadget behavior, Wi-Fi/BT
 firmware on real hardware, or anything RK3566-specific. `WAVEFORM` may
 point at a local waveform backup; it is never bundled or committed.
 
+Two software stand-ins are built as modules for use inside the VM:
+
+```sh
+modprobe dummy_hcd   # fake UDC: exercise the configfs/ACM gadget stack
+modprobe vkms        # virtual DRM device: exercise render plumbing
+```
+
+`dummy_hcd` lets the gadget service sequence run end to end without dwc3
+(the layer known to be broken on 7.0), and `vkms` gives DRM userspace a
+real connector to talk to. Neither models EBC semantics; rendering policy
+(Y4 quantization, waveform selection) belongs in a host-side software
+backend, and a QEMU device model for the EBC register block is a possible
+future rung (see `ROADMAP.md`).
+
 ## Validation ladder
 
 Run before any hardware deployment, stopping at the first failure:

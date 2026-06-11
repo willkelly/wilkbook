@@ -46,7 +46,13 @@
         "CONFIG_HW_RANDOM_VIRTIO=y"
         "CONFIG_SERIAL_AMBA_PL011=y"
         "CONFIG_SERIAL_AMBA_PL011_CONSOLE=y"
-        "CONFIG_RTC_DRV_PL031=y"))
+        "CONFIG_RTC_DRV_PL031=y"
+        ;; Software stand-ins for PineNote hardware, modules so they only
+        ;; exist when explicitly loaded inside the VM: dummy_hcd fakes a UDC
+        ;; so the configfs/ACM gadget stack can be exercised without dwc3,
+        ;; and vkms provides a virtual DRM device for render-path testing.
+        "CONFIG_USB_DUMMY_HCD=m"
+        "CONFIG_DRM_VKMS=m"))
 
 (define %linux-pinenote-patches
   (list (local-file "../patches/linux-pinenote-7.0-forward-port.patch")))
