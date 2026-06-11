@@ -38,6 +38,10 @@
 ;; QEMU-specific module list.  Harmless on PineNote hardware.
 (define %pinenote-qemu-virt-config-lines
   (list "CONFIG_PCI_HOST_GENERIC=y"
+        ;; pinenote_defconfig disables the VIRTIO_MENU umbrella, which gates
+        ;; the PCI/MMIO transports; without it olddefconfig silently drops
+        ;; the lines below and QEMU's disk never appears.
+        "CONFIG_VIRTIO_MENU=y"
         "CONFIG_VIRTIO_PCI=y"
         "CONFIG_VIRTIO_MMIO=y"
         "CONFIG_VIRTIO_BLK=y"
