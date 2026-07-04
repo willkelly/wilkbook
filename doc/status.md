@@ -247,6 +247,22 @@ pass) and a **cold-bin test** (0 °C selects and cleanly orchestrates the
 patch edit; `make kernel-drv` computes; validated only offline — the
 shrunken syncs ride along for hardware validation next session.
 
+## 2026-07-04 KOReader packaging spike (offline) — reader track started, KOReader first
+
+Track 4 reprioritized: KOReader leads (an external user wants to run
+it). Spike result (`doc/koreader-spike.md`): `koreader-bin` packaged
+from the upstream `linux-arm64`/`linux-x86_64` release tarballs
+(`pinenote/packages/koreader.scm`, gnu-build-system + patchelf; the
+bundle is self-contained except glibc and the Wayland client libs its
+SDL3 dlopens). Proven offline: the x86_64 variant boots the complete
+KOReader frontend headless (`SDL_VIDEODRIVER=offscreen` — the bundled
+SDL3 has wayland/offscreen/dummy backends only, so the device needs a
+Wayland compositor) and sits in its UI loop; the aarch64 variant
+cross-builds with correct target interpreter/rpath. Key integration
+fact: no kmsdrm/x11 in the bundled SDL3 → the device plan is a `cage`
+kiosk (wlroots, pixman renderer) per hrdl's proven architecture. Next:
+the `reader` flavor, then panel/pen validation on hardware.
+
 ## Next sessions
 
 - Diagnose the qemu-virt udev deadlock (ROADMAP §3 rung 4) so the
@@ -261,6 +277,9 @@ shrunken syncs ride along for hardware validation next session.
 - First boot with the cherry-picked driver (fsleep + shrunken dma_sync):
   confirm partial refreshes stay artifact-free — the offline harness
   proves the bookkeeping, only the panel proves the cache/DMA physics.
+- First cage+KOReader session on the panel once the `reader` flavor
+  exists: page turn, refresh behavior, pen/touch (KOReader stack:
+  `doc/koreader-spike.md`).
 
 ## Device facts
 
