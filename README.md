@@ -14,18 +14,20 @@ e-ink tablet. The goals, in order:
 See `ROADMAP.md` for direction and `doc/status.md` for what is currently
 proven on hardware.
 
-## Status (2026-06)
+## Status (2026-07)
 
 - The **6.6.30 m-weigand kernel flavor works entirely** on the device:
   display, Wi-Fi, Bluetooth, USB console. Build it with
   `make rootfs-usb-console-linux-6-6`.
 - The **forward-ported 7.0 kernel** boots to Guix userspace on the
-  experimental `os2` slot. It now builds from vanilla kernel.org sources
-  (via the nonguix channel) so non-free firmware can load — the earlier
-  linux-libre base gated firmware loading entirely. Open issues: Wi-Fi
-  firmware on the vanilla base awaits hardware confirmation, the USB gadget
-  fails at `ep0out` (UART console works), and nothing has been drawn on the
-  panel yet. Details in `doc/status.md` and `doc/kernel-forward-port.md`.
+  experimental `os2` slot, and Wi-Fi/Bluetooth firmware loading on the
+  vanilla (nonguix) base is hardware-confirmed. The display failure is
+  root-caused — mainline's TPS65185 driver lacks the IIO temperature
+  channel the EBC driver needs — and a fix is staged in the forward-port
+  patch, along with `CONFIG_PREEMPT_RT=y`, `CONFIG_DEBUG_FS=y`, and
+  service fixes for waveform installation and gadget module loading. All
+  await the next hardware session. Details in `doc/status.md` and
+  `doc/kernel-forward-port.md`.
 
 ## Quick start
 

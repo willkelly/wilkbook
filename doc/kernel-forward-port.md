@@ -56,9 +56,34 @@ Both live in `pinenote/packages/kernel.scm`:
 
 - the `rockchip_ebc` DRM driver (EBC e-ink controller),
 - the WS8100 pen driver,
-- PineNote DTS/DTSI (`rk3566-pinenote-v1.2.dts`, `rk3566-pinenote.dtsi`),
+- PineNote DTS/DTSI additions (`rk3566-pinenote.dtsi`, `rk356x-base.dtsi`):
+  EBC/eink-tcon nodes, panel, pen SPI, `#io-channel-cells = <1>` on the
+  `ebc_pmic` node (added 2026-07-03; see below), and
+  `snps,dis_u3_susphy_quirk` on `&usb_host0_xhci` (added 2026-07-03): since
+  6.15 (`cc5bfc4e16fc` "usb: dwc3: Set SUSPENDENABLE soon after phy init",
+  in stable) dwc3 sets `GUSB3PIPECTL.SUSPHY` at core init; with the RK3566
+  OTG's USB3 PIPE phy unwired, the first ep0out `DEPCFG` command then times
+  out — the exact `dwc3: failed to enable ep0out` gadget failure seen since
+  the 7.0 bring-up. USB3 is unused on the PineNote, so suspend-phy stays
+  off. Unproven on hardware until the next session,
 - `arch/arm64/configs/pinenote_defconfig`,
-- supporting bits (TPS65185 PMIC integration, etc.).
+- a minimal IIO temperature provider added to mainline
+  `drivers/regulator/tps65185.c` (added 2026-07-03): mainline exposes the
+  EPD PMIC temperature via hwmon only, but `rockchip_ebc` selects waveform
+  LUTs through `devm_iio_channel_get()`/`iio_read_channel_processed()`
+  (millicelsius). Without the IIO channel + the DT property, the EBC probe
+  dies with `-EINVAL: Failed to get temperature I/O channel` — the exact
+  failure of the 2026-06-11 os2 boot. The downstream 6.12 tree solves this
+  with a full IIO rewrite of the driver (events, triggers); we carry a
+  ~70-line additive hunk against mainline instead, to keep future rebases
+  cheap.
+- the `eink,ed103tc2` panel entry for `panel-simple` (added 2026-07-03),
+  taken verbatim from the hardware-validated m-weigand 6.6.30 tree (8
+  refresh-rate modes, 1872x1404, DPI). Vanilla panel-simple only knows
+  `eink,vb3300-kca`, so without this hunk the EBC probe — once past the
+  temperature channel — parks forever in `-EPROBE_DEFER` at
+  `devm_drm_of_get_bridge()` because nothing ever binds the panel node.
+  (Found by adversarial review before it cost a hardware session.)
 
 ## Refreshing the patch for a new kernel
 
@@ -89,6 +114,21 @@ Record anything that took a hardware session to discover:
 - `CONFIG_GPIO_ROCKCHIP=y` (built-in, not module). As a module, boot dies in
   a mass deferred-probe storm (regulators, sdhci, dwc3 extcon, EBC
   temperature channel all waiting on GPIO) and root never appears.
+- `CONFIG_DEBUG_FS=y`. The 2026-06-11 boot had it off: Guix's
+  `/sys/kernel/debug` file-system service loops on EPERM, and the gadget
+  service cannot reach the dwc3 debugfs `mode` file, so the role-gated
+  gadget never binds.
+- `CONFIG_PREEMPT_RT=y` (2026-07-03, unproven on hardware yet): full RT
+  preemption for pen/refresh latency. arm64 has mainline RT support since
+  6.12, so this only exists on the 7.0 track — 6.6's olddefconfig will
+  silently drop the symbol, which is fine for the regression-isolation
+  baseline.
+- Loading modules from userspace on Guix needs
+  `modprobe -d /run/booted-system/kernel`: Guix's kmod does *not* honor
+  `LINUX_MODULE_DIRECTORY`, and only the kernel profile (not the kernel
+  package) contains `modules.dep`. Discovered by chroot-testing the os2
+  rootfs from os1 (2026-07-03) after every gadget modprobe failed on the
+  2026-06-11 boot.
 - The TPS65185 module is named `tps65185-regulator` in newer kernels but
   `tps65185` in 6.6; the initrd module lists in
   `pinenote/images/pinenote-initramfs.scm` differ for exactly this reason.
