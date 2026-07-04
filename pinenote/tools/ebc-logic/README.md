@@ -1,13 +1,21 @@
-# ebc-logic — host unit tests for the EBC driver's pure logic (offline ladder, rung 2)
+# ebc-logic — host tests for the EBC driver (offline ladder, rungs 2 and 7a)
 
 Compiles the **verbatim** `drivers/gpu/drm/rockchip/rockchip_ebc.c` (and its
 LUT dependency `drm_epd_helper.c`) out of
 `pinenote/patches/linux-pinenote-7.0-forward-port.patch` — extracted at build
 time with rung 1's `extract-from-patch.py`, so the tests always exercise
 exactly the code the kernel ships — against a kernel-API shim
-(`shim/kernel-shim.h`), and unit-tests the driver's pure arithmetic.  This is
-the code most likely to break silently on every forward-port; these tests
-make that a red `make check` instead of a wasted panel session.
+(`shim/kernel-shim.h`).  Two binaries:
+
+- **`ebc-logic-test`** (rung 2): unit tests for the driver's pure
+  arithmetic — blitters, damage scheduling, threshold/dither paths.
+- **`ebc-refresh-test`** (rung 7a, scoped in `doc/ebc-harness-spike.md`):
+  *executes* the hardware-facing half — probe, the global/partial refresh
+  state machine, LUT upload, DMA windowing, the IRQ/completion contract —
+  against a behavioral device model (`shim/fake-ebc.h`), under ASan.
+
+This is the code most likely to break silently on every forward-port; these
+tests make that a red `make check` instead of a wasted panel session.
 
 ```sh
 # from the repo root:
@@ -24,17 +32,25 @@ message.
 ## How it works
 
 Both driver files are `#include`d into a single test translation unit
-(`ebc-logic-test.c`), the same way rung 1 includes `drm_epd_helper.c`.  That
+(one per binary: `ebc-logic-test.c`, `ebc-refresh-test.c`), the same way
+rung 1 includes `drm_epd_helper.c`.  That
 makes the driver's `static` functions directly callable and its
 module-parameter globals (`panel_reflection`, `bw_mode`, `bw_threshold`,
 `fourtone_*`, `bw_dither_invert`, `split_area_limit`, `diff_mode`,
-`default_waveform`) directly settable per test.  The shim has two layers:
+`default_waveform`) directly settable per test.  The shim has three layers:
 
 - **faithful**: what the tested logic actually executes — `list_head` ops,
   `drm_rect` ops, `kref`, allocators — reimplemented per kernel semantics;
-- **inert**: everything only reachable from probe/refresh/PM paths the tests
-  never run (regmap, clk, dma, pm_runtime, kthread, iio, DRM plumbing) —
-  stubs that return 0/NULL so the whole file compiles.
+- **harness**: the hardware-facing seams the refresh harness runs through —
+  regmap (a RAM register file with a device write-hook), dma-mapping (a
+  32-bit bus-handle registry that validates unmap/sync), completion
+  (kernel counting semantics: an unsignalled wait is a visible timeout),
+  pm_runtime (refcount + suspended flag calling the driver's real runtime
+  callbacks), kthread (recorded and flag-driven so the thread body runs
+  synchronously), irq registration.  With no hooks installed these degrade
+  to the old inert behavior, so rung 2 is unaffected;
+- **inert**: everything else — stubs that return 0/NULL so the whole file
+  compiles.
 
 Buffer geometry comes from the driver's own `rockchip_ebc_ctx_alloc`
 (`gray4_pitch = width/2` etc.), and the blitters are driven through an exact
@@ -87,12 +103,73 @@ fixed-seed xorshift32; output is byte-identical across runs (asserted by
   rests on — phase number 0xff *and* the last real phase are neutral
   (all-zero LUT data) for **all nine** waveforms.
 
+## The refresh harness (`ebc-refresh-test`, rung 7a)
+
+`shim/fake-ebc.h` implements the EBC block's behavior as enumerated in
+`doc/ebc-harness-spike.md` §2: config registers latch on `CONFIG_DONE`; a
+`DSP_START` write with `DSP_FRM_START` plays `DSP_FRM_TOTAL+1` LUT phases
+(global mode) or one three-window frame with per-pixel phase indices from
+`WIN_MST2`; per pixel the 2-bit drive code comes from the LUT **as the
+driver uploaded it into the LUT registers** (word `[phase*16+from]`, bit
+pair `2*to` — the axis convention pinned by rung 1/3's crosscheck);
+`DSP_DIFF_MODE` masks unchanged pixels; completion is one `DSP_END` status
+bit raised through the driver's own registered `rockchip_ebc_irq()` —
+synchronously, inside the triggering register write, so no threads are
+needed and a sequencing bug becomes a visible driver timeout.
+
+What it executes and asserts (`quirk:`-policy applies as in rung 2):
+
+- **`mode_set_nofb`**: the full ED103TC2 timing-register set, hand-derived
+  from the mode + the documented SDCK translation (12-register golden).
+- **Global refresh**: LUT-mode contract (`FRM_TOTAL = num_phases-1`, one
+  frame event, one `DSP_END`), `WIN_MST0/1` resolving to `ctx->prev/next`
+  through the DMA registry, `next <- final` / `prev <- next` buffer
+  discipline, queue draining, `DSP_OUT_LOW` epilogue, INT_STATUS
+  write-1-to-clear, per-pixel drive counts vs an independent formula.
+- **Partial refresh**: `num_phases` three-window frames with per-frame
+  `CONFIG_DONE` discipline, the full per-pixel drive *sequence* (real
+  phases then the 0xff neutral tail) vs the independent formula, silence
+  outside the damage, `prev` catch-up, and two rendered PGM goldens.
+- **`diff_mode`**: the driver sets `DSP_DIFF_MODE`, and unchanged pixels
+  get zero drives even where the LUT drives the diagonal.
+- **Mid-refresh commits** (injected from the device's frame hook, i.e.
+  while the "hardware" refreshes): queue splice into a running refresh,
+  final-buffer switch delivering the new frame to the later area,
+  in-flight collision deferral to the window end — with a per-pixel
+  phase-regression detector proving no conflicting waveform data.
+- **Scheduler QUIRK E made device-visible**: with the shipped
+  `split_area_limit=0`, the rung-2 chained-begin-together scenario makes
+  overlap pixels' phase indices regress mid-sequence (conflicting drive
+  data on real hardware).
+- **The rung-2 teardown UAF, executed**: `run-tests.sh` runs
+  `ebc-refresh-test quirk-ctx-free-uaf` as a subprocess and asserts it
+  dies with an ASan heap-use-after-free.
+- **With `WBF=`**: the real `rockchip_ebc_probe()` (the shim's firmware
+  loader honors `EBC_SHIM_FW_DIR`, so the driver's own
+  `rockchip/ebc.wbf` request resolves), the real
+  `rockchip_ebc_refresh()` (temperature via the stub IIO's 25 °C, LUT
+  upload exactly when `lut_changed`, re-upload skipped when nothing
+  changed), the refresh-thread body run synchronously through a scripted
+  session (RESET global → full refresh → partial damage → off-screen
+  global), and the **drive-sequence differential**: all 256 Y4 (from,to)
+  transitions refreshed through the driver, and every observed sequence
+  compared against `rastersim`'s independent decode of the same waveform
+  (`wbf-info --dump-lut`).  That closes the loop driver-blit → scheduler →
+  LUT-upload → device-LUT-readback vs an independent derivation of the
+  waveform format.
+
+**Limits** (see `doc/ebc-harness-spike.md` §4): the device model encodes
+*our understanding* of the silicon, so agreement proves consistency, not
+hardware truth — the on-device `EXTRACT_FBS` differential stays the ground
+truth, and optics stay hardware-only.  Concurrency is not modeled (the
+device completes synchronously), so the races the driver tolerates by
+design never overlap here.  `direct_mode` is unmodeled (off in the shipped
+config).  The real probe path uses the DRM-core shim stubs, not the real
+DRM core — that is option (b)'s territory.
+
 ## What is not validated
 
-- Anything touching hardware: register programming, DMA mapping/sync, IRQ
-  handling, frame timing, kthread scheduling, PM. The refresh loops
-  themselves (`rockchip_ebc_partial_refresh` / `_global_refresh`) are
-  compiled but not executed.
+- Real kernel concurrency: kthread preemption, IRQ timing, PM races.
 - DRM atomic plumbing (plane/CRTC state lifecycles, damage iteration) —
   rung 5's vkms tests cover the client side of that.
 - Whether the Y4 output looks right on a panel: rung 3's simulator plus the
@@ -154,12 +231,19 @@ these silently in the patch** — they are candidates for upstream discussion
 
 6. **`rockchip_ebc_ctx_free` iterates while freeing** (patch 3206):
    `list_for_each_entry(area, &ctx->queue, list) kfree(area);` reads
-   `area->list.next` after `kfree(area)` — GCC flags it
-   (`-Wuse-after-free`) when compiling this harness.  Only reachable when
-   a context is torn down with damage still queued (mode-set/teardown
-   races); the fix is the `_safe` iterator.  The tests only ever free
-   contexts with an empty queue, so the harness itself never executes the
-   UAF.
+   `area->list.next` after `kfree(area)`.  Only reachable when a context
+   is torn down with damage still queued (mode-set/teardown races); the
+   fix is the `_safe` iterator.  **Executed, no longer just read**: the
+   rung-7a reproducer (`ebc-refresh-test quirk-ctx-free-uaf`) frees a
+   context with one queued area and dies with an ASan
+   heap-use-after-free; `run-tests.sh` asserts exactly that.
+
+The rung-7a WBF drive-sequence differential also re-confirmed the
+rastersim finding that **`blit_direct` reads the LUT transposed** from
+the hardware side: the device model only matches the independent
+waveform decode with the `[from]`-word/`[to]`-bit-pair axis convention,
+which is the opposite of what `blit_direct` (unused, `direct_mode=0`)
+implements.
 
 Other pinned behaviors worth knowing: `blit_fb_r4` ignores
 `panel_reflection` for pixel order (only the caller mirrors the rect

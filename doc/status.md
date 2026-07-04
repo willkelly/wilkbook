@@ -207,6 +207,26 @@ kernel enabling both (or a gdbstub attach) is the next step (ROADMAP §3
 rung 4). This does not affect hardware, where all of these services are
 confirmed working (2026-07-04 above).
 
+## 2026-07-04 refresh harness rung 7a (offline) — the refresh machine executes on the host
+
+Built spike option (a) from `doc/ebc-harness-spike.md` the same day it was
+scoped: `pinenote/tools/ebc-logic/ebc-refresh-test` runs the **verbatim**
+driver's probe, global/partial refresh orchestration, LUT upload, DMA
+windowing, IRQ/completion contract, mid-refresh buffer switching, and the
+refresh-thread body against a behavioral EBC model (`shim/fake-ebc.h`),
+under ASan, as part of `make ebc-logic-check`. All green against the
+device's own waveform, including the strongest check: all 256 Y4 (from,to)
+drive sequences observed at the fake device match rastersim's independent
+decode of the same `.wbf` (GC16@25 °C, 38 phases). Two rung-2 findings are
+now *executed*, not just read: the `ctx_free` teardown UAF (ASan-verified
+reproducer, asserted by the test runner) and scheduler QUIRK E (chained
+begin-together produces device-visible phase-index regressions —
+conflicting waveform data on hardware). The differential also re-confirmed
+from the hardware side that `blit_direct` (unused, `direct_mode=0`) reads
+the LUT transposed. Hardware truth unchanged: the model encodes our
+understanding of the silicon; the on-device `EXTRACT_FBS` differential
+remains the ground-truth complement.
+
 ## Next sessions
 
 - Diagnose the qemu-virt udev deadlock (ROADMAP §3 rung 4) so the

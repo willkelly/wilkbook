@@ -58,7 +58,7 @@ message rather than fail.
 | Tool | Ladder rung | What it validates | Run |
 | --- | --- | --- | --- |
 | `pinenote/tools/wbf` | 1 | PVI `.wbf` parsing/decode (header, modes, temperature bins, LUT decode) exactly as `rockchip_ebc` loads it; `--dump-lut` exports a decoded LUT for the simulator | `make wbf-check WBF=…` |
-| `pinenote/tools/ebc-logic` | 2 | The driver's pure logic: XRGB8888/R4→Y4 blitters, damage split/collision scheduling, threshold/dither paths — vs independent references | `make ebc-logic-check WBF=…` |
+| `pinenote/tools/ebc-logic` | 2 + 7a | Rung 2 (`ebc-logic-test`): the driver's pure logic — XRGB8888/R4→Y4 blitters, damage split/collision scheduling, threshold/dither paths — vs independent references.  Rung 7a (`ebc-refresh-test`): *executes* the refresh state machine (probe, global/partial orchestration, LUT upload, DMA windowing, IRQ/completion, buffer switching) against a behavioral device model under ASan, incl. a drive-sequence differential vs rastersim's independent waveform decode | `make ebc-logic-check WBF=…` |
 | `pinenote/tools/rastersim` | 3 | A standalone Gray8→Y4 raster library + waveform *simulator* (state model + LUT playback), with golden-image and convergence tests | `make rastersim-check WBF=…` |
 
 Each tool's `README.md` documents what it does and does **not** cover.
@@ -77,8 +77,9 @@ lives at `~/pinenote-backup/2026-07-04-wbf-pull/ebc.wbf`.
 Run in order, stopping at the first failure. Rungs 1–5 are offline; only
 6 touches the device. (See `doc/building.md` for the exact commands and
 `ROADMAP.md` §3 for rungs not yet built, e.g. vkms writeback screenshot
-tests and executing the real driver's refresh machine offline — the
-latter scoped in `doc/ebc-harness-spike.md`.)
+tests.  The refresh machine now *executes* offline — rung 7a, part of
+`make ebc-logic-check`, scoped in `doc/ebc-harness-spike.md`; the QEMU
+device model, 7b, remains future work.)
 
 1. **Host tool suites** — `make wbf-check ebc-logic-check rastersim-check`
    (with `WBF=`). Fast; catches driver-logic and waveform regressions.

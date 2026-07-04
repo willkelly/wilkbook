@@ -1,5 +1,11 @@
 # Executing the real EBC driver offline — scoping spike (2026-07-04)
 
+> **Status update (2026-07-04, later the same day):** option (a) is
+> built — `pinenote/tools/ebc-logic/ebc-refresh-test` +
+> `shim/fake-ebc.h`, wired into `make ebc-logic-check`.  See that tool's
+> README for coverage.  §3's estimate of 2–4 days was pessimistic (the
+> seam was exactly where §3 said); §4's option (b) remains future work.
+
 Question: can the *hardware-facing half* of `rockchip_ebc` — probe, the
 refresh state machine, LUT upload, DMA windowing, the IRQ path — be
 exercised without a PineNote? Rungs 1–3 of the testing ladder cover the

@@ -144,13 +144,20 @@ independently useful, and 1–3 start roadmap track 4 without hardware:
        2026-07-04, see `doc/ebc-harness-spike.md` for the evidence
        (probe dependency chain, register/IRQ/DMA contract, effort
        pricing). Two stages, cheapest first:
-   - [ ] **(a) Shim-executed refresh harness** (~2–4 days): back the
-         ebc-logic shim's inert regmap with a RAM register file, hook
-         DSP_START to call the driver's own IRQ handler and hand the
-         MST0/1/2 buffers to librastersim for LUT playback → PNG
-         goldens. Executes (under ASan) the refresh orchestration, LUT
-         upload, per-frame register discipline, buffer switching, and
-         the teardown-UAF class — the paths rungs 1–3 only compile.
+   - [x] **(a) Shim-executed refresh harness** (done 2026-07-04, same
+         day as the spike: `pinenote/tools/ebc-logic/ebc-refresh-test`,
+         part of `make ebc-logic-check`).  The shim's regmap became a
+         RAM register file with a behavioral device model behind it
+         (`shim/fake-ebc.h`): CONFIG_DONE latching, LUT/three-window
+         frames, DSP_END raised through the driver's own IRQ handler.
+         Executes (under ASan) probe, global/partial orchestration, LUT
+         upload, DMA windowing, mid-refresh buffer switching, the
+         scripted refresh-thread body, and — with `WBF=` — a
+         drive-sequence differential proving all 256 Y4 transitions
+         match rastersim's independent waveform decode.  Also executed
+         (not just read): the rung-2 teardown UAF (ASan-verified
+         reproducer) and scheduler QUIRK E made device-visible as
+         phase-index regressions.  Two PGM goldens committed.
    - [ ] **(b) QEMU EBC device model** (~1–2 weeks; build when the
          reader track needs a UAPI-true offline target): ~300–500 line
          sysbus device carried as a Guix QEMU patch, bespoke ~100-line
