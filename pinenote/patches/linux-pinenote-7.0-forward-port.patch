@@ -1,8 +1,8 @@
 diff --git a/arch/arm64/boot/dts/rockchip/rk3566-pinenote.dtsi b/arch/arm64/boot/dts/rockchip/rk3566-pinenote.dtsi
-index 791719acb..79f2a78e8 100644
+index 791719a..e969e76 100644
 --- a/arch/arm64/boot/dts/rockchip/rk3566-pinenote.dtsi
 +++ b/arch/arm64/boot/dts/rockchip/rk3566-pinenote.dtsi
-@@ -74,6 +74,16 @@ led-0 {
+@@ -74,6 +74,16 @@
  		};
  	};
  
@@ -19,7 +19,7 @@ index 791719acb..79f2a78e8 100644
  	sdio_pwrseq: sdio-pwrseq {
  		compatible = "mmc-pwrseq-simple";
  		clocks = <&rk817 1>;
-@@ -131,6 +141,33 @@ link1_codec: codec {
+@@ -131,6 +141,33 @@
  		};
  	};
  
@@ -53,7 +53,7 @@ index 791719acb..79f2a78e8 100644
  	vbat_4g: regulator-vbat-4g {
  		compatible = "regulator-fixed";
  		regulator-name = "vbat_4g";
-@@ -215,6 +252,24 @@ &cpu3 {
+@@ -215,6 +252,24 @@
  	cpu-supply = <&vdd_cpu>;
  };
  
@@ -78,7 +78,15 @@ index 791719acb..79f2a78e8 100644
  &i2c0 {
  	status = "okay";
  
-@@ -583,6 +638,29 @@ backlight_hwen_h: backlight-hwen-h {
+@@ -503,6 +558,7 @@
+ 	ebc_pmic: pmic@68 {
+ 		compatible = "ti,tps65185";
+ 		reg = <0x68>;
++		#io-channel-cells = <1>;
+ 		interrupt-parent = <&gpio3>;
+ 		interrupts = <RK_PA6 IRQ_TYPE_LEVEL_LOW>;
+ 		enable-gpios = <&gpio3 RK_PB0 GPIO_ACTIVE_HIGH>;
+@@ -583,6 +639,29 @@
  		};
  	};
  
@@ -108,6 +116,21 @@ index 791719acb..79f2a78e8 100644
  	bt {
  		bt_enable_h: bt-enable-h {
  			rockchip,pins = <0 RK_PC4 RK_FUNC_GPIO &pcfg_pull_none>;
+@@ -751,6 +830,14 @@
+ 
+ &usb_host0_xhci {
+ 	dr_mode = "otg";
++	/*
++	 * USB3 PIPE phy is not wired on the PineNote.  Since 6.15
++	 * (cc5bfc4e16fc "usb: dwc3: Set SUSPENDENABLE soon after phy init")
++	 * dwc3 sets GUSB3PIPECTL.SUSPHY at core init, which makes the first
++	 * ep0out DEPCFG command time out ("failed to enable ep0out") when the
++	 * gadget binds.  Keeping USB3 suspend-phy off avoids that.
++	 */
++	snps,dis_u3_susphy_quirk;
+ 	status = "okay";
+ };
+ 
 diff --git a/arch/arm64/boot/dts/rockchip/rk356x-base.dtsi b/arch/arm64/boot/dts/rockchip/rk356x-base.dtsi
 index a2c4957a5..cf6ec2f1d 100644
 --- a/arch/arm64/boot/dts/rockchip/rk356x-base.dtsi
@@ -147,13 +170,14 @@ new file mode 100755
 index 000000000..c65b19441
 --- /dev/null
 +++ b/arch/arm64/configs/pinenote_defconfig
-@@ -0,0 +1,1576 @@
+@@ -0,0 +1,1577 @@
 +CONFIG_DEFAULT_HOSTNAME="pinenote"
 +# CONFIG_SWAP is not set
 +CONFIG_SYSVIPC=y
 +CONFIG_POSIX_MQUEUE=y
 +CONFIG_GENERIC_IRQ_DEBUGFS=y
 +CONFIG_NO_HZ_IDLE=y
++CONFIG_PREEMPT_RT=y
 +CONFIG_HIGH_RES_TIMERS=y
 +# CONFIG_BPF_SYSCALL is not set
 +# CONFIG_BPF_JIT is not set
@@ -345,7 +369,7 @@ index 000000000..c65b19441
 +CONFIG_DEBUG_INFO_SPLIT=y
 +CONFIG_MAGIC_SYSRQ=y
 +# CONFIG_MAGIC_SYSRQ_SERIAL is not set
-+# CONFIG_DEBUG_FS is not set
++CONFIG_DEBUG_FS=y
 +CONFIG_PANIC_ON_OOPS=y
 +CONFIG_PANIC_TIMEOUT=1
 +CONFIG_SOFTLOCKUP_DETECTOR=y
@@ -2470,6 +2494,229 @@ index 000000000..27df164c8
 +MODULE_AUTHOR("Samuel Holland <samuel@sholland.org>");
 +MODULE_DESCRIPTION("DRM EPD waveform LUT library");
 +MODULE_LICENSE("Dual MIT/GPL");
+diff --git a/drivers/gpu/drm/panel/panel-simple.c b/drivers/gpu/drm/panel/panel-simple.c
+index a242ae2..b57e0b0 100644
+--- a/drivers/gpu/drm/panel/panel-simple.c
++++ b/drivers/gpu/drm/panel/panel-simple.c
+@@ -2214,6 +2214,208 @@ static const struct panel_desc edt_etmv570g2dhu = {
+ 	.connector_type = DRM_MODE_CONNECTOR_DPI,
+ };
+ 
++static const struct drm_display_mode eink_ed103tc2_mode[] ={
++	/* clock frequency = refresh rate * (htotal * vtotal) / 1000 */
++	// 0.5 Hz
++	{
++		.clock = 1568,
++		.hdisplay = 1872,
++		.hsync_start = 1872 + 56,
++		.hsync_end = 1872 + 56 + 144,
++		.htotal = 1872 + 56 + 144 + 136,
++		.hskew = 64,
++		.vdisplay = 1404,
++		.vsync_start = 1404 + 12,
++		.vsync_end = 1404 + 12 + 1,
++		.vtotal = 1404 + 12 + 1 + 4,
++		.flags = DRM_MODE_FLAG_PHSYNC | DRM_MODE_FLAG_NVSYNC |
++			 DRM_MODE_FLAG_HSKEW | DRM_MODE_FLAG_CLKDIV2,
++	},
++	// 1 Hz
++	{
++		.clock = 3137,
++		.hdisplay = 1872,
++		.hsync_start = 1872 + 56,
++		.hsync_end = 1872 + 56 + 144,
++		.htotal = 1872 + 56 + 144 + 136,
++		.hskew = 64,
++		.vdisplay = 1404,
++		.vsync_start = 1404 + 12,
++		.vsync_end = 1404 + 12 + 1,
++		.vtotal = 1404 + 12 + 1 + 4,
++		.flags = DRM_MODE_FLAG_PHSYNC | DRM_MODE_FLAG_NVSYNC |
++			 DRM_MODE_FLAG_HSKEW | DRM_MODE_FLAG_CLKDIV2,
++	},
++	// 5 Hz
++	{
++		.clock = 15687,
++		.hdisplay = 1872,
++		.hsync_start = 1872 + 56,
++		.hsync_end = 1872 + 56 + 144,
++		.htotal = 1872 + 56 + 144 + 136,
++		.hskew = 64,
++		.vdisplay = 1404,
++		.vsync_start = 1404 + 12,
++		.vsync_end = 1404 + 12 + 1,
++		.vtotal = 1404 + 12 + 1 + 4,
++		.flags = DRM_MODE_FLAG_PHSYNC | DRM_MODE_FLAG_NVSYNC |
++			 DRM_MODE_FLAG_HSKEW | DRM_MODE_FLAG_CLKDIV2,
++	},
++	// 15 Hz
++	{
++		.clock = 47063,
++		.hdisplay = 1872,
++		.hsync_start = 1872 + 56,
++		.hsync_end = 1872 + 56 + 144,
++		.htotal = 1872 + 56 + 144 + 136,
++		.hskew = 64,
++		.vdisplay = 1404,
++		.vsync_start = 1404 + 12,
++		.vsync_end = 1404 + 12 + 1,
++		.vtotal = 1404 + 12 + 1 + 4,
++		.flags = DRM_MODE_FLAG_PHSYNC | DRM_MODE_FLAG_NVSYNC |
++			 DRM_MODE_FLAG_HSKEW | DRM_MODE_FLAG_CLKDIV2,
++	},
++	// 20 Hz
++	{
++		.clock = 62751,
++		/* .clock = 200000, */
++		.hdisplay = 1872,
++		.hsync_start = 1872 + 56,
++		.hsync_end = 1872 + 56 + 144,
++		.htotal = 1872 + 56 + 144 + 136,
++		.hskew = 64,
++		.vdisplay = 1404,
++		.vsync_start = 1404 + 12,
++		.vsync_end = 1404 + 12 + 1,
++		.vtotal = 1404 + 12 + 1 + 4,
++		.flags = DRM_MODE_FLAG_PHSYNC | DRM_MODE_FLAG_NVSYNC |
++			 DRM_MODE_FLAG_HSKEW | DRM_MODE_FLAG_CLKDIV2,
++	},
++	// 25 Hz
++	{
++		.clock = 78439,
++		.hdisplay = 1872,
++		.hsync_start = 1872 + 56,
++		.hsync_end = 1872 + 56 + 144,
++		.htotal = 1872 + 56 + 144 + 136,
++		.hskew = 64,
++		.vdisplay = 1404,
++		.vsync_start = 1404 + 12,
++		.vsync_end = 1404 + 12 + 1,
++		.vtotal = 1404 + 12 + 1 + 4,
++		.flags = DRM_MODE_FLAG_PHSYNC | DRM_MODE_FLAG_NVSYNC |
++			 DRM_MODE_FLAG_HSKEW | DRM_MODE_FLAG_CLKDIV2,
++	},
++	// 30 Hz
++	{
++		.clock = 94127,
++		.hdisplay = 1872,
++		.hsync_start = 1872 + 56,
++		.hsync_end = 1872 + 56 + 144,
++		.htotal = 1872 + 56 + 144 + 136,
++		.hskew = 64,
++		.vdisplay = 1404,
++		.vsync_start = 1404 + 12,
++		.vsync_end = 1404 + 12 + 1,
++		.vtotal = 1404 + 12 + 1 + 4,
++		.flags = DRM_MODE_FLAG_PHSYNC | DRM_MODE_FLAG_NVSYNC |
++			 DRM_MODE_FLAG_HSKEW | DRM_MODE_FLAG_CLKDIV2,
++	},
++	// 40 Hz
++	{
++		.clock = 125502,
++		.hdisplay = 1872,
++		.hsync_start = 1872 + 56,
++		.hsync_end = 1872 + 56 + 144,
++		.htotal = 1872 + 56 + 144 + 136,
++		.hskew = 64,
++		/* .hskew = 0, */ // <- does not work
++		/* .hskew = 10, */
++		/* .hskew = 20, */
++		/* .hskew = 30, */
++		/* .hskew = 40, */
++		/* .hskew = 50, */
++		/* .hskew = 60, */
++		/* .hskew = 70, */
++		.vdisplay = 1404,
++		.vsync_start = 1404 + 12,
++		.vsync_end = 1404 + 12 + 1,
++		.vtotal = 1404 + 12 + 1 + 4,
++		.flags = DRM_MODE_FLAG_PHSYNC | DRM_MODE_FLAG_NVSYNC |
++			 DRM_MODE_FLAG_HSKEW | DRM_MODE_FLAG_CLKDIV2 |
++			DRM_MODE_TYPE_PREFERRED,
++	},
++
++/* 	/1* modes that actually take the .clock seriously *1/ */
++/* 	{ */
++/* 		/1* this will lead to dclk == 250 Mhz *1/ */
++/* 		/1* .clock = 266693, *1/ */
++/* 		/1* request dclk == 200 MHz *1/ */
++/* 		.clock = 200000, */
++/* 		.hdisplay = 1872, */
++/* 		/1* hsync_start, for linux timing order, should be display + fp */
++/* 		 * according to the data sheet, display = ldl == 234 [dclk] = 1872 pixels, and fp == lel == 7 [dclk] == 56 pixels */
++/* 		 *1/ */
++/* 		/1* data sheet days sync == lsl == 18 sclk = 18 * 8 pixels = 144 pixels *1/ */
++/* 		.hsync_start = 1872 + 56, */
++/* 		.hsync_end = 1872 + 56 + 144, */
++/* 		.htotal = 1872 + 56 + 144 + 136, */
++/* 		/1* .hsync_start = 1872 + 184, *1/ */
++/* 		/1* .hsync_end = 1872 + 184 + 88, *1/ */
++/* 		/1* .htotal = 1872 + 184 + 88 + 64, *1/ */
++/* 		/1* .hskew = 136, *1/ */
++/* 		.hskew = 64, */
++/* 		.vdisplay = 1404, */
++/* 		.vsync_start = 1404 + 12, */
++/* 		.vsync_end = 1404 + 12 + 1, */
++/* 		.vtotal = 1404 + 12 + 1 + 4, */
++/* 		.flags = DRM_MODE_FLAG_PHSYNC | DRM_MODE_FLAG_NVSYNC | */
++/* 			 DRM_MODE_FLAG_HSKEW | DRM_MODE_FLAG_CLKDIV2, */
++/* 	}, */
++/* 	{ */
++/* 		.clock = 220000, */
++/* 		.hdisplay = 1872, */
++/* 		.hsync_start = 1872 + 56, */
++/* 		.hsync_end = 1872 + 56 + 144, */
++/* 		.htotal = 1872 + 56 + 144 + 136, */
++/* 		.hskew = 64, */
++/* 		.vdisplay = 1404, */
++/* 		.vsync_start = 1404 + 12, */
++/* 		.vsync_end = 1404 + 12 + 1, */
++/* 		.vtotal = 1404 + 12 + 1 + 4, */
++/* 		.flags = DRM_MODE_FLAG_PHSYNC | DRM_MODE_FLAG_NVSYNC | */
++/* 			 DRM_MODE_FLAG_HSKEW | DRM_MODE_FLAG_CLKDIV2, */
++/* 	}, */
++/* 	{ */
++/* 		.clock = 266693, */
++/* 		.hdisplay = 1872, */
++/* 		.hsync_start = 1872 + 56, */
++/* 		.hsync_end = 1872 + 56 + 144, */
++/* 		.htotal = 1872 + 56 + 144 + 136, */
++/* 		.hskew = 64, */
++/* 		.vdisplay = 1404, */
++/* 		.vsync_start = 1404 + 12, */
++/* 		.vsync_end = 1404 + 12 + 1, */
++/* 		.vtotal = 1404 + 12 + 1 + 4, */
++/* 		.flags = DRM_MODE_FLAG_PHSYNC | DRM_MODE_FLAG_NVSYNC | */
++/* 			 DRM_MODE_FLAG_HSKEW | DRM_MODE_FLAG_CLKDIV2, */
++/* 	}, */
++};
++
++static const struct panel_desc eink_ed103tc2 = {
++	.modes = eink_ed103tc2_mode,
++	.num_modes = 8,
++	.bpc = 4,
++	.size = {
++		.width = 210,
++		.height = 157,
++	},
++	.bus_format = MEDIA_BUS_FMT_FIXED,
++	.bus_flags = DRM_BUS_FLAG_DE_LOW | DRM_BUS_FLAG_PIXDATA_SAMPLE_POSEDGE,
++	.connector_type = DRM_MODE_CONNECTOR_DPI,
++};
++
+ static const struct display_timing eink_vb3300_kca_timing = {
+ 	.pixelclock = { 40000000, 40000000, 40000000 },
+ 	.hactive = { 334, 334, 334 },
+@@ -5271,6 +5473,9 @@ static const struct of_device_id platform_of_match[] = {
+ 	}, {
+ 		.compatible = "edt,etmv570g2dhu",
+ 		.data = &edt_etmv570g2dhu,
++	}, {
++		.compatible = "eink,ed103tc2",
++		.data = &eink_ed103tc2,
+ 	}, {
+ 		.compatible = "eink,vb3300-kca",
+ 		.data = &eink_vb3300_kca,
 diff --git a/drivers/gpu/drm/rockchip/Kconfig b/drivers/gpu/drm/rockchip/Kconfig
 index 1479b8c4e..3a78bb357 100644
 --- a/drivers/gpu/drm/rockchip/Kconfig
@@ -6159,6 +6406,102 @@ index 000000000..ce6a31d10
 +MODULE_DESCRIPTION("WS8100 BLE Pen Driver");
 +MODULE_AUTHOR("Samuel Holland <samuel@sholland.org>");
 +MODULE_LICENSE("GPL");
+diff --git a/drivers/regulator/tps65185.c b/drivers/regulator/tps65185.c
+index 786622d..7c9464b 100644
+--- a/drivers/regulator/tps65185.c
++++ b/drivers/regulator/tps65185.c
+@@ -10,6 +10,7 @@
+ #include <linux/module.h>
+ #include <linux/mutex.h>
+ #include <linux/hwmon.h>
++#include <linux/iio/iio.h>
+ #include <linux/pm_runtime.h>
+ #include <linux/property.h>
+ #include <linux/regulator/consumer.h>
+@@ -100,6 +101,54 @@ static const struct hwmon_chip_info tps65185_chip_info = {
+ 	.info = tps65185_info,
+ };
+ 
++/*
++ * IIO temperature channel for in-kernel consumers such as the Rockchip
++ * EBC driver, which selects EPD waveform LUTs by panel temperature via
++ * io-channels.  Reports millidegrees Celsius as a processed value.
++ */
++static const struct iio_chan_spec tps65185_iio_channels[] = {
++	{
++		.type = IIO_TEMP,
++		.info_mask_separate = BIT(IIO_CHAN_INFO_PROCESSED),
++	},
++};
++
++static int tps65185_iio_read_raw(struct iio_dev *indio_dev,
++				 const struct iio_chan_spec *chan,
++				 int *val, int *val2, long mask)
++{
++	struct tps65185_data *data = *(struct tps65185_data **)iio_priv(indio_dev);
++	unsigned int regval;
++	int ret;
++
++	if (mask != IIO_CHAN_INFO_PROCESSED)
++		return -EINVAL;
++
++	reinit_completion(&data->tmst_completion);
++	/* start acquisition */
++	regmap_update_bits(data->regmap, TPS65185_REG_TMST1,
++			   TPS65185_READ_THERM, TPS65185_READ_THERM);
++	wait_for_completion_timeout(&data->tmst_completion,
++				    msecs_to_jiffies(PGOOD_TIMEOUT_MSECS));
++	ret = regmap_read(data->regmap, TPS65185_REG_TMST1, &regval);
++	if (ret)
++		return ret;
++	if (!(regval & TPS65185_CONV_END))
++		return -ETIMEDOUT;
++
++	ret = regmap_read(data->regmap, TPS65185_REG_TMST_VALUE, &regval);
++	if (ret)
++		return ret;
++
++	*val = (s8)regval * 1000;
++
++	return IIO_VAL_INT;
++}
++
++static const struct iio_info tps65185_iio_info = {
++	.read_raw = tps65185_iio_read_raw,
++};
++
+ static bool tps65185_volatile_reg(struct device *dev, unsigned int reg)
+ {
+ 	switch (reg) {
+@@ -429,6 +478,28 @@ static int tps65185_probe(struct i2c_client *client)
+ 			dev_notice(&client->dev, "failed to register hwmon\n");
+ 	}
+ 
++	if (IS_REACHABLE(CONFIG_IIO)) {
++		struct iio_dev *indio_dev;
++		struct tps65185_data **priv;
++
++		indio_dev = devm_iio_device_alloc(&client->dev, sizeof(*priv));
++		if (!indio_dev)
++			return -ENOMEM;
++
++		priv = iio_priv(indio_dev);
++		*priv = data;
++		indio_dev->name = "tps65185";
++		indio_dev->info = &tps65185_iio_info;
++		indio_dev->modes = INDIO_DIRECT_MODE;
++		indio_dev->channels = tps65185_iio_channels;
++		indio_dev->num_channels = ARRAY_SIZE(tps65185_iio_channels);
++
++		ret = devm_iio_device_register(&client->dev, indio_dev);
++		if (ret)
++			return dev_err_probe(&client->dev, ret,
++					     "failed to register iio device\n");
++	}
++
+ 	return 0;
+ }
+ 
 diff --git a/include/drm/drm_epd_helper.h b/include/drm/drm_epd_helper.h
 new file mode 100755
 index 000000000..56a606841
