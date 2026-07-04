@@ -1,4 +1,5 @@
 (define-module (pinenote packages ebc-test)
+  #:use-module (gnu packages guile)
   #:use-module (guix build-system trivial)
   #:use-module (guix gexp)
   #:use-module (guix licenses)
@@ -18,8 +19,40 @@
           (use-modules (guix build utils))
           (let* ((out #$output)
                  (bin (string-append out "/bin"))
-                 (script (string-append bin "/pinenote-ebc-test")))
+                 (script (string-append bin "/pinenote-ebc-test"))
+                 (refresh (string-append bin "/pinenote-ebc-refresh")))
             (mkdir-p bin)
+            ;; Trigger the rockchip_ebc GLOBAL_REFRESH ioctl (a full-panel
+            ;; deghosting refresh) from stock Guile via the FFI — no
+            ;; compiled tools needed on the device.  Technique validated on
+            ;; hardware 2026-07-04.  The ioctl number is
+            ;; DRM_IOWR(DRM_COMMAND_BASE + 0x00, struct { bool; }) =
+            ;; _IOC(3, 'd', 0x40, 1) = #xC0016440 (see
+            ;; include/uapi/drm/rockchip_ebc_drm.h in the forward-port
+            ;; patch).  DRM_AUTH-gated: run as root with no other DRM
+            ;; master (the first opener of card0 becomes master).
+            (call-with-output-file refresh
+              (lambda (port)
+                (display (string-append
+                          "#!" #$(file-append guile-3.0 "/bin/guile")
+                          " --no-auto-compile\n") port)
+                (display "!#\n" port)
+                (display "(use-modules (system foreign) (rnrs bytevectors))\n" port)
+                (display "(define card \"/dev/dri/card0\")\n" port)
+                (display "(define ioctl\n" port)
+                (display "  (pointer->procedure int (dynamic-func \"ioctl\" (dynamic-link))\n" port)
+                (display "                      (list int unsigned-long '*)))\n" port)
+                (display "(define fd (open-fdes card O_RDWR))\n" port)
+                (display "(define buf (make-bytevector 1 1))\n" port)
+                (display "(define ret (ioctl fd #xC0016440 (bytevector->pointer buf)))\n" port)
+                (display "(close-fdes fd)\n" port)
+                (display "(if (zero? ret)\n" port)
+                (display "    (format #t \"pinenote-ebc-refresh: global refresh triggered~%\")\n" port)
+                (display "    (begin\n" port)
+                (display "      (format (current-error-port)\n" port)
+                (display "              \"pinenote-ebc-refresh: ioctl failed (ret=~a); run as root with no other DRM master~%\" ret)\n" port)
+                (display "      (exit 1)))\n" port)))
+            (chmod refresh #o555)
             (call-with-output-file script
               (lambda (port)
                 (display "#!/bin/sh\n" port)
@@ -84,11 +117,13 @@
                 (display "echo 'No framebuffer, DRM, EBC, partition, or bootloader writes are performed unless --draw-smoke is passed.'\n" port)))
             (chmod script #o555)))))
     (home-page "https://github.com/m-weigand/linux/tree/branch_pinenote_6-12-11")
-    (synopsis "Conservative PineNote EBC bring-up placeholder")
+    (synopsis "Conservative PineNote EBC bring-up tools")
     (description
       "Install a small pinenote-ebc-test command that reports the EBC and DRM
 state without writing by default, and can run an explicit reversible framebuffer
-smoke test with --draw-smoke.  It is a real package so the minimal
-operating-system declaration can refer to an in-repository test artifact while
-native rendering is still being implemented.")
+smoke test with --draw-smoke; plus pinenote-ebc-refresh, which triggers the
+rockchip_ebc GLOBAL_REFRESH ioctl (full-panel deghosting) through Guile's FFI.
+It is a real package so the minimal operating-system declaration can refer to
+an in-repository test artifact while native rendering is still being
+implemented.")
     (license gpl3+)))
