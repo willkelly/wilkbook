@@ -161,18 +161,34 @@ fix):
   (PineNote has no VOP — EBC is the display) and the pre-existing
   `ws8100_pen` status-property `-74` quirk (also present on 6.6).
 
+## 2026-07-04 display exercise (same boot, over the ACM console)
+
+- `pinenote-ebc-test --draw-smoke`: white square drawn and restored.
+- 16-step grayscale ramp written to `/dev/fb0` (XRGB8888, 1872×1404,
+  stride 7488) with plain `dd`/`tr` — all 16 levels rendered.
+- `GLOBAL_REFRESH` ioctl (`0xC0016440` on `/dev/dri/card0`) triggered
+  successfully **from stock Guile via the FFI** — no compiled tools
+  needed on the device. Packaged as `pinenote-ebc-refresh` in
+  `pinenote-ebc-test` for future images.
+- The device's own waveform was pulled over the ACM console (base64,
+  ~1.5 s for 2 MiB) and SHA-verified against the device copy
+  (`ba3d4883…`); preserved at
+  `~/pinenote-backup/2026-07-04-wbf-pull/` and used as the input for the
+  new host-side parser tests (`pinenote/tools/wbf/`, ladder rung 1 —
+  all tests pass; see `pinenote/tools/wbf/README.md` for what the
+  waveform contains).
+
 ## Next sessions
 
-- Exercise the display beyond fbcon: `pinenote-ebc-test`, grayscale
-  ramps, a `GLOBAL_REFRESH` ioctl poke — start of the render-harness
-  work (ROADMAP track 4 / testing-ladder rung 3).
+- Ladder rung 2–3 (offline): EBC blit/damage host tests, then the
+  Gray8→Y4 raster library + waveform simulator seeded with the rung-1
+  decoded LUTs.
 - Wi-Fi on 7.0 end-to-end (firmware load is proven; the usb-console
   flavor has no networking userland — needs the networked flavor or a
-  credentials story).
+  credentials story). Consider the community-standard ECM ethernet
+  gadget alongside ACM.
 - RT characterization under load (refresh + pen input; watch the EBC
   refresh kthread).
-- Consider retiring 6.6 to a regression-isolation tool per ROADMAP now
-  that 7.0 has display/gadget/RT parity.
 
 ## Device facts
 

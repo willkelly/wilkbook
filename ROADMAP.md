@@ -37,8 +37,9 @@ especially PREEMPT_RT interactions (see the RT watch list in
       clamp ≥ 19 °C; pixels-to-IDLE on waveform change; `fsleep` /
       `dma_sync` size fixes. Skip the NEON/`scoped_ksimd` blitters until
       we want their throughput (our copy has no NEON today).
-- [ ] Once 7.0 reaches parity with 6.6 on hardware, demote the 6.6
-      package to a regression-isolation tool.
+- [x] Once 7.0 reaches parity with 6.6 on hardware, demote the 6.6
+      package to a regression-isolation tool (2026-07-04: parity reached;
+      docs repositioned).
 - [ ] Later, low-cost upstream-friendly experiment: DRM self-refresh
       helper for idle panel power-down (the model reviewers pointed to in
       the 2022 RFC; better battery than suspend hacks for a reader).
@@ -70,14 +71,15 @@ Goal: shrink what only a hardware session can prove down to optics,
 latency feel, and electrical behavior. Rungs in build order — each is
 independently useful, and 1–3 start roadmap track 4 without hardware:
 
-1. [ ] **.wbf parser as a host tool** (~1–2 days). Extract the
-       `pvi_wbf_*` functions from `drm_epd_helper.c` (MIT-licensed, pure
-       over a byte buffer) into a userspace tool; run against the
-       device's own backed-up waveform (`ebc_orig.wbf`, verified backups
-       per `doc/device-runbook.md`). Tests: header/CRC validation, mode
-       table decode (the 0x19 mode-version layout), temperature-bin
-       lookup across the full range, LUT decode lengths. Output doubles
-       as ground truth for rung 3.
+1. [x] **.wbf parser as a host tool** (done 2026-07-04:
+       `pinenote/tools/wbf/`, `make wbf-check WBF=…`). Compiles the
+       verbatim `drm_epd_helper.[ch]` out of the forward-port patch
+       against a small shim and inspects a waveform exactly the way
+       `rockchip_ebc` does. All tests pass against the device's own
+       waveform (pulled over the ACM console, SHA-verified): mode-version
+       0x19, 5-bit LUTs, ED103TC2 panel string, 13 temperature bins with
+       GC16 at 131 phases @0 °C vs 38 @≥24 °C, A2=10 phases. Its decoded
+       LUTs are the ground truth for rung 3.
 2. [ ] **EBC driver logic as host unit tests** (~2–4 days). Compile the
        driver's pure arithmetic against a tiny kernel-API shim: the
        XRGB8888/R4→Y4 blitters (odd-x/stride edge cases), damage

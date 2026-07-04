@@ -16,25 +16,22 @@ proven on hardware.
 
 ## Status (2026-07)
 
-- The **6.6.30 m-weigand kernel flavor works entirely** on the device:
-  display, Wi-Fi, Bluetooth, USB console. Build it with
-  `make rootfs-usb-console-linux-6-6`.
-- The **forward-ported 7.0 kernel** boots to Guix userspace on the
-  experimental `os2` slot, and Wi-Fi/Bluetooth firmware loading on the
-  vanilla (nonguix) base is hardware-confirmed. The display failure is
-  root-caused — mainline's TPS65185 driver lacks the IIO temperature
-  channel the EBC driver needs — and a fix is staged in the forward-port
-  patch, along with `CONFIG_PREEMPT_RT=y`, `CONFIG_DEBUG_FS=y`, and
-  service fixes for waveform installation and gadget module loading. All
-  await the next hardware session. Details in `doc/status.md` and
+- The **forward-ported 7.0 kernel is the validated primary** (2026-07-04
+  hardware session): e-ink display output with temperature-compensated
+  waveform selection, Wi-Fi/Bluetooth firmware, USB ACM gadget console,
+  and full `PREEMPT_RT` — on an untainted vanilla-source kernel. Build it
+  with `make rootfs-usb-console`. Details in `doc/status.md` and
   `doc/kernel-forward-port.md`.
+- The **6.6.30 m-weigand flavor** is kept as a regression-isolation tool
+  only (`make rootfs-usb-console-linux-6-6`); it no longer leads
+  anything.
 
 ## Quick start
 
 ```sh
 make help                              # list targets
-make rootfs-usb-console-linux-6-6     # known-good baseline image -> rootfs
-make rootfs-usb-console               # kernel-currency track
+make rootfs-usb-console               # validated primary (7.0 + PREEMPT_RT)
+make rootfs-usb-console-linux-6-6     # 6.6 regression-isolation baseline
 make kernel-drv                       # cheap gate: compute kernel derivation
 make qemu-smoke                       # generic ARM64 userspace check
 ```
