@@ -71,3 +71,8 @@ qemu-virt:
 	  pinenote/scripts/preflight/stage-boot-bundle-from-rootfs.sh '$(ROOTFS)' \"$$bundle\" && \
 	  pinenote/scripts/qemu/make-virt-disk.sh '$(ROOTFS)' \"$$disk\" $(WAVEFORM) && \
 	  pinenote/scripts/qemu/run-pinenote-virt.sh \"$$bundle\" \"$$disk\""
+
+# Host-side waveform parser tests (offline ladder rung 1); needs the
+# per-device .wbf (never committed): make wbf-check WBF=/path/to/ebc.wbf
+wbf-check:
+	guix shell gcc-toolchain python -- $(MAKE) -C pinenote/tools/wbf check WBF=$(WBF)
