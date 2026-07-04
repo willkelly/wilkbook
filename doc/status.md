@@ -109,33 +109,25 @@ Also staged 2026-07-03:
 
 ## Current os2 contents
 
-Still the 2026-06-10 artifact (`pinenote-usb-console-PNGuixRoot-20260610.ext4`,
-SHA-256 `1b6b8ed2…`), whose boot produced the 2026-06-11 log above.
-
-## Staged and ready to write (2026-07-03)
-
-The full fix-stack artifact is built, QEMU-virt boot-tested (reaches
-Shepherd on the `PREEMPT_RT` kernel; initrd installs waveform and loads
-display modules), and staged on the device with a verified SHA:
+Written and readback-verified 2026-07-03 from os1 (device on the network,
+no reboot performed):
 
 - Artifact: `pinenote-usb-console-PNGuixRoot-20260703.ext4`,
-  1,503,334,400 bytes (= 2,936,200 × 512 sectors), at
+  1,503,334,400 bytes (= 2,936,200 × 512 sectors), staged copy kept at
   `/home/user/wilkbook-artifacts/` on os1.
-- SHA-256 (host artifact and staged copy both):
+- SHA-256 (host artifact, staged copy, and p6 readback all):
   `4cab03b25c2c80ae6a3c22147f30c1022fcfe3e9f787ab302d8dbc9e034ea43e`.
-- Contains: TPS65185 IIO + `#io-channel-cells`, `eink,ed103tc2`
-  panel-simple entry, `snps,dis_u3_susphy_quirk`, `CONFIG_PREEMPT_RT=y`,
+- QEMU-virt boot-tested before writing: reaches Shepherd on the
+  `PREEMPT_RT` kernel; initrd installs the waveform and loads all
+  display modules.
+- Contains the full 2026-07-03 fix stack: TPS65185 IIO +
+  `#io-channel-cells`, `eink,ed103tc2` panel-simple entry,
+  `snps,dis_u3_susphy_quirk`, `CONFIG_PREEMPT_RT=y`,
   `CONFIG_DEBUG_FS=y`, waveform-service udev ordering + sysfs fallback,
   gadget `modprobe -d` fix.
-
-To write (from os1, os2 unmounted — deliberately left as a manual step):
-
-```sh
-A=/home/user/wilkbook-artifacts/pinenote-usb-console-PNGuixRoot-20260703.ext4
-sudo dd if=$A of=/dev/mmcblk0p6 bs=1M conv=fsync status=progress && sync
-sudo dd if=/dev/mmcblk0p6 bs=512 count=2936200 status=none | sha256sum
-# expect 4cab03b25c2c80ae6a3c22147f30c1022fcfe3e9f787ab302d8dbc9e034ea43e
-```
+- This replaces the 2026-06-10 artifact whose boot produced the
+  2026-06-11 log above. Next os2 boot is the first observation of the
+  whole stack.
 
 ## Immediate next session (once charged enough for the UART adapter)
 
