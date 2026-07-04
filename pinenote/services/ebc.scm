@@ -18,7 +18,10 @@
   (list
     (shepherd-service
      (provision '(pinenote-waveform))
-     (requirement '(root-file-system))
+     ;; udev creates /dev/disk/by-partlabel/waveform, the primary source;
+     ;; without it this service raced device node creation and failed
+     ;; (observed on the 2026-06-11 os2 boot).
+     (requirement '(root-file-system udev))
      (documentation "Install the PineNote waveform from a local partition or state file.")
     (one-shot? #t)
     (start

@@ -165,16 +165,16 @@
         (apply log message arguments)
         #f)
 
-      ;; Activation services run before login/session environment variables are
-      ;; available.  Point kmod at the booted Guix kernel module tree explicitly;
-      ;; otherwise it falls back to /lib/modules and cannot find PineNote gadget
-      ;; modules.
-      (setenv "LINUX_MODULE_DIRECTORY"
-              "/run/current-system/kernel/lib/modules")
-
+      ;; Point modprobe at the kernel profile with -d: only the profile under
+      ;; /run/booted-system/kernel carries modules.dep (the raw kernel package
+      ;; has none), and the previous LINUX_MODULE_DIRECTORY setenv demonstrably
+      ;; never reached modprobe on the 2026-06-11 boot (it searched
+      ;; /lib/modules).  -d needs no environment at all; verified against the
+      ;; deployed image's own kmod in an os2 chroot, 2026-07-03.
       (for-each (lambda (module)
                   (let ((status
                          (system* #$(file-append kmod "/bin/modprobe")
+                                  "-d" "/run/booted-system/kernel"
                                   module)))
                     (unless (zero? status)
                       (log "warning: modprobe ~a exited with ~a"
