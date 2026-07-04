@@ -107,6 +107,12 @@ Both live in `pinenote/packages/kernel.scm`:
 6. Verify the output contains uncompressed `Image`, modules, and
    `lib/dtbs/rockchip/rk3566-pinenote-v1.2.dtb`.
 
+For a *single-file* edit (a cherry-pick, a pinned-quirk fix landing from
+upstream) a full refresh is overkill: extract the file, edit it, and
+splice it back with `pinenote/scripts/update-patch-file.py`, then verify
+the extraction round-trips and gate in ladder order. The step-by-step
+recipe with commands is `doc/worked-examples.md` case study 3.
+
 ## Cherry-picks from the community lineage (2026-07-04)
 
 The ROADMAP's four cherry-pick candidates from hrdl's v6.19 tree

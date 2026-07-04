@@ -45,8 +45,12 @@ code review — before a single reboot. That's the standard.
 - `doc/status.md` — **the single source of hardware truth.** Update it
   after every hardware session; it records what's actually been proven.
 - `doc/testing.md` — the testing philosophy, host tools, validation ladder.
+- `doc/worked-examples.md` — the philosophy applied: replayable case
+  studies (cherry-pick evaluation, harness-first risk-taking, patch
+  surgery). Read these before your first non-trivial change.
 - `doc/kernel-forward-port.md` — how to refresh the patch for a new
-  kernel; hard-won config lessons; the pinned driver quirks.
+  kernel; hard-won config lessons; the pinned driver quirks; the
+  community cherry-pick record.
 - `doc/building.md` — exact build/QEMU/extraction commands.
 - `doc/hardware-deploy.md` + `doc/device-runbook.md` — the os2 write
   protocol and the device inventory/backup ledger.
