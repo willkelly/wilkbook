@@ -99,12 +99,11 @@ if [ -z "$firmware_support" ] || [ -z "$diagnostics" ] || [ -z "$ebc_test" ]; th
 fi
 
 waveform_helper=$firmware_support/bin/pinenote-install-waveform
-brcm_helper=$firmware_support/bin/pinenote-install-brcm-firmware
 params_helper=$firmware_support/bin/pinenote-apply-ebc-params
 diagnostics_helper=$diagnostics/bin/pinenote-diagnostics
 ebc_test_helper=$ebc_test/bin/pinenote-ebc-test
 
-for helper in "$waveform_helper" "$brcm_helper" "$params_helper" "$diagnostics_helper" "$ebc_test_helper"; do
+for helper in "$waveform_helper" "$params_helper" "$diagnostics_helper" "$ebc_test_helper"; do
   if [ ! -x "$helper" ]; then
     fail "missing executable helper: $helper"
   fi
@@ -123,11 +122,6 @@ else
   fail "parameter helper does not mention expected EBC sysfs parameter path"
 fi
 
-if grep -q '/lib/firmware/brcm' "$brcm_helper"; then
-  pass "Broadcom helper documents the real brcm firmware destination"
-else
-  fail "Broadcom helper does not mention expected brcm firmware destination"
-fi
 
 note "not executing waveform or parameter helpers because they target real /lib and /sys paths"
 

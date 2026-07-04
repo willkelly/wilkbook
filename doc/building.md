@@ -124,12 +124,18 @@ modprobe dummy_hcd   # fake UDC: exercise the configfs/ACM gadget stack
 modprobe vkms        # virtual DRM device: exercise render plumbing
 ```
 
-`dummy_hcd` lets the gadget service sequence run end to end without dwc3
-(the layer known to be broken on 7.0), and `vkms` gives DRM userspace a
-real connector to talk to. Neither models EBC semantics; rendering policy
-(Y4 quantization, waveform selection) belongs in a host-side software
-backend, and a QEMU device model for the EBC register block is a possible
-future rung (see `ROADMAP.md`).
+`dummy_hcd` provides a fake UDC for exercising the configfs/ACM plumbing
+(libcomposite, u_serial, usb_f_acm, ttyGS0) *manually* — note the v3
+gadget service itself will not bind on the virt machine: it ends in a
+dwc3 debugfs mode write against `fcc00000.usb`, which does not exist
+there, so it logs "USB device role is not ready" and declines by design.
+`vkms` gives DRM userspace a real connector to talk to. Neither models
+EBC semantics; rendering policy (Y4 quantization, waveform selection)
+lives in the host-side tools under `pinenote/tools/`, and a QEMU device
+model for the EBC register block is a possible future rung (see
+`ROADMAP.md`). (The dwc3 `ep0out` regression itself was never
+reproducible here — dummy_hcd bypasses dwc3 — and was fixed on hardware
+2026-07-04 via `snps,dis_u3_susphy_quirk`.)
 
 ## Validation ladder
 

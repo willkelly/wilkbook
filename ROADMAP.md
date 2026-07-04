@@ -55,10 +55,10 @@ community convention and stays).
       README quick start already uses it).
 - [ ] Re-measure flavor closure sizes; add the usb-console flavors to the
       `doc/pinenote-flavors.md` table (stale, predates firmware pkgs).
-- [ ] Decide the Broadcom firmware delivery story: firmware *packages*
-      are hardware-proven, so wire `pinenote-brcm-firmware-service-type`
-      into a flavor or delete it, and retire the `/state/firmware/brcm`
-      runtime helper.
+- [x] Broadcom firmware delivery story decided (2026-07-04): the packaged
+      firmware in the OS firmware field is hardware-proven, so
+      `pinenote-brcm-firmware-service-type` and the `/state/firmware/brcm`
+      runtime helper were deleted.
 - [ ] Add an ECM/RNDIS ethernet gadget flavor alongside the ACM console
       (community-standard debug path; survives console-less sessions;
       Debian's `usb-otg_eth.sh` is the configfs reference).
