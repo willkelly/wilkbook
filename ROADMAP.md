@@ -140,11 +140,26 @@ independently useful, and 1–3 start roadmap track 4 without hardware:
 6. [ ] **Reader prototype offline** (see track 4): MuPDF loop against
        SDL/vkms in days; KOReader Guix packaging as a separate timeboxed
        spike (LuaJIT + vendored deps is the real risk, not the device).
-7. [ ] **QEMU EBC device model** (days-to-weeks of QEMU C; keep gated on
-       display debugging actually demanding it). Register block +
-       stub IIO temperature provider so the real driver probes end to
-       end in the VM; render Y4 frames to PNG. The only offline way to
-       run the actual driver. Full RK3566 emulation stays a non-goal.
+7. [ ] **Execute the real driver's refresh machine offline** — scoped
+       2026-07-04, see `doc/ebc-harness-spike.md` for the evidence
+       (probe dependency chain, register/IRQ/DMA contract, effort
+       pricing). Two stages, cheapest first:
+   - [ ] **(a) Shim-executed refresh harness** (~2–4 days): back the
+         ebc-logic shim's inert regmap with a RAM register file, hook
+         DSP_START to call the driver's own IRQ handler and hand the
+         MST0/1/2 buffers to librastersim for LUT playback → PNG
+         goldens. Executes (under ASan) the refresh orchestration, LUT
+         upload, per-frame register discipline, buffer switching, and
+         the teardown-UAF class — the paths rungs 1–3 only compile.
+   - [ ] **(b) QEMU EBC device model** (~1–2 weeks; build when the
+         reader track needs a UAPI-true offline target): ~300–500 line
+         sysbus device carried as a Guix QEMU patch, bespoke ~100-line
+         DTB (fixed clocks, fixed regulators, stub-IIO out-of-tree
+         module, ed103tc2 panel), tiny initramfs — no virtio, no
+         distro, no udev. Real probe, real DRM core, real
+         GLOBAL_REFRESH/damage UAPI. Full RK3566 emulation stays a
+         non-goal; optics stay hardware-only; the on-device
+         EXTRACT_FBS differential remains the ground truth.
 
 Hardware-only validation set (the checklist scarce sessions exist for):
 waveform optics (ghosting, grayscale uniformity, mode tradeoffs); real

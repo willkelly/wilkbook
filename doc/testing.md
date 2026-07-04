@@ -77,7 +77,8 @@ lives at `~/pinenote-backup/2026-07-04-wbf-pull/ebc.wbf`.
 Run in order, stopping at the first failure. Rungs 1–5 are offline; only
 6 touches the device. (See `doc/building.md` for the exact commands and
 `ROADMAP.md` §3 for rungs not yet built, e.g. vkms writeback screenshot
-tests and a QEMU EBC device model.)
+tests and executing the real driver's refresh machine offline — the
+latter scoped in `doc/ebc-harness-spike.md`.)
 
 1. **Host tool suites** — `make wbf-check ebc-logic-check rastersim-check`
    (with `WBF=`). Fast; catches driver-logic and waveform regressions.
