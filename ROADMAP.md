@@ -106,16 +106,32 @@ independently useful, and 1–3 start roadmap track 4 without hardware:
        `blit_pixels` edge leak), see the rastersim README. Still later:
        pair with the driver's `EXTRACT_FBS` ioctl as a
        hardware-differential oracle.
-4. [ ] **Mechanized qemu-virt assertions** (~2–4 days). Wrap the
-       existing `make qemu-virt` rung (expect-script over the PL011
-       console, or a Guix marionette test): assert initrd waveform
-       install, PNGuixRoot mount, `pinenote-waveform` ordering after
-       udev, gadget modprobes resolving via `-d`, debugfs mounted. This
-       is the bug class already hit twice (waveform/udev race, modprobe
-       path); make regressions red before they cost a UART session.
-       Includes fixing the doc/building.md overstatement: the v3 gadget
-       service won't bind on virt (no `fcc00000.usb`) — either document
-       the manual dummy_hcd configfs walk or add a virt-aware bypass.
+4. [x] **Mechanized qemu-virt assertions** — `make qemu-virt-check`, built
+       2026-07-04. Boots the real kernel/initrd/rootfs on virt, captures
+       the console, kills QEMU on log quiescence, and asserts the boot
+       milestones through Shepherd start (kernel + PREEMPT_RT, initrd
+       waveform install + EBC module load, PNGuixRoot pre-root visibility,
+       root mount) plus the absence of panic / RT-splat / root-not-found /
+       PNGuixRoot-not-visible. Runs in <1 min; guards the
+       config/initrd/root-mount regression class (the VIRTIO_MENU-drop
+       class that was already hit). The doc/building.md overstatement ("the
+       one-shot services run" on virt) is corrected. **Found while building
+       it:** the virt boot deadlocks entering the udev service (idle-CPU
+       hang — 0.5% host CPU, see `doc/status.md`), so it never reaches the
+       post-udev services. The `pinenote-waveform`-after-udev, gadget
+       modprobe-via-`-d`, and debugfs assertions this rung originally
+       wanted are therefore NOT reachable in virt and stay guarded by the
+       host tools and hardware. Unblocking them needs the hang fixed:
+   - [ ] **Diagnose the qemu-virt udev deadlock.** The boot reaches
+         `Starting service udev` and then hangs with the guest idle (a
+         blocked worker or `udevadm settle`, not a TCG slowdown — confirmed
+         by CPU sampling). Make it self-diagnosing: build a debug kernel
+         with `CONFIG_MAGIC_SYSRQ_SERIAL=y` + `CONFIG_DETECT_HUNG_TASK=y`
+         (both currently off) to capture the blocked-task backtrace, or
+         attach gdb to QEMU's `-s` gdbstub with vmlinux symbols. Likely
+         suspects: a coldplug rule on an initrd-loaded EBC/DRM module, or a
+         worker blocked on a device node. Fixing it restores the
+         service-ordering assertions above.
 5. [ ] **vkms writeback screenshot tests** (~1–3 days, after rung 3
        exists to screenshot). Validates DRM clients: atomic commits,
        `FB_DAMAGE_CLIPS` emission (what the EBC consumes), pixel-exact

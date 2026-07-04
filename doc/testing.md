@@ -76,8 +76,8 @@ lives at `~/pinenote-backup/2026-07-04-wbf-pull/ebc.wbf`.
 
 Run in order, stopping at the first failure. Rungs 1–5 are offline; only
 6 touches the device. (See `doc/building.md` for the exact commands and
-`ROADMAP.md` §3 for rungs not yet built, e.g. mechanized qemu-virt boot
-assertions.)
+`ROADMAP.md` §3 for rungs not yet built, e.g. vkms writeback screenshot
+tests and a QEMU EBC device model.)
 
 1. **Host tool suites** — `make wbf-check ebc-logic-check rastersim-check`
    (with `WBF=`). Fast; catches driver-logic and waveform regressions.
@@ -86,12 +86,18 @@ assertions.)
 3. **Source + config inspection** —
    `pinenote/scripts/preflight/inspect-kernel-source.sh`.
 4. **QEMU smoke** (`make qemu-smoke`) for generic ARM64 userspace, and
-   **QEMU virt** (`make qemu-virt ROOTFS=…`) which boots the *real*
-   kernel/initrd/rootfs against a synthetic waveform+os2 disk. This
-   catches config regressions (it's how the VIRTIO_MENU olddefconfig drop
-   was caught), initrd waveform discovery, root mount, and Shepherd
-   service ordering. `dummy_hcd`/`vkms` stand in for the UDC and a DRM
-   device. It does **not** exercise the dwc3 gadget or EBC hardware.
+   **QEMU virt** — interactive (`make qemu-virt ROOTFS=…`) or the
+   mechanized rung-4 gate (`make qemu-virt-check ROOTFS=…`) — which boots
+   the *real* kernel/initrd/rootfs against a synthetic waveform+os2 disk.
+   This catches the config/initrd/root-mount regression class (it's how the
+   VIRTIO_MENU olddefconfig drop was caught): kernel + PREEMPT_RT boot,
+   initrd waveform discovery + EBC module load, PNGuixRoot pre-root
+   visibility, and root mount — through Shepherd start. It does **not**
+   reach the post-udev services: the virt boot deadlocks entering udev
+   (idle-CPU hang, 2026-07-04; see `doc/status.md`), so Shepherd *service
+   ordering* (the waveform/udev race, gadget modprobes via `-d`) is not
+   covered here and stays on the host tools and hardware. `dummy_hcd`/`vkms`
+   are built for a later rung but aren't reachable through this boot.
 5. **Mock helper + boot-bundle inspection** — the preflight scripts.
 6. **Hardware deployment** — `doc/hardware-deploy.md`, backups per
    `doc/device-runbook.md` verified first. Write os2 only; os1 is the

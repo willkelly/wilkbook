@@ -178,11 +178,40 @@ fix):
   all tests pass; see `pinenote/tools/wbf/README.md` for what the
   waveform contains).
 
+## 2026-07-04 qemu-virt rung 4 (offline) — mechanized boot assertions + a udev-hang finding
+
+Built the mechanized qemu-virt gate (`make qemu-virt-check`, offline ladder
+rung 4). Booting the real 2026-07-03 artifact on QEMU `virt` with the pulled
+waveform, it asserts and passes all boot milestones **through Shepherd
+start**: kernel 7.0.11 `PREEMPT_RT`, `root=PNGuixRoot`, initrd waveform
+install from `/dev/vda1`, EBC display module load, `PNGuixRoot` visible
+pre-root at `/dev/vda2`, root fsck-clean mount, `Service root-file-system
+running #t`, and reaching `Starting service udev`; and no panic / RT
+sleeping-in-atomic / root-not-found / `PNGuixRoot`-not-visible. The whole
+run is ~45 s (quiescence-terminated).
+
+**Finding:** the virt boot then *deadlocks entering the `udev` service.*
+After `Starting service udev` → udevd starts → shepherd `waiting for
+udevd...` → loopback up, the console goes silent at guest t≈12.3 s and never
+advances. CPU sampling of the QEMU process shows **0.5 % of one core** (13 s
+of CPU over 6+ min elapsed) — the guest is idle-blocked, a genuine deadlock,
+not TCG slowness. So the post-udev one-shot services (`pinenote-waveform`,
+the ACM gadget, `pinenote-ebc-params`) **never run on virt** — correcting the
+earlier doc claim that "the one-shot services run." Consequently the
+service-ordering regressions (waveform/udev race, gadget `modprobe -d`) are
+*not* covered by qemu-virt and stay on the host tools + hardware. Diagnosing
+the hang is blocked on visibility: the defconfig ships
+`CONFIG_MAGIC_SYSRQ_SERIAL` and `CONFIG_DETECT_HUNG_TASK` **off**, so no
+serial-SysRq or automatic blocked-task backtrace is available — a debug
+kernel enabling both (or a gdbstub attach) is the next step (ROADMAP §3
+rung 4). This does not affect hardware, where all of these services are
+confirmed working (2026-07-04 above).
+
 ## Next sessions
 
-- Ladder rung 2–3 (offline): EBC blit/damage host tests, then the
-  Gray8→Y4 raster library + waveform simulator seeded with the rung-1
-  decoded LUTs.
+- Diagnose the qemu-virt udev deadlock (ROADMAP §3 rung 4) so the
+  service-ordering assertions become automatable; needs a debug kernel
+  (`MAGIC_SYSRQ_SERIAL` + `DETECT_HUNG_TASK`) or a gdbstub attach.
 - Wi-Fi on 7.0 end-to-end (firmware load is proven; the usb-console
   flavor has no networking userland — needs the networked flavor or a
   credentials story). Consider the community-standard ECM ethernet

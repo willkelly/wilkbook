@@ -108,32 +108,56 @@ mimics the PineNote layout (a 2 MiB partition GPT-named `waveform`, the
 rootfs in a partition named `os2`), and boots QEMU with the bundle's exact
 Guix boot arguments, only steering the console from `ttyS2` to `ttyAMA0`.
 
-What it tests for real: the hardware kernel image boots, the initrd finds
-the waveform partition by PARTNAME and installs `ebc.wbf`, root mounts by
-the `PNGuixRoot` label, Shepherd starts, and the one-shot services run
-(including their failure paths — the EBC parameter service can be
-exercised because `rockchip_ebc` loads even without the hardware).
-What it cannot test: EBC rendering, USB dwc3 gadget behavior, Wi-Fi/BT
-firmware on real hardware, or anything RK3566-specific. `WAVEFORM` may
-point at a local waveform backup; it is never bundled or committed.
+What it tests for real: the hardware kernel image boots with `PREEMPT_RT`,
+the initrd finds the waveform partition by PARTNAME and installs `ebc.wbf`,
+loads the EBC display modules, sees `PNGuixRoot` before the root switch,
+root mounts by that label, and Shepherd brings up its base services. That
+is the config/initrd/root-mount regression class — exactly how the
+`VIRTIO_MENU` olddefconfig drop (which made virtio-blk vanish so root never
+appeared) is caught.
 
-Two software stand-ins are built as modules for use inside the VM:
+What it does *not* reach: the virt boot deadlocks entering the `udev`
+service — an idle-CPU hang confirmed 2026-07-04 (see `doc/status.md`) — so
+the post-udev one-shot services (`pinenote-waveform`, the ACM gadget,
+`pinenote-ebc-params`) never run here. The waveform/udev-ordering and
+gadget-modprobe regressions therefore stay guarded by the host tools and
+hardware until that hang is fixed. And nothing RK3566-specific — EBC
+rendering, the dwc3 gadget, Wi-Fi/BT firmware — can be tested on virt at
+all. `WAVEFORM` may point at a local waveform backup; it is never bundled
+or committed.
+
+`make qemu-virt-check` (offline ladder rung 4) wraps this boot into a
+non-interactive gate. It captures the console, terminates QEMU once the log
+goes quiescent (the udev deadlock, or a future healthy idle point), then
+asserts the milestones above are present and a set of regression signatures
+(waveform-not-found, PNGuixRoot-not-visible, kernel panic, RT
+sleeping-in-atomic) are absent. It exits non-zero on any failed assertion
+and finishes in well under a minute:
+
+```sh
+make qemu-virt-check ROOTFS=/tmp/opencode/pinenote-rootfs-artifacts/<artifact>.ext4 \
+     [WAVEFORM=/path/to/local/waveform.bin]
+```
+
+Two software stand-ins are built into the image as modules for a future
+rung that can exercise the gadget and render plumbing off-device:
 
 ```sh
 modprobe dummy_hcd   # fake UDC: exercise the configfs/ACM gadget stack
 modprobe vkms        # virtual DRM device: exercise render plumbing
 ```
 
-`dummy_hcd` provides a fake UDC for exercising the configfs/ACM plumbing
-(libcomposite, u_serial, usb_f_acm, ttyGS0) *manually* — note the v3
-gadget service itself will not bind on the virt machine: it ends in a
-dwc3 debugfs mode write against `fcc00000.usb`, which does not exist
-there, so it logs "USB device role is not ready" and declines by design.
-`vkms` gives DRM userspace a real connector to talk to. Neither models
-EBC semantics; rendering policy (Y4 quantization, waveform selection)
-lives in the host-side tools under `pinenote/tools/`, and a QEMU device
-model for the EBC register block is a possible future rung (see
-`ROADMAP.md`). (The dwc3 `ep0out` regression itself was never
+`dummy_hcd` is a fake UDC for the configfs/ACM plumbing (libcomposite,
+u_serial, usb_f_acm, ttyGS0); `vkms` gives DRM userspace a real connector.
+Neither is reachable through a normal virt boot today: it has no interactive
+console (the getty is on `ttyS2`, absent on virt; the reader shell is on the
+`ttyGS0` gadget, also absent) and it deadlocks at udev before that point
+anyway. So the note that the v3 gadget service "declines by design" on virt
+is aspirational — that service lives past the udev hang and never runs here.
+Neither module models EBC semantics; rendering policy (Y4 quantization,
+waveform selection) lives in the host-side tools under `pinenote/tools/`,
+and a QEMU device model for the EBC register block is a possible future rung
+(see `ROADMAP.md`). (The dwc3 `ep0out` regression itself was never
 reproducible here — dummy_hcd bypasses dwc3 — and was fixed on hardware
 2026-07-04 via `snps,dis_u3_susphy_quirk`.)
 
@@ -149,8 +173,11 @@ reasoning behind this ordering — and the host tools in rung 0 — is in
    driver-logic and waveform regressions; run them whenever you touch the
    forward-port patch.
 1. Static Guix build of the scaffold packages (commands above).
-2. QEMU `virt` smoke run for generic ARM64 userspace, and `make qemu-virt`
-   for the real kernel/initrd/rootfs on a synthetic disk.
+2. QEMU `virt` smoke run for generic ARM64 userspace; `make qemu-virt` for
+   an interactive boot of the real kernel/initrd/rootfs on a synthetic disk;
+   and `make qemu-virt-check` for the non-interactive assertion gate over
+   the same boot (kernel+RT, initrd waveform install, EBC module load,
+   PNGuixRoot pre-root visibility, root mount — through Shepherd start).
 3. Kernel source inspection:
    `pinenote/scripts/preflight/inspect-kernel-source.sh /path/to/linux`
    (read-only; checks `pinenote_defconfig`, PineNote DTS/DTSI, `rockchip_ebc`,

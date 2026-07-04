@@ -9,7 +9,8 @@ ARTIFACTS ?= /tmp/opencode/pinenote-rootfs-artifacts
 
 FLAVORS = minimal slim networked dev usb-console usb-console-linux-6-6
 
-.PHONY: help packages kernel kernel-drv qemu-smoke \
+.PHONY: help packages kernel kernel-drv qemu-smoke qemu-virt qemu-virt-check \
+        wbf-check ebc-logic-check rastersim-check \
         $(FLAVORS) $(addprefix image-,$(FLAVORS)) $(addprefix rootfs-,$(FLAVORS))
 
 help:
@@ -21,6 +22,7 @@ help:
 	@echo "  kernel            build the forward-ported linux-pinenote"
 	@echo "  packages          build the helper/firmware packages"
 	@echo "  qemu-smoke        build the generic ARM64 QEMU smoke VM launcher"
+	@echo "  qemu-virt-check   mechanized virt boot assertions (ROOTFS=.. [WAVEFORM=..])"
 	@echo
 	@echo "Deployment is manual by design: see doc/hardware-deploy.md."
 
@@ -71,6 +73,23 @@ qemu-virt:
 	  pinenote/scripts/preflight/stage-boot-bundle-from-rootfs.sh '$(ROOTFS)' \"$$bundle\" && \
 	  pinenote/scripts/qemu/make-virt-disk.sh '$(ROOTFS)' \"$$disk\" $(WAVEFORM) && \
 	  pinenote/scripts/qemu/run-pinenote-virt.sh \"$$bundle\" \"$$disk\""
+
+# Mechanized qemu-virt boot assertions (offline ladder rung 4): boot the real
+# kernel/initrd/rootfs on virt, capture the console, and assert the boot
+# milestones through Shepherd start (kernel+PREEMPT_RT, initrd waveform
+# install, EBC module load, PNGuixRoot pre-root visibility, root mount).
+# Non-interactive; exits non-zero on any failed assertion. Usage:
+#   make qemu-virt-check ROOTFS=<rootfs.ext4> [WAVEFORM=<file>]
+qemu-virt-check:
+	@test -n "$(ROOTFS)" || { echo "usage: make qemu-virt-check ROOTFS=<rootfs.ext4> [WAVEFORM=<file>]"; exit 2; }
+	@set -e; \
+	stamp=$$(date +%Y%m%d-%H%M%S); \
+	bundle=/tmp/opencode/pinenote-virtchk-bundle-$$stamp; \
+	disk=/tmp/opencode/pinenote-virtchk-disk-$$stamp.img; \
+	guix shell e2fsprogs gptfdisk qemu -- sh -c "\
+	  pinenote/scripts/preflight/stage-boot-bundle-from-rootfs.sh '$(ROOTFS)' \"$$bundle\" && \
+	  pinenote/scripts/qemu/make-virt-disk.sh '$(ROOTFS)' \"$$disk\" $(WAVEFORM) && \
+	  pinenote/scripts/qemu/run-virt-assertions.sh \"$$bundle\" \"$$disk\""
 
 # Host-side waveform parser tests (offline ladder rung 1); needs the
 # per-device .wbf (never committed): make wbf-check WBF=/path/to/ebc.wbf
