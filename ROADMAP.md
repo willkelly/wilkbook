@@ -25,13 +25,10 @@ especially PREEMPT_RT interactions (see the RT watch list in
 - [x] Move `linux-pinenote` from the `linux-libre` base to vanilla
       kernel.org sources (2026-06-10). Wi-Fi firmware loading on the
       vanilla base hardware-confirmed 2026-06-11 (brcmfmac 7.45.234).
-- [ ] **Next hardware session** (the whole staged stack in one boot; see
-      `doc/status.md` for the step-by-step): EBC probe → panel output
-      (TPS65185 IIO + `#io-channel-cells` + `eink,ed103tc2` panel entry),
-      gadget bind + `ep0out` (`snps,dis_u3_susphy_quirk`, debugfs,
-      `modprobe -d`), `PREEMPT_RT` sanity, waveform-service ordering.
-      Harvest `/var/log/messages` from os2 afterwards regardless of
-      outcome.
+- [x] Validate the 2026-07-03 fix stack on hardware (2026-07-04 boot: panel
+      text via fbcon, gadget console end-to-end with zero dwc3 errors,
+      `PREEMPT_RT` untainted with no splats, waveform service clean —
+      see `doc/status.md`). 7.0 now has display/gadget/RT parity.
 - [ ] Patch-refresh discipline: record each refresh in
       `doc/kernel-forward-port.md` (base version, conflicts, config
       deltas). Rebase reference is now ayakael/hrdl 6.19 topic branches,

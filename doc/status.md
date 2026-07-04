@@ -1,22 +1,26 @@
 # Hardware status
 
-Last updated: 2026-07-03. This is the single place to record what has actually
+Last updated: 2026-07-04. This is the single place to record what has actually
 been proven on the device. Update it after every hardware session; the
 detailed evidence lives in session logs, not in git.
 
-2026-07-03 note: the 2026-06-11 os2 boot *was* captured after all — the boot
-ran unobserved but syslog persisted to os2's `/var/log/messages`, harvested
-read-only from os1 over SSH. The 7.0 findings below reflect that log.
+**2026-07-04: the 7.0 forward-port reached hardware parity on the
+kernel-currency goals.** The 2026-07-03 fix-stack boot succeeded on every
+axis: fbcon text on the panel, USB ACM gadget console working end-to-end
+(this session's diagnostics were gathered *over that console*), full
+`PREEMPT_RT`, untainted kernel, zero dwc3 errors, zero RT splats.
 
 ## Summary
 
 | Area | 6.6.30 (m-weigand) | 7.0 forward-port (vanilla via nonguix) |
 | --- | --- | --- |
 | Boots to Guix userspace on os2 | yes | yes (needs `CONFIG_GPIO_ROCKCHIP=y`) |
-| Waveform install (initrd, from partition) | yes | yes (initrd); post-boot service raced udev, fixed 2026-07-03 |
-| EBC display output | yes | probe fails: no TPS65185 IIO temp channel on vanilla base; fix staged 2026-07-03, unproven on panel |
+| Waveform install (initrd + post-boot service) | yes | yes (2026-07-04: `ebc.wbf` installed; service `running #t` after the udev-ordering fix) |
+| EBC display output | yes | **yes** (2026-07-04: healthy probe signature — waveform 0x19, `rockchip-ebc 0.3.0`, `fb0` — and fbcon text visible on the panel) |
+| EBC temperature channel (TPS65185 IIO) | yes | **yes** (2026-07-04: `iio:device0` = tps65185, `in_temp_input` = 28000 m°C, via the forward-ported IIO provider) |
 | UART console (ttyS2, 1500000) | yes | yes |
-| USB ACM gadget console (ttyGS0) | yes | never bound on 6-11 boot: modprobe path bug + `CONFIG_DEBUG_FS` off gated the role check; both fixed 2026-07-03, plus `snps,dis_u3_susphy_quirk` targeting the `ep0out` root cause (6.15 susphy reordering); unproven on hardware |
+| USB ACM gadget console (ttyGS0) | yes | **yes** (2026-07-04: enumerates as `PineNote Guix Gate6 ACM Console`, reader shell works, zero dwc3 errors — `snps,dis_u3_susphy_quirk` fixed `ep0out`) |
+| PREEMPT_RT | n/a (not supported on 6.6) | **yes** (2026-07-04: `#1 SMP PREEMPT_RT`, tainted=0, no sleeping-function/atomic splats) |
 | Bluetooth firmware (BCM4345C0.hcd) | yes | yes (2026-06-11: `BCM4345C0.pine64,pinenote-v1.2.hcd` patch applied, build 0382) |
 | Wi-Fi firmware (brcmfmac43455) | yes | yes (2026-06-11: brcmfmac 7.45.234 loaded on vanilla base — deblob problem confirmed solved) |
 
@@ -129,26 +133,46 @@ no reboot performed):
   2026-06-11 log above. Next os2 boot is the first observation of the
   whole stack.
 
-## Immediate next session (once charged enough for the UART adapter)
+## 2026-07-04 boot session (fix-stack validation — all green)
 
-Precondition: build and stage the 2026-07-03 fix stack (TPS65185 IIO +
-`#io-channel-cells`, `CONFIG_DEBUG_FS=y`, `CONFIG_PREEMPT_RT=y`, waveform
-service ordering, gadget `modprobe -d`) to os2 first.
+The os2 boot of `pinenote-usb-console-PNGuixRoot-20260703.ext4` validated
+the entire 2026-07-03 fix stack. Diagnostics gathered live over the ACM
+gadget console itself (the strongest possible evidence for the gadget
+fix):
 
-1. Connect UART (1500000 8N1), start capture, power-cycle, confirm `os1`
-   still boots.
-2. Select OS2 and watch for, in order:
-   - `rockchip_ebc` probe passing the temperature channel (expect deferral
-     until `tps65185` registers IIO, then `Loaded 4-bit PVI waveform`
-     and `Initialized rockchip-ebc`, per the os1 6.12 signature);
-   - anything drawn on the panel (fbcon on `tty0` is on the cmdline);
-   - v3 gadget binding with working modprobes and debugfs mode writes,
-     then whether `dwc3 ep0out` still fails; host enumeration of
-     `/dev/ttyACM0` (0525:a4a7).
-3. Confirm `uname -v` shows `PREEMPT_RT` and check dmesg for RT-related
-   warnings (e.g. `BUG: sleeping function called from invalid context`).
-4. Even without a panel result, harvest `/var/log/messages` from os2
-   before ending the session — the 6-11 boot proved post-mortem logs work.
+- `uname -a`: `Linux pinenote-usb-console 7.0.11 #1 SMP PREEMPT_RT 1
+  aarch64`. `tainted = 0`. No RT splats in dmesg.
+- EBC: `rockchip_ebc_probe start` → `Loaded 4-bit PVI waveform version
+  0x19` → `Initialized rockchip-ebc 0.3.0` → `fb0: rockchip-ebcdrm` —
+  identical to the healthy 6.12 signature; fbcon text visible on the
+  panel. Benign residue: `panel-simple: Expected bpc in {6,8} but got: 4`
+  (warning only) and a missing optional
+  `rockchip_ebc_default_screen.bin` (could ship one later).
+- Temperature: `iio:device0` = `tps65185`, `in_temp_input` = 28000
+  (28 °C) — the forward-ported IIO provider feeding per-refresh LUT
+  selection.
+- Gadget: host enumerates `PineNote Guix Gate6 ACM Console`
+  (1d6b:0104 composite); `dmesg | grep -iE "dwc3|ep0"` is **empty** —
+  the `snps,dis_u3_susphy_quirk` DT fix eliminated the `ep0out` failure.
+- Services: `pinenote-waveform`, `pinenote-usb-acm-gadget`,
+  `pinenote-usb-acm-console`, `pinenote-ebc-params` all
+  `running`/`#t`; `/lib/firmware/rockchip/ebc.wbf` installed this boot.
+- Remaining dmesg errors, both known/benign: `No available vop found`
+  (PineNote has no VOP — EBC is the display) and the pre-existing
+  `ws8100_pen` status-property `-74` quirk (also present on 6.6).
+
+## Next sessions
+
+- Exercise the display beyond fbcon: `pinenote-ebc-test`, grayscale
+  ramps, a `GLOBAL_REFRESH` ioctl poke — start of the render-harness
+  work (ROADMAP track 4 / testing-ladder rung 3).
+- Wi-Fi on 7.0 end-to-end (firmware load is proven; the usb-console
+  flavor has no networking userland — needs the networked flavor or a
+  credentials story).
+- RT characterization under load (refresh + pen input; watch the EBC
+  refresh kthread).
+- Consider retiring 6.6 to a regression-isolation tool per ROADMAP now
+  that 7.0 has display/gadget/RT parity.
 
 ## Device facts
 
