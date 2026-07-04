@@ -33,10 +33,17 @@ especially PREEMPT_RT interactions (see the RT watch list in
       `doc/kernel-forward-port.md` (base version, conflicts, config
       deltas). Rebase reference is now ayakael/hrdl 6.19 topic branches,
       not m-weigand 6.12.
-- [ ] Cherry-pick from hrdl/ayakael 6.19 (value order): temperature
-      clamp ≥ 19 °C; pixels-to-IDLE on waveform change; `fsleep` /
-      `dma_sync` size fixes. Skip the NEON/`scoped_ksimd` blitters until
-      we want their throughput (our copy has no NEON today).
+- [x] Cherry-pick from hrdl/ayakael 6.19 (evaluated against the actual
+      diffs 2026-07-04; record in `doc/kernel-forward-port.md`). Ported:
+      `fsleep` conversion and the `dma_sync` size shrink (translated to
+      our area list, proven by the refresh harness's new non-coherent
+      DMA model). Rejected on evidence: the ≥19 °C temperature clamp and
+      pixels-to-IDLE are workarounds for their 60–85 Hz rework's early
+      cancellation / per-pixel scheduler state, which our copy doesn't
+      have — the clamp would discard the waveform's cold bins (a new
+      `wbf cold` harness test pins 131-phase GC16@0 °C working). The
+      NEON/`scoped_ksimd` blitters stay skipped until we want their
+      throughput (our copy has no NEON today).
 - [x] Once 7.0 reaches parity with 6.6 on hardware, demote the 6.6
       package to a regression-isolation tool (2026-07-04: parity reached;
       docs repositioned).

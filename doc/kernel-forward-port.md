@@ -107,6 +107,63 @@ Both live in `pinenote/packages/kernel.scm`:
 6. Verify the output contains uncompressed `Image`, modules, and
    `lib/dtbs/rockchip/rk3566-pinenote-v1.2.dtb`.
 
+## Cherry-picks from the community lineage (2026-07-04)
+
+The ROADMAP's four cherry-pick candidates from hrdl's v6.19 tree
+(`git.sr.ht/~hrdl/linux`, branch `v6.19_ebc_custom`) were evaluated
+against their actual diffs. Important context: that branch is hrdl's
+60–85 Hz driver **rework** (per-pixel scheduler state, NEON, early
+cancellation) — structurally far from our m-weigand-lineage copy — so
+nothing applies cleanly; ports are translations and rejections need
+evidence, not vibes.
+
+**Ported into the forward-port patch:**
+
+- `99b4841ca12` *replace usleep_range with fsleep* — applied to our
+  three sites (the partial-refresh queue-lock retry loop and both
+  `atomic_update` pacing delays). `fsleep()` picks the appropriate
+  sleep mechanism per duration; the old `[min, max]` ranges were
+  arbitrary.
+- `28d9ca7b518` *shrink dma_sync size* — translated to our area-list
+  partial refresh: each frame accumulates the row span actually
+  blitted (`sync_y1`/`sync_y2`, tracking `area->clip` at the same
+  sites that blit), and the three per-frame
+  `dma_sync_single_for_device` calls now clean only those rows
+  (`phase_pitch/4` in direct mode) instead of the full ~1.3–2.6 MB
+  buffers. Untouched rows were published by `dma_map_single`'s
+  map-time clean at refresh start. **Validated offline** by the
+  refresh harness's non-coherent DMA model (the fake device reads
+  per-mapping shadows that only map/sync_for_device update): the
+  256-transition waveform differential, the goldens, and the
+  in-bounds sync checks all stay green — an under-synced row would
+  fail visibly, not silently.
+
+**Rejected, with evidence:**
+
+- `5d6e5b43360` *emergency fix: don't allow temperatures < 19* — the
+  commit's own rationale is that **their** early-cancellation feature
+  corrupts the display on DU sequences longer than 29 phases. Our
+  copy has no early cancellation (no cancellation path at all), and
+  the clamp would throw away the waveform's cold temperature bins —
+  per-device calibration data — for no benefit. Backed by the
+  harness's `wbf cold` test: at 0 °C the driver selects the 131-phase
+  GC16 cold bin and orchestrates it cleanly. Revisit only if we ever
+  adopt their early-cancellation/rework.
+- `7e85b4ff0ea` *set all pixels to IDLE when changing waveforms* —
+  resets the rework's per-pixel scheduler state
+  (`packed_inner_outer_nextprev`) so pixels can't get stuck WAITING
+  (soft-lockup with `redraw_delay<=0`). Our driver has no per-pixel
+  scheduler state, and the LUT never changes mid-flight:
+  `partial_refresh` drains its area list before returning and the LUT
+  is set in the `refresh()` preamble. There is no equivalent state to
+  reset. (Runtime waveform-swap ghosting is separately handled by the
+  existing `prepare_prev_before_a2` logic.)
+
+The NEON/`scoped_ksimd` blitters remain skipped per the ROADMAP (our
+copy has no NEON). When a future rebase lands on their tree, the two
+rejections above should be re-evaluated against whatever driver
+structure we are carrying then.
+
 ## Hard-won configuration lessons
 
 Record anything that took a hardware session to discover:

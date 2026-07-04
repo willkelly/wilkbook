@@ -118,12 +118,15 @@ eventually (map wlroots `app_id` → EBC hint values).
 - **Nobody publicly runs 7.0.x; wilkbook is ahead of the whole
   community.** For the next patch refresh, diff against
   ayakael/hrdl 6.19 branches, not m-weigand 6.12.
-- Cherry-pick candidates from hrdl/ayakael 6.19, in value order:
-  temperature clamp ≥ 19 °C; "set all pixels to IDLE when changing
-  waveforms" (ghosting on runtime waveform swap); `fsleep`/`dma_sync`
-  size fixes (latency wins under RT). The `scoped_ksimd()` conversion
-  only matters if we adopt their NEON blitters (our current driver copy
-  has no NEON).
+- Cherry-pick candidates from hrdl/ayakael 6.19 — **resolved 2026-07-04**
+  (see `doc/kernel-forward-port.md` for the full record): `fsleep` and
+  the `dma_sync` size shrink were ported (latency wins under RT); the
+  temperature clamp ≥ 19 °C and pixels-to-IDLE turned out to be
+  workarounds for their 60–85 Hz rework's early-cancellation/per-pixel
+  scheduler state — not applicable to our m-weigand-lineage copy — and
+  were rejected on evidence. The `scoped_ksimd()` conversion only
+  matters if we adopt their NEON blitters (our current driver copy has
+  no NEON).
 - Userland reference stack: hrdl's `pinenote-dist` (sway + squeekboard +
   dbus service + koreader-bin), not the factory GNOME image.
   `WeraPea/pinenote-nixos` is the closest analogue to a Guix port — its

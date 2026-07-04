@@ -227,6 +227,26 @@ the LUT transposed. Hardware truth unchanged: the model encodes our
 understanding of the silicon; the on-device `EXTRACT_FBS` differential
 remains the ground-truth complement.
 
+## 2026-07-04 hrdl 6.19 cherry-picks (offline) — two ported, two rejected on evidence
+
+The ROADMAP's four cherry-pick candidates were read as actual diffs from
+`git.sr.ht/~hrdl/linux` `v6.19_ebc_custom` (full record:
+`doc/kernel-forward-port.md`). Ported into the forward-port patch:
+`usleep_range`→`fsleep` (three sites) and the `dma_sync` size shrink,
+translated to our area-list partial refresh (per-frame blitted-row spans
+instead of full ~1.3–2.6 MB buffer cleans — RT latency win). Rejected:
+the ≥19 °C temperature clamp and pixels-to-IDLE, both workarounds for
+their 60–85 Hz rework's early-cancellation / per-pixel scheduler state,
+which our m-weigand-lineage copy does not have. To make the shrink
+provable and the clamp rejection evidence-backed, the refresh harness
+grew a **non-coherent DMA model** (the fake device reads per-mapping
+shadow buffers that only `dma_map_single`/`dma_sync_single_for_device`
+publish — an under-synced CPU write is now a test failure, not a silent
+pass) and a **cold-bin test** (0 °C selects and cleanly orchestrates the
+131-phase GC16 waveform). All host suites green before and after the
+patch edit; `make kernel-drv` computes; validated only offline — the
+shrunken syncs ride along for hardware validation next session.
+
 ## Next sessions
 
 - Diagnose the qemu-virt udev deadlock (ROADMAP §3 rung 4) so the
@@ -238,6 +258,9 @@ remains the ground-truth complement.
   gadget alongside ACM.
 - RT characterization under load (refresh + pen input; watch the EBC
   refresh kthread).
+- First boot with the cherry-picked driver (fsleep + shrunken dma_sync):
+  confirm partial refreshes stay artifact-free — the offline harness
+  proves the bookkeeping, only the panel proves the cache/DMA physics.
 
 ## Device facts
 
