@@ -43,8 +43,9 @@ with stock Debian on `os1` as the rescue path. See `doc/hardware-deploy.md`.
 ## Layout
 
 - `pinenote/packages/` — the two kernel packages (`linux-pinenote` forward
-  port, `linux-pinenote-6.6.30` baseline), Broadcom Wi-Fi/BT firmware
-  packages, firmware helper scripts, EBC test and diagnostics tools.
+  port, `linux-pinenote-6.6.30` regression baseline), Broadcom Wi-Fi/BT
+  firmware packages, firmware helper scripts, EBC test and diagnostics
+  tools.
 - `pinenote/patches/` — the kernel forward-port patch (EBC driver, WS8100
   pen, PineNote DTS, `pinenote_defconfig`).
 - `pinenote/services/` — Shepherd services: waveform install, EBC modprobe
@@ -55,10 +56,15 @@ with stock Debian on `os1` as the rescue path. See `doc/hardware-deploy.md`.
 - `pinenote/systems/` — flavor entrypoints (see `doc/pinenote-flavors.md`).
 - `pinenote/scripts/preflight/` — non-destructive inspection and extraction
   helpers.
-- `doc/` — `building.md`, `hardware-deploy.md`, `status.md`,
-  `kernel-forward-port.md`, `device-runbook.md` (device inventory and
-  backup ledger), `pinenote-flavors.md`, and `archive/` for historical
-  documents.
+- `pinenote/tools/` — host-side test tools that compile the verbatim EBC
+  driver/waveform sources and test them off-device (`wbf`, `ebc-logic`,
+  `rastersim`; see `doc/testing.md`).
+- `doc/` — start with `testing.md` and `kernel-forward-port.md`; also
+  `building.md`, `hardware-deploy.md`, `status.md`, `device-runbook.md`
+  (device inventory and backup ledger), `eink-research.md` (domain
+  background), `driver-findings-report.md`, `pinenote-flavors.md`, and
+  `archive/` for historical documents. Contributors and agents should read
+  `CLAUDE.md` first.
 
 ## Firmware and waveform policy
 

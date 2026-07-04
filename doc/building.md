@@ -139,10 +139,18 @@ reproducible here — dummy_hcd bypasses dwc3 — and was fixed on hardware
 
 ## Validation ladder
 
-Run before any hardware deployment, stopping at the first failure:
+Run before any hardware deployment, stopping at the first failure. The
+reasoning behind this ordering — and the host tools in rung 0 — is in
+`doc/testing.md`.
 
+0. Host tool suites (offline, no VM):
+   `make wbf-check ebc-logic-check rastersim-check WBF=/path/to/ebc.wbf`.
+   These compile the verbatim EBC driver/waveform sources and catch
+   driver-logic and waveform regressions; run them whenever you touch the
+   forward-port patch.
 1. Static Guix build of the scaffold packages (commands above).
-2. QEMU `virt` smoke run for generic ARM64 userspace.
+2. QEMU `virt` smoke run for generic ARM64 userspace, and `make qemu-virt`
+   for the real kernel/initrd/rootfs on a synthetic disk.
 3. Kernel source inspection:
    `pinenote/scripts/preflight/inspect-kernel-source.sh /path/to/linux`
    (read-only; checks `pinenote_defconfig`, PineNote DTS/DTSI, `rockchip_ebc`,
