@@ -139,6 +139,36 @@ Record anything that took a hardware session to discover:
   (`earlycon console=tty0 console=ttyS2,1500000n8 fw_devlink=off` plus the
   `rockchip_ebc` parameters).
 
+## Known driver quirks pinned by the host test tools (2026-07-04)
+
+The offline ladder (`pinenote/tools/ebc-logic`, `pinenote/tools/rastersim`)
+compiles the verbatim driver sources out of the patch and surfaced seven
+latent issues, all documented with patch line numbers in the tool READMEs
+and pinned as `quirk:` tests so a future refresh that changes the behavior
+turns a test red. None affect the shipped configuration paths in a
+user-visible way today. Highlights, in upstream-fix priority order:
+
+1. `rockchip_ebc_blit_pixels` odd-`x2` "preserve" writes byte `pitch-1`
+   instead of the clip edge — a 1-byte kernel heap overrun
+   (read-modify-write past the buffer) when a clip touches the last row
+   with `x1 >= 2`; otherwise a silent no-op.
+2. `rockchip_ebc_schedule_area`'s begin-together/wait paths ignore
+   `do_not_start_before_frame`, so an area can start inside an overlapping
+   area's refresh window (more likely with the shipped
+   `split_area_limit=0`); deterministic reproducer in the tests.
+3. `rockchip_ebc_ctx_free` kfrees queue nodes inside `list_for_each_entry`
+   (UAF on teardown with queued damage).
+4. `rockchip_ebc_blit_direct` reads the packed LUT transposed relative to
+   the waveform-file semantics (only matters if `direct_mode=1` is ever
+   enabled; we ship 0 — hardware LUT mode indexes correctly in silicon).
+5. Assorted blit edge-case quirks: odd-x damage-edge preservation
+   cross-wired under `panel_reflection`, `panel_reflection=0` drops the
+   last damage row, odd-`x1` "preserve" is a no-op that leaks one
+   out-of-clip column.
+
+When refreshing the patch or cherry-picking from hrdl/ayakael, check
+whether their trees already fix any of these before re-pinning.
+
 ## Why the base is vanilla, not linux-libre (history)
 
 The forward-port originally sat on Guix's `linux-libre`. That can never

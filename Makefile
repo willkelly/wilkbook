@@ -76,3 +76,16 @@ qemu-virt:
 # per-device .wbf (never committed): make wbf-check WBF=/path/to/ebc.wbf
 wbf-check:
 	guix shell gcc-toolchain python -- $(MAKE) -C pinenote/tools/wbf check WBF=$(WBF)
+
+# EBC driver logic unit tests against the verbatim rockchip_ebc.c from
+# the forward-port patch (offline ladder rung 2). WBF optional; without
+# it the waveform-dependent tests are skipped:
+#   make ebc-logic-check [WBF=/path/to/ebc.wbf]
+ebc-logic-check:
+	guix shell gcc-toolchain python -- $(MAKE) -C pinenote/tools/ebc-logic check WBF=$(WBF)
+
+# Gray8->Y4 raster library + waveform simulator tests (offline ladder
+# rung 3). WBF optional; without it the waveform-dependent tests are
+# skipped: make rastersim-check [WBF=/path/to/ebc.wbf]
+rastersim-check:
+	guix shell gcc-toolchain python -- $(MAKE) -C pinenote/tools/rastersim check WBF=$(WBF)

@@ -80,21 +80,32 @@ independently useful, and 1–3 start roadmap track 4 without hardware:
        0x19, 5-bit LUTs, ED103TC2 panel string, 13 temperature bins with
        GC16 at 131 phases @0 °C vs 38 @≥24 °C, A2=10 phases. Its decoded
        LUTs are the ground truth for rung 3.
-2. [ ] **EBC driver logic as host unit tests** (~2–4 days). Compile the
-       driver's pure arithmetic against a tiny kernel-API shim: the
-       XRGB8888/R4→Y4 blitters (odd-x/stride edge cases), damage
-       split/merge/collision scheduling, threshold/dither paths —
-       parameterized over the exact module params `pinenote/services/
-       ebc.scm` ships. This is the code most likely to break on every
-       forward-port; make it a red test instead of a panel session.
-3. [ ] **Gray8→Y4 raster library + waveform simulator with golden-image
-       tests** (~1 week). The track-4 raster library, host-first: apply
-       rung 1's decoded LUTs frame-by-frame to a pixel-state array.
-       Invariant test: every (mode, temp, from, to) converges to `to`.
-       Golden PGM/hash tests for quantization, dithering, partial-update
-       composition (overlapping damage == full redraw). Later pairs with
-       the driver's `EXTRACT_FBS` ioctl as a hardware-differential
-       oracle.
+2. [x] **EBC driver logic as host unit tests** (done 2026-07-03:
+       `pinenote/tools/ebc-logic/`, `make ebc-logic-check [WBF=…]`).
+       Compiles the verbatim `rockchip_ebc.c` from the forward-port patch
+       against a kernel-API shim and tests the XRGB8888/R4→Y4 blitters
+       (odd-x/stride edge cases vs an independent reference), damage
+       split/collision scheduling (coverage-bitmap checker), and the
+       threshold/dither paths — over the exact module params
+       `pinenote/services/ebc.scm` ships. With `WBF=` it also pins the
+       phase-0xff/last-phase-neutral assumption against the device's own
+       waveform. Surfaced six driver quirks incl. a 1-byte kernel heap
+       overrun in `blit_pixels` and a scheduler dead-zone hole — see the
+       tool README's Findings before the next patch refresh.
+3. [x] **Gray8→Y4 raster library + waveform simulator with golden-image
+       tests** (done 2026-07-03: `pinenote/tools/rastersim/`, `make
+       rastersim-check [WBF=…]`). librastersim (plain C, no deps) covers
+       Y4 pack/blit ops, the driver's quantization modes plus
+       Floyd–Steinberg, the prev/next damage model, and phase-by-phase
+       LUT application over rung 1's new `wbf-info --dump-lut` exports.
+       GC16@25 °C converges for all 256 (from,to) pairs; goldens pin
+       quantization and overlapping-damage == full-redraw. Deriving the
+       LUT axes pinned real-waveform facts (GC16/GL16 drive from==to;
+       A2 only 0↔15) and turned up two driver quirks (`blit_direct`
+       reads the LUT transposed — unused path on our config; odd-x1
+       `blit_pixels` edge leak), see the rastersim README. Still later:
+       pair with the driver's `EXTRACT_FBS` ioctl as a
+       hardware-differential oracle.
 4. [ ] **Mechanized qemu-virt assertions** (~2–4 days). Wrap the
        existing `make qemu-virt` rung (expect-script over the PL011
        console, or a Guix marionette test): assert initrd waveform

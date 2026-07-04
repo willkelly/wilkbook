@@ -14,7 +14,10 @@ tool=$1
 wbf=$2
 out=$(mktemp)
 out2=$(mktemp)
-trap 'rm -f -- "$out" "$out2"' EXIT HUP INT TERM
+dump=$(mktemp)
+dump2=$(mktemp)
+dumpout=$(mktemp)
+trap 'rm -f -- "$out" "$out2" "$dump" "$dump2" "$dumpout"' EXIT HUP INT TERM
 
 fail=0
 assert() {
@@ -84,6 +87,72 @@ if cmp -s "$out" "$out2"; then
 else
   echo "FAIL: output differs between runs" >&2
   fail=1
+fi
+
+# --- --dump-lut mode (RSL1 export consumed by tools/rastersim) ---
+
+if "$tool" --dump-lut GC16 25 "$dump" "$wbf" > "$dumpout"; then
+  echo "PASS: dump-lut GC16 exits ok"
+else
+  echo "FAIL: dump-lut GC16 exited nonzero" >&2
+  fail=1
+fi
+
+# The 5-bit dump must agree with the 4BIT_PACKED buffer exactly as the
+# driver builds and indexes it (a transposed axis fails this).
+if grep -q '^dump-lut: crosscheck-4bit-packed: ok' "$dumpout"; then
+  echo "PASS: dump-lut axis crosscheck vs 4BIT_PACKED"
+else
+  echo "FAIL: dump-lut crosscheck missing" >&2
+  fail=1
+fi
+if grep -q '^dump-lut: padding-neutral: ok' "$dumpout"; then
+  echo "PASS: dump-lut LUT padding is neutral (0xff phase trick sound)"
+else
+  echo "FAIL: dump-lut padding check missing" >&2
+  fail=1
+fi
+
+# Header magic and exact file size: 16-byte header + phases * 32 * 32.
+magic=$(head -c 4 "$dump")
+if [ "$magic" = "RSL1" ]; then
+  echo "PASS: dump-lut magic RSL1"
+else
+  echo "FAIL: dump-lut magic ('$magic')" >&2
+  fail=1
+fi
+dphases=$(sed -n 's/^dump-lut: mode=GC16 .* phases=\([0-9]*\)$/\1/p' "$dumpout")
+size=$(wc -c < "$dump")
+if [ -n "$dphases" ] && [ "$size" -eq $((16 + dphases * 1024)) ]; then
+  echo "PASS: dump-lut size $size == 16 + $dphases*1024"
+else
+  echo "FAIL: dump-lut size $size (phases='$dphases')" >&2
+  fail=1
+fi
+
+# The dumped phase count must match the info mode's GC16 phase count.
+if [ -n "$dphases" ] && [ "$dphases" = "$gc16" ]; then
+  echo "PASS: dump-lut GC16 phases match info mode ($gc16)"
+else
+  echo "FAIL: dump-lut phases ($dphases) != info mode ($gc16)" >&2
+  fail=1
+fi
+
+# Deterministic dump.
+"$tool" --dump-lut GC16 25 "$dump2" "$wbf" > /dev/null
+if cmp -s "$dump" "$dump2"; then
+  echo "PASS: dump-lut deterministic"
+else
+  echo "FAIL: dump-lut output differs between runs" >&2
+  fail=1
+fi
+
+# Unknown waveform names are rejected.
+if "$tool" --dump-lut BOGUS 25 "$dump2" "$wbf" > /dev/null 2>&1; then
+  echo "FAIL: dump-lut accepted unknown waveform" >&2
+  fail=1
+else
+  echo "PASS: dump-lut rejects unknown waveform"
 fi
 
 [ "$fail" -eq 0 ] && echo "ALL TESTS PASSED" || echo "TESTS FAILED" >&2

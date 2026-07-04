@@ -7,6 +7,12 @@
  * would see.  Output is line-oriented for run-tests.sh to assert on.
  *
  * Usage: wbf-info FILE.wbf [TEMPERATURE_C]
+ *        wbf-info --dump-lut WAVEFORM_NAME TEMP_C OUTFILE FILE.wbf
+ *
+ * The --dump-lut mode writes the decoded LUT for one (waveform, temperature)
+ * pair in the RSL1 format consumed by pinenote/tools/rastersim (see that
+ * README for the format and for how the axis order was derived from
+ * pvi_wbf_decode_lut / drm_epd_lut_convert / rockchip_ebc_blit_direct).
  */
 
 /* Include the driver source directly so private pvi_wbf_* helpers are
@@ -39,6 +45,178 @@ static void print_xwia(const struct drm_epd_lut_file *file)
 	printf("xwia: %.*s\n", xwia[0], (const char *)xwia + 1);
 }
 
+/* --- --dump-lut: export one decoded (waveform, temperature) LUT --- */
+
+static int lookup_waveform(const char *name)
+{
+	int i;
+
+	for (i = 0; i < DRM_EPD_WF_MAX; i++)
+		if (waveform_names[i] && !strcmp(waveform_names[i], name))
+			return i;
+	return -1;
+}
+
+static void put_le32(FILE *f, u32 v)
+{
+	u8 b[4] = { v & 0xff, (v >> 8) & 0xff, (v >> 16) & 0xff, v >> 24 };
+
+	fwrite(b, 1, 4, f);
+}
+
+/*
+ * RSL1 dump format (all little-endian):
+ *   u32 magic 0x314C5352 ("RSL1")
+ *   u32 num_phases
+ *   u32 from_levels (32)
+ *   u32 to_levels   (32)
+ *   u8  codes[num_phases][from][to], values 0..3 (1=darken, 2=lighten)
+ *
+ * Axis order: pvi_wbf_decode_lut fills the DRM_EPD_LUT_5BIT buffer as
+ * buf[phase*0x400 + x*0x20 + y] (x is the raw stream's fast axis; the
+ * decode transposes it to stride 0x20).  drm_epd_lut_convert packs even
+ * (x, y) pairs into the 4BIT_PACKED buffer as u32 word[phase*16 + x/2]
+ * bit 2*(y/2).  The semantic labels are pinned by the waveform content
+ * itself (see pinenote/tools/rastersim/README.md): the final non-neutral
+ * drive of every sequence is a function of y alone (darken for y=0,
+ * lighten for y=31), DU only drives pairs with y in {0,31}, and A2's two
+ * driven pairs use 1=darken/2=lighten in the standard PVI polarity.
+ * Hence x == FROM (prev) and y == TO (next):
+ *
+ *   5BIT:        buf[phase*0x400 + from5*0x20 + to5]
+ *   4BIT_PACKED: word[phase*16 + prev4] >> (2*next4)   (hardware view)
+ *
+ * Note rockchip_ebc_blit_direct reads word[next] >> (2*prev), i.e. the
+ * TRANSPOSE of the file semantics.  That software-LUT path is unused on
+ * the PineNote (direct_mode=0; the EBC hardware indexes the LUT itself
+ * from the prev/next window buffers), so the dump follows the file/
+ * hardware semantics, not blit_direct's variable names.  The cross-check
+ * below verifies the byte-level relation between the two buffers the
+ * driver actually builds, independent of labels.
+ */
+static int dump_lut(const char *mode_name, int temperature,
+		    const char *outpath, const char *wbf_path)
+{
+	struct drm_epd_lut_file file = { 0 };
+	struct drm_epd_lut lut5 = { 0 }, lut4 = { 0 };
+	struct drm_device dev = { 0 };
+	const u32 *packed;
+	unsigned int phase, from, to;
+	int wf, ret;
+	FILE *out;
+
+	wf = lookup_waveform(mode_name);
+	if (wf < 0) {
+		fprintf(stderr, "FAIL: unknown waveform '%s'\n", mode_name);
+		return 2;
+	}
+
+	ret = drmm_epd_lut_file_init(&dev, &file, wbf_path);
+	if (ret) {
+		fprintf(stderr, "FAIL: lut_file_init: %d\n", ret);
+		return 1;
+	}
+
+	/* Decode twice: full 32x32 5-bit matrix for the dump, plus the
+	 * driver's own 4BIT_PACKED view for the axis cross-check. */
+	ret = drmm_epd_lut_init(&file, &lut5, DRM_EPD_LUT_5BIT,
+				EBC_MAX_PHASES);
+	if (!ret)
+		ret = drmm_epd_lut_init(&file, &lut4, DRM_EPD_LUT_4BIT_PACKED,
+					EBC_MAX_PHASES);
+	if (ret) {
+		fprintf(stderr, "FAIL: lut_init: %d\n", ret);
+		return 1;
+	}
+
+	ret = drm_epd_lut_set_temperature(&lut5, temperature);
+	if (ret >= 0)
+		ret = drm_epd_lut_set_temperature(&lut4, temperature);
+	if (ret < 0) {
+		fprintf(stderr, "FAIL: set_temperature(%d): %d\n",
+			temperature, ret);
+		return 1;
+	}
+
+	ret = drm_epd_lut_set_waveform(&lut5, wf);
+	if (ret >= 0)
+		ret = drm_epd_lut_set_waveform(&lut4, wf);
+	if (ret < 0) {
+		fprintf(stderr, "FAIL: set_waveform(%s): %d\n", mode_name,
+			ret);
+		return 1;
+	}
+
+	if (!lut5.num_phases || lut5.num_phases != lut4.num_phases) {
+		fprintf(stderr, "FAIL: phase mismatch (5bit=%u packed=%u)\n",
+			lut5.num_phases, lut4.num_phases);
+		return 1;
+	}
+
+	printf("dump-lut: mode=%s temp=%d temp_index=%d phases=%u\n",
+	       mode_name, temperature, lut5.temp_index, lut5.num_phases);
+
+	/* Cross-check the 5BIT buffer against the 4BIT_PACKED buffer: u32
+	 * word[phase*16 + from4] bit 2*to4 must equal the even-even 5BIT
+	 * entry (Y4 gray g maps to 5-bit index 2*g, which is also how the
+	 * driver's Y4 prev/next buffers index the packed LUT). */
+	packed = (const u32 *)lut4.buf;
+	for (phase = 0; phase < lut4.num_phases; phase++) {
+		for (from = 0; from < 16; from++) {
+			u32 word = packed[phase * 16 + from];
+
+			for (to = 0; to < 16; to++) {
+				u8 c4 = (word >> (to << 1)) & 0x3;
+				u8 c5 = lut5.buf[phase * 0x400 +
+						 (from * 2) * 0x20 + to * 2];
+
+				if (c4 != c5) {
+					fprintf(stderr,
+						"FAIL: axis crosscheck phase=%u from=%u to=%u packed=%u 5bit=%u\n",
+						phase, from, to, c4, c5);
+					return 1;
+				}
+			}
+		}
+	}
+	printf("dump-lut: crosscheck-4bit-packed: ok (%u phases x 16x16)\n",
+	       lut4.num_phases);
+
+	/* The driver writes phase 0xff for the tail frames of every area
+	 * and relies on the padding beyond num_phases being neutral. */
+	for (phase = lut4.num_phases * 64;
+	     phase < (unsigned int)EBC_MAX_PHASES * 64; phase++) {
+		if (lut4.buf[phase]) {
+			fprintf(stderr, "FAIL: nonzero LUT padding at %u\n",
+				phase);
+			return 1;
+		}
+	}
+	printf("dump-lut: padding-neutral: ok\n");
+
+	out = fopen(outpath, "wb");
+	if (!out) {
+		fprintf(stderr, "FAIL: cannot open %s\n", outpath);
+		return 1;
+	}
+	fwrite("RSL1", 1, 4, out);
+	put_le32(out, lut5.num_phases);
+	put_le32(out, 32);
+	put_le32(out, 32);
+	/* The decoded 5BIT buffer is already [phase][from][to]. */
+	fwrite(lut5.buf, 1, (size_t)lut5.num_phases * 0x400, out);
+	if (fflush(out) != 0 || ferror(out)) {
+		fprintf(stderr, "FAIL: write error on %s\n", outpath);
+		fclose(out);
+		return 1;
+	}
+	fclose(out);
+	printf("dump-lut: wrote %s (%u bytes)\n", outpath,
+	       16 + lut5.num_phases * 32 * 32);
+	printf("RESULT: ok\n");
+	return 0;
+}
+
 int main(int argc, char **argv)
 {
 	struct drm_epd_lut_file file = { 0 };
@@ -47,6 +225,16 @@ int main(int argc, char **argv)
 	const struct pvi_wbf_file_header *h;
 	int temperature = DRM_EPD_DEFAULT_TEMPERATURE;
 	int ret, i, failures = 0;
+
+	if (argc >= 2 && !strcmp(argv[1], "--dump-lut")) {
+		if (argc != 6) {
+			fprintf(stderr,
+				"usage: %s --dump-lut WAVEFORM_NAME TEMP_C OUTFILE FILE.wbf\n",
+				argv[0]);
+			return 2;
+		}
+		return dump_lut(argv[2], atoi(argv[3]), argv[4], argv[5]);
+	}
 
 	if (argc < 2) {
 		fprintf(stderr, "usage: %s FILE.wbf [TEMPERATURE_C]\n",

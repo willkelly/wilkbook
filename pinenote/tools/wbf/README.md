@@ -36,3 +36,17 @@ backup ledger in `doc/device-runbook.md` or pull
 `run-tests.sh` pins the PineNote-specific golden values plus generic
 invariants (all 9 modes decode, A2 < GC16, all bins decode,
 deterministic output).
+
+## LUT export (`--dump-lut`)
+
+`wbf-info --dump-lut WAVEFORM_NAME TEMP_C OUTFILE FILE.wbf` writes the
+decoded LUT for one (mode, temperature) pair in the RSL1 format consumed
+by `pinenote/tools/rastersim` (rung 3): a 16-byte little-endian header
+{magic `"RSL1"`, num_phases, 32, 32} followed by u8 drive codes indexed
+`[phase][from][to]` over the 5-bit waveform states (Y4 gray `g` = state
+`2*g`). Before writing, the tool re-derives the driver's `4BIT_PACKED`
+buffer and verifies the axis relation byte-for-byte
+(`crosscheck-4bit-packed`), and checks the beyond-`num_phases` padding is
+neutral (what the driver's phase-0xff tail substitution relies on). The
+from/to axis derivation — including the `blit_direct` transpose quirk it
+turned up — is documented in `pinenote/tools/rastersim/README.md`.
