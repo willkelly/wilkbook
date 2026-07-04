@@ -258,10 +258,22 @@ SDL3 dlopens). Proven offline: the x86_64 variant boots the complete
 KOReader frontend headless (`SDL_VIDEODRIVER=offscreen` — the bundled
 SDL3 has wayland/offscreen/dummy backends only, so the device needs a
 Wayland compositor) and sits in its UI loop; the aarch64 variant
-cross-builds with correct target interpreter/rpath. Key integration
-fact: no kmsdrm/x11 in the bundled SDL3 → the device plan is a `cage`
-kiosk (wlroots, pixman renderer) per hrdl's proven architecture. Next:
-the `reader` flavor, then panel/pen validation on hardware.
+cross-builds with correct target interpreter/rpath (and its luajit
+executes under qemu-user). The kiosk was built the same day: stock
+wlroots propagates mesa, which does not cross-compile, so
+`pinenote/packages/kiosk.scm` carries `wlroots-pixman`/`cage-pixman`
+(no mesa/vulkan/Xwayland — the EBC has no GPU path; pixman on dumb
+buffers), plus `reader-session.scm` (respawning root kiosk,
+`LIBSEAT_BACKEND=builtin`) and the `reader` flavor (usb-console +
+kiosk). Validated offline: full system closure cross-builds;
+`make rootfs-reader` produces a preflight-clean
+`pinenote-reader-PNGuixRoot-20260704.ext4`; the exact
+compositor+client pairing (cage-pixman nested in a live session,
+KOReader inside) runs end-to-end. One isolated offline-only failure:
+under a *headless* wlroots backend SDL3 segfaults on the
+zero-capability seat (no input devices) — can't occur on device
+(touch+pen always present); verify at first light. Next: panel/pen
+validation on hardware.
 
 ## Next sessions
 

@@ -7,7 +7,7 @@ TARGET = aarch64-linux-gnu
 GUIX_FLAGS = -L . --target=$(TARGET)
 ARTIFACTS ?= /tmp/opencode/pinenote-rootfs-artifacts
 
-FLAVORS = minimal slim networked dev usb-console usb-console-linux-6-6
+FLAVORS = minimal slim networked dev usb-console usb-console-linux-6-6 reader
 
 .PHONY: help packages kernel kernel-drv qemu-smoke qemu-virt qemu-virt-check \
         wbf-check ebc-logic-check rastersim-check \

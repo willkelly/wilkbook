@@ -203,15 +203,20 @@ the start of this track — no panel required. Policy background in
       early.
 - [ ] Reader decision — **KOReader first** (priority raised 2026-07-04:
       an external user wants to run it; also proven on PineNote via
-      hrdl's image). Spike done same day, see `doc/koreader-spike.md`:
-      `koreader-bin` packaged from the upstream release binary
-      (`pinenote/packages/koreader.scm`), runs headless offline and
-      cross-builds for the device. Remaining, in order: a cage-kiosk
-      `reader` flavor; pen/touch via libinput (#14694 stylus tags); the
+      hrdl's image). Spike + stack done same day, see
+      `doc/koreader-spike.md`: `koreader-bin` (upstream release binary,
+      runs headless offline, cross-builds), `wlroots-pixman`/
+      `cage-pixman` (mesa-free kiosk — stock wlroots's mesa dep does
+      not cross-compile), the `reader-session` service and the `reader`
+      flavor (`make rootfs-reader` → preflight-clean artifact; the
+      compositor+client pairing validated end-to-end on the
+      workstation). Remaining, in order: first-light hardware session
+      (panel + pen/touch); pen/touch mapping (#14694 stylus tags); the
       refresh-policy path (#14017 full-refresh → `GLOBAL_REFRESH`, the
-      `org.pinenote.ebc` dbus service). The MuPDF prototype loop
-      (render → Gray8 → Y4 harness → vkms/SDL) stays available as the
-      bespoke-reader fallback if KOReader integration disappoints.
+      `org.pinenote.ebc` dbus service); kiosk hardening (seatd +
+      unprivileged user). The MuPDF prototype loop (render → Gray8 →
+      Y4 harness → vkms/SDL) stays available as the bespoke-reader
+      fallback if KOReader integration disappoints.
 - [ ] Wi-Fi credentials/networking story for the device (the networked
       flavor has no credential handling yet).
 - [ ] Later: wlroots session (sway or cage/KOReader-kiosk, following
