@@ -350,6 +350,52 @@ static void write_pgm(const char *path, const u8 *gray, unsigned int w,
 }
 
 /* ---------------------------------------------------------------------- */
+/* the shim's non-coherent DMA model itself                                */
+
+/* Every device-side read in the harness goes through a mapping's shadow,
+ * which only dma_map_single (whole buffer) and dma_sync_single_for_device
+ * (the synced range) update.  This self-test pins that contract — it is
+ * what makes an under-synced driver change a test failure instead of a
+ * silent pass, and it must hold before any shrunken-sync cherry-pick can
+ * be trusted. */
+static void test_dma_shadow_model(void)
+{
+	u8 buf[256];
+	dma_addr_t handle;
+	const u8 *dev_view;
+	unsigned long violations;
+
+	ebc_shim_reset();
+	memset(buf, 0xAA, sizeof(buf));
+	handle = dma_map_single(NULL, buf, sizeof(buf), DMA_TO_DEVICE);
+	dev_view = ebc_shim_dma_resolve((u32)handle, sizeof(buf));
+
+	check(dev_view && !memcmp(dev_view, buf, sizeof(buf)),
+	      "dma shadow: mapping publishes the buffer (map-time cache clean)");
+
+	memset(buf, 0x55, sizeof(buf));
+	check(dev_view[0] == 0xAA && dev_view[255] == 0xAA,
+	      "dma shadow: unsynced CPU writes stay invisible to the device");
+
+	dma_sync_single_for_device(NULL, handle + 64, 32, DMA_TO_DEVICE);
+	check(dev_view[63] == 0xAA && dev_view[64] == 0x55 &&
+	      dev_view[95] == 0x55 && dev_view[96] == 0xAA,
+	      "dma shadow: for_device publishes exactly the synced range");
+
+	dma_sync_single_for_cpu(NULL, handle + 64, 32, DMA_TO_DEVICE);
+	check(ebc_shim.dma_violations == 0,
+	      "dma shadow: in-range offset syncs are not violations");
+
+	violations = ebc_shim.dma_violations;
+	dma_sync_single_for_device(NULL, handle + 240, 32, DMA_TO_DEVICE);
+	check(ebc_shim.dma_violations == violations + 1,
+	      "dma shadow: a sync crossing the mapping end is a violation");
+
+	dma_unmap_single(NULL, handle, sizeof(buf), DMA_TO_DEVICE);
+	ebc_shim_reset();	/* clear the deliberate violation */
+}
+
+/* ---------------------------------------------------------------------- */
 /* mode_set: config-register golden for the real panel mode                */
 
 static void test_mode_set_golden(void)
@@ -944,6 +990,49 @@ static void test_wbf_real_refresh(void)
 	wbf_teardown(&h, ctx);
 }
 
+/* Cold-panel LUT selection and orchestration.  hrdl's v6.19 tree clamps
+ * the temperature to >= 19 C (5d6e5b43360, "emergency fix") because
+ * *their* early-cancellation feature breaks on long DU sequences; our
+ * m-weigand-lineage copy has no early cancellation, so we deliberately do
+ * NOT carry the clamp — the waveform's cold bins are per-device
+ * calibration and dropping them costs image quality.  This test backs
+ * that decision: the coldest bin must select and orchestrate cleanly.
+ * (Optics stay hardware-only, as ever.) */
+static void test_wbf_cold_temperature(void)
+{
+	struct harness h;
+	struct rockchip_ebc *ebc = wbf_probe(&h);
+	struct rockchip_ebc_ctx *ctx;
+	struct drm_rect rect = {0, 0, GW, GH};
+	u32 n;
+
+	if (!ebc)
+		return;
+	ebc_shim.iio_temp_override = true;
+	ebc_shim.iio_temp_mC = 0;	/* 0 C */
+	harness_mode_set(&h, GW, GH);
+	ctx = harness_ctx(&h, GW, GH);
+
+	memset(ctx->prev, 0xff, ctx->gray4_size);
+	memset(ctx->next, 0xff, ctx->gray4_size);
+	memset(ctx->final_atomic_update, 0x00, ctx->gray4_size);
+	commit_damage(ctx, &rect, 1);
+
+	rockchip_ebc_refresh(ebc, ctx, true, DRM_EPD_WF_GC16);
+	n = ebc->lut.num_phases;
+
+	/* this device's waveform: GC16 is 131 phases in the 0 C bin
+	 * (vs 38 at 25 C) — the doc/status.md rung-1 numbers */
+	check(n == 131, "wbf cold: GC16@0C selects the 131-phase cold bin (got %u)", n);
+	check(fake_ebc.nev == 1 && fake_ebc.ev[0].lut_mode &&
+	      fake_ebc.ev[0].planes == n,
+	      "wbf cold: global refresh plays all %u cold-bin frames", n);
+	check(fake_ebc.dsp_end_irqs == 1 && ebc_shim.completion_timeouts == 0,
+	      "wbf cold: hardware wait completed");
+	check(harness_clean("wbf-cold"), "wbf cold: no harness violations");
+	wbf_teardown(&h, ctx);
+}
+
 /* thread-body scripting */
 static struct rockchip_ebc_ctx *thread_ctx;
 static int thread_step;
@@ -1102,6 +1191,7 @@ int main(int argc, char **argv)
 	if (fwdir && !strcmp(fwdir, "quirk-ctx-free-uaf"))
 		return quirk_ctx_free_uaf();
 
+	test_dma_shadow_model();
 	test_mode_set_golden();
 	test_global_refresh();
 	test_partial_refresh_single_area(outdir);
@@ -1113,6 +1203,7 @@ int main(int argc, char **argv)
 		setenv("EBC_SHIM_FW_DIR", fwdir, 1);
 		test_wbf_probe();
 		test_wbf_real_refresh();
+		test_wbf_cold_temperature();
 		test_wbf_thread_body();
 		if (rsl)
 			test_wbf_lut_differential(rsl);

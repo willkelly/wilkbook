@@ -44,7 +44,9 @@ struct fake_ebc_event {
 	u32 dsp_ctrl;		/* latched */
 	u32 win_act;		/* latched */
 	u32 mst0, mst1, mst2;	/* latched bus handles */
-	const void *prev_cpu;	/* resolved host pointers (NULL if bad) */
+	const void *prev_cpu;	/* CPU buffers behind the window mappings
+				 * (identification only — the device reads
+				 * the mappings' shadows; NULL if bad) */
 	const void *next_cpu;
 	const void *phase_cpu;
 	bool lut_mode;
@@ -260,9 +262,10 @@ static void fake_ebc_frm_start(u32 val)
 		ev->mst0 = fake_ebc.latched[EBC_WIN_MST0 / 4];
 		ev->mst1 = fake_ebc.latched[EBC_WIN_MST1 / 4];
 		ev->mst2 = fake_ebc.latched[EBC_WIN_MST2 / 4];
-		ev->prev_cpu = prev;
-		ev->next_cpu = next;
-		ev->phase_cpu = phase_buf;
+		ev->prev_cpu = ebc_shim_dma_cpu(fake_ebc.latched[EBC_WIN_MST0 / 4]);
+		ev->next_cpu = ebc_shim_dma_cpu(fake_ebc.latched[EBC_WIN_MST1 / 4]);
+		ev->phase_cpu = three_win ?
+			ebc_shim_dma_cpu(fake_ebc.latched[EBC_WIN_MST2 / 4]) : NULL;
 		ev->lut_mode = lut_mode;
 		ev->three_win = three_win;
 		ev->diff = diff;

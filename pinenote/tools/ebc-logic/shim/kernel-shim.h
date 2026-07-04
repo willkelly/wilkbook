@@ -94,6 +94,13 @@ typedef irqreturn_t (*irq_handler_t)(int irq, void *dev_id);
 struct ebc_shim_dma_mapping {
 	u32 handle;
 	void *cpu;
+	/* Device-visible copy (non-coherent DMA model): populated from the
+	 * CPU buffer at dma_map_single (the arch cleans caches on a
+	 * TO_DEVICE map) and by dma_sync_single_for_device for the synced
+	 * range only.  The fake device reads *this*, so a CPU write the
+	 * driver forgets to sync is invisible to the device — exactly the
+	 * arm64 failure mode shrunken syncs risk. */
+	void *shadow;
 	size_t size;
 	bool active;
 };
@@ -151,19 +158,31 @@ struct ebc_shim_state {
 	struct ebc_shim_dma_mapping dma[EBC_SHIM_DMA_SLOTS];
 	u32 dma_next;
 	unsigned long dma_violations;
+
+	/* iio: panel temperature in millicelsius.  Default (override unset)
+	 * is 25000, the value every pre-existing test was written against. */
+	bool iio_temp_override;
+	int iio_temp_mC;
 };
 
 static struct ebc_shim_state ebc_shim = { .dma_next = EBC_SHIM_DMA_BASE };
 
 static inline void ebc_shim_reset(void)
 {
+	int i;
+
+	/* shadow is non-NULL only while a mapping is active */
+	for (i = 0; i < EBC_SHIM_DMA_SLOTS; i++)
+		free(ebc_shim.dma[i].shadow);
 	memset(&ebc_shim, 0, sizeof(ebc_shim));
 	ebc_shim.dma_next = EBC_SHIM_DMA_BASE;
 }
 
 /* Resolve a bus handle the driver programmed into a window register back
  * to host memory; `need` guards against a mapping smaller than what the
- * device-side consumer will read. */
+ * device-side consumer will read.  Returns the mapping's *shadow*, so the
+ * caller (the fake device) sees only data published by dma_map_single or
+ * dma_sync_single_for_device. */
 static inline void *ebc_shim_dma_resolve(u32 handle, size_t need)
 {
 	int i;
@@ -171,8 +190,21 @@ static inline void *ebc_shim_dma_resolve(u32 handle, size_t need)
 	for (i = 0; i < EBC_SHIM_DMA_SLOTS; i++)
 		if (ebc_shim.dma[i].active && ebc_shim.dma[i].handle == handle &&
 		    need <= ebc_shim.dma[i].size)
-			return ebc_shim.dma[i].cpu;
+			return ebc_shim.dma[i].shadow;
 	ebc_shim.dma_violations++;
+	return NULL;
+}
+
+/* Identify the CPU buffer behind a mapping, for test assertions ("was
+ * WIN_MST1 really programmed with ctx->next's mapping?").  Never counts a
+ * violation; device-side *reads* must go through ebc_shim_dma_resolve. */
+static inline const void *ebc_shim_dma_cpu(u32 handle)
+{
+	int i;
+
+	for (i = 0; i < EBC_SHIM_DMA_SLOTS; i++)
+		if (ebc_shim.dma[i].active && ebc_shim.dma[i].handle == handle)
+			return ebc_shim.dma[i].cpu;
 	return NULL;
 }
 
@@ -333,6 +365,7 @@ static inline void schedule(void)
 		ebc_shim.schedule_hook();
 }
 static inline void usleep_range(unsigned long a, unsigned long b) { (void)a; (void)b; }
+static inline void fsleep(unsigned long usecs) { (void)usecs; }
 
 /* completion (HARNESS): kernel counting semantics.  complete() increments;
  * a successful wait consumes one.  A wait with nothing signalled is a
@@ -569,7 +602,8 @@ static inline struct iio_channel *devm_iio_channel_get(struct device *dev,
 static inline int iio_read_channel_processed(struct iio_channel *chan, int *val)
 {
 	(void)chan;
-	*val = 25000; /* 25 C in millicelsius */
+	*val = ebc_shim.iio_temp_override ? ebc_shim.iio_temp_mC
+					  : 25000; /* 25 C in millicelsius */
 	return 0;
 }
 
@@ -736,15 +770,24 @@ static inline void regcache_cache_only(struct regmap *map, bool enable)
 static inline void regcache_mark_dirty(struct regmap *map) { (void)map; }
 static inline int regcache_sync(struct regmap *map) { (void)map; return 0; }
 
-/* --- dma-mapping (HARNESS: 32-bit handle registry) ------------------------
+/* --- dma-mapping (HARNESS: 32-bit handle registry, non-coherent model) ----
  *
  * dma_map_single hands out 32-bit bus handles (never raw host pointers:
  * the driver truncates the handle to 32 bits when programming WIN_MST*,
  * exactly like on the real 32-bit-DMA SoC, and the fake device resolves
  * it back through ebc_shim_dma_resolve).  unmap must match an active
- * mapping's handle and size; syncs must stay within a mapping.  Anything
- * else counts a dma_violation — the class the hrdl/ayakael dma_sync size
- * fixes address.
+ * mapping's handle and size; syncs must stay within a mapping (offsets
+ * into it are fine, as the dma-api allows).  Anything else counts a
+ * dma_violation.
+ *
+ * DMA here is modelled as *non-coherent*, like the arm64 SoC: each
+ * mapping keeps a shadow copy that only dma_map_single (whole buffer;
+ * the arch cleans caches when mapping TO_DEVICE) and
+ * dma_sync_single_for_device (the synced range) update, and the fake
+ * device reads the shadow.  A CPU write that reaches the device without
+ * an intervening sync is therefore a *test failure*, not a silent pass —
+ * the guard that makes shrunken-sync changes (the hrdl/ayakael dma_sync
+ * size fixes) provable offline.
  */
 
 enum dma_data_direction { DMA_BIDIRECTIONAL, DMA_TO_DEVICE, DMA_FROM_DEVICE };
@@ -767,6 +810,10 @@ static inline dma_addr_t dma_map_single(struct device *dev, void *ptr,
 
 		if (m->active)
 			continue;
+		m->shadow = malloc(size);
+		if (!m->shadow)
+			break;
+		memcpy(m->shadow, ptr, size);
 		m->active = true;
 		m->cpu = ptr;
 		m->size = size;
@@ -787,6 +834,8 @@ static inline void dma_unmap_single(struct device *dev, dma_addr_t addr,
 		struct ebc_shim_dma_mapping *m = &ebc_shim.dma[i];
 
 		if (m->active && m->handle == addr && m->size == size) {
+			free(m->shadow);
+			m->shadow = NULL;
 			m->active = false;
 			return;
 		}
@@ -798,29 +847,45 @@ static inline int dma_mapping_error(struct device *dev, dma_addr_t addr)
 	(void)dev;
 	return addr == 0;
 }
-static inline void ebc_shim_dma_sync(dma_addr_t addr, size_t size)
+/* Find the active mapping containing [addr, addr + size); NULL (plus a
+ * violation) if the range is not fully inside one mapping. */
+static inline struct ebc_shim_dma_mapping *
+ebc_shim_dma_find(dma_addr_t addr, size_t size)
 {
 	int i;
 
 	for (i = 0; i < EBC_SHIM_DMA_SLOTS; i++) {
 		struct ebc_shim_dma_mapping *m = &ebc_shim.dma[i];
 
-		if (m->active && m->handle == addr && size <= m->size)
-			return;
+		if (m->active && addr >= m->handle &&
+		    addr - m->handle + size <= m->size)
+			return m;
 	}
 	ebc_shim.dma_violations++;
+	return NULL;
 }
 static inline void dma_sync_single_for_cpu(struct device *dev, dma_addr_t addr,
 					   size_t size, enum dma_data_direction dir)
 {
 	(void)dev; (void)dir;
-	ebc_shim_dma_sync(addr, size);
+	/* The driver only maps TO_DEVICE buffers, and the device never
+	 * writes them, so handing ownership back to the CPU moves no
+	 * data — this just validates the range. */
+	ebc_shim_dma_find(addr, size);
 }
 static inline void dma_sync_single_for_device(struct device *dev, dma_addr_t addr,
 					      size_t size, enum dma_data_direction dir)
 {
+	struct ebc_shim_dma_mapping *m;
+
 	(void)dev; (void)dir;
-	ebc_shim_dma_sync(addr, size);
+	m = ebc_shim_dma_find(addr, size);
+	if (m) {
+		size_t off = addr - m->handle;
+
+		memcpy((char *)m->shadow + off, (const char *)m->cpu + off,
+		       size);
+	}
 }
 
 /* --- uaccess ------------------------------------------------------------- */

@@ -117,6 +117,19 @@ bit raised through the driver's own registered `rockchip_ebc_irq()` —
 synchronously, inside the triggering register write, so no threads are
 needed and a sequencing bug becomes a visible driver timeout.
 
+DMA is modelled as **non-coherent**, like the arm64 SoC: every
+`dma_map_single` mapping keeps a shadow copy that only the map itself
+(whole buffer — the arch cleans caches when mapping `TO_DEVICE`) and
+`dma_sync_single_for_device` (the synced range only) update, and the fake
+device reads exclusively from the shadows.  A CPU write the driver
+forgets to sync is therefore *invisible to the device* and fails the
+pixel-level assertions instead of passing silently.  This is the guard
+that made the hrdl `dma_sync`-shrink cherry-pick (2026-07-04, see
+`doc/kernel-forward-port.md`) provable offline: with per-frame row-span
+syncs in place of full-buffer cleans, the 256-transition differential
+and the goldens still pass.  A self-test (`dma shadow:`) pins the model's
+own contract.
+
 What it executes and asserts (`quirk:`-policy applies as in rung 2):
 
 - **`mode_set_nofb`**: the full ED103TC2 timing-register set, hand-derived
@@ -157,6 +170,13 @@ What it executes and asserts (`quirk:`-policy applies as in rung 2):
   (`wbf-info --dump-lut`).  That closes the loop driver-blit → scheduler →
   LUT-upload → device-LUT-readback vs an independent derivation of the
   waveform format.
+- **Cold-bin selection (`wbf cold:`)**: the stub IIO is settable
+  (`ebc_shim.iio_temp_override`); at 0 °C the driver must select this
+  waveform's 131-phase GC16 cold bin and orchestrate it cleanly.  This
+  is the evidence behind rejecting hrdl's ≥19 °C temperature clamp
+  (a workaround for *their* rework's early-cancellation feature — see
+  `doc/kernel-forward-port.md`): our copy handles cold bins fine, and
+  clamping would discard per-device calibration data.
 
 **Limits** (see `doc/ebc-harness-spike.md` §4): the device model encodes
 *our understanding* of the silicon, so agreement proves consistency, not
