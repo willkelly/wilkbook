@@ -30,7 +30,7 @@ axis: fbcon text on the panel, USB ACM gadget console working end-to-end
 | PREEMPT_RT | n/a (not supported on 6.6) | **yes** (2026-07-04: `#1 SMP PREEMPT_RT`, tainted=0, no sleeping-function/atomic splats) |
 | Bluetooth firmware (BCM4345C0.hcd) | yes | yes (2026-06-11: `BCM4345C0.pine64,pinenote-v1.2.hcd` patch applied, build 0382) |
 | Wi-Fi firmware (brcmfmac43455) | yes | yes (2026-06-11: brcmfmac 7.45.234 loaded on vanilla base — deblob problem confirmed solved) |
-| KOReader on the panel (reader flavor) | n/a | **yes** (2026-07-05: native fbdev + evdev, pen-navigable; finger touch pending the cyttsp5 DTS node) |
+| KOReader on the panel (reader flavor) | n/a | **yes** (2026-07-05: native fbdev + evdev, pen- and finger-navigable, frontlight, MB Type fonts; unattended boot validated) |
 
 The `pinenote-usb-console-linux-6-6` flavor is the fully working baseline.
 The `pinenote-usb-console` flavor (7.0 forward-port) is the kernel-currency
@@ -121,22 +121,23 @@ Also staged 2026-07-03:
 
 ## Current os2 contents
 
-os2 currently holds the 2026-07-05 morning build (SHA `40393404…`,
-written and readback-verified from os1) — **booted and live-debugged the
-same day** (second session record below): the touchscreen probed and
-works, but KOReader crashed on the read-only store bundle (KO_HOME
-missing) and the hardcoded input paths were stale; both were hotfixed
-live and are fixed in-repo.
+os2 currently holds the 2026-07-05 **evening (phase A) build**, SHA
+`f4e0cd5d745a5e963aadc69f4a0e40a9c8b914c054e93755d9334d6fce0e9c98`,
+written and readback-verified from os1 the same evening — **boot
+pending**. It supersedes two same-day predecessors that were each
+booted and validated: the midday build (`0a8a55c2…` — unattended boot,
+touch, pen, frontlight, MB Type fonts all validated; see the session
+records) and the morning build (`40393404…` — touchscreen probed, but
+KOReader white-screened on the missing KO_HOME; hotfixed live).
 
-**Deployment candidate, ready to write**:
-`pinenote-reader-PNGuixRoot-20260705.ext4` (current build), SHA-256
-`0a8a55c253119249da44ef8421f538deb82b2d1899beb3164cc318ad68a1894c`.
-Adds over the on-device build: `KO_HOME` (the white-screen fix),
-name-based input device resolution + touchscreen + scoped pen scaling
-(all hardware-validated live), and the locally staged MB Type fonts
-with seeded serif/sans/mono defaults (`pinenote/fonts/README.md`).
-rung-4 `make qemu-virt-check` green on this exact rootfs. Contents
-carried over from the morning build:
+Phase A adds over the validated midday build (offline gates green,
+optics judgment pending): the >=60%-area flash policy (menus stop
+washing the whole panel), the pre-KOReader panel blank+wash (boot text
+no longer lingers), `[pn-refresh]` intent tracing to
+/var/log/reader-session.log, and the virt-only virtio-gpu/input
+modules + probe token for the rung-4v visual loop.
+
+Contents carried over from the earlier 2026-07-05 builds:
 
 - KOReader **native fbdev** device target grafted into `koreader-bin`
   (pen input via pure-Lua evdev backend, frontlight/battery powerd,
@@ -150,16 +151,17 @@ carried over from the morning build:
 - **cyttsp5 touchscreen DTS node** (`cypress,tt21000` on i2c5 +
   pinctrl) added to the forward-port patch — driver was already `=m`
   but mainline's DTS has no node (neither does hrdl's tree; taken from
-  m-weigand's). **Unvalidated on hardware**; if coordinates are
-  garbage, the mainline driver's missing sysinfo fallbacks are the
-  first suspect (`doc/kernel-forward-port.md`).
+  m-weigand's). **Validated on hardware 2026-07-05**: native screen
+  coordinates, finger navigation works.
 
-First-boot checklist for the 20260705 artifact: KOReader appears on the
-panel without any console interaction (validates all three boot fixes +
-the service); finger touch (first observation of the touchscreen node);
-pen taps/page turns; frontlight from KOReader's UI; gadget console as
-escape hatch. Harvest `/var/log/reader-session.log` and dmesg (cyttsp5
-probe signature) afterwards.
+First-boot checklist for the phase A (`f4e0cd5d…`) artifact: boot text
+washes to clean white before KOReader appears; menu open/close updates
+without a whole-panel flash; ghosting from un-flashed overlays stays
+tolerable (note where it does not — that calibrates the phase B
+workbench); everything from the midday build still works (unattended
+boot, touch, pen, frontlight, fonts). Harvest
+`/var/log/reader-session.log` afterwards — it now carries the
+`[pn-refresh]` intent trace.
 
 The previously deployed `pinenote-reader-PNGuixRoot-20260704.ext4` (SHA
 `23e597fd…`) was **booted and live-debugged 2026-07-04/05** — session
