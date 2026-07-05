@@ -119,18 +119,16 @@ Also staged 2026-07-03:
 
 ## Current os2 contents
 
-os2 currently holds `pinenote-reader-PNGuixRoot-20260704.ext4` (SHA
-`23e597fd…`, written and readback-verified 2026-07-04) — **booted and
-live-debugged 2026-07-04/05** (session record below). The device came up,
-was recovered by hand over the ACM console, and ended the session with
-KOReader working natively; every hand-applied fix is now staged in this
-repo.
-
-**Ready to write, not yet on the device**:
-`pinenote-reader-PNGuixRoot-20260705.ext4`, SHA-256
-`4039340409ccc2cbd1853ef455f54a297b0c573b19101a83a7863222302ad3fb`,
-containing everything the first-light session proved out plus the
-touchscreen enablement:
+Written and readback-verified 2026-07-05 from os1 (**not yet booted**):
+`pinenote-reader-PNGuixRoot-20260705.ext4`, 1,895,833,600 bytes, SHA-256
+`4039340409ccc2cbd1853ef455f54a297b0c573b19101a83a7863222302ad3fb` (host
+artifact, staged copy at `/home/user/wilkbook-artifacts/` on os1, and p6
+readback all identical). Offline gates before the write: host tool
+suites, kernel cross-build, rootfs preflight, DTB/bundle content checks
+(`touchscreen@24` present; pinenote device + probe grafted; koreader.sh
+shebang clean), and rung-4 `make qemu-virt-check` fully green on this
+exact rootfs. Contents — everything the first-light session proved out
+plus the touchscreen enablement:
 
 - KOReader **native fbdev** device target grafted into `koreader-bin`
   (pen input via pure-Lua evdev backend, frontlight/battery powerd,
@@ -154,6 +152,10 @@ the service); finger touch (first observation of the touchscreen node);
 pen taps/page turns; frontlight from KOReader's UI; gadget console as
 escape hatch. Harvest `/var/log/reader-session.log` and dmesg (cyttsp5
 probe signature) afterwards.
+
+The previously deployed `pinenote-reader-PNGuixRoot-20260704.ext4` (SHA
+`23e597fd…`) was **booted and live-debugged 2026-07-04/05** — session
+record below; its staged copy remains on os1 for rollback.
 
 ## 2026-07-04/05 reader first light (os2 boot of the 20260704 artifact)
 
