@@ -1,5 +1,5 @@
 diff --git a/arch/arm64/boot/dts/rockchip/rk3566-pinenote.dtsi b/arch/arm64/boot/dts/rockchip/rk3566-pinenote.dtsi
-index 791719a..e969e76 100644
+index 791719acb..76fc7fce0 100644
 --- a/arch/arm64/boot/dts/rockchip/rk3566-pinenote.dtsi
 +++ b/arch/arm64/boot/dts/rockchip/rk3566-pinenote.dtsi
 @@ -74,6 +74,16 @@
@@ -86,7 +86,36 @@ index 791719a..e969e76 100644
  		interrupt-parent = <&gpio3>;
  		interrupts = <RK_PA6 IRQ_TYPE_LEVEL_LOW>;
  		enable-gpios = <&gpio3 RK_PB0 GPIO_ACTIVE_HIGH>;
-@@ -583,6 +639,29 @@
+@@ -549,6 +605,28 @@
+ 		vdd-supply = <&vcc_3v3>;
+ 		vddio-supply = <&vcc_3v3>;
+ 	};
++
++	touchscreen@24 {
++		compatible = "cypress,tt21000";
++		reg = <0x24>;
++		interrupt-parent = <&gpio0>;
++		interrupts = <RK_PA6 IRQ_TYPE_EDGE_FALLING>;
++		pinctrl-0 = <&ts_int_l>, <&ts_rst_l>;
++		pinctrl-names = "default";
++		reset-gpios = <&gpio0 RK_PA5 GPIO_ACTIVE_LOW>;
++		vdd-supply = <&vcc_3v3_pmu>;
++		/*
++		 * Read as sysinfo overrides by the m-weigand cyttsp5 driver;
++		 * the mainline driver ignores them and trusts the chip.
++		 */
++		touchscreen-max-pressure = <46>;
++		touchscreen-min-x = <10>;
++		touchscreen-min-y = <5>;
++		touchscreen-size-x = <1863>;
++		touchscreen-size-y = <1399>;
++		touchscreen-x-mm = <1864>;
++		touchscreen-y-mm = <1400>;
++	};
+ };
+ 
+ &i2s1_8ch {
+@@ -583,6 +661,39 @@
  		};
  	};
  
@@ -113,10 +142,20 @@ index 791719a..e969e76 100644
 +		};
 +	};
 +
++	touchscreen {
++		ts_int_l: ts-int-l {
++			rockchip,pins = <0 RK_PA6 RK_FUNC_GPIO &pcfg_pull_up>;
++		};
++
++		ts_rst_l: ts-rst-l {
++			rockchip,pins = <0 RK_PA5 RK_FUNC_GPIO &pcfg_pull_none>;
++		};
++	};
++
  	bt {
  		bt_enable_h: bt-enable-h {
  			rockchip,pins = <0 RK_PC4 RK_FUNC_GPIO &pcfg_pull_none>;
-@@ -751,6 +830,14 @@
+@@ -751,6 +862,14 @@
  
  &usb_host0_xhci {
  	dr_mode = "otg";

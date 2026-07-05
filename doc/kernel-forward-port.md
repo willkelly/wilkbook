@@ -84,6 +84,21 @@ Both live in `pinenote/packages/kernel.scm`:
   temperature channel — parks forever in `-EPROBE_DEFER` at
   `devm_drm_of_get_bridge()` because nothing ever binds the panel node.
   (Found by adversarial review before it cost a hardware session.)
+- the cyttsp5 touchscreen DTS node (added 2026-07-05, **unvalidated on
+  hardware**): `touchscreen@24` (`cypress,tt21000`) on `&i2c5` plus the
+  `ts_int_l`/`ts_rst_l` pinctrl entries, taken from the m-weigand 6.6.30
+  tree. Context: `CONFIG_TOUCHSCREEN_CYTTSP5=m` was already in the
+  defconfig, but neither mainline's `rk3566-pinenote.dtsi` nor hrdl's
+  v6.19 tree carries a node, so the driver never probed — first light
+  (2026-07-05) had pen input but no finger touch. We keep the **vanilla
+  mainline driver**; m-weigand's tree additionally patches
+  `cyttsp5.c` with DT-property fallbacks (`touchscreen-size-x/y`,
+  `touchscreen-max-pressure` overriding chip-reported sysinfo, plus
+  zero-guards) that mainline lacks. The node carries those properties
+  anyway (mainline ignores them), so if hardware shows a probing
+  touchscreen with zero/garbage ABS ranges, the missing fallbacks are
+  the first suspect — that would become a pinned quirk, not a silent
+  driver fork.
 
 ## Refreshing the patch for a new kernel
 
@@ -201,6 +216,20 @@ Record anything that took a hardware session to discover:
   `pinenote/images/pinenote-initramfs.scm`
   (`earlycon console=tty0 console=ttyS2,1500000n8 fw_devlink=off` plus the
   `rockchip_ebc` parameters).
+- `console=tty0` + `ignore_loglevel` means every kernel message redraws
+  fbcon on the e-ink panel, and the fbdev emulation's flushes overwrite
+  whatever userspace put there (2026-07-05 first-light root cause). Any
+  service that owns the panel must unbind fbcon
+  (`/sys/class/vtconsole/vtcon1/bind`) — the reader-session service does.
+  Related trap: `drm.debug=0x2` works without `CONFIG_DYNAMIC_DEBUG`
+  (drm has its own gate) but its printk lines land on fbcon and feed a
+  redraw→commit→log feedback loop; expect ~8 Hz of full-frame blits
+  while it's on.
+- Driver-observability wishlist for a future debug kernel config: the
+  7.0 port stubs the `EXTRACT_FBS` ioctl (`-EOPNOTSUPP`), so the
+  on-device buffer-dump oracle is unavailable; `CONFIG_DYNAMIC_DEBUG`,
+  `CONFIG_MAGIC_SYSRQ_SERIAL`, and `CONFIG_DETECT_HUNG_TASK` are all
+  off (the last two also block the qemu-virt udev-hang diagnosis).
 
 ## Known driver quirks pinned by the host test tools (2026-07-04)
 
