@@ -526,21 +526,36 @@ validation on hardware.
 
 ## Next sessions
 
-- ~~Diagnose the qemu-virt udev deadlock~~ Done offline 2026-07-05 (no
-  deadlock — a console-logging artifact; see that section). Rung 4 now
-  asserts the full service stack unattended, no debug kernel needed.
-- Wi-Fi on 7.0 end-to-end (firmware load is proven; the usb-console
-  flavor has no networking userland — needs the networked flavor or a
+The next user-present device session, in order (everything here is
+pre-verified offline; the session is judgment + harvest):
+
+1. **os2 write of the phase A.2 candidate** (`52cf8e8a…`, ledger above)
+   with the standard protocol, then boot and judge:
+   - GL16 full-refresh optics: the every-N-pages wash should read as
+     "the letters shimmer", not "the screen shows a negative". Watch
+     for believed-white residue accumulating over a long session — the
+     one thing GL16 never scrubs (`doc/refresh-policy.md`).
+   - Input rework feel: two-finger pinch (structurally fixed), palm
+     resting near the screen while the pen hovers (ghost taps fixed),
+     ws8100 pen-button page turns (barrel long-press: pen-side =
+     forward, eraser-side = back; needs the BLE pen connected).
+2. **Harvest for the phase B workbench** (this is the payload that makes
+   future display tuning offline): `/var/log/reader-session.log` after
+   a real reading session — it carries the `[pn-refresh]` intent trace;
+   plus `evtest` captures of a pinch and a palm-while-writing episode,
+   and the gpio-keys node contents.
+
+Still queued behind the display program:
+
+- Wi-Fi on 7.0 end-to-end (firmware load is proven; the reader flavor
+  has no networking userland — needs the networked flavor or a
   credentials story). Consider the community-standard ECM ethernet
   gadget alongside ACM.
 - RT characterization under load (refresh + pen input; watch the EBC
   refresh kthread).
-- First boot with the cherry-picked driver (fsleep + shrunken dma_sync):
-  confirm partial refreshes stay artifact-free — the offline harness
-  proves the bookkeeping, only the panel proves the cache/DMA physics.
-- First cage+KOReader session on the panel once the `reader` flavor
-  exists: page turn, refresh behavior, pen/touch (KOReader stack:
-  `doc/koreader-spike.md`).
+- Finger-touch DTS validation happened 2026-07-05 (cyttsp5 works); the
+  cherry-picked driver (fsleep + shrunken dma_sync) has now survived
+  three hardware boots with artifact-free partials.
 
 ## Device facts
 
