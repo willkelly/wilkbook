@@ -312,6 +312,15 @@ lands in the unprivileged reader shell (`pinenote-acm$`), so root-side
 herd/syslog checks need the UART or os1 post-mortem instead. This
 closes the appliance-path milestone: power-on → reader, hands off.
 
+**Validated in the same session:** frontlight brightness, finger touch
+(cyttsp5), pen, and the **MB Type reading fonts** — Will confirmed
+Equity A active in the book view (the UI chrome stays Noto Sans by
+design; only the reading fonts are seeded). Known rough edge, expected:
+**page turns flash** — the driver global-refreshes past
+`refresh_threshold=60` and a page turn damages ~100% of the panel, so
+every turn is a full refresh. That is the refresh-policy tuning work
+(ROADMAP §4), not a regression.
+
 ## 2026-07-05 the qemu-virt "udev deadlock" was never a deadlock — rung 4 now asserts the full service stack
 
 The 2026-07-04 "virt deadlocks entering udev" finding (below) is
