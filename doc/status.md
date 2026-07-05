@@ -113,17 +113,38 @@ Also staged 2026-07-03:
 
 ## Current os2 contents
 
-Written and readback-verified 2026-07-03 from os1 (device on the network,
-no reboot performed):
+Written and readback-verified 2026-07-04 from os1 (device on the network,
+no reboot performed; **not yet booted**):
 
-- Artifact: `pinenote-usb-console-PNGuixRoot-20260703.ext4`,
-  1,503,334,400 bytes (= 2,936,200 × 512 sectors), staged copy kept at
-  `/home/user/wilkbook-artifacts/` on os1.
+- Artifact: `pinenote-reader-PNGuixRoot-20260704.ext4`,
+  1,933,021,184 bytes (= 3,775,432 × 512 sectors), staged copy kept at
+  `/home/user/wilkbook-artifacts/` on os1 (alongside the previous
+  usb-console artifact).
 - SHA-256 (host artifact, staged copy, and p6 readback all):
-  `4cab03b25c2c80ae6a3c22147f30c1022fcfe3e9f787ab302d8dbc9e034ea43e`.
-- QEMU-virt boot-tested before writing: reaches Shepherd on the
-  `PREEMPT_RT` kernel; initrd installs the waveform and loads all
-  display modules.
+  `23e597fd8d01abdfce49bcc827b9a457fa224fbcabba6d9bdeedc364e8671f06`.
+- Contents: the **reader flavor** — usb-console base (ACM gadget
+  console, UART getty) + the cage-pixman/KOReader kiosk
+  (`doc/koreader-spike.md`) — on the kernel carrying the hrdl
+  fsleep/dma_sync-shrink cherry-picks (`doc/kernel-forward-port.md`).
+  First boot of both.
+- Gates run before writing: rung-4 `make qemu-virt-check` green on this
+  exact rootfs (PREEMPT_RT boot, initrd waveform + EBC modules,
+  PNGuixRoot mount, Shepherd through udev, no panics/RT splats); host
+  tool suites green on the cherry-picked driver; the kiosk pairing
+  validated end-to-end on the workstation.
+- First-light checklist for the boot (user-present, UART logging at
+  1500000 baud, pick "Boot OS2 (part 6)"): panel shows KOReader; page
+  turn works via touch; pen behavior noted (#14694 expected: pen as
+  finger); whole-screen refresh per update is expected (refresh policy
+  not yet integrated); partial refreshes artifact-free (validates the
+  dma_sync shrink); gadget console still enumerates as the escape
+  hatch. Harvest `/var/log/messages` and `/var/log/reader-session.log`
+  from os2 afterwards regardless of outcome.
+
+Previous os2 contents (2026-07-03, hardware-validated 2026-07-04):
+`pinenote-usb-console-PNGuixRoot-20260703.ext4`, SHA
+`4cab03b25c2c80ae6a3c22147f30c1022fcfe3e9f787ab302d8dbc9e034ea43e` —
+staged copy still on os1 if a rollback write is wanted.
 - Contains the full 2026-07-03 fix stack: TPS65185 IIO +
   `#io-channel-cells`, `eink,ed103tc2` panel-simple entry,
   `snps,dis_u3_susphy_quirk`, `CONFIG_PREEMPT_RT=y`,
