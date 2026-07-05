@@ -116,23 +116,30 @@ is the config/initrd/root-mount regression class — exactly how the
 `VIRTIO_MENU` olddefconfig drop (which made virtio-blk vanish so root never
 appeared) is caught.
 
-What it does *not* reach: the virt boot deadlocks entering the `udev`
-service — an idle-CPU hang confirmed 2026-07-04 (see `doc/status.md`) — so
-the post-udev one-shot services (`pinenote-waveform`, the ACM gadget,
-`pinenote-ebc-params`) never run here. The waveform/udev-ordering and
-gadget-modprobe regressions therefore stay guarded by the host tools and
-hardware until that hang is fixed. And nothing RK3566-specific — EBC
-rendering, the dwc3 gadget, Wi-Fi/BT firmware — can be tested on virt at
-all. `WAVEFORM` may point at a local waveform backup; it is never bundled
-or committed.
+The full service stack comes up on virt: udev, the `pinenote-waveform`
+and `pinenote-ebc-params` one-shots, and reader-session (KOReader's
+luajit — which then spins a vCPU for want of a framebuffer; expected).
+Note that the *console* stops showing shepherd messages ~5 s into boot —
+that's shepherd diverting its output from /dev/kmsg to /var/log/messages
+once its system-log service is up, not a hang (this masqueraded as a
+"udev deadlock" on 2026-07-04; see `doc/status.md` 2026-07-05). Log in
+as root on the console and read /var/log/messages for the rest. What
+virt can *not* test is anything RK3566-specific — EBC rendering, the
+dwc3 gadget (the ACM gadget one-shot fails here, correctly), Wi-Fi/BT
+firmware. `WAVEFORM` may point at a local waveform backup; it is never
+bundled or committed.
 
 `make qemu-virt-check` (offline ladder rung 4) wraps this boot into a
-non-interactive gate. It captures the console, terminates QEMU once the log
-goes quiescent (the udev deadlock, or a future healthy idle point), then
-asserts the milestones above are present and a set of regression signatures
+non-interactive gate. It captures the console via a socket chardev, waits
+for the login prompt, asserts the early milestones from the console log,
+then logs in as root over the socket and asserts the post-udev service
+stack from the guest's own /var/log/messages (udev completion, both
+one-shots, reader-session start), and finally powers the guest off and
+requires a clean `reboot: Power down`. Regression signatures
 (waveform-not-found, PNGuixRoot-not-visible, kernel panic, RT
-sleeping-in-atomic) are absent. It exits non-zero on any failed assertion
-and finishes in well under a minute:
+sleeping-in-atomic) must be absent. It exits non-zero on any failed
+assertion; a green run takes a few minutes (TCG, and udev's settle takes
+~a minute):
 
 ```sh
 make qemu-virt-check ROOTFS=/tmp/opencode/pinenote-rootfs-artifacts/<artifact>.ext4 \
@@ -149,11 +156,9 @@ modprobe vkms        # virtual DRM device: exercise render plumbing
 
 `dummy_hcd` is a fake UDC for the configfs/ACM plumbing (libcomposite,
 u_serial, usb_f_acm, ttyGS0); `vkms` gives DRM userspace a real connector.
-Neither is reachable through a normal virt boot today: it has no interactive
-console (the getty is on `ttyS2`, absent on virt; the reader shell is on the
-`ttyGS0` gadget, also absent) and it deadlocks at udev before that point
-anyway. So the note that the v3 gadget service "declines by design" on virt
-is aspirational — that service lives past the udev hang and never runs here.
+Both are reachable today: the virt boot completes and Guix's console getty
+answers on `ttyAMA0` (log in as root there, or over the harness's console
+socket), so a future rung can modprobe and exercise them interactively.
 Neither module models EBC semantics; rendering policy (Y4 quantization,
 waveform selection) lives in the host-side tools under `pinenote/tools/`,
 and a QEMU device model for the EBC register block is a possible future rung

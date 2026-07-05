@@ -164,5 +164,7 @@ and `rockchip_ebc.ko` in the store output).
   spike, including the effort pricing that made option (a) obviously
   right: `doc/ebc-harness-spike.md` and the ebc-logic README.
 - The **qemu-virt rung 4** build, including honestly recording what the
-  rung can *not* reach (the udev deadlock finding): `ROADMAP.md` §3 and
-  `doc/status.md`.
+  rung appeared unable to reach (the "udev deadlock" finding) — and then
+  the 2026-07-05 retraction of that finding as a console-logging
+  artifact, a case study in chasing a wrong-but-precise theory to the
+  evidence that kills it: `ROADMAP.md` §3 and `doc/status.md`.

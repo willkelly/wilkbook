@@ -286,7 +286,68 @@ fix):
   all tests pass; see `pinenote/tools/wbf/README.md` for what the
   waveform contains).
 
+## 2026-07-05 the qemu-virt "udev deadlock" was never a deadlock — rung 4 now asserts the full service stack
+
+The 2026-07-04 "virt deadlocks entering udev" finding (below) is
+**retracted**. The guest boots to completion every time; what stops is
+the *console log*, deterministically, by design:
+
+- Shepherd (PID 1) routes its messages through `call-with-syslog-port`
+  (`comm.scm`): it first tries to connect to **/dev/log** and only falls
+  back to `/dev/kmsg` (which is what reaches the serial console) when
+  that fails. Shepherd 1.0's built-in **system-log service starts
+  listening on /dev/log ~5 s into boot**, and from that moment every
+  shepherd message — including `Service udev has been started` and the
+  one-shot completions — goes to **/var/log/messages** and the console
+  goes dark. All nine captured boot logs stop at the exact same place
+  (the loopback/udev-logger lines at guest t≈5.2 s). 100% deterministic;
+  there was never a per-boot race.
+- What looked like "login unsticks the wedge" was observability, not
+  causation: logging into a "wedged" guest and running `herd status
+  udev` showed *"It is running since … (3 minutes ago)"* — it had
+  completed long before, on its own. `ps` in the same guest showed the
+  whole stack up: udevd, nscd, six gettys, and the reader-session
+  **luajit process running** (KOReader). /var/log/messages holds all
+  the "missing" lines.
+- The theory-killing experiment: the interim harness poked a quiet
+  guest with four *clean* root-login/`herd`/`exit` cycles — every one
+  executed perfectly (login, prompt, herd reply, logout, getty respawn),
+  proving shepherd's SIGCHLD handling, process monitor, and control
+  socket were all healthy — yet the console still never showed udev
+  completing. That ruled out the shepherd lost-wakeup theory the pokes
+  were built on and pointed the investigation at the logging path.
+- The earlier exonerations stand (kernel, eudev `settle`'s hard 120 s
+  deadline, entropy, signalfd) — but the conclusion is stronger: nothing
+  was ever stuck. There is **no upstream shepherd bug to file** (the
+  kmsg→/dev/log switchover is intended behavior, if a spooky-quiet one).
+- New virt-only finding while validating: with no EBC framebuffer on
+  virt, KOReader's luajit **spins a vCPU**, which under TCG starves the
+  guest enough to produce soft-lockup/RCU-stall splats and a sluggish
+  console. Harmless on virt, absent on hardware (fb exists); the
+  harness stops reader-session once its start is confirmed to keep the
+  guest responsive.
+
+The assertion harness (`run-virt-assertions.sh`) was redesigned around
+this: the console lives on a socket chardev (qemu `logfile=` tees the
+capture; anything can connect for post-mortem debugging), and once the
+login prompt appears the harness **logs in as root over the socket and
+asserts the post-switchover milestones from inside the guest** — it
+greps /var/log/messages for udev completion, the pinenote-waveform and
+pinenote-ebc-params one-shots, and reader-session start, echoing
+VIRTCHK-\* sentinel lines that land in the console log; then it powers
+the guest off cleanly and requires `reboot: Power down`. Since
+reader-session's shepherd requirements are `(udev user-processes
+pinenote-waveform pinenote-ebc-params)`, its start line transitively
+proves the whole service-ordering chain that cost the first two
+hardware sessions. Rung 4 now covers power-on → full service stack →
+clean shutdown, unattended.
+
 ## 2026-07-04 qemu-virt rung 4 (offline) — mechanized boot assertions + a udev-hang finding
+
+*(Superseded 2026-07-05, above: the "deadlock" was a console-logging
+artifact — shepherd's messages divert from /dev/kmsg to /var/log/messages
+once the system-log service is up. The boot completes; the one-shots DO
+run on virt.)*
 
 Built the mechanized qemu-virt gate (`make qemu-virt-check`, offline ladder
 rung 4). Booting the real 2026-07-03 artifact on QEMU `virt` with the pulled
@@ -385,9 +446,9 @@ validation on hardware.
 
 ## Next sessions
 
-- Diagnose the qemu-virt udev deadlock (ROADMAP §3 rung 4) so the
-  service-ordering assertions become automatable; needs a debug kernel
-  (`MAGIC_SYSRQ_SERIAL` + `DETECT_HUNG_TASK`) or a gdbstub attach.
+- ~~Diagnose the qemu-virt udev deadlock~~ Done offline 2026-07-05 (no
+  deadlock — a console-logging artifact; see that section). Rung 4 now
+  asserts the full service stack unattended, no debug kernel needed.
 - Wi-Fi on 7.0 end-to-end (firmware load is proven; the usb-console
   flavor has no networking userland — needs the networked flavor or a
   credentials story). Consider the community-standard ECM ethernet

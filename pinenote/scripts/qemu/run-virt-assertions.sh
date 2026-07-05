@@ -2,43 +2,52 @@
 # Mechanized QEMU-virt boot assertions (offline testing ladder rung 4).
 #
 # Boots the *real* PineNote kernel, initrd, and rootfs on QEMU's generic
-# ARM64 "virt" machine exactly as run-pinenote-virt.sh does, but instead of
-# handing you an interactive console it captures the console to a log,
-# terminates QEMU once the boot goes quiescent (or a hard cap elapses), and
-# then asserts a set of REQUIRED boot signatures are present and FORBIDDEN
-# regression signatures are absent.  Exits non-zero if any assertion fails.
+# ARM64 "virt" machine exactly as run-pinenote-virt.sh does, captures the
+# console to a log, then LOGS IN over the console socket and asserts the
+# post-udev service state from inside the guest before powering it off.
+# Exits non-zero if any assertion fails.
 #
 # Takes a boot bundle staged by stage-boot-bundle-from-rootfs.sh and a disk
 # built by make-virt-disk.sh (the Makefile's qemu-virt-check target chains
 # all three).  Host-side only; writes nothing outside /tmp/opencode.
 #
-# WHAT THIS RUNG PROVES (and, deliberately, what it does NOT):
-#   The virt boot is healthy from power-on through Shepherd start: the
-#   hardware kernel image boots with PREEMPT_RT, the initrd finds the
-#   waveform partition by PARTNAME and installs it, loads the EBC display
-#   modules, sees PNGuixRoot before the root switch, root mounts by label,
-#   and Shepherd brings up its base services.  This is the config/initrd/
-#   root-mount regression class (e.g. the VIRTIO_MENU olddefconfig drop that
-#   made virtio-blk vanish and root never appear).
+# WHAT THIS RUNG PROVES:
+#   Power-on through the full service stack: the hardware kernel image
+#   boots with PREEMPT_RT, the initrd finds the waveform partition by
+#   PARTNAME and installs it, loads the EBC display modules, sees
+#   PNGuixRoot before the root switch, root mounts by label, Shepherd
+#   brings up its base services, udev completes, the pinenote-waveform and
+#   pinenote-ebc-params one-shots run, and the reader-session service
+#   starts (its shepherd requirements — udev, user-processes, and both
+#   one-shots — make it a transitive check of the whole chain).  This is
+#   the config/initrd/root-mount regression class (e.g. the VIRTIO_MENU
+#   olddefconfig drop) plus the service-ordering regression class that
+#   cost the first two hardware sessions.
 #
-#   It does NOT reach the post-udev one-shot services (pinenote-waveform,
-#   the ACM gadget, pinenote-ebc-params): the virt boot deadlocks entering
-#   the udev service (idle-CPU hang, confirmed 2026-07-04 — see
-#   doc/status.md and doc/testing.md).  The waveform/udev-ordering and
-#   gadget-modprobe regressions therefore stay guarded by the host tools and
-#   hardware, not here, until that hang is fixed.  The harness pins the
-#   current high-water mark so a regression *before* it goes red.
+# WHY THE HARNESS LOGS IN instead of watching the console:
+#   Shepherd (PID 1) writes its messages to /dev/kmsg — visible on the
+#   console — only until something listens on /dev/log.  Shepherd 1.0's
+#   built-in system-log service starts listening ~5 s into boot, and from
+#   that moment every "Service X has been started" goes to
+#   /var/log/messages and the console goes dark BY DESIGN.  The boot
+#   continues fine underneath (this deterministic silence was mistaken
+#   for a udev deadlock on 2026-07-04; see doc/status.md 2026-07-05).
+#   So post-switchover milestones are asserted by logging in as root on
+#   the console socket, grepping /var/log/messages *inside* the guest,
+#   and echoing VIRTCHK-* sentinel lines that land in the console log via
+#   qemu's logfile= tee.  Sentinels are composed with shell variables
+#   ($u etc.) so the echoed command text can never satisfy the grep.
 set -eu
 
 # Hard wall-clock cap.  virt boots run under TCG (no KVM for aarch64 on an
-# x86 host) and are slow; the quiescence detector normally kills QEMU well
-# before this.  Override with VIRT_ASSERT_TIMEOUT if needed.
+# x86 host) and are slow.  Override with VIRT_ASSERT_TIMEOUT if needed.
 : "${VIRT_ASSERT_TIMEOUT:=420}"
-# Kill QEMU once the console log has not grown for this many seconds (after
-# the boot has reached at least the initrd handoff).  The virt boot goes
-# silent when it deadlocks at udev; a healthy future boot that runs further
-# would simply quiesce at its own login/idle point and still be captured.
-: "${VIRT_ASSERT_QUIESCE:=25}"
+# How long to wait for the console login prompt (getty is up early,
+# independent of udev; a boot that never reaches it has failed early and
+# the console-log assertions will say why).
+: "${VIRT_ASSERT_LOGIN_WAIT:=180}"
+# Pause between in-guest probe rounds while waiting for the one-shots.
+: "${VIRT_ASSERT_PROBE_INTERVAL:=20}"
 
 usage() {
   printf 'usage: %s BOOT_BUNDLE_DIRECTORY DISK_IMAGE [LOG_FILE]\n' "$0" >&2
@@ -57,6 +66,8 @@ log=${3:-}
 
 command -v qemu-system-aarch64 >/dev/null 2>&1 || \
   fail "qemu-system-aarch64 not found; run via: guix shell qemu -- $0 ..."
+command -v guile >/dev/null 2>&1 || \
+  fail "guile not found (needed to drive the console socket)"
 
 kernel=$bundle/extlinux/Image
 initrd=$bundle/extlinux/initrd.cpio.gz
@@ -90,25 +101,34 @@ append=$(printf '%s' "$append" | sed \
   -e 's/console=tty0 //')
 
 printf 'qemu-virt assertions: booting (console -> %s)\n' "$log"
-printf '  cap=%ss quiesce=%ss\n' "$VIRT_ASSERT_TIMEOUT" "$VIRT_ASSERT_QUIESCE"
+printf '  cap=%ss login-wait=%ss probe-interval=%ss\n' \
+  "$VIRT_ASSERT_TIMEOUT" "$VIRT_ASSERT_LOGIN_WAIT" "$VIRT_ASSERT_PROBE_INTERVAL"
 
+# Console on a socket chardev: qemu tees everything to $log via logfile=,
+# and the harness (or a human, post-mortem) can connect to the socket to
+# drive a login session.
+sock=$log.sock
+rm -f "$sock"
 qemu-system-aarch64 \
   -M virt -cpu max -smp 4 -m 2048 \
-  -nographic -no-reboot \
+  -display none -no-reboot \
+  -chardev "socket,id=con0,path=$sock,server=on,wait=off,logfile=$log" \
+  -serial chardev:con0 \
+  -monitor none \
   -kernel "$kernel" \
   -initrd "$initrd" \
   -append "$append" \
   -drive if=virtio,format=raw,file="$disk" \
-  > "$log" 2>&1 &
+  2> "$log.qemu-stderr" &
 qemu_pid=$!
+start_time=$(date +%s)
 
-# Terminate QEMU on log quiescence or the hard cap, whichever comes first.
-# "Quiescent" means the log stopped growing for VIRT_ASSERT_QUIESCE seconds
-# AND the boot has progressed at least to the initrd handoff (so we never
-# mistake a slow early boot for a finished one).
+elapsed() {
+  echo $(( $(date +%s) - start_time ))
+}
+
 kill_qemu() {
   kill "$qemu_pid" 2>/dev/null || true
-  # Give it a moment, then force.
   i=0
   while kill -0 "$qemu_pid" 2>/dev/null; do
     [ "$i" -ge 5 ] && { kill -9 "$qemu_pid" 2>/dev/null || true; break; }
@@ -116,55 +136,151 @@ kill_qemu() {
   done
 }
 
-reason=cap
-waited=0
-last_size=-1
-quiet=0
+# Console driver: connects to the socket, logs in as root, sends each argv
+# command with a pause, and exits the shell.  Command output is not parsed
+# here — everything lands in $log via qemu's logfile= tee.  Three hard-won
+# details:
+#   (a) bytes are paced ~2 ms apart because the guest PL011 has a 16-byte
+#       FIFO and blasting a whole line drops everything past byte 16 when
+#       the guest is busy (the truncated line then leaves bash stuck in a
+#       '>' continuation prompt);
+#   (b) every line is preceded by Ctrl-C to clear any such stuck input
+#       state from an earlier, interrupted round;
+#   (c) the driver must continuously DRAIN the socket: while a client is
+#       connected qemu applies backpressure for it, so an unread socket
+#       fills up, qemu stops draining guest TX, bash blocks mid-echo and
+#       stops reading input, guest RX fills, qemu stops reading the
+#       client — and the writer deadlocks (and the logfile freezes with
+#       it, since logging happens at delivery time).
+probe_scm=$log.probe.scm
+cat > "$probe_scm" <<'EOF'
+(use-modules (rnrs bytevectors))
+(sigaction SIGPIPE SIG_IGN)   ;peer may vanish mid-write (qemu exit at poweroff)
+(let ((s     (socket PF_UNIX SOCK_STREAM 0))
+      (path  (cadr (command-line)))
+      (lines (cddr (command-line)))
+      (buf   (make-bytevector 4096)))
+  (define (drain)
+    (let loop ()
+      (define n
+        (catch 'system-error
+          (lambda () (recv! s buf MSG_DONTWAIT))
+          (lambda args 0)))                       ;EAGAIN etc: nothing to read
+      (when (> n 0) (loop))))
+  (define (pause seconds)                         ;sleep, draining as we go
+    (let loop ((ticks (inexact->exact (round (* seconds 10)))))
+      (when (> ticks 0)
+        (drain) (usleep 100000) (loop (- ticks 1)))))
+  (define (send-slow str)
+    (string-for-each (lambda (c)
+                       (display c s) (force-output s)
+                       (drain) (usleep 2000))
+                     str))
+  (define (ctrl-c)
+    (display (string (integer->char 3)) s) (force-output s)
+    (pause 0.4))
+  (connect s AF_UNIX path)
+  (send-slow "\r\n") (pause 0.8)
+  (ctrl-c)
+  (send-slow "root\r\n") (pause 6)
+  (for-each (lambda (l)
+              (ctrl-c)
+              (send-slow l) (send-slow "\r\n")
+              (pause 3))
+            lines)
+  (ctrl-c)
+  (send-slow "exit\r\n") (pause 1)
+  (close-port s))
+EOF
+
+# One probe round: log in and emit VIRTCHK sentinels for the post-switchover
+# milestones.  The $u/$w/... indirection keeps the echoed command text from
+# matching the assertion greps.  Once reader-session's start is confirmed,
+# stop it: on virt there is no EBC framebuffer, so KOReader's luajit spins a
+# whole vCPU, which under TCG floods the console with soft-lockup/RCU-stall
+# splats and makes the shell sluggish — stopping it keeps later rounds and
+# the poweroff crisp.  (Its 'has been started' line stays in the syslog, so
+# the assertion is unaffected.)
+probe_round() {
+  guile -s "$probe_scm" "$sock" \
+    "if grep -q 'Service udev has been started' /var/log/messages; then u=yes; else u=no; fi; echo VIRTCHK-UDEV-\$u" \
+    "if grep -q 'Service pinenote-waveform has been started' /var/log/messages; then w=yes; else w=no; fi; echo VIRTCHK-WVF-\$w" \
+    "if grep -q 'Service pinenote-ebc-params has been started' /var/log/messages; then e=yes; else e=no; fi; echo VIRTCHK-EBCP-\$e" \
+    "if grep -q 'Service reader-session has been started' /var/log/messages; then r=yes; else r=no; fi; echo VIRTCHK-RDR-\$r" \
+    "if [ \"\$r\" = yes ]; then timeout 20 herd stop reader-session > /dev/null 2>&1; fi" \
+    2>/dev/null || true
+}
+
+all_sentinels_present() {
+  grep -aq 'VIRTCHK-UDEV-yes' "$log" && \
+  grep -aq 'VIRTCHK-WVF-yes'  "$log" && \
+  grep -aq 'VIRTCHK-EBCP-yes' "$log" && \
+  grep -aq 'VIRTCHK-RDR-yes'  "$log"
+}
+
+# Phase 1: wait for the console login prompt (or early death/stall).
+reason=login-wait-expired
 while kill -0 "$qemu_pid" 2>/dev/null; do
+  if grep -aq 'login:' "$log" 2>/dev/null; then
+    reason=probing
+    break
+  fi
+  if [ "$(elapsed)" -ge "$VIRT_ASSERT_LOGIN_WAIT" ]; then
+    break
+  fi
   sleep 3
-  waited=$((waited + 3))
-  size=$(wc -c < "$log" 2>/dev/null || echo 0)
-  if [ "$size" = "$last_size" ]; then
-    quiet=$((quiet + 3))
-  else
-    quiet=0
-    last_size=$size
-  fi
-  # Only honour quiescence once the boot has reached the initrd handoff,
-  # so an unusually slow kernel/initrd stage is never read as "done".
-  if [ "$quiet" -ge "$VIRT_ASSERT_QUIESCE" ] && \
-     grep -q 'handoff to Guix root mount' "$log" 2>/dev/null; then
-    reason=quiescent
-    break
-  fi
-  # Fallback: a much longer silence with no handoff means an early panic or
-  # stall (healthy boots produce steady output up to the handoff). Bound it
-  # instead of waiting out the whole cap; the assertions then fail cleanly.
-  if [ "$quiet" -ge $((VIRT_ASSERT_QUIESCE * 2)) ]; then
-    reason=quiescent-early
-    break
-  fi
-  if [ "$waited" -ge "$VIRT_ASSERT_TIMEOUT" ]; then
-    reason=cap
-    break
-  fi
 done
+kill -0 "$qemu_pid" 2>/dev/null || reason=qemu-exited-early
+
+# Phase 2: probe rounds until every sentinel is yes or the cap expires.
+if [ "$reason" = probing ]; then
+  printf '  login prompt at %ss; probing in-guest service state\n' "$(elapsed)"
+  reason=cap
+  while kill -0 "$qemu_pid" 2>/dev/null; do
+    probe_round
+    if all_sentinels_present; then
+      reason=all-green
+      break
+    fi
+    if [ "$(elapsed)" -ge "$VIRT_ASSERT_TIMEOUT" ]; then
+      break
+    fi
+    printf '  (sentinels incomplete at %ss; will probe again)\n' "$(elapsed)"
+    sleep "$VIRT_ASSERT_PROBE_INTERVAL"
+  done
+fi
+
+# Phase 3: clean shutdown so the run ends deterministically (and the stop
+# path gets exercised).  -no-reboot makes qemu exit on poweroff.
+if [ "$reason" = all-green ] && kill -0 "$qemu_pid" 2>/dev/null; then
+  printf '  all sentinels green at %ss; powering off\n' "$(elapsed)"
+  # shepherd's halt powers the machine off; absolute path because there is
+  # no 'poweroff' on Guix and root's PATH may lack sbin
+  guile -s "$probe_scm" "$sock" "/run/current-system/profile/sbin/halt" \
+    2>/dev/null || true
+  i=0
+  while kill -0 "$qemu_pid" 2>/dev/null; do
+    [ "$i" -ge 90 ] && { reason=poweroff-timeout; break; }
+    sleep 3; i=$((i + 3))
+  done
+fi
 if kill -0 "$qemu_pid" 2>/dev/null; then
   kill_qemu
-else
-  reason=qemu-exited
 fi
 wait "$qemu_pid" 2>/dev/null || true
 
 printf 'qemu-virt assertions: capture ended (%s, %ss, %s bytes)\n\n' \
-  "$reason" "$waited" "$(wc -c < "$log" 2>/dev/null || echo 0)"
+  "$reason" "$(elapsed)" "$(wc -c < "$log" 2>/dev/null || echo 0)"
 
 # ---------------------------------------------------------------------------
 # Assertions.  require = must be present; forbid = must be absent.
+# Milestones up to "Starting service udev" print on the console (shepherd
+# still logs via /dev/kmsg then); everything later comes from the VIRTCHK
+# sentinels emitted by the in-guest probe.
 # ---------------------------------------------------------------------------
 rc=0
 require() { # LABEL REGEX
-  if grep -Eq -- "$2" "$log"; then
+  if grep -aEq -- "$2" "$log"; then
     printf '  PASS  require  %s\n' "$1"
   else
     printf '  FAIL  require  %s\n' "$1"
@@ -172,7 +288,7 @@ require() { # LABEL REGEX
   fi
 }
 forbid() { # LABEL REGEX
-  if grep -Eq -- "$2" "$log"; then
+  if grep -aEq -- "$2" "$log"; then
     printf '  FAIL  forbid   %s\n' "$1"
     rc=1
   else
@@ -180,7 +296,7 @@ forbid() { # LABEL REGEX
   fi
 }
 
-printf 'Required boot milestones (through Shepherd start):\n'
+printf 'Required boot milestones (console log, through Shepherd start):\n'
 require 'kernel boots'                 'Booting Linux on physical CPU'
 require 'PREEMPT_RT kernel'            'SMP PREEMPT_RT'
 require 'root=PNGuixRoot on cmdline'   'Kernel command line:.*root=PNGuixRoot'
@@ -191,6 +307,13 @@ require 'PNGuixRoot visible pre-root'  'PineNote initrd: PNGuixRoot is visible b
 require 'root fs mounts (fsck clean)'  'PNGuixRoot: clean'
 require 'shepherd root-fs up'          'Service root-file-system running with value #t'
 require 'reached udev service'         'Starting service udev'
+
+printf '\nRequired service milestones (in-guest probe of /var/log/messages):\n'
+require 'udev service completes'       'VIRTCHK-UDEV-yes'
+require 'waveform one-shot ran'        'VIRTCHK-WVF-yes'
+require 'ebc-params one-shot ran'      'VIRTCHK-EBCP-yes'
+require 'reader-session started'       'VIRTCHK-RDR-yes'
+require 'clean poweroff'               'reboot: Power down'
 
 printf '\nForbidden regressions:\n'
 forbid 'waveform partition not found'  'PineNote initrd: warning: waveform partition not found'

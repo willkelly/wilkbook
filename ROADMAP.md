@@ -114,31 +114,25 @@ independently useful, and 1–3 start roadmap track 4 without hardware:
        pair with the driver's `EXTRACT_FBS` ioctl as a
        hardware-differential oracle.
 4. [x] **Mechanized qemu-virt assertions** — `make qemu-virt-check`, built
-       2026-07-04. Boots the real kernel/initrd/rootfs on virt, captures
-       the console, kills QEMU on log quiescence, and asserts the boot
-       milestones through Shepherd start (kernel + PREEMPT_RT, initrd
-       waveform install + EBC module load, PNGuixRoot pre-root visibility,
-       root mount) plus the absence of panic / RT-splat / root-not-found /
-       PNGuixRoot-not-visible. Runs in <1 min; guards the
-       config/initrd/root-mount regression class (the VIRTIO_MENU-drop
-       class that was already hit). The doc/building.md overstatement ("the
-       one-shot services run" on virt) is corrected. **Found while building
-       it:** the virt boot deadlocks entering the udev service (idle-CPU
-       hang — 0.5% host CPU, see `doc/status.md`), so it never reaches the
-       post-udev services. The `pinenote-waveform`-after-udev, gadget
-       modprobe-via-`-d`, and debugfs assertions this rung originally
-       wanted are therefore NOT reachable in virt and stay guarded by the
-       host tools and hardware. Unblocking them needs the hang fixed:
-   - [ ] **Diagnose the qemu-virt udev deadlock.** The boot reaches
-         `Starting service udev` and then hangs with the guest idle (a
-         blocked worker or `udevadm settle`, not a TCG slowdown — confirmed
-         by CPU sampling). Make it self-diagnosing: build a debug kernel
-         with `CONFIG_MAGIC_SYSRQ_SERIAL=y` + `CONFIG_DETECT_HUNG_TASK=y`
-         (both currently off) to capture the blocked-task backtrace, or
-         attach gdb to QEMU's `-s` gdbstub with vmlinux symbols. Likely
-         suspects: a coldplug rule on an initrd-loaded EBC/DRM module, or a
-         worker blocked on a device node. Fixing it restores the
-         service-ordering assertions above.
+       2026-07-04, completed 2026-07-05. Boots the real
+       kernel/initrd/rootfs on virt with the console on a socket chardev,
+       asserts the boot milestones through Shepherd start from the console
+       log (kernel + PREEMPT_RT, initrd waveform install + EBC module
+       load, PNGuixRoot pre-root visibility, root mount) plus the absence
+       of panic / RT-splat / root-not-found / PNGuixRoot-not-visible, then
+       **logs in as root over the console socket and asserts the post-udev
+       service stack from inside the guest** (udev completion, the
+       pinenote-waveform and pinenote-ebc-params one-shots, reader-session
+       start, clean poweroff) — the Shepherd service-ordering regression
+       class that cost the first two hardware sessions.
+   - [x] **Diagnose the qemu-virt udev "deadlock".** Root-caused
+         2026-07-05: there was no deadlock. Shepherd's messages divert
+         from /dev/kmsg (console-visible) to /var/log/messages the moment
+         its system-log service starts listening on /dev/log (~t+5 s), so
+         the console goes dark while the boot completes normally
+         underneath — udev, one-shots, and KOReader all come up on virt.
+         Hence the in-guest assertions above. See `doc/status.md`
+         2026-07-05.
 5. [ ] **vkms writeback screenshot tests** (~1–3 days, after rung 3
        exists to screenshot). Validates DRM clients: atomic commits,
        `FB_DAMAGE_CLIPS` emission (what the EBC consumes), pixel-exact
@@ -202,7 +196,8 @@ the start of this track — no panel required. Policy background in
       early.
 - [x] Reader decision — **KOReader, running natively on the
       framebuffer**. First light 2026-07-05: quickstart guide on the
-      panel, pen-navigable UI (`doc/status.md`). The cage/SDL kiosk
+      panel, pen- and finger-navigable UI (cyttsp5 touch validated on
+      hardware the same day; `doc/status.md`). The cage/SDL kiosk
       architecture was abandoned on hardware evidence (SDL3 cannot
       present on Wayland without GL/Vulkan — `doc/koreader-spike.md`
       §3); the shipped stack is `koreader-bin` + a wilkbook-authored
@@ -210,8 +205,7 @@ the start of this track — no panel required. Policy background in
       `GLOBAL_REFRESH` ioctl for full refreshes) run directly by the
       `reader-session` service. `wlroots-pixman`/`cage-pixman` stay in
       the repo (cross-building, unused).
-- [ ] Reader polish, in order: finger touch (cyttsp5 DTS node staged,
-      needs a hardware session); refresh-policy tuning (KOReader's
+- [ ] Reader polish, in order: refresh-policy tuning (KOReader's
       partial/UI/full hints → EBC behavior; the `org.pinenote.ebc`
       dbus/UAPI compatibility story remains relevant for community
       tooling); pen buttons + #14694 stylus tags; unprivileged-user

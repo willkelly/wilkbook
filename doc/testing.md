@@ -94,12 +94,19 @@ device model, 7b, remains future work.)
    This catches the config/initrd/root-mount regression class (it's how the
    VIRTIO_MENU olddefconfig drop was caught): kernel + PREEMPT_RT boot,
    initrd waveform discovery + EBC module load, PNGuixRoot pre-root
-   visibility, and root mount — through Shepherd start. It does **not**
-   reach the post-udev services: the virt boot deadlocks entering udev
-   (idle-CPU hang, 2026-07-04; see `doc/status.md`), so Shepherd *service
-   ordering* (the waveform/udev race, gadget modprobes via `-d`) is not
-   covered here and stays on the host tools and hardware. `dummy_hcd`/`vkms`
-   are built for a later rung but aren't reachable through this boot.
+   visibility, root mount, **udev completion, the post-udev one-shots**
+   (waveform install, EBC params), **reader-session start, and a clean
+   poweroff** — the Shepherd service-ordering class that cost the first
+   two hardware sessions. Because shepherd's messages divert from the
+   console (/dev/kmsg) to /var/log/messages once its system-log service
+   is up (~t+5 s — the source of the retracted 2026-07-04 "virt
+   deadlocks entering udev" finding; see `doc/status.md` 2026-07-05),
+   the harness asserts the post-udev milestones by logging in as root
+   over the console socket and grepping the guest's own
+   /var/log/messages, emitting VIRTCHK-\* sentinels into the console
+   log. The ACM gadget service still can't succeed on virt (no dwc3),
+   and `dummy_hcd`/`vkms` are built for a later rung but aren't
+   reachable through this boot.
 5. **Mock helper + boot-bundle inspection** — the preflight scripts.
 6. **Hardware deployment** — `doc/hardware-deploy.md`, backups per
    `doc/device-runbook.md` verified first. Write os2 only; os1 is the
