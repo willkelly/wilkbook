@@ -309,8 +309,11 @@ on the new image, and the new **rung 4v visual loop** (`make
 qemu-virt-visual`) passed first try — QMP screendumps show the KOReader
 quickstart rendered in Equity at 1872x1404 on the virt framebuffer, and
 a scripted tap dismissed a toast (input path proven; shots in the run
-directory). Next hardware session: write this image to os2 and judge
-the flash policy + first-paint wash with real optics.
+directory). **os2 write done same evening** (full protocol, readback-SHA verified
+byte-exact); boot + optics judgment pending — the visible tests are (1)
+boot text washes to white before KOReader appears, (2) menu open/close
+no longer flashes the whole panel, (3) where ghosting from un-flashed
+overlays actually bothers a reader.
 
 ## 2026-07-05 os2 write: final reader image deployed (unattended boot pending)
 
