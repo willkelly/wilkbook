@@ -249,7 +249,10 @@
   (list
    (shepherd-service
     (provision '(pinenote-usb-acm-gadget))
-    (requirement '(root-file-system))
+    ;; file-systems (not just root-file-system): starting alongside the
+    ;; fstab mounts raced the kernel debugfs/configfs mounts to EBUSY on
+    ;; first light (2026-07-04), cascading into every dependent service.
+    (requirement '(file-systems))
     (documentation "Expose a temporary USB CDC-ACM gadget as /dev/ttyGS0.")
     (one-shot? #t)
     (modules '((ice-9 ftw)

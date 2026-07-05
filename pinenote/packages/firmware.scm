@@ -132,6 +132,10 @@ Debian screen image from device backups.")
                (lambda (port)
                  (display "#!/bin/sh\n" port)
                  (display "set -eu\n" port)
+                 ;; shepherd one-shots run with an empty environment; the
+                 ;; external tools below (dd, cp, mktemp, ...) need a PATH
+                 ;; (first-light finding 2026-07-04: cat -> exit 127).
+                 (display "export PATH=\"/run/current-system/profile/bin${PATH:+:$PATH}\"\n" port)
                  (display "primary_source=/dev/disk/by-partlabel/waveform\n" port)
                  (display "fallback_source=/state/firmware/ebc.wbf\n" port)
                  (display "destination=/lib/firmware/rockchip/ebc.wbf\n" port)
@@ -196,6 +200,8 @@ Debian screen image from device backups.")
                (lambda (port)
                 (display "#!/bin/sh\n" port)
                 (display "set -eu\n" port)
+                ;; see waveform-script: shepherd runs this with no PATH
+                (display "export PATH=\"/run/current-system/profile/bin${PATH:+:$PATH}\"\n" port)
                 (display "directory=/sys/module/rockchip_ebc/parameters\n" port)
                 (display "if [ ! -d \"$directory\" ]; then\n" port)
                 (display "  echo 'rockchip_ebc parameters are not available yet' >&2\n" port)
