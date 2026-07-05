@@ -286,6 +286,24 @@ fix):
   all tests pass; see `pinenote/tools/wbf/README.md` for what the
   waveform contains).
 
+## 2026-07-05 os2 write: final reader image deployed (unattended boot pending)
+
+Wrote `pinenote-reader-PNGuixRoot-20260705.ext4` (SHA
+`0a8a55c253119249da44ef8421f538deb82b2d1899beb3164cc318ad68a1894c`,
+1 903 083 520 bytes) to `/dev/mmcblk0p6` from os1 over SSH with the full
+protocol (os1-root confirmed, p6 unmounted, dd with fsync, readback-SHA
+verified byte-exact). This supersedes the first-light build that was on
+os2, which predates the KO_HOME fix and white-screens on unattended
+boot. What's new in this image vs. what os2 held: KO_HOME set by
+reader-session (fixes the cache-init crash loop), MB Type fonts staged
+with Equity A / Concourse 4 / Triplicate A Code defaults (Noto
+fallbacks), cyttsp5 finger-touch DTS node, and the three boot-service
+fixes. All offline gates green at deploy time, including the completed
+rung 4 (full service stack + clean poweroff asserted in-guest, 2×
+consecutive). **Pending user-present step:** power-on boot of os2 with
+*no console intervention* — expectation is KOReader on the panel from
+cold boot; that result should be recorded here.
+
 ## 2026-07-05 the qemu-virt "udev deadlock" was never a deadlock — rung 4 now asserts the full service stack
 
 The 2026-07-04 "virt deadlocks entering udev" finding (below) is
