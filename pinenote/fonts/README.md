@@ -17,9 +17,12 @@ ships**. Everything under `local/` is gitignored.
 - If the directory is absent or empty, the build proceeds without it —
   a fresh clone builds fine.
 
-The reader-session service also seeds `cre_font = "Equity A"` as the
-default book font on first boot (only when no KOReader settings exist
-yet; it never overwrites choices made on the device).
+The reader-session service also seeds the font defaults on first boot
+(only when no KOReader settings exist yet; it never overwrites choices
+made on the device), mirroring wilkhome's fontconfig aliases: book/serif
+= Equity A, sans-serif = Concourse 4, monospace = Triplicate A Code.
+KOReader's built-in fallback chain (Noto Serif/Sans, Noto CJK,
+FreeSans/FreeSerif) remains in effect beneath these.
 
 ## Provenance (Will's setup)
 

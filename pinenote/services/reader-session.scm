@@ -47,8 +47,12 @@
          (when (file-exists? #$%fbcon-bind)
            (call-with-output-file #$%fbcon-bind
              (lambda (port) (display "0" port))))
-         ;; when local fonts are staged in the image, seed the default
-         ;; book font once (never overwrite on-device choices)
+         ;; when local fonts are staged in the image, seed the font
+         ;; defaults once (never overwrite on-device choices).  Mirrors
+         ;; wilkhome's fontconfig aliases: serif=Equity, sans=Concourse,
+         ;; mono=Triplicate Code; crengine's built-in fallback chain
+         ;; (Noto Serif/Sans, CJK, FreeSans/Serif) stays in effect below
+         ;; these.
          #$@(if pinenote-local-fonts
                 #~((let ((settings "/root/.config/koreader/settings.reader.lua"))
                      (unless (file-exists? settings)
@@ -62,6 +66,12 @@
 -- seeded by wilkbook reader-session; KOReader rewrites this file
 return {
     [\"cre_font\"] = \"Equity A\",
+    [\"monospace_font\"] = \"Triplicate A Code\",
+    [\"cre_font_family_fonts\"] = {
+        [\"serif\"] = \"Equity A\",
+        [\"sans-serif\"] = \"Concourse 4\",
+        [\"monospace\"] = \"Triplicate A Code\",
+    },
 }
 " port))))))
                 #~())
