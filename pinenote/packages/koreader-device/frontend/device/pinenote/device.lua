@@ -21,11 +21,34 @@ require("ffi/linux_input_h")
 local function yes() return true end
 local function no() return false end
 
--- Input device nodes (see /proc/bus/input/devices; stable on this kernel).
-local PEN_DEVICE = "/dev/input/event2"     -- w9013 EMR digitizer
-local PWRKEY_DEVICE = "/dev/input/event0"  -- rk805 pwrkey
-local GPIOKEYS_DEVICE = "/dev/input/event1"
-local PENBTN_DEVICE = "/dev/input/event5"  -- ws8100 BT pen buttons
+-- Input devices are resolved by name: event numbering shuffles across
+-- kernels (adding the cyttsp5 touchscreen moved the pen from event2 to
+-- event3).  "Stylus" matches the w9013's pen interface only (its second
+-- interface, "w9013 2D1F:0095", is not opened).
+local function findInputDevices()
+    local found = {}
+    for n = 0, 31 do
+        local f = io.open(string.format(
+            "/sys/class/input/event%d/device/name", n), "r")
+        if f then
+            local name = f:read("*line") or ""
+            f:close()
+            local node = string.format("/dev/input/event%d", n)
+            if name:find("Stylus") then
+                found.pen = node
+            elseif name == "cyttsp5" then
+                found.touch = node
+            elseif name == "rk805 pwrkey" then
+                found.pwrkey = node
+            elseif name == "gpio-keys" then
+                found.gpiokeys = node
+            elseif name == "ws8100_pen" then
+                found.penbtn = node
+            end
+        end
+    end
+    return found
+end
 
 -- DRM_IOCTL_ROCKCHIP_EBC_GLOBAL_REFRESH:
 -- _IOWR('d', 0x40, struct { bool }) = 0xC0016440
@@ -97,15 +120,30 @@ function PineNote:init()
         input = require("ffi/input_evdev"),
     }
 
-    self.input:open(PEN_DEVICE, "w9013 pen digitizer")
-    self.input:open(PWRKEY_DEVICE, "rk805 pwrkey")
-    self.input:open(GPIOKEYS_DEVICE, "gpio-keys")
-    self.input:open(PENBTN_DEVICE, "ws8100 pen buttons")
+    local devs = findInputDevices()
+    if devs.pen then self.input:open(devs.pen, "w9013 pen digitizer") end
+    if devs.touch then self.input:open(devs.touch, "cyttsp5 touchscreen") end
+    if devs.pwrkey then self.input:open(devs.pwrkey, "rk805 pwrkey") end
+    if devs.gpiokeys then self.input:open(devs.gpiokeys, "gpio-keys") end
+    if devs.penbtn then self.input:open(devs.penbtn, "ws8100 pen buttons") end
+    if not (devs.pen or devs.touch) then
+        logger.warn("PineNote: no pen or touchscreen input device found")
+    end
 
-    -- Scale pen coordinates to the framebuffer.
+    -- Coordinate mapping.  The cyttsp5 touchscreen reports native
+    -- screen coordinates (0..1871 x 0..1403 — verified on hardware), so
+    -- its ABS_MT_* events pass through untouched.  The pen reports
+    -- digitizer units (20966x15725) on plain ABS_X/ABS_Y and needs
+    -- scaling — but the touchscreen ALSO emits legacy plain ABS_X/ABS_Y
+    -- alongside its MT events, so the scale is applied only while the
+    -- pen is in proximity (inside its BTN_TOOL_PEN bracket).
     local evdev = require("ffi/input_evdev")
-    local _, max_x = evdev.absinfo(PEN_DEVICE, C.ABS_X)
-    local _, max_y = evdev.absinfo(PEN_DEVICE, C.ABS_Y)
+    local max_x, max_y
+    if devs.pen then
+        local _min
+        _min, max_x = evdev.absinfo(devs.pen, C.ABS_X)
+        _min, max_y = evdev.absinfo(devs.pen, C.ABS_Y)
+    end
     local screen_w = self.screen:getRawSize().w
     local screen_h = self.screen:getRawSize().h
     if max_x and max_x > 0 and max_y and max_y > 0 then
@@ -114,8 +152,11 @@ function PineNote:init()
         logger.info(string.format(
             "PineNote: pen axes %dx%d -> screen %dx%d (scale %.4f/%.4f)",
             max_x, max_y, screen_w, screen_h, scale_x, scale_y))
+        local pen_in_proximity = false
         self.input:registerEventAdjustHook(function(_, ev)
-            if ev.type == C.EV_ABS then
+            if ev.type == C.EV_KEY and ev.code == C.BTN_TOOL_PEN then
+                pen_in_proximity = ev.value ~= 0
+            elseif pen_in_proximity and ev.type == C.EV_ABS then
                 if ev.code == C.ABS_X then
                     ev.value = math.floor(ev.value * scale_x + 0.5)
                 elseif ev.code == C.ABS_Y then
@@ -123,7 +164,7 @@ function PineNote:init()
                 end
             end
         end)
-    else
+    elseif devs.pen then
         logger.warn("PineNote: could not query pen axis ranges; pen coordinates unscaled")
     end
 
