@@ -119,16 +119,22 @@ Also staged 2026-07-03:
 
 ## Current os2 contents
 
-Written and readback-verified 2026-07-05 from os1 (**not yet booted**):
-`pinenote-reader-PNGuixRoot-20260705.ext4`, 1,895,833,600 bytes, SHA-256
-`4039340409ccc2cbd1853ef455f54a297b0c573b19101a83a7863222302ad3fb` (host
-artifact, staged copy at `/home/user/wilkbook-artifacts/` on os1, and p6
-readback all identical). Offline gates before the write: host tool
-suites, kernel cross-build, rootfs preflight, DTB/bundle content checks
-(`touchscreen@24` present; pinenote device + probe grafted; koreader.sh
-shebang clean), and rung-4 `make qemu-virt-check` fully green on this
-exact rootfs. Contents — everything the first-light session proved out
-plus the touchscreen enablement:
+os2 currently holds the 2026-07-05 morning build (SHA `40393404…`,
+written and readback-verified from os1) — **booted and live-debugged the
+same day** (second session record below): the touchscreen probed and
+works, but KOReader crashed on the read-only store bundle (KO_HOME
+missing) and the hardcoded input paths were stale; both were hotfixed
+live and are fixed in-repo.
+
+**Deployment candidate, ready to write**:
+`pinenote-reader-PNGuixRoot-20260705.ext4` (current build), SHA-256
+`0a8a55c253119249da44ef8421f538deb82b2d1899beb3164cc318ad68a1894c`.
+Adds over the on-device build: `KO_HOME` (the white-screen fix),
+name-based input device resolution + touchscreen + scoped pen scaling
+(all hardware-validated live), and the locally staged MB Type fonts
+with seeded serif/sans/mono defaults (`pinenote/fonts/README.md`).
+rung-4 `make qemu-virt-check` green on this exact rootfs. Contents
+carried over from the morning build:
 
 - KOReader **native fbdev** device target grafted into `koreader-bin`
   (pen input via pure-Lua evdev backend, frontlight/battery powerd,
