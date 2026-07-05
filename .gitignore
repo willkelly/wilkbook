@@ -1,2 +1,5 @@
 *~
 .sisyphus/
+
+# licensed fonts staged locally for image builds; never committed
+/pinenote/fonts/local/

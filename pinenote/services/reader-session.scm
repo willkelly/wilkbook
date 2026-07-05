@@ -2,6 +2,7 @@
   #:use-module (gnu services)
   #:use-module (gnu services shepherd)
   #:use-module (guix gexp)
+  #:use-module (pinenote packages fonts)
   #:use-module (pinenote packages koreader)
   #:export (pinenote-reader-session-service-type))
 
@@ -46,6 +47,24 @@
          (when (file-exists? #$%fbcon-bind)
            (call-with-output-file #$%fbcon-bind
              (lambda (port) (display "0" port))))
+         ;; when local fonts are staged in the image, seed the default
+         ;; book font once (never overwrite on-device choices)
+         #$@(if pinenote-local-fonts
+                #~((let ((settings "/root/.config/koreader/settings.reader.lua"))
+                     (unless (file-exists? settings)
+                       (for-each (lambda (dir)
+                                   (unless (file-exists? dir)
+                                     (mkdir dir #o700)))
+                                 '("/root/.config" "/root/.config/koreader"))
+                       (call-with-output-file settings
+                         (lambda (port)
+                           (display "\
+-- seeded by wilkbook reader-session; KOReader rewrites this file
+return {
+    [\"cre_font\"] = \"Equity A\",
+}
+" port))))))
+                #~())
          (apply
           (make-forkexec-constructor
            ;; reader.lua's own shebang is #!./luajit, so run the
@@ -63,7 +82,12 @@
            (list "HOME=/root"
                  "KO_HOME=/root/.config/koreader"
                  "PATH=/run/current-system/profile/bin"
-                 "LC_ALL=en_US.UTF-8")
+                 "LC_ALL=en_US.UTF-8"
+                 ;; KOReader's supported external-font hook; only set
+                 ;; when fonts are actually staged in this image
+                 #$@(if pinenote-local-fonts
+                        #~("EXT_FONT_DIR=/run/current-system/profile/share/fonts/local")
+                        #~()))
            #:log-file "/var/log/reader-session.log")
           args)))
     (stop

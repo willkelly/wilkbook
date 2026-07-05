@@ -3,6 +3,7 @@
   #:use-module (gnu services base)
   #:use-module (gnu system)
   #:use-module (guix gexp)
+  #:use-module (pinenote packages fonts)
   #:use-module (pinenote packages koreader)
   #:use-module (pinenote services reader-session)
   #:use-module (pinenote services usb-gadget)
@@ -41,6 +42,11 @@ reader ALL=(ALL) NOPASSWD: ALL
     (inherit (make-pinenote-operating-system
               #:host-name "pinenote-reader"
               #:packages (append (list koreader-bin)
+                                 ;; licensed fonts staged locally; #f on
+                                 ;; a fresh clone (pinenote/fonts/README.md)
+                                 (if pinenote-local-fonts
+                                     (list pinenote-local-fonts)
+                                     '())
                                  %pinenote-local-packages
                                  %base-packages)
               #:services pinenote-reader-services))
