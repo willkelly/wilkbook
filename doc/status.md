@@ -312,10 +312,15 @@ qemu-virt-visual`) passed first try — QMP screendumps show the KOReader
 quickstart rendered in Equity at 1872x1404 on the virt framebuffer, and
 a scripted tap dismissed a toast (input path proven; shots in the run
 directory). **os2 write done same evening** (full protocol, readback-SHA verified
-byte-exact); boot + optics judgment pending — the visible tests are (1)
-boot text washes to white before KOReader appears, (2) menu open/close
-no longer flashes the whole panel, (3) where ghosting from un-flashed
-overlays actually bothers a reader.
+byte-exact) and **booted + judged the same evening**: boot-text wash
+works ("boot worked right"), menus are "a bit better", **no real
+ghosting observed** from the un-flashed overlays, overall verdict
+"pretty awesome". Remaining optics complaint: the periodic full refresh
+(every 6th page turn, KOReader's default) is "very flashy... a lot of
+black" — that is GC16's inversion drive, the next policy target (can
+the global use a gentler waveform? how few fulls can we get away with,
+given ghosting stayed invisible?). Separate finding: stylus+touch UX
+"feels wrong" — input-architecture rework queued (prefab survey).
 
 ## 2026-07-05 os2 write: final reader image deployed (unattended boot pending)
 
