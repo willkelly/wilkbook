@@ -205,6 +205,22 @@ the start of this track — no panel required. Policy background in
       `GLOBAL_REFRESH` ioctl for full refreshes) run directly by the
       `reader-session` service. `wlroots-pixman`/`cage-pixman` stay in
       the repo (cross-building, unused).
+- [ ] **Refresh-policy program (started 2026-07-05).** Root causes of
+      the first-light rough edges are known (see `doc/status.md`):
+      menu flashing was flashui/flashpartial cascading into the
+      whole-panel GLOBAL_REFRESH; partial updates run at GC16 (~450 ms;
+      DU is ~224 ms, A2 ~118 ms per the panel wbf); boot text lingered
+      because nothing cleared the retained panel. Phase A (landed):
+      area-thresholded flash policy + `[pn-refresh]` intent tracing in
+      the device target, panel blank+wash before KOReader spawns, and
+      the rung-4v visual loop. Phase B: the trace-replay workbench —
+      extend the rung-7a verbatim-driver harness + rastersim to replay
+      captured intent traces under candidate policies (waveform choices,
+      flash thresholds, runtime param flips) and emit per-frame PGMs +
+      metrics (flash count, frames-to-settle, est. ms/page-turn).
+      Phase C: one hardware session validates the winning policy's
+      optics. The `org.pinenote.ebc` dbus/UAPI compatibility story
+      stays in scope for phase B design.
 - [ ] Reader polish, in order: refresh-policy tuning (KOReader's
       partial/UI/full hints → EBC behavior; the `org.pinenote.ebc`
       dbus/UAPI compatibility story remains relevant for community

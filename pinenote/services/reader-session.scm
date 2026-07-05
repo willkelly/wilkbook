@@ -23,6 +23,33 @@
 
 (define %fbcon-bind "/sys/class/vtconsole/vtcon1/bind")
 
+;; Blank the panel to clean white and run one global refresh, so the
+;; boot console text does not linger on the e-ink (which retains it
+;; unpowered) for the several seconds KOReader takes to start.  Runs via
+;; the bundle's own luajit: Guile cannot issue the DRM ioctl, and the
+;; ~10 lines of ffi below beat shipping a C helper.  Best-effort on
+;; purpose — on qemu-virt the ioctl fails harmlessly (no EBC), and a
+;; missing fb0 just skips the fill.
+(define %panel-blank-lua "
+local ffi = require('ffi')
+ffi.cdef('int open(const char*,int); long write(int,const void*,unsigned long); int close(int); int ioctl(int,unsigned long,...);')
+local C = ffi.C
+local fb = C.open('/dev/fb0', 1)
+if fb >= 0 then
+  local n = 1048576
+  local buf = ffi.new('uint8_t[?]', n)
+  ffi.fill(buf, n, 0xFF)
+  while C.write(fb, buf, n) > 0 do end
+  C.close(fb)
+end
+local card = C.open('/dev/dri/card0', 2)
+if card >= 0 then
+  local arg = ffi.new('uint8_t[1]', 1)
+  C.ioctl(card, 0xC0016440, arg)
+  C.close(card)
+end
+")
+
 (define (pinenote-reader-session-shepherd-service _config)
   (list
    (shepherd-service
@@ -47,6 +74,10 @@
          (when (file-exists? #$%fbcon-bind)
            (call-with-output-file #$%fbcon-bind
              (lambda (port) (display "0" port))))
+         ;; wash the boot text off the panel before KOReader appears
+         (when (file-exists? "/dev/fb0")
+           (system* #$(file-append koreader-bin "/lib/koreader/luajit")
+                    "-e" #$%panel-blank-lua))
          ;; when local fonts are staged in the image, seed the font
          ;; defaults once (never overwrite on-device choices).  Mirrors
          ;; wilkhome's fontconfig aliases: serif=Equity, sans=Concourse,

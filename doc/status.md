@@ -288,6 +288,30 @@ fix):
   all tests pass; see `pinenote/tools/wbf/README.md` for what the
   waveform contains).
 
+## 2026-07-05 (evening, offline) refresh-policy phase A built — NOT yet on hardware
+
+Built and offline-validated the first refresh-policy pass plus its
+tooling; **no hardware validation yet** (the deployed os2 image predates
+these changes). New artifact `pinenote-reader-PNGuixRoot-20260705.ext4`
+SHA `f4e0cd5d745a5e963aadc69f4a0e40a9c8b914c054e93755d9334d6fce0e9c98`
+carries: (1) device-target refresh policy v1 — flashui/flashpartial no
+longer always fire the whole-panel GLOBAL_REFRESH; they wash only when
+damage covers >=60% of the panel, so menu open/close stops blinking the
+screen (ghosting is cleared by KOReader's every-N-pages full refresh);
+(2) every refresh intent traced as a `[pn-refresh]` line in
+/var/log/reader-session.log (the capture side of the replay workbench);
+(3) reader-session blanks the panel white + one global wash before
+KOReader spawns, so retained boot text disappears immediately; (4)
+kernel gains virtio-gpu/virtio-input modules (virt-only, invisible on
+hardware) and the KOReader probe honors the harness-only
+`wilkbook.force_device=pinenote` token. Offline gates: rung 4 all green
+on the new image, and the new **rung 4v visual loop** (`make
+qemu-virt-visual`) passed first try — QMP screendumps show the KOReader
+quickstart rendered in Equity at 1872x1404 on the virt framebuffer, and
+a scripted tap dismissed a toast (input path proven; shots in the run
+directory). Next hardware session: write this image to os2 and judge
+the flash policy + first-paint wash with real optics.
+
 ## 2026-07-05 os2 write: final reader image deployed (unattended boot pending)
 
 Wrote `pinenote-reader-PNGuixRoot-20260705.ext4` (SHA

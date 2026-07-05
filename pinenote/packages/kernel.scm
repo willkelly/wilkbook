@@ -56,7 +56,14 @@
         ;; so the configfs/ACM gadget stack can be exercised without dwc3,
         ;; and vkms provides a virtual DRM device for render-path testing.
         "CONFIG_USB_DUMMY_HCD=m"
-        "CONFIG_DRM_VKMS=m"))
+        "CONFIG_DRM_VKMS=m"
+        ;; The offline visual loop (rung 4v): virtio-gpu gives the virt
+        ;; guest a real /dev/fb0 for KOReader to paint (QMP screendump on
+        ;; the host), virtio-input provides scripted tablet/keyboard
+        ;; events.  Modules, loaded by udev coldplug from the rootfs on
+        ;; virt only — no initrd change, invisible on hardware.
+        "CONFIG_DRM_VIRTIO_GPU=m"
+        "CONFIG_VIRTIO_INPUT=m"))
 
 (define %linux-pinenote-patches
   (list (local-file "../patches/linux-pinenote-7.0-forward-port.patch")))

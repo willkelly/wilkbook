@@ -107,6 +107,16 @@ device model, 7b, remains future work.)
    log. The ACM gadget service still can't succeed on virt (no dwc3),
    and `dummy_hcd`/`vkms` are built for a later rung but aren't
    reachable through this boot.
+   **4v. QEMU virt visual loop** (`make qemu-virt-visual ROOTFS=…`) — the
+   same boot plus a virtio-gpu framebuffer at panel resolution
+   (1872x1404) and virtio tablet/keyboard. The KOReader pinenote device
+   target is selected via the harness-only `wilkbook.force_device=
+   pinenote` cmdline token; QMP screendumps assert KOReader actually
+   paints (non-uniform frame) and a scripted tap asserts the input path
+   moves pixels. This is where UI behavior, damage patterns, and the
+   `[pn-refresh]` intent traces iterate without hardware — what the
+   e-ink *optics* do with those updates stays on hardware and rung 7's
+   simulators.
 5. **Mock helper + boot-bundle inspection** — the preflight scripts.
 6. **Hardware deployment** — `doc/hardware-deploy.md`, backups per
    `doc/device-runbook.md` verified first. Write os2 only; os1 is the

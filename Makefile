@@ -91,6 +91,21 @@ qemu-virt-check:
 	  pinenote/scripts/qemu/make-virt-disk.sh '$(ROOTFS)' \"$$disk\" $(WAVEFORM) && \
 	  pinenote/scripts/qemu/run-virt-assertions.sh \"$$bundle\" \"$$disk\""
 
+# QEMU-virt visual loop (offline ladder rung 4v): same boot plus a
+# virtio-gpu framebuffer at panel resolution and scripted virtio input;
+# QMP screendumps assert KOReader paints and reacts to a tap. Usage:
+#   make qemu-virt-visual ROOTFS=<rootfs.ext4> [WAVEFORM=<file>]
+qemu-virt-visual:
+	@test -n "$(ROOTFS)" || { echo "usage: make qemu-virt-visual ROOTFS=<rootfs.ext4> [WAVEFORM=<file>]"; exit 2; }
+	@set -e; \
+	stamp=$$(date +%Y%m%d-%H%M%S); \
+	bundle=/tmp/opencode/pinenote-virtvis-bundle-$$stamp; \
+	disk=/tmp/opencode/pinenote-virtvis-disk-$$stamp.img; \
+	guix shell e2fsprogs gptfdisk qemu -- sh -c "\
+	  pinenote/scripts/preflight/stage-boot-bundle-from-rootfs.sh '$(ROOTFS)' \"$$bundle\" && \
+	  pinenote/scripts/qemu/make-virt-disk.sh '$(ROOTFS)' \"$$disk\" $(WAVEFORM) && \
+	  pinenote/scripts/qemu/run-virt-visual.sh \"$$bundle\" \"$$disk\""
+
 # Host-side waveform parser tests (offline ladder rung 1); needs the
 # per-device .wbf (never committed): make wbf-check WBF=/path/to/ebc.wbf
 wbf-check:

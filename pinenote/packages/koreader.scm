@@ -119,6 +119,10 @@
                               (assoc-ref inputs "pinenote-device"))))
                 (copy-recursively aux kor)
                 ;; Probe order: PineNote before the SDL desktop fallback.
+                ;; Selected by device-tree model on hardware; the
+                ;; wilkbook.force_device=pinenote cmdline token exists for
+                ;; the qemu-virt visual loop (DT model there is
+                ;; "linux,dummy-virt"), appended only by the harness.
                 (substitute* (string-append kor "/frontend/device.lua")
                   (("^    if util\\.loadSDL3\\(\\) then" line)
                    (string-append
@@ -128,6 +132,14 @@
                     "        local model = pinenote_model:read(\"*a\") or \"\"\n"
                     "        pinenote_model:close()\n"
                     "        if model:find(\"PineNote\") then\n"
+                    "            return require(\"device/pinenote/device\")\n"
+                    "        end\n"
+                    "    end\n"
+                    "    local pinenote_cmdline = io.open(\"/proc/cmdline\", \"r\")\n"
+                    "    if pinenote_cmdline then\n"
+                    "        local cmdline = pinenote_cmdline:read(\"*a\") or \"\"\n"
+                    "        pinenote_cmdline:close()\n"
+                    "        if cmdline:find(\"wilkbook.force_device=pinenote\", 1, true) then\n"
                     "            return require(\"device/pinenote/device\")\n"
                     "        end\n"
                     "    end\n\n"

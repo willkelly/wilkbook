@@ -44,6 +44,13 @@ local function findInputDevices()
                 found.gpiokeys = node
             elseif name == "ws8100_pen" then
                 found.penbtn = node
+            -- QEMU virt visual loop (offline testing ladder): scripted
+            -- input arrives via virtio-input devices.  Only ever present
+            -- inside the VM; harmless to look for on hardware.
+            elseif name:find("QEMU Virtio Tablet") then
+                found.virt_tablet = node
+            elseif name:find("QEMU Virtio Keyboard") then
+                found.virt_keyboard = node
             end
         end
     end
@@ -89,19 +96,76 @@ function PineNote:init()
         debug = logger.dbg,
     }
 
-    -- e-ink refresh wiring: deferred-io already publishes damage for
-    -- every paint, so partial refreshes need no explicit kick; a full
-    -- refresh maps to the driver's global-refresh (GC16 wash) ioctl.
+    -- e-ink refresh wiring.  Deferred-io already publishes damage for
+    -- every paint, so anything mapped to "partial" needs no explicit
+    -- kick (the driver partial-refreshes each damage clip with its
+    -- default_waveform); "global" fires the driver's global-refresh
+    -- ioctl (a full-panel wash with its refresh_waveform).
+    --
+    -- Policy v1 (2026-07-05): only 'full' always washes.  The flash
+    -- intents (flashui/flashpartial — menu open/close, dialogs) wash
+    -- only when the damage covers most of the panel; small overlays
+    -- stay partial so summoning a menu no longer blinks the whole
+    -- screen.  Ghosting from un-flashed overlays is cleared by the
+    -- every-N-pages full refresh (KOReader's full_refresh_count).
+    -- Every decision is traced to the session log as one
+    -- "[pn-refresh]" line: the capture side of the offline
+    -- refresh-policy workbench (doc/testing.md).
     local drm_fd = C.open("/dev/dri/card0", bit.bor(C.O_RDWR, C.O_CLOEXEC))
     if drm_fd == -1 then
         logger.warn("PineNote: cannot open /dev/dri/card0; full refresh disabled")
     end
     local refresh_arg = ffi.new("uint8_t[1]", 1)
-    self.screen.refreshPartialImp = function() end
-    self.screen.refreshFullImp = function()
+    local screen_area = nil -- computed lazily; screen size is known post-init
+    local gettime = require("ffi/util").gettime
+    local function trace(intent, decision, x, y, w, h, d)
+        local sec, usec = gettime()
+        logger.info(string.format(
+            "[pn-refresh] %s %s rect=%s,%s,%s,%s dither=%s t=%d.%06d",
+            intent, decision,
+            tostring(x), tostring(y), tostring(w), tostring(h),
+            tostring(d), sec, usec))
+    end
+    local function global_refresh()
         if drm_fd ~= -1 then
             C.ioctl(drm_fd, DRM_GLOBAL_REFRESH, refresh_arg)
         end
+    end
+    -- Flash intents wash the panel only when they cover at least this
+    -- fraction of it.
+    local flash_area_fraction = 0.60
+    local function flash_policy(intent)
+        return function(_, x, y, w, h, d)
+            if not screen_area then
+                local size = self.screen:getRawSize()
+                screen_area = size.w * size.h
+            end
+            local rect_area = (tonumber(w) or 0) * (tonumber(h) or 0)
+            if rect_area >= flash_area_fraction * screen_area then
+                trace(intent, "global", x, y, w, h, d)
+                global_refresh()
+            else
+                trace(intent, "partial", x, y, w, h, d)
+            end
+        end
+    end
+    self.screen.refreshPartialImp = function(_, x, y, w, h, d)
+        trace("partial", "partial", x, y, w, h, d)
+    end
+    self.screen.refreshUIImp = function(_, x, y, w, h, d)
+        trace("ui", "partial", x, y, w, h, d)
+    end
+    self.screen.refreshFastImp = function(_, x, y, w, h, d)
+        trace("fast", "partial", x, y, w, h, d)
+    end
+    self.screen.refreshA2Imp = function(_, x, y, w, h, d)
+        trace("a2", "partial", x, y, w, h, d)
+    end
+    self.screen.refreshFlashUIImp = flash_policy("flashui")
+    self.screen.refreshFlashPartialImp = flash_policy("flashpartial")
+    self.screen.refreshFullImp = function(_, x, y, w, h, d)
+        trace("full", "global", x, y, w, h, d)
+        global_refresh()
     end
 
     self.powerd = require("device/pinenote/powerd"):new{
@@ -127,7 +191,43 @@ function PineNote:init()
     if devs.gpiokeys then self.input:open(devs.gpiokeys, "gpio-keys") end
     if devs.penbtn then self.input:open(devs.penbtn, "ws8100 pen buttons") end
     if not (devs.pen or devs.touch) then
-        logger.warn("PineNote: no pen or touchscreen input device found")
+        -- Offline visual loop on qemu-virt: no PineNote input hardware
+        -- exists, but the harness attaches virtio tablet/keyboard.
+        -- Opening at least one device matters beyond input itself:
+        -- with zero devices, input_evdev.waitForEvent has nothing to
+        -- poll and KOReader aborts into a respawn loop.
+        if devs.virt_tablet then
+            self.input:open(devs.virt_tablet, "qemu virtio tablet")
+            local evdev_ffi = require("ffi/input_evdev")
+            local _min, tab_max_x = evdev_ffi.absinfo(devs.virt_tablet, C.ABS_X)
+            local tab_max_y
+            _min, tab_max_y = evdev_ffi.absinfo(devs.virt_tablet, C.ABS_Y)
+            local size = self.screen:getRawSize()
+            local BTN_LEFT, BTN_TOUCH = 0x110, 0x14a
+            if tab_max_x and tab_max_x > 0 and tab_max_y and tab_max_y > 0 then
+                local sx, sy = size.w / tab_max_x, size.h / tab_max_y
+                self.input:registerEventAdjustHook(function(_, ev)
+                    if ev.type == C.EV_KEY and ev.code == BTN_LEFT then
+                        ev.code = BTN_TOUCH
+                    elseif ev.type == C.EV_ABS then
+                        if ev.code == C.ABS_X then
+                            ev.value = math.floor(ev.value * sx + 0.5)
+                        elseif ev.code == C.ABS_Y then
+                            ev.value = math.floor(ev.value * sy + 0.5)
+                        end
+                    end
+                end)
+                logger.info(string.format(
+                    "PineNote(virt): tablet %dx%d -> screen %dx%d",
+                    tab_max_x, tab_max_y, size.w, size.h))
+            end
+        end
+        if devs.virt_keyboard then
+            self.input:open(devs.virt_keyboard, "qemu virtio keyboard")
+        end
+        if not (devs.virt_tablet or devs.virt_keyboard) then
+            logger.warn("PineNote: no pen or touchscreen input device found")
+        end
     end
 
     -- Coordinate mapping.  The cyttsp5 touchscreen reports native
