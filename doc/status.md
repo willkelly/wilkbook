@@ -4,10 +4,12 @@ Last updated: 2026-07-05. This is the single place to record what has actually
 been proven on the device. Update it after every hardware session; the
 detailed evidence lives in session logs, not in git.
 
-**2026-07-05: reader first light.** KOReader renders and is
-pen-navigable on the panel, running **natively on the framebuffer** (no
-compositor, no SDL — the cage/SDL plan died on hardware; see the session
-section below and `doc/koreader-spike.md`).
+**2026-07-05: reader first light, then the appliance path.** KOReader
+renders and is pen- and finger-navigable on the panel, running
+**natively on the framebuffer** (no compositor, no SDL — the cage/SDL
+plan died on hardware; see the session section below and
+`doc/koreader-spike.md`). Same day, the final image passed the
+**unattended-boot test**: power-on → KOReader, no console intervention.
 
 **2026-07-04: the 7.0 forward-port reached hardware parity on the
 kernel-currency goals.** The 2026-07-03 fix-stack boot succeeded on every
@@ -300,9 +302,15 @@ with Equity A / Concourse 4 / Triplicate A Code defaults (Noto
 fallbacks), cyttsp5 finger-touch DTS node, and the three boot-service
 fixes. All offline gates green at deploy time, including the completed
 rung 4 (full service stack + clean poweroff asserted in-guest, 2×
-consecutive). **Pending user-present step:** power-on boot of os2 with
-*no console intervention* — expectation is KOReader on the panel from
-cold boot; that result should be recorded here.
+consecutive).
+
+**Unattended boot: VALIDATED same day.** Will booted os2 with no console
+intervention and KOReader appeared on the panel. Read-only ACM check
+confirmed the reader process (`luajit reader.lua`, PID 318 — a low PID,
+i.e. one clean start, no respawn churn). The ACM console on this image
+lands in the unprivileged reader shell (`pinenote-acm$`), so root-side
+herd/syslog checks need the UART or os1 post-mortem instead. This
+closes the appliance-path milestone: power-on → reader, hands off.
 
 ## 2026-07-05 the qemu-virt "udev deadlock" was never a deadlock — rung 4 now asserts the full service stack
 
