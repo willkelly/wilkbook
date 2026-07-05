@@ -54,7 +54,14 @@
                  "reader.lua")
            #:directory #$(file-append koreader-bin "/lib/koreader")
            #:environment-variables
+           ;; KO_HOME is load-bearing: without it KOReader treats its
+           ;; own directory (the read-only store) as the data dir and
+           ;; dies in cache init before painting anything - the panel
+           ;; shows only framebuffer_linux's white init fill, on a
+           ;; respawn loop (found on the 2026-07-05 boot of the first
+           ;; native-reader image; reproduced offline in 30 s).
            (list "HOME=/root"
+                 "KO_HOME=/root/.config/koreader"
                  "PATH=/run/current-system/profile/bin"
                  "LC_ALL=en_US.UTF-8")
            #:log-file "/var/log/reader-session.log")
