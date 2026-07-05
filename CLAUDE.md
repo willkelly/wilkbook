@@ -109,11 +109,13 @@ with descriptive messages. Keep `doc/status.md` in sync with reality after
 any hardware session. Don't commit the per-device waveform or anything
 under a tool's gitignored `build/`.
 
-## Where we are (2026-07-04)
+## Where we are (2026-07-05)
 
 7.0.x is the validated primary: e-ink display with temperature-compensated
 waveforms, Wi-Fi/BT, USB gadget console, and PREEMPT_RT — all confirmed on
-hardware. Offline ladder rungs 1–3 are built and green. Open next steps
-(ROADMAP): qemu-virt boot assertions (rung 4), a Wi-Fi networking/
-credentials story, and the reader userland (KOReader spike vs MuPDF). See
-`ROADMAP.md` and `doc/status.md` for specifics.
+hardware. **Reader first light achieved**: KOReader runs natively on the
+framebuffer (no compositor — the cage/SDL kiosk died on hardware evidence,
+`doc/koreader-spike.md` §3) with pen-navigable UI. Offline ladder rungs 1–4
+are built and green. Open next steps (ROADMAP): finger touch (cyttsp5 DTS
+node staged, unvalidated), refresh-policy tuning, a Wi-Fi networking/
+credentials story. See `ROADMAP.md` and `doc/status.md` for specifics.

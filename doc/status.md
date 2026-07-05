@@ -1,8 +1,13 @@
 # Hardware status
 
-Last updated: 2026-07-04. This is the single place to record what has actually
+Last updated: 2026-07-05. This is the single place to record what has actually
 been proven on the device. Update it after every hardware session; the
 detailed evidence lives in session logs, not in git.
+
+**2026-07-05: reader first light.** KOReader renders and is
+pen-navigable on the panel, running **natively on the framebuffer** (no
+compositor, no SDL — the cage/SDL plan died on hardware; see the session
+section below and `doc/koreader-spike.md`).
 
 **2026-07-04: the 7.0 forward-port reached hardware parity on the
 kernel-currency goals.** The 2026-07-03 fix-stack boot succeeded on every
@@ -23,6 +28,7 @@ axis: fbcon text on the panel, USB ACM gadget console working end-to-end
 | PREEMPT_RT | n/a (not supported on 6.6) | **yes** (2026-07-04: `#1 SMP PREEMPT_RT`, tainted=0, no sleeping-function/atomic splats) |
 | Bluetooth firmware (BCM4345C0.hcd) | yes | yes (2026-06-11: `BCM4345C0.pine64,pinenote-v1.2.hcd` patch applied, build 0382) |
 | Wi-Fi firmware (brcmfmac43455) | yes | yes (2026-06-11: brcmfmac 7.45.234 loaded on vanilla base — deblob problem confirmed solved) |
+| KOReader on the panel (reader flavor) | n/a | **yes** (2026-07-05: native fbdev + evdev, pen-navigable; finger touch pending the cyttsp5 DTS node) |
 
 The `pinenote-usb-console-linux-6-6` flavor is the fully working baseline.
 The `pinenote-usb-console` flavor (7.0 forward-port) is the kernel-currency
@@ -113,33 +119,106 @@ Also staged 2026-07-03:
 
 ## Current os2 contents
 
-Written and readback-verified 2026-07-04 from os1 (device on the network,
-no reboot performed; **not yet booted**):
+os2 currently holds `pinenote-reader-PNGuixRoot-20260704.ext4` (SHA
+`23e597fd…`, written and readback-verified 2026-07-04) — **booted and
+live-debugged 2026-07-04/05** (session record below). The device came up,
+was recovered by hand over the ACM console, and ended the session with
+KOReader working natively; every hand-applied fix is now staged in this
+repo.
 
-- Artifact: `pinenote-reader-PNGuixRoot-20260704.ext4`,
-  1,933,021,184 bytes (= 3,775,432 × 512 sectors), staged copy kept at
-  `/home/user/wilkbook-artifacts/` on os1 (alongside the previous
-  usb-console artifact).
-- SHA-256 (host artifact, staged copy, and p6 readback all):
-  `23e597fd8d01abdfce49bcc827b9a457fa224fbcabba6d9bdeedc364e8671f06`.
-- Contents: the **reader flavor** — usb-console base (ACM gadget
-  console, UART getty) + the cage-pixman/KOReader kiosk
-  (`doc/koreader-spike.md`) — on the kernel carrying the hrdl
-  fsleep/dma_sync-shrink cherry-picks (`doc/kernel-forward-port.md`).
-  First boot of both.
-- Gates run before writing: rung-4 `make qemu-virt-check` green on this
-  exact rootfs (PREEMPT_RT boot, initrd waveform + EBC modules,
-  PNGuixRoot mount, Shepherd through udev, no panics/RT splats); host
-  tool suites green on the cherry-picked driver; the kiosk pairing
-  validated end-to-end on the workstation.
-- First-light checklist for the boot (user-present, UART logging at
-  1500000 baud, pick "Boot OS2 (part 6)"): panel shows KOReader; page
-  turn works via touch; pen behavior noted (#14694 expected: pen as
-  finger); whole-screen refresh per update is expected (refresh policy
-  not yet integrated); partial refreshes artifact-free (validates the
-  dma_sync shrink); gadget console still enumerates as the escape
-  hatch. Harvest `/var/log/messages` and `/var/log/reader-session.log`
-  from os2 afterwards regardless of outcome.
+**Ready to write, not yet on the device**:
+`pinenote-reader-PNGuixRoot-20260705.ext4`, SHA-256
+`4039340409ccc2cbd1853ef455f54a297b0c573b19101a83a7863222302ad3fb`,
+containing everything the first-light session proved out plus the
+touchscreen enablement:
+
+- KOReader **native fbdev** device target grafted into `koreader-bin`
+  (pen input via pure-Lua evdev backend, frontlight/battery powerd,
+  full refresh = EBC `GLOBAL_REFRESH` ioctl); reader-session service
+  runs `luajit reader.lua` directly and unbinds fbcon for the session.
+  cage/seatd are gone from the image.
+- Boot fixes for everything recovered by hand on 2026-07-04: gadget
+  service requires `file-systems` (debugfs EBUSY race); waveform +
+  ebc-params scripts export a PATH (shepherd runs them env-empty);
+  koreader.sh shebang no longer x86_64-mangled (shebang phases deleted).
+- **cyttsp5 touchscreen DTS node** (`cypress,tt21000` on i2c5 +
+  pinctrl) added to the forward-port patch — driver was already `=m`
+  but mainline's DTS has no node (neither does hrdl's tree; taken from
+  m-weigand's). **Unvalidated on hardware**; if coordinates are
+  garbage, the mainline driver's missing sysinfo fallbacks are the
+  first suspect (`doc/kernel-forward-port.md`).
+
+First-boot checklist for the 20260705 artifact: KOReader appears on the
+panel without any console interaction (validates all three boot fixes +
+the service); finger touch (first observation of the touchscreen node);
+pen taps/page turns; frontlight from KOReader's UI; gadget console as
+escape hatch. Harvest `/var/log/reader-session.log` and dmesg (cyttsp5
+probe signature) afterwards.
+
+## 2026-07-04/05 reader first light (os2 boot of the 20260704 artifact)
+
+The boot validated the base system again (kernel 7.0.11 PREEMPT_RT
+tainted=0, cherry-picked driver healthy, gadget console up after manual
+recovery) and produced a chain of findings that ended with KOReader
+working. Everything below was diagnosed and worked around **live over
+the ACM console**, then turned into the staged fixes above.
+
+Boot-time service failures (all now fixed in-repo):
+
+- The gadget service raced the fstab mounts to `EBUSY` on debugfs,
+  cascading into every dependent service; recovered live with
+  `umount`/`herd start`. Fix: require `file-systems`.
+- `pinenote-ebc-params` died with exit 127: shepherd one-shots run with
+  an empty environment and the script needs `cat`. The waveform script
+  only survived by luck (its early-exit path is all shell builtins).
+  Fix: both scripts export PATH.
+- KOReader couldn't launch via `bin/koreader`: cross `patch-shebangs`
+  had rewritten `koreader.sh`'s `#!/bin/sh` to a build-machine x86_64
+  bash ("Exec format error"). Fix: delete the shebang phases.
+
+The display mystery (why the panel showed console text while the kiosk
+"ran"), root-caused in three layers — full narrative in
+`doc/koreader-spike.md` §3:
+
+1. **fbcon stomps the compositor.** `console=tty0 ignore_loglevel`
+   means every kernel message redraws fbcon, and the DRM fbdev
+   emulation's flushes commit over the compositor's frames (observed
+   as 1872×1392 full-frame blits at ~8 Hz with `drm.debug=0x2`, which
+   itself feeds the loop). cage's own frames *were* reaching the
+   panel — and being immediately overwritten. Unbinding fbcon
+   (`vtcon1/bind=0`) gave cage the panel: uniform gray + software
+   cursor, confirmed visually.
+2. **SDL3 first-frame deadlock under wlroots** (frame callback
+   requested on a surface that's then unmapped; wlroots never fires
+   it; SDL parks in `ppoll` forever, 0 CPU).
+3. **SDL3 cannot present on Wayland without GL/Vulkan** — SDL3 has no
+   software present path (SDL2 did). The device has neither; the
+   renderer cascade fails and KOReader ignores the failure and runs
+   blind. This killed the kiosk architecture, not just a configuration.
+
+The pivot, built and validated the same session: KOReader's own e-ink
+architecture (fbdev + evdev, as on Kobo). Verified `/dev/fb0` mmap
+writes reach the panel via deferred-io (luajit one-liner, black band
+visible) before writing the port. Then the native device target
+(`pinenote/packages/koreader-device/`) brought first light:
+
+- `initializing for device PineNote`; quickstart guide rendered on the
+  panel after a `GLOBAL_REFRESH` wash; **pen taps navigate the UI**
+  (w9013 axes 20966×15725 auto-scaled to 1872×1404, no axis swap
+  needed); user exited KOReader from its own menu.
+- Frontlight confirmed working this session via the sysfs backlights
+  (cool=60/warm=140 were set live; powerd now drives the same knobs).
+- **No finger touch**: `/proc/bus/input/devices` shows no touchscreen —
+  `CONFIG_TOUCHSCREEN_CYTTSP5=m` was set but no DTS node exists in
+  mainline (or hrdl); node now staged from m-weigand's tree.
+- Driver observability gaps found while debugging, for the config
+  wishlist: `EXTRACT_FBS` ioctl is stubbed `-EOPNOTSUPP` in the 7.0
+  port (the buffer-dump oracle is unavailable on-device) and
+  `CONFIG_DYNAMIC_DEBUG` is off (`drm.debug` sufficed).
+- The pen pressure warning `w9013 … Ignoring pressure offset greater
+  than 50%` appears whenever libinput handles the pen (cage runs);
+  KOReader's evdev path doesn't involve libinput. Park for the pen
+  polish pass.
 
 Previous os2 contents (2026-07-03, hardware-validated 2026-07-04):
 `pinenote-usb-console-PNGuixRoot-20260703.ext4`, SHA

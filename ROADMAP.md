@@ -144,12 +144,11 @@ independently useful, and 1–3 start roadmap track 4 without hardware:
        `FB_DAMAGE_CLIPS` emission (what the EBC consumes), pixel-exact
        reader UI rendering. vkms can't do Y4/EBC semantics — that half
        stays with rung 3's simulator.
-6. [ ] **Reader prototype offline** (see track 4; KOReader now leads).
-       The packaging half is done — `koreader-bin` runs headless via
-       `SDL_VIDEODRIVER=offscreen` (the bundled SDL3's offscreen
-       backend), which also gives rung 5+ a way to drive the real
-       reader UI in screenshot tests. The MuPDF loop against SDL/vkms
-       remains the bespoke fallback.
+6. [x] **Reader prototype** (done, and it leapfrogged offline: KOReader
+       reached the panel natively on 2026-07-05 — see track 4). For
+       offline UI testing, `koreader-bin` still runs headless via
+       `SDL_VIDEODRIVER=offscreen` on a workstation; the native fbdev
+       path could additionally be exercised against vkms/vfb later.
 7. [ ] **Execute the real driver's refresh machine offline** — scoped
        2026-07-04, see `doc/ebc-harness-spike.md` for the evidence
        (probe dependency chain, register/IRQ/DMA contract, effort
@@ -201,22 +200,23 @@ the start of this track — no panel required. Policy background in
       (`org.pinenote.ebc` dbus service, exact ioctl numbers) so community
       tooling runs unmodified; package or port `pinenote_dbus_service`
       early.
-- [ ] Reader decision — **KOReader first** (priority raised 2026-07-04:
-      an external user wants to run it; also proven on PineNote via
-      hrdl's image). Spike + stack done same day, see
-      `doc/koreader-spike.md`: `koreader-bin` (upstream release binary,
-      runs headless offline, cross-builds), `wlroots-pixman`/
-      `cage-pixman` (mesa-free kiosk — stock wlroots's mesa dep does
-      not cross-compile), the `reader-session` service and the `reader`
-      flavor (`make rootfs-reader` → preflight-clean artifact; the
-      compositor+client pairing validated end-to-end on the
-      workstation). Remaining, in order: first-light hardware session
-      (panel + pen/touch); pen/touch mapping (#14694 stylus tags); the
-      refresh-policy path (#14017 full-refresh → `GLOBAL_REFRESH`, the
-      `org.pinenote.ebc` dbus service); kiosk hardening (seatd +
-      unprivileged user). The MuPDF prototype loop (render → Gray8 →
-      Y4 harness → vkms/SDL) stays available as the bespoke-reader
-      fallback if KOReader integration disappoints.
+- [x] Reader decision — **KOReader, running natively on the
+      framebuffer**. First light 2026-07-05: quickstart guide on the
+      panel, pen-navigable UI (`doc/status.md`). The cage/SDL kiosk
+      architecture was abandoned on hardware evidence (SDL3 cannot
+      present on Wayland without GL/Vulkan — `doc/koreader-spike.md`
+      §3); the shipped stack is `koreader-bin` + a wilkbook-authored
+      pinenote device target (fbdev output, pure-Lua evdev input,
+      `GLOBAL_REFRESH` ioctl for full refreshes) run directly by the
+      `reader-session` service. `wlroots-pixman`/`cage-pixman` stay in
+      the repo (cross-building, unused).
+- [ ] Reader polish, in order: finger touch (cyttsp5 DTS node staged,
+      needs a hardware session); refresh-policy tuning (KOReader's
+      partial/UI/full hints → EBC behavior; the `org.pinenote.ebc`
+      dbus/UAPI compatibility story remains relevant for community
+      tooling); pen buttons + #14694 stylus tags; unprivileged-user
+      hardening; a books-directory convention; upstreaming the device
+      target to KOReader.
 - [ ] Wi-Fi credentials/networking story for the device (the networked
       flavor has no credential handling yet).
 - [ ] Later: wlroots session (sway or cage/KOReader-kiosk, following
