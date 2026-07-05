@@ -21,11 +21,17 @@
 ;; also how the PineNote community runs it (hrdl's pinenote-dist ships
 ;; koreader-bin).  A from-source package stays future work.
 ;;
-;; The bundled SDL3 supports only wayland/offscreen/dummy video backends
-;; (no kmsdrm, no x11), so on the device KOReader needs a Wayland
-;; compositor - the planned kiosk is `cage` on the EBC DRM driver.  On a
-;; workstation it runs under your session (or headless with
-;; SDL_VIDEODRIVER=offscreen, which is how the smoke test works).
+;; On the device KOReader does NOT use SDL at all: the bundled SDL3 can
+;; only present on Wayland through GL or Vulkan (SDL3 dropped SDL2's shm
+;; software path), and the PineNote image has neither.  Instead the
+;; package grafts a native "pinenote" device target into the bundle
+;; (koreader-device/): framebuffer_linux output on /dev/fb0, a pure-Lua
+;; evdev input backend, and a full-refresh hook on the EBC driver's
+;; global-refresh ioctl - the same way KOReader runs on Kobo hardware.
+;; First light 2026-07-05: quickstart guide rendered, pen taps working.
+;; On a workstation the SDL frontend still works under a desktop Wayland
+;; session (or headless with SDL_VIDEODRIVER=offscreen, which is how the
+;; smoke test works).
 
 (define %koreader-version "2026.03")
 
@@ -85,6 +91,13 @@
               (chdir "koreader")))
           (delete 'configure)
           (delete 'build)
+          ;; Foreign bundle: leave every shebang alone.  Under --target
+          ;; the default phases rewrite koreader.sh's #!/bin/sh to a
+          ;; *build-machine* (x86_64) bash store path, producing "Exec
+          ;; format error" on the device.
+          (delete 'patch-source-shebangs)
+          (delete 'patch-generated-file-shebangs)
+          (delete 'patch-shebangs)
           (replace 'install
             (lambda* (#:key outputs #:allow-other-keys)
               (let ((out (assoc-ref outputs "out")))
@@ -93,6 +106,32 @@
                 (install-file "README.md"
                               (string-append
                                out "/share/doc/koreader-bin")))))
+          ;; Graft the native PineNote device target into the bundle:
+          ;; fbdev screen + pure-Lua evdev input (the release tarball
+          ;; ships no compiled input module), plus the device probe hook.
+          (add-after 'install 'add-pinenote-device
+            (lambda* (#:key inputs native-inputs outputs
+                      #:allow-other-keys)
+              (let* ((out (assoc-ref outputs "out"))
+                     (kor (string-append out "/lib/koreader"))
+                     (aux (or (assoc-ref (or native-inputs '())
+                                         "pinenote-device")
+                              (assoc-ref inputs "pinenote-device"))))
+                (copy-recursively aux kor)
+                ;; Probe order: PineNote before the SDL desktop fallback.
+                (substitute* (string-append kor "/frontend/device.lua")
+                  (("^    if util\\.loadSDL3\\(\\) then" line)
+                   (string-append
+                    "    -- PineNote (wilkbook): fbdev + evdev, no compositor\n"
+                    "    local pinenote_model = io.open(\"/proc/device-tree/model\", \"r\")\n"
+                    "    if pinenote_model then\n"
+                    "        local model = pinenote_model:read(\"*a\") or \"\"\n"
+                    "        pinenote_model:close()\n"
+                    "        if model:find(\"PineNote\") then\n"
+                    "            return require(\"device/pinenote/device\")\n"
+                    "        end\n"
+                    "    end\n\n"
+                    line))))))
           ;; The bundle's C++ pieces (crengine, k2pdfopt) and luajit
           ;; need libstdc++.so.6/libgcc_s.so.1, which upstream does not
           ;; ship.  Copy them from the toolchain into the bundle's own
@@ -163,6 +202,10 @@
     ;; cross-built package in the image links against.
     (native-inputs
      `(("patchelf" ,patchelf)
+       ;; Architecture-independent Lua sources grafted into the bundle.
+       ("pinenote-device" ,(local-file "koreader-device"
+                                       "koreader-pinenote-device"
+                                       #:recursive? #t))
        ("gcc-runtime" ,(let ((target (%current-target-system)))
                          (if target
                              (cross-gcc target

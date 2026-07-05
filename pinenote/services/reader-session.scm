@@ -2,19 +2,25 @@
   #:use-module (gnu services)
   #:use-module (gnu services shepherd)
   #:use-module (guix gexp)
-  #:use-module (pinenote packages kiosk)
   #:use-module (pinenote packages koreader)
   #:export (pinenote-reader-session-service-type))
 
-;; A cage (wlroots) Wayland kiosk running KOReader as its sole client,
-;; on the EBC DRM driver with software rendering (WLR_RENDERER=pixman).
-;; KOReader's bundled SDL3 only has a wayland video backend, so the
-;; compositor is not optional - see doc/koreader-spike.md.
+;; KOReader running natively on the framebuffer - no compositor, no SDL.
+;; The koreader-bin package grafts a "pinenote" device target into the
+;; bundle (fbdev output on /dev/fb0, pure-Lua evdev input, full-refresh
+;; via the EBC driver's global-refresh ioctl), the same architecture
+;; KOReader uses on Kobo hardware.  See doc/koreader-spike.md for why
+;; the cage/SDL kiosk was abandoned: SDL3's Wayland backend cannot
+;; present without GL/Vulkan, neither of which exists on the device.
 ;;
-;; v1 deliberately runs as root with libseat's builtin backend: no seatd
-;; service, no seat-group plumbing, fewest moving parts for first light.
-;; Hardening (seatd + the reader user + logind-style idle) is follow-up
-;; work once the kiosk is hardware-proven.
+;; fbcon is unbound before launch: with console=tty0 on the cmdline,
+;; every kernel message would otherwise redraw the text console over
+;; KOReader's framebuffer content (first-light finding, 2026-07-05).
+;; It is re-bound on stop so the console comes back as a rescue path.
+;;
+;; v1 runs as root; unprivileged hardening is follow-up work.
+
+(define %fbcon-bind "/sys/class/vtconsole/vtcon1/bind")
 
 (define (pinenote-reader-session-shepherd-service _config)
   (list
@@ -25,40 +31,42 @@
     ;; would light the panel
     (requirement '(udev user-processes
                    pinenote-waveform pinenote-ebc-params))
-    (documentation "cage Wayland kiosk running KOReader on the e-ink panel.")
+    (documentation "KOReader running natively on the e-ink framebuffer.")
     (respawn? #t)
     (start
      #~(lambda args
-         ;; runtime dir for the compositor and its client
-         (for-each (lambda (dir)
-                     (unless (file-exists? dir)
-                       (mkdir dir #o700)))
-                   '("/run/user" "/run/user/0"))
-         ;; don't race the DRM node on a slow module load; respawn
+         ;; don't race the fb node on a slow module load; respawn
          ;; still covers the pathological case
          (let loop ((tries 0))
-           (unless (or (file-exists? "/dev/dri/card0")
+           (unless (or (file-exists? "/dev/fb0")
                        (>= tries 50))
              (usleep 200000)
              (loop (+ tries 1))))
+         ;; keep fbcon off the panel while the reader owns it
+         (when (file-exists? #$%fbcon-bind)
+           (call-with-output-file #$%fbcon-bind
+             (lambda (port) (display "0" port))))
          (apply
           (make-forkexec-constructor
-           (list #$(file-append cage-pixman "/bin/cage") "--"
-                 #$(file-append koreader-bin "/bin/koreader"))
+           ;; reader.lua's own shebang is #!./luajit, so run the
+           ;; bundled luajit directly from the bundle directory.
+           (list #$(file-append koreader-bin "/lib/koreader/luajit")
+                 "reader.lua")
+           #:directory #$(file-append koreader-bin "/lib/koreader")
            #:environment-variables
-           ;; PATH: koreader.sh is a shell script (realpath, dirname);
-           ;; LIBSEAT_BACKEND=builtin: root session without seatd;
-           ;; pixman: software rendering on the EBC's dumb buffers
            (list "HOME=/root"
                  "PATH=/run/current-system/profile/bin"
-                 "XDG_RUNTIME_DIR=/run/user/0"
-                 "LIBSEAT_BACKEND=builtin"
-                 "WLR_RENDERER=pixman"
-                 "WLR_NO_HARDWARE_CURSORS=1"
                  "LC_ALL=en_US.UTF-8")
            #:log-file "/var/log/reader-session.log")
           args)))
-    (stop #~(make-kill-destructor)))))
+    (stop
+     #~(lambda (pid . args)
+         (let ((stopped ((make-kill-destructor) pid)))
+           ;; restore the text console as a rescue path
+           (when (file-exists? #$%fbcon-bind)
+             (call-with-output-file #$%fbcon-bind
+               (lambda (port) (display "1" port))))
+           stopped))))))
 
 (define pinenote-reader-session-service-type
   (service-type
@@ -67,4 +75,4 @@
     (list (service-extension shepherd-root-service-type
                              pinenote-reader-session-shepherd-service)))
    (default-value #f)
-   (description "Run KOReader in a cage Wayland kiosk on the PineNote panel.")))
+   (description "Run KOReader natively on the PineNote framebuffer.")))

@@ -3,7 +3,6 @@
   #:use-module (gnu services base)
   #:use-module (gnu system)
   #:use-module (guix gexp)
-  #:use-module (pinenote packages kiosk)
   #:use-module (pinenote packages koreader)
   #:use-module (pinenote services reader-session)
   #:use-module (pinenote services usb-gadget)
@@ -11,8 +10,9 @@
   #:export (pinenote-reader-operating-system))
 
 ;; The reading-first flavor: the usb-console flavor (gadget console as
-;; the escape hatch, UART auto-login) plus the cage+KOReader kiosk.
-;; See doc/koreader-spike.md for the stack and its validation status.
+;; the escape hatch, UART auto-login) plus KOReader running natively on
+;; the framebuffer (no compositor - see doc/koreader-spike.md for why
+;; the cage/SDL kiosk was abandoned and how the native port works).
 
 (define pinenote-reader-sudoers
   (plain-file "sudoers" "\
@@ -40,7 +40,7 @@ reader ALL=(ALL) NOPASSWD: ALL
   (operating-system
     (inherit (make-pinenote-operating-system
               #:host-name "pinenote-reader"
-              #:packages (append (list cage-pixman koreader-bin)
+              #:packages (append (list koreader-bin)
                                  %pinenote-local-packages
                                  %base-packages)
               #:services pinenote-reader-services))
