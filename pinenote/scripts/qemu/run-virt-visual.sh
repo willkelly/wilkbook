@@ -225,10 +225,22 @@ while kill -0 "$qemu_pid" 2>/dev/null; do
 done
 printf '  first painted shot at %ss\n' "$(elapsed)"
 
-# Phase 3: tap the menu zone (top center) and look for pixel change.
+# Phase 3: wait for a SETTLED baseline (two identical consecutive shots
+# — transient toasts expiring between shots once faked a tap-pass), then
+# tap the menu zone (top center) and require a pixel change.
 changed=1
 if [ "$painted" = 0 ]; then
+  settle_tries=0
   sha_a=$(sha256sum "$shot_a" | cut -d' ' -f1)
+  while [ "$settle_tries" -lt 6 ]; do
+    sleep 8
+    screendump "$shot_a"
+    sha_a2=$(sha256sum "$shot_a" | cut -d' ' -f1)
+    [ "$sha_a" = "$sha_a2" ] && break
+    sha_a=$sha_a2
+    settle_tries=$((settle_tries + 1))
+  done
+  printf '  baseline settled at %ss (%s retries)\n' "$(elapsed)" "$settle_tries"
   tap 936 100
   sleep 12                       # give TCG time to repaint
   shot_b=$outdir/shot-b.ppm

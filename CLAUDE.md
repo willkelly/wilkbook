@@ -56,6 +56,9 @@ code review — before a single reboot. That's the standard.
   protocol and the device inventory/backup ledger.
 - `doc/eink-research.md` — domain background (waveforms, commercial e-ink
   stacks, the PineNote community lineage). Read before display work.
+- `doc/refresh-policy.md` — the display-quality program: waveform decodes
+  from the device's own .wbf, policy decisions (flash thresholds, GL16
+  globals, input architecture), and the replay-workbench plan.
 - `doc/driver-findings-report.md` — the community-facing writeup of driver
   bugs the host tools found.
 - `doc/pinenote-flavors.md` — the system flavors.

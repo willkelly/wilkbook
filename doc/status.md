@@ -122,9 +122,20 @@ Also staged 2026-07-03:
 ## Current os2 contents
 
 os2 currently holds the 2026-07-05 **evening (phase A) build**, SHA
-`f4e0cd5d745a5e963aadc69f4a0e40a9c8b914c054e93755d9334d6fce0e9c98`,
-written and readback-verified from os1 the same evening — **boot
-pending**. It supersedes two same-day predecessors that were each
+`f4e0cd5d…` — **booted and judged the same evening** (wash + quiet menus
+good, no ghosting; full-refresh black flash and input feel raised).
+
+**Deployment candidate, ready to write**: the **phase A.2 build**, SHA
+`52cf8e8a2663a9e9126f4c23eeff8aec49c8300025795351de6d853a3371cb6c`.
+Adds over the on-device phase A build: GL16 global refreshes
+(`rockchip_ebc.refresh_waveform=6` — the full wash no longer drives the
+white background through a negative; doc/refresh-policy.md has the
+waveform decode), the input-architecture rework (handleMixedTouchEv +
+per-source event conditioning: two-finger gestures structurally fixed,
+palm-while-pen ghost taps fixed, ws8100 pen-button page turns), and the
+rung-4v tap-path fix. Rungs 4 and 4v green on this exact rootfs (the
+4v tap now provably works: the scripted tap word-selects in the
+quickstart and opens the dictionary dialog in the screendump). It supersedes two same-day predecessors that were each
 booted and validated: the midday build (`0a8a55c2…` — unattended boot,
 touch, pen, frontlight, MB Type fonts all validated; see the session
 records) and the morning build (`40393404…` — touchscreen probed, but

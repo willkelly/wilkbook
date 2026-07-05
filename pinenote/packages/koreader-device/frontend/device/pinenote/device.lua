@@ -175,7 +175,12 @@ function PineNote:init()
     self.input = require("device/input"):new{
         device = self,
         event_map = {
-            [116] = "Power", -- KEY_POWER (rk805 pwrkey)
+            [116] = "Power",   -- KEY_POWER (rk805 pwrkey)
+            -- ws8100 BLE pen buttons (long presses; see the driver's
+            -- input_status map in the forward-port patch): page turns
+            -- from the pen barrel.
+            [158] = "RPgBack", -- KEY_BACK  (eraser-side long press)
+            [159] = "RPgFwd",  -- KEY_FORWARD (pen-side long press)
         },
         wacom_protocol = true,
         -- Pure-LuaJIT evdev backend (the desktop release bundle does not
@@ -203,22 +208,36 @@ function PineNote:init()
             local tab_max_y
             _min, tab_max_y = evdev_ffi.absinfo(devs.virt_tablet, C.ABS_Y)
             local size = self.screen:getRawSize()
-            local BTN_LEFT, BTN_TOUCH = 0x110, 0x14a
+            -- Synthesize an MT protocol-B stream from the tablet's
+            -- single-touch events: BTN_LEFT becomes the tracking id
+            -- (contact down/up), ABS_X/Y become MT positions.  A
+            -- BTN_TOUCH rewrite is NOT enough: with wacom_protocol,
+            -- Input:handleKeyBoardEv swallows BTN_TOUCH outside the
+            -- pen slot, so no contact ever forms (rung 4v caught
+            -- this — the tap changed nothing).
+            local BTN_LEFT = 0x110
+            local ABS_MT_POSITION_X, ABS_MT_POSITION_Y = 0x35, 0x36
+            local ABS_MT_TRACKING_ID = 0x39
             if tab_max_x and tab_max_x > 0 and tab_max_y and tab_max_y > 0 then
                 local sx, sy = size.w / tab_max_x, size.h / tab_max_y
                 self.input:registerEventAdjustHook(function(_, ev)
+                    if ev.src ~= devs.virt_tablet then return end
                     if ev.type == C.EV_KEY and ev.code == BTN_LEFT then
-                        ev.code = BTN_TOUCH
+                        ev.type = C.EV_ABS
+                        ev.code = ABS_MT_TRACKING_ID
+                        ev.value = ev.value ~= 0 and 1 or -1
                     elseif ev.type == C.EV_ABS then
                         if ev.code == C.ABS_X then
+                            ev.code = ABS_MT_POSITION_X
                             ev.value = math.floor(ev.value * sx + 0.5)
                         elseif ev.code == C.ABS_Y then
+                            ev.code = ABS_MT_POSITION_Y
                             ev.value = math.floor(ev.value * sy + 0.5)
                         end
                     end
                 end)
                 logger.info(string.format(
-                    "PineNote(virt): tablet %dx%d -> screen %dx%d",
+                    "PineNote(virt): tablet %dx%d -> screen %dx%d (MT synthesis)",
                     tab_max_x, tab_max_y, size.w, size.h))
             end
         end
@@ -230,43 +249,70 @@ function PineNote:init()
         end
     end
 
-    -- Coordinate mapping.  The cyttsp5 touchscreen reports native
-    -- screen coordinates (0..1871 x 0..1403 — verified on hardware), so
-    -- its ABS_MT_* events pass through untouched.  The pen reports
-    -- digitizer units (20966x15725) on plain ABS_X/ABS_Y and needs
-    -- scaling — but the touchscreen ALSO emits legacy plain ABS_X/ABS_Y
-    -- alongside its MT events, so the scale is applied only while the
-    -- pen is in proximity (inside its BTN_TOOL_PEN bracket).
-    local evdev = require("ffi/input_evdev")
-    local max_x, max_y
-    if devs.pen then
-        local _min
-        _min, max_x = evdev.absinfo(devs.pen, C.ABS_X)
-        _min, max_y = evdev.absinfo(devs.pen, C.ABS_Y)
+    -- Pen + touchscreen coexistence — the reMarkable-on-mainline recipe
+    -- (input.lua handleMixedTouchEv): the touchscreen's MT protocol is
+    -- the sole source of truth for fingers; plain ABS_X/Y are honored
+    -- only inside the pen's slot.  Without this, the cyttsp5's legacy
+    -- single-touch aliases are misread as slot coordinates — corrupting
+    -- the second finger of every two-finger frame (pinch was
+    -- structurally broken) — and collide with pen coordinate scaling.
+    if devs.pen and devs.touch then
+        self.input.handleTouchEv = self.input.handleMixedTouchEv
     end
-    local screen_w = self.screen:getRawSize().w
-    local screen_h = self.screen:getRawSize().h
-    if max_x and max_x > 0 and max_y and max_y > 0 then
-        local scale_x = screen_w / max_x
-        local scale_y = screen_h / max_y
-        logger.info(string.format(
-            "PineNote: pen axes %dx%d -> screen %dx%d (scale %.4f/%.4f)",
-            max_x, max_y, screen_w, screen_h, scale_x, scale_y))
-        local pen_in_proximity = false
-        self.input:registerEventAdjustHook(function(_, ev)
-            if ev.type == C.EV_KEY and ev.code == C.BTN_TOOL_PEN then
-                pen_in_proximity = ev.value ~= 0
-            elseif pen_in_proximity and ev.type == C.EV_ABS then
+
+    -- Per-source event conditioning.  Our evdev backend tags every
+    -- event with src = originating device node, so no cross-device
+    -- state (like the old pen-proximity boolean) is needed:
+    --  * pen: scale digitizer units (20966x15725) to screen pixels,
+    --    unconditionally — the mixed handler only consumes plain ABS
+    --    in the pen slot, so touch is unaffected;
+    --  * touchscreen: neutralize its legacy BTN_TOUCH alias — while
+    --    the pen hovers it would poison the wacom contact gate (ghost
+    --    pen taps from a resting palm); its MT tracking IDs carry the
+    --    real finger state;
+    --  * ws8100 pen buttons: neutralize the BTN_TOOL_PEN/RUBBER
+    --    wrappers the driver emits around every button event — they
+    --    would fight the digitizer's true proximity state; the KEY_*
+    --    events pass through to event_map.
+    local EV_MSC = 4
+    local BTN_TOOL_RUBBER = 0x141
+    local evdev = require("ffi/input_evdev")
+    local pen_scale_x, pen_scale_y
+    if devs.pen then
+        local _min, max_x = evdev.absinfo(devs.pen, C.ABS_X)
+        local _min2, max_y = evdev.absinfo(devs.pen, C.ABS_Y)
+        local screen_w = self.screen:getRawSize().w
+        local screen_h = self.screen:getRawSize().h
+        if max_x and max_x > 0 and max_y and max_y > 0 then
+            pen_scale_x = screen_w / max_x
+            pen_scale_y = screen_h / max_y
+            logger.info(string.format(
+                "PineNote: pen axes %dx%d -> screen %dx%d (scale %.4f/%.4f)",
+                max_x, max_y, screen_w, screen_h, pen_scale_x, pen_scale_y))
+        else
+            logger.warn("PineNote: could not query pen axis ranges; pen coordinates unscaled")
+        end
+    end
+    self.input:registerEventAdjustHook(function(_, ev)
+        if ev.src == devs.pen then
+            if pen_scale_x and ev.type == C.EV_ABS then
                 if ev.code == C.ABS_X then
-                    ev.value = math.floor(ev.value * scale_x + 0.5)
+                    ev.value = math.floor(ev.value * pen_scale_x + 0.5)
                 elseif ev.code == C.ABS_Y then
-                    ev.value = math.floor(ev.value * scale_y + 0.5)
+                    ev.value = math.floor(ev.value * pen_scale_y + 0.5)
                 end
             end
-        end)
-    elseif devs.pen then
-        logger.warn("PineNote: could not query pen axis ranges; pen coordinates unscaled")
-    end
+        elseif ev.src == devs.touch then
+            if ev.type == C.EV_KEY and ev.code == C.BTN_TOUCH then
+                ev.type = EV_MSC -- handleMiscEv is a no-op here
+            end
+        elseif ev.src == devs.penbtn then
+            if ev.type == C.EV_KEY and
+               (ev.code == C.BTN_TOOL_PEN or ev.code == BTN_TOOL_RUBBER) then
+                ev.type = EV_MSC
+            end
+        end
+    end)
 
     Generic.init(self)
 end

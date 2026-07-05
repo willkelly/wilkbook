@@ -132,7 +132,7 @@ local EV_BUF_LEN = 64
 local ev_buf = ffi.new("struct input_event[?]", EV_BUF_LEN)
 local ev_size = ffi.sizeof("struct input_event")
 
-local function drainFd(fd, events)
+local function drainFd(fd, events, src)
     while true do
         local len = tonumber(C.read(fd, ev_buf, EV_BUF_LEN * ev_size))
         if len <= 0 then
@@ -147,6 +147,10 @@ local function drainFd(fd, events)
                     sec = tonumber(ev_buf[i].time.tv_sec),
                     usec = tonumber(ev_buf[i].time.tv_usec),
                 },
+                -- originating device node: device.lua's adjust hooks use
+                -- this to condition events per source (pen scaling,
+                -- legacy-alias suppression) without cross-device state
+                src = src,
             })
         end
         if len < EV_BUF_LEN * ev_size then
@@ -180,7 +184,7 @@ function input.waitForEvent(sec, usec)
     for i = 0, poll_n - 1 do
         local revents = poll_fds[i].revents
         if bit.band(revents, POLLIN) ~= 0 then
-            drainFd(poll_fds[i].fd, events)
+            drainFd(poll_fds[i].fd, events, poll_paths[i + 1])
         elseif bit.band(revents, bit.bor(POLLERR, POLLHUP, POLLNVAL)) ~= 0 then
             C.close(poll_fds[i].fd)
             open_fds[poll_paths[i + 1]] = nil

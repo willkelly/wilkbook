@@ -231,4 +231,13 @@ partition and loading PineNote display modules from the initrd.")
      "rockchip_ebc.split_area_limit=0"
      "rockchip_ebc.panel_reflection=1"
      "rockchip_ebc.prepare_prev_before_a2=0"
-     "rockchip_ebc.dclk_select=0"))
+     "rockchip_ebc.dclk_select=0"
+     ;; Global refreshes use GL16 (enum 6) instead of GC16: decoded from
+     ;; the device's own waveform (doc/refresh-policy.md), GL16 is GC16
+     ;; minus the white->white drive — the page background stays white
+     ;; through a full wash instead of flashing to a negative for
+     ;; ~165 ms, at identical duration and ghost-clearing everywhere
+     ;; else.  Residue in believed-white pixels is the one thing GL16
+     ;; never scrubs; a deliberate GC16 deep-clean action can cover
+     ;; that later if hardware shows it accumulating.
+     "rockchip_ebc.refresh_waveform=6"))
