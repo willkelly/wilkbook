@@ -121,25 +121,32 @@ Also staged 2026-07-03:
 
 ## Current os2 contents
 
-os2 currently holds the 2026-07-05 **evening (phase A) build**, SHA
-`f4e0cd5d…` — **booted and judged the same evening** (wash + quiet menus
-good, no ghosting; full-refresh black flash and input feel raised).
+os2 currently holds the **phase A.2 build**, SHA
+`52cf8e8a2663a9e9126f4c23eeff8aec49c8300025795351de6d853a3371cb6c` —
+**written 2026-07-05 late evening** with the full protocol (os1 root
+confirmed, p6 unmounted, dd with fsync, readback of the exact
+1 903 321 088-byte range SHA-matched). Staged copy on os1 at
+`/home/user/wilkbook-artifacts/pinenote-reader-PNGuixRoot-20260705-a2.ext4`.
+**First boot pending** (user-present step).
 
-**Deployment candidate, ready to write**: the **phase A.2 build**, SHA
-`52cf8e8a2663a9e9126f4c23eeff8aec49c8300025795351de6d853a3371cb6c`.
-Adds over the on-device phase A build: GL16 global refreshes
+Phase A.2 adds over the phase A build it replaced: GL16 global refreshes
 (`rockchip_ebc.refresh_waveform=6` — the full wash no longer drives the
 white background through a negative; doc/refresh-policy.md has the
-waveform decode), the input-architecture rework (handleMixedTouchEv +
-per-source event conditioning: two-finger gestures structurally fixed,
-palm-while-pen ghost taps fixed, ws8100 pen-button page turns), and the
-rung-4v tap-path fix. Rungs 4 and 4v green on this exact rootfs (the
-4v tap now provably works: the scripted tap word-selects in the
-quickstart and opens the dictionary dialog in the screendump). It supersedes two same-day predecessors that were each
-booted and validated: the midday build (`0a8a55c2…` — unattended boot,
-touch, pen, frontlight, MB Type fonts all validated; see the session
-records) and the morning build (`40393404…` — touchscreen probed, but
-KOReader white-screened on the missing KO_HOME; hotfixed live).
+waveform decode and the replay-study numbers), the input-architecture
+rework (handleMixedTouchEv + per-source event conditioning: two-finger
+gestures structurally fixed, palm-while-pen ghost taps fixed, ws8100
+pen-button page turns), and the rung-4v tap-path fix. Rungs 4 and 4v
+green on this exact rootfs (the 4v tap now provably works: the scripted
+tap word-selects in the quickstart and opens the dictionary dialog in
+the screendump).
+
+Superseded same-day predecessors, each booted and validated: the
+evening phase A build (`f4e0cd5d…` — booted and judged: wash + quiet
+menus good, no ghosting; full-refresh black flash and input feel
+raised), the midday build (`0a8a55c2…` — unattended boot, touch, pen,
+frontlight, MB Type fonts all validated; see the session records) and
+the morning build (`40393404…` — touchscreen probed, but KOReader
+white-screened on the missing KO_HOME; hotfixed live).
 
 Phase A adds over the validated midday build (offline gates green,
 optics judgment pending): the >=60%-area flash policy (menus stop
@@ -569,8 +576,8 @@ validation on hardware.
 The next user-present device session, in order (everything here is
 pre-verified offline; the session is judgment + harvest):
 
-1. **os2 write of the phase A.2 candidate** (`52cf8e8a…`, ledger above)
-   with the standard protocol, then boot and judge:
+1. ~~os2 write of the phase A.2 candidate~~ **Done 2026-07-05 late
+   evening** (readback-verified; ledger above). **Boot os2 and judge:**
    - GL16 full-refresh optics: the every-N-pages wash should read as
      "the letters shimmer", not "the screen shows a negative". Watch
      for believed-white residue accumulating over a long session — the
