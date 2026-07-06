@@ -121,25 +121,27 @@ Also staged 2026-07-03:
 
 ## Current os2 contents
 
-os2 currently holds the **phase A.2 build**, SHA
-`52cf8e8a2663a9e9126f4c23eeff8aec49c8300025795351de6d853a3371cb6c` —
-**written 2026-07-05 late evening** with the full protocol (os1 root
+os2 currently holds the **phase A.2.2 build**, SHA
+`b166d869fa765b3ef08b31c017bc632ef709848b084ca48afa7a8887cf1743c0` —
+**written 2026-07-05 night** with the full protocol (os1 root
 confirmed, p6 unmounted, dd with fsync, readback of the exact
-1 903 321 088-byte range SHA-matched). Staged copy on os1 at
-`/home/user/wilkbook-artifacts/pinenote-reader-PNGuixRoot-20260705-a2.ext4`.
-**First-booted the same night** (session record below): pinch-zoom
-validated; the GL16 config never applied (the refresh_waveform bug —
-fixed in the repo, but the image on os2 still carries it and will boot
-GC16 again); the TOC-tap bug is open.
+1 903 329 280-byte range SHA-matched). Staged copy on os1 at
+`/home/user/wilkbook-artifacts/pinenote-reader-PNGuixRoot-20260705-a22.ext4`.
+**First boot pending** (user-present step).
 
-**Staged for the next write — phase A.2.1**, SHA
-`4b97c382918c5ef5441a351b7c55f2eadb567aada05ed5a55ee12bb02b391b6b`, at
-`/tmp/opencode/pinenote-rootfs-artifacts/pinenote-reader-PNGuixRoot-20260705-a21.ext4`
-(host; not yet staged to os1). Over A.2 it fixes the refresh_waveform
-config bug (the ebc-params one-shot now sets GL16; inert cmdline tokens
-removed) and upgrades the boot blank to a GC16 deep clean. Rung-4
-assertions on this exact rootfs include the new live-parameter check
-(`VIRTCHK-WF-6`).
+Over A.2 it carries three fixes, each found on (or predicted by) the
+A.2 first boot the same night and proven offline before this write:
+the refresh_waveform config bug (the ebc-params one-shot now sets
+GL16; inert cmdline tokens removed; rung 4 asserts the live value,
+`VIRTCHK-WF-6`), the boot blank upgraded to a GC16 deep clean, and the
+TOC-tap fix (`mixedrouter.lua` src-aware slot routing, proven on the
+`koreader-input` harness). Rungs 4 (all-green, incl. the new
+live-parameter assertion) and the host suites ran on this exact
+rootfs. It supersedes the intermediate A.2.1 (`4b97c382…`, config
+fixes only, rung-4 green, never written — its os1 staged copy can be
+deleted) and the first-booted **A.2** (`52cf8e8a…`, session record
+below; its staged copy remains on os1 at
+`pinenote-reader-PNGuixRoot-20260705-a2.ext4` for rollback).
 
 Phase A.2 adds over the phase A build it replaced: GL16 global refreshes
 (`rockchip_ebc.refresh_waveform=6` — the full wash no longer drives the
@@ -237,16 +239,33 @@ scrubbed the residue. Under the intended GL16 policy such residue would
 reader-session boot blank now runs its wash as an explicit GC16 deep
 clean and restores the shipped waveform after (validated live).
 
-**Bug 2 (open): the TOC-tap bug.** Tapping a link in the quickstart
-guide's table of contents always navigates to the same wrong
-destination ("the user interface page"), regardless of the link tapped;
-pinch and menu navigation work. Offline diagnosis so far: the os1
-oracle exonerated the DT axis config (the working stock system has the
-*identical* touchscreen node — no inversion/swap properties), which
-narrows it to the KOReader input stack or the mainline-vs-m-weigand
-cyttsp5 driver difference (os1 runs the fork; our kernel runs
-mainline). Input captures armed during the session expired unused
-(empty files recovered post-mortem).
+**Bug 2 (root-caused and fixed offline, same night): the TOC-tap
+bug.** Tapping a link in the quickstart guide's table of contents
+always navigated to the same wrong destination ("the user interface
+page"), regardless of the link tapped; pinch and menu navigation
+worked. Diagnosis ran entirely offline (os1 oracle + a 19-agent
+adversarially-verified read of the KOReader input stack and the
+mainline cyttsp5 driver source): KOReader's single global `cur_slot`
+gets parked on the dedicated pen slot by BTN_TOOL_PEN:1 — pen *hover*,
+no contact needed — and the kernel's ABS_MT_SLOT dedup means a
+single-finger session never re-routes it. So while the pen hovered,
+every finger tap was written into the pen slot, where live pen-hover
+coordinates rewrote the contact mid-gesture into a swipe along the
+finger→pen bearing; swipe = one page forward, and from the quickstart
+TOC one page forward IS the "User interface" page (also the first
+link's target). It explains all three facts at once: constant wrong
+destination (fixed hand posture), working pinch (explicit slot events
++ two-handed so the pen is away), working menus (pen stowed). The os1
+oracle had already exonerated the DT axis config (identical
+touchscreen node on the working stock system). Fixed in our device
+layer (`mixedrouter.lua`: src-aware slot routing, commit cf670ed) and
+proven on the new `koreader-input` host harness (rung-2-style: the
+verbatim bundle input stack, synthetic event streams — bug reproduced
+without the router, tap lands correctly with it, pen/pinch/baseline
+guarded; commit 776da5b). Hardware confirmation pending the A.2.2
+boot: tap TOC links with the pen held near the glass. The underlying
+src-blind cur_slot design should be reported upstream to KOReader (it
+bites every wacom_protocol + multitouch device).
 
 **Post-mortem harvest (via the os1 oracle, p6 mounted read-only):**
 `/var/log/reader-session.log` recovered — the first **real device
@@ -655,9 +674,9 @@ validation on hardware.
 The next user-present device session, in order (everything here is
 pre-verified offline; the session is judgment + harvest):
 
-1. **os2 write of the A.2.1 candidate** (`4b97c382…`, ledger above) —
-   the A.2 image still on os2 carries the refresh_waveform bug and
-   boots GC16. Then boot and judge what A.2 left unjudged:
+1. **Boot the A.2.2 build and judge** what A.2 left unjudged (the os2
+   write happens autonomously under the standing protocol once rung 4
+   passes — check the ledger above for whether it already happened):
    - GL16 full-refresh optics (now actually applied at boot): the
      every-N-pages wash should read as "the letters shimmer", not "the
      screen shows a negative". Watch for believed-white residue
@@ -667,10 +686,14 @@ pre-verified offline; the session is judgment + harvest):
      while the pen hovers (ghost taps fixed), ws8100 pen-button page
      turns (barrel long-press: pen-side = forward, eraser-side = back;
      needs the BLE pen connected). Pinch is already validated.
-2. **TOC-tap bug evidence** (unless the offline diagnosis lands a fix
-   first): reproduce one tap on a named quickstart TOC link inside an
-   armed `cat /dev/input/eventN > /tmp/cap-*.bin` capture window, so
-   the 24-byte event stream shows what the kernel actually emitted.
+2. **Confirm the TOC-tap fix on hardware** (root-caused and fixed
+   offline — session record above): tap quickstart TOC links twice
+   over — once with the pen held near the glass (the posture that
+   triggered the bug: hover parks KOReader's cur_slot on the pen slot)
+   and once with the pen stowed. Both should follow the tapped link.
+   If it still misfires, arm the `cat /dev/input/eventN >
+   /tmp/cap-*.bin` capture (os2 /tmp survives reboots) and reproduce
+   one named tap inside the window.
 3. **Harvest for the phase B workbench**: `/var/log/reader-session.log`
    after a real reading session (the first real trace from the A.2
    boot is already committed — a longer organic-reading one is the

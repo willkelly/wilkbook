@@ -123,12 +123,14 @@ touch hardware-validated; pinch-zoom confirmed on the A.2 boot). Offline
 ladder rungs 1–4 (+4v visual loop) are built and green, and the
 refresh-policy program has its offline workbench plus its first real
 device trace (`ebc-replay`, rung 7a phase B — `doc/refresh-policy.md`).
-The A.2 boot surfaced two bugs: the refresh_waveform config bug (fixed —
-cmdline module params are inert; the params one-shot owns them now, and
-rung 4 asserts the live value) and the open TOC-tap bug (taps always
-land on the same wrong link; `doc/status.md`). Staged for the next
-device session: the A.2.1 image (config fix + GC16 boot deep clean; os2
-ledger in `doc/status.md`). Open next steps (ROADMAP): the GL16 optics
-verdict + TOC-tap evidence, refresh-policy tuning on the workbench,
-a Wi-Fi networking/credentials story. See `ROADMAP.md` and
+The A.2 boot surfaced two bugs, both root-caused and fixed offline the
+same night: the refresh_waveform config bug (cmdline module params are
+inert; the params one-shot owns them now, and rung 4 asserts the live
+value) and the TOC-tap bug (pen hover captured finger taps into the
+pen slot — fixed by `mixedrouter.lua`, proven on the `koreader-input`
+host harness). Staged for the next device session: the A.2.2 image
+(all three fixes; os2 ledger in `doc/status.md`). Open next steps
+(ROADMAP): the GL16 optics + tap-fix hardware verdicts, refresh-policy
+tuning on the workbench, a Wi-Fi networking/credentials story. See
+`ROADMAP.md` and
 `doc/status.md` for specifics.
