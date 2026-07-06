@@ -118,7 +118,12 @@ under a tool's gitignored `build/`.
 waveforms, Wi-Fi/BT, USB gadget console, and PREEMPT_RT — all confirmed on
 hardware. **Reader first light achieved**: KOReader runs natively on the
 framebuffer (no compositor — the cage/SDL kiosk died on hardware evidence,
-`doc/koreader-spike.md` §3) with pen-navigable UI. Offline ladder rungs 1–4
-are built and green. Open next steps (ROADMAP): finger touch (cyttsp5 DTS
-node staged, unvalidated), refresh-policy tuning, a Wi-Fi networking/
-credentials story. See `ROADMAP.md` and `doc/status.md` for specifics.
+`doc/koreader-spike.md` §3) with pen- and finger-navigable UI (cyttsp5
+touch hardware-validated). Offline ladder rungs 1–4 (+4v visual loop) are
+built and green, and the refresh-policy program has its offline workbench
+(`ebc-replay`, rung 7a phase B — `doc/refresh-policy.md`). Staged for the
+next device session: the phase A.2 image (GL16 globals + input rework;
+os2 ledger in `doc/status.md`). Open next steps (ROADMAP): the A.2
+hardware verdict + trace harvest, refresh-policy tuning on the workbench,
+a Wi-Fi networking/credentials story. See `ROADMAP.md` and
+`doc/status.md` for specifics.

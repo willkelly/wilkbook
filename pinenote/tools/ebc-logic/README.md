@@ -5,7 +5,7 @@ LUT dependency `drm_epd_helper.c`) out of
 `pinenote/patches/linux-pinenote-7.0-forward-port.patch` — extracted at build
 time with rung 1's `extract-from-patch.py`, so the tests always exercise
 exactly the code the kernel ships — against a kernel-API shim
-(`shim/kernel-shim.h`).  Two binaries:
+(`shim/kernel-shim.h`).  Three binaries:
 
 - **`ebc-logic-test`** (rung 2): unit tests for the driver's pure
   arithmetic — blitters, damage scheduling, threshold/dither paths.
@@ -13,6 +13,10 @@ exactly the code the kernel ships — against a kernel-API shim
   *executes* the hardware-facing half — probe, the global/partial refresh
   state machine, LUT upload, DMA windowing, the IRQ/completion contract —
   against a behavioral device model (`shim/fake-ebc.h`), under ASan.
+- **`ebc-replay`** (the rung-7a phase-B workbench, results in
+  `doc/refresh-policy.md`): replays KOReader `[pn-refresh]` intent traces
+  through the same machine under candidate refresh policies and reports
+  washes, the black-flash census, settle latency and scrub staleness.
 
 This is the code most likely to break silently on every forward-port; these
 tests make that a red `make check` instead of a wasted panel session.
@@ -187,6 +191,60 @@ design never overlap here.  `direct_mode` is unmodeled (off in the shipped
 config).  The real probe path uses the DRM-core shim stubs, not the real
 DRM core — that is option (b)'s territory.
 
+## The trace-replay workbench (`ebc-replay`, rung 7a phase B)
+
+The measurement tool the refresh-policy program runs on
+(`doc/refresh-policy.md` has the program and the study results).  It
+parses `[pn-refresh]` lines out of `/var/log/reader-session.log` (or a
+`synth`-generated session), re-decides each intent under a candidate
+policy — the KOReader-side layer our device target implements: the
+area-thresholded flash policy, waveform choices, and the driver params
+(`auto_refresh`, `refresh_threshold`, `split_area_limit`) — and drives
+the damage and global-refresh requests through the **real refresh-thread
+body** against the fake device, on a modeled 85 Hz frame clock (trace
+wall-clock gaps become idle frames; events landing mid-refresh inject
+from the device's frame hook, exactly like a concurrent atomic update).
+
+Faithfulness details that matter and are modeled:
+
+- **"partial" trace lines are annotations, not commands**: on the device
+  the pixels travel via fbdev deferred-io, whose damage is page-granular
+  — traced rects are widened to full-width row bands covering their fb
+  pages (`defio=bands`, the default; `defio=rect` for comparison).
+  Content is painted only inside the traced rect, so the band's
+  out-of-rect rows stay byte-identical and diff-mask to nothing,
+  exactly like the device.  `defio-delay-ms=` models the flush timer
+  (device ~50 ms): with it, a wash ioctl beats the flush and runs on
+  the stale page, and a follow-up partial draws the new content.
+- **The driver's auto-refresh accumulator** runs verbatim, so untraced
+  auto washes appear where the device would fire them (the hardcoded
+  screen-area unit is compensated when replaying at reduced geometry).
+- **Globals coalesce** through the same boolean flag the ioctl sets.
+- Content is deterministic pseudo-text (policies compare on identical
+  content streams; absolute pixel counts are model-relative).
+
+Per run it reports: washes by cause (reset/boot/ioctl/auto) with a
+per-wash census — believed-white pixels and how many of them the
+selected waveform drives dark (the black-flash number) — pixel-phases
+of drive, per-event settle latency in frames/ms, and end-of-trace
+**scrub staleness** (how long pixels have gone without an active drive
+— the honest proxy for GL16 residue risk; actual residue physics is
+hardware-only).  `pgm-dir=` additionally renders per-frame PGMs through
+a crude optical integrator at small scales (qualitative, for eyeballing
+flash patterns).
+
+```sh
+build/ebc-replay synth build/session.trace pages=120 menus=6 full-every=6
+build/ebc-replay replay build/fw build/session.trace scale=2 \
+  refresh-waveform=GL16 refresh-threshold=60
+```
+
+Built without ASan (it scans full-panel buffers per frame; the same
+driver paths run under ASan in `ebc-refresh-test`).  Its self-tests run
+in `make check`: parser/policy/deferred-io/content tests always, the
+replay tests (including the GC16-vs-GL16 differential and the
+accumulator quirk below) with `WBF=`.
+
 ## What is not validated
 
 - Real kernel concurrency: kthread preemption, IRQ timing, PM races.
@@ -194,6 +252,9 @@ DRM core — that is option (b)'s territory.
   rung 5's vkms tests cover the client side of that.
 - Whether the Y4 output looks right on a panel: rung 3's simulator plus the
   hardware-only optics checklist own that.
+- What the panel optically shows during/after a replay: the workbench
+  measures what the driver *drives*; ghosting, residue and flash
+  perception stay hardware-only.
 
 ## Findings (driver oddities discovered by these tests)
 
@@ -257,6 +318,20 @@ these silently in the patch** — they are candidates for upstream discussion
    rung-7a reproducer (`ebc-refresh-test quirk-ctx-free-uaf`) frees a
    context with one queued area and dies with an ASan
    heap-use-after-free; `run-tests.sh` asserts exactly that.
+
+7. **Manual global washes do not reset the auto-refresh accumulator**
+   (patch: `rockchip_ebc_refresh`'s epilogue).  `ctx->area_count` only
+   accumulates in the partial path and only clears when the auto
+   threshold itself fires (or when `auto_refresh=0`); the global-refresh
+   path neither counts nor clears.  With `auto_refresh=1` the driver
+   therefore schedules its own whole-panel wash purely on partial-damage
+   volume, even immediately after a user-triggered wash that already
+   cleaned the panel — a redundant flash every `refresh_threshold`
+   half-screens regardless of interleaved manual washes.  Executed by
+   `ebc-replay selftest` ("quirk: manual washes do not reset...") and
+   quantified in `doc/refresh-policy.md`'s replay study.  Policy-level
+   inefficiency, not memory unsafety; an upstream fix would zero the
+   accumulator in `rockchip_ebc_global_refresh`.
 
 The rung-7a WBF drive-sequence differential also re-confirmed the
 rastersim finding that **`blit_direct` reads the LUT transposed** from

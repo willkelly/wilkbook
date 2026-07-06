@@ -97,6 +97,14 @@ struct fake_ebc {
 	 * driver's DSP_START write, i.e. exactly when a concurrent
 	 * atomic_update could run on hardware) */
 	void (*on_frm_start)(u32 hw_frame);
+
+	/* test hook: called once per honored DSP_FRM_START after the
+	 * window mappings resolve and before any plane runs.  prev/next
+	 * (and phase_buf in three-window mode; NULL in LUT mode) are the
+	 * device-visible shadow buffers — the census point for tools that
+	 * want to account per-refresh work (ebc-replay). */
+	void (*on_event)(const struct fake_ebc_event *ev, const u8 *prev,
+			 const u8 *next, const u8 *phase_buf);
 };
 
 static struct fake_ebc fake_ebc;
@@ -228,7 +236,6 @@ static void fake_ebc_frm_start(u32 val)
 	bool lut_mode = dsp_ctrl & EBC_DSP_CTRL_DSP_LUT_MODE;
 	bool diff = dsp_ctrl & EBC_DSP_CTRL_DSP_DIFF_MODE;
 	u32 frm_total = (val >> 2) & 0x3ff;
-	struct fake_ebc_event *ev = NULL;
 	const u8 *prev, *next, *phase_buf = NULL;
 	u32 planes, i;
 
@@ -253,34 +260,42 @@ static void fake_ebc_frm_start(u32 val)
 
 	planes = lut_mode ? frm_total + 1 : 1;
 
-	if (fake_ebc.nev < FAKE_EBC_MAX_EVENTS) {
-		ev = &fake_ebc.ev[fake_ebc.nev++];
-		ev->dsp_start = val;
-		ev->epd_ctrl = epd_ctrl;
-		ev->dsp_ctrl = dsp_ctrl;
-		ev->win_act = win_act;
-		ev->mst0 = fake_ebc.latched[EBC_WIN_MST0 / 4];
-		ev->mst1 = fake_ebc.latched[EBC_WIN_MST1 / 4];
-		ev->mst2 = fake_ebc.latched[EBC_WIN_MST2 / 4];
-		ev->prev_cpu = ebc_shim_dma_cpu(fake_ebc.latched[EBC_WIN_MST0 / 4]);
-		ev->next_cpu = ebc_shim_dma_cpu(fake_ebc.latched[EBC_WIN_MST1 / 4]);
-		ev->phase_cpu = three_win ?
-			ebc_shim_dma_cpu(fake_ebc.latched[EBC_WIN_MST2 / 4]) : NULL;
-		ev->lut_mode = lut_mode;
-		ev->three_win = three_win;
-		ev->diff = diff;
-		ev->first_hw_frame = fake_ebc.hw_frames;
-		ev->planes = planes;
-	} else {
-		fake_ebc.event_overflow++;
-	}
+	{
+		struct fake_ebc_event evl;
 
-	if (!prev || !next || (three_win && !phase_buf) ||
-	    (!three_win && !lut_mode)) {
-		/* unresolvable windows or an unmodeled mode (direct) */
-		fake_ebc.bad_frames++;
-		fake_ebc_raise_dsp_end();
-		return;
+		memset(&evl, 0, sizeof(evl));
+		evl.dsp_start = val;
+		evl.epd_ctrl = epd_ctrl;
+		evl.dsp_ctrl = dsp_ctrl;
+		evl.win_act = win_act;
+		evl.mst0 = fake_ebc.latched[EBC_WIN_MST0 / 4];
+		evl.mst1 = fake_ebc.latched[EBC_WIN_MST1 / 4];
+		evl.mst2 = fake_ebc.latched[EBC_WIN_MST2 / 4];
+		evl.prev_cpu = ebc_shim_dma_cpu(fake_ebc.latched[EBC_WIN_MST0 / 4]);
+		evl.next_cpu = ebc_shim_dma_cpu(fake_ebc.latched[EBC_WIN_MST1 / 4]);
+		evl.phase_cpu = three_win ?
+			ebc_shim_dma_cpu(fake_ebc.latched[EBC_WIN_MST2 / 4]) : NULL;
+		evl.lut_mode = lut_mode;
+		evl.three_win = three_win;
+		evl.diff = diff;
+		evl.first_hw_frame = fake_ebc.hw_frames;
+		evl.planes = planes;
+
+		if (fake_ebc.nev < FAKE_EBC_MAX_EVENTS)
+			fake_ebc.ev[fake_ebc.nev++] = evl;
+		else
+			fake_ebc.event_overflow++;
+
+		if (!prev || !next || (three_win && !phase_buf) ||
+		    (!three_win && !lut_mode)) {
+			/* unresolvable windows or an unmodeled mode (direct) */
+			fake_ebc.bad_frames++;
+			fake_ebc_raise_dsp_end();
+			return;
+		}
+
+		if (fake_ebc.on_event)
+			fake_ebc.on_event(&evl, prev, next, phase_buf);
 	}
 
 	for (i = 0; i < planes; i++)

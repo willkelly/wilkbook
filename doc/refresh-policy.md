@@ -121,18 +121,102 @@ exactly for this; leave DU/A2 to the phase B workbench.
   flash, fast/a2→DU/A2, ui/partial→AUTO with waveform per update — the
   shape to emulate if per-update selection ever lands in the driver.
 
-## Open questions for the phase B workbench
+## The phase B workbench (built 2026-07-05, `ebc-replay`)
 
-- Replay captured `[pn-refresh]` traces under candidate policies:
-  flash-threshold values, full_refresh_count, GL16-vs-GC16 cadence,
-  refresh_threshold/auto_refresh, split_area_limit (quirk: scheduler
-  finding 2 worsens at 0), DU partials with binarized content.
-- Metrics per trace: flash count, pixels driven, frames-to-settle,
-  est. wall ms per page turn (phases × 1/85 Hz).
-- Believed-white residue accumulation rate under GL16-only fulls (the
-  one thing GL16 never cleans) — how often does a GC16 deep-clean
-  actually need to run?
-- Cold-bin behavior (GC16 = 1.5 s at 0 °C): should full_refresh_count
-  scale with temperature?
-- Harvest next hardware session: evtest captures of a pinch, a
-  palm-while-writing trace, gpio-keys contents.
+`pinenote/tools/ebc-logic/ebc-replay` replays `[pn-refresh]` traces
+(real ones from `/var/log/reader-session.log`, or `synth`-generated
+sessions) through the **verbatim driver's refresh thread** against the
+rung-7a fake device, on an 85 Hz frame-clock model.  It re-decides every
+intent under a candidate policy (flash fraction, waveforms, driver
+params), models the two layers the trace does not record — deferred-io
+page-band damage and the driver's own auto-refresh accumulator — and
+reports washes by cause, the black-flash census, pixel-phases, settle
+latency, and scrub staleness.  Tool details in the ebc-logic README;
+runs are deterministic and take seconds at `scale=2`.
+
+### First study: 120-page session, 6 menus, synthetic content (scale 2)
+
+Ship policy unless noted (flash-frac 0.60, GC16 partials, auto_refresh=1
+threshold=60, defio bands, flush delay 0, 25 °C).  Traces differ only
+where stated.
+
+| run | washes (ioctl+auto) | white px driven dark | wash px-phases | staleness p50/p90 |
+| --- | --- | --- | --- | --- |
+| GC16 fulls (phase A)   | 26+3 | **12.0 M** | 509 M | 3 / 3 frames |
+| GL16 fulls (phase A.2) | 26+3 | **0**      | 222 M | 28 212 / 28 212 (whole session) |
+| GL16, full-every 12    | 16+3 | 0          | 145 M | 28 212 / 28 212 |
+| GL16, no promoted fulls, thr 60 | 6+4 | 0 | 72 M  | 28 212 / 28 212 |
+| GL16, no promoted fulls, thr 20 (hrdl) | 6+12 | 0 | 122 M | 28 212 / 28 212 |
+| GL16 + real ~50 ms deferred-io lag | 25+4 | 0 | 187 M | 28 250 / 28 250 |
+
+(Counts at scale 2 = ¼ of native pixel counts.  Settle latency was
+38 frames / 447 ms median in every delay-0 run — the GC16 partial page
+turn, matching the waveform decode exactly; the scheduler adds zero
+frames.)
+
+### What the numbers say
+
+1. **The A.2 GL16 decision, quantified.**  Same trace, same washes:
+   GC16 fulls drove 12.0 M believed-white pixels dark over the session
+   (the black flash the user reported); GL16 drove **zero**, at 2.3×
+   fewer wash pixel-phases.  The panel-visible tradeoff is the
+   staleness column: under GL16 the white background (~70 % of the
+   screen with this content model) is never actively driven after the
+   boot wash — 330 s and counting at session end.
+2. **Under GL16 fulls, `full_refresh_count` loses its scrub value.**
+   The whole point of promoting every Nth page turn to `full` is
+   scrubbing accumulated residue — but a GL16 wash does not drive the
+   white background either, so staleness is *identical* at full-every
+   6, 12, or never.  What frequent fulls still buy is ghost-scrub of
+   recently-driven (text) regions; what they cost is a 447 ms
+   interruption and ~8 M px-phases each.  Consequence: with GL16
+   globals, raising `full_refresh_count` (KOReader menu, default 6) is
+   nearly free, and the **only mechanism that re-scrubs whites is a
+   GC16 deep clean** — promoting the "dispatcher deep-clean action"
+   idea from nice-to-have to the load-bearing residue answer.
+3. **Driver quirk (reported, not patched — ebc-logic README finding 7):
+   manual washes never reset the auto-refresh accumulator.**
+   `ctx->area_count` clears only when the auto threshold itself fires,
+   so with `auto_refresh=1` the driver fires its own whole-panel wash
+   every `refresh_threshold` half-screens of partial damage *regardless*
+   of interleaved user washes — 3 redundant auto washes rode along in
+   the full-every-6 run above.  Executed as a `quirk:` test in
+   `ebc-replay selftest`.
+4. **hrdl's threshold 20 vs our 60**: 12 auto washes per 120 pages vs 4
+   (one per ~10 pages vs ~30).  With GL16 autos both are optically
+   cheap; with GC16-class washes threshold 20 would flash every ~10
+   page turns.
+5. **The ioctl races the deferred-io flush — and wins.**  On the device
+   the wash ioctl fires at trace time while the painted page travels
+   via the fbdev flush timer (~50 ms).  The `defio-delay-ms=50` run
+   models that: washes start on the **stale** page, the flush lands
+   after, and a follow-up full-band partial draws the new content —
+   +22 % partial pixel-phases, median page turn 42 frames/494 ms, and
+   under GC16 this is literally the "draws all black and then redraws"
+   the hardware verdict described (the wash inverts the *old* page,
+   then the new one paints).  GL16 removes the black; the two-pass
+   structure remains.  A future policy could delay the ioctl by one
+   flush period to wash the new content instead — workbench-testable.
+6. **Deferred-io banding** cost ~1.6 % partial pixel-phases on this
+   page-turn-dominated session and changed no wash counts (page turns
+   are full-screen already; menu rects widen to full-width bands but
+   their out-of-rect rows diff-mask to nothing).  It will matter more
+   for small frequent UI damage (clock, progress bar) — `defio=bands`
+   stays the default for honesty.
+
+### Open questions (updated)
+
+- Replay a **real** harvested trace (next hardware session) and compare
+  against the synthetic model; run `verify-decisions=1` as the model
+  self-check.
+- The deep-clean action: trigger (gesture? every N GL16 washes? on
+  A2/DU exit?), and whether it should be GC16-global or a driver-param
+  flip around one wash.  The workbench can now cost candidate cadences;
+  the optics (how much residue actually accumulates before a clean is
+  *visible*) stay hardware-only.
+- DU partials with binarized content (`bw_mode`), split_area_limit >0
+  (rung-2 scheduler quirk E interacts), and cold-bin cadence (GC16 =
+  1.5 s at 0 °C; `temp-c=` is a workbench knob now).
+- Harvest next hardware session: `/var/log/reader-session.log` traces,
+  evtest captures of a pinch, a palm-while-writing trace, gpio-keys
+  contents.

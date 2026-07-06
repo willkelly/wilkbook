@@ -210,14 +210,23 @@ the start of this track — no panel required. Policy background in
       menu flashing was flashui/flashpartial cascading into the
       whole-panel GLOBAL_REFRESH; partial updates run at GC16 (~450 ms;
       DU is ~224 ms, A2 ~118 ms per the panel wbf); boot text lingered
-      because nothing cleared the retained panel. Phase A (landed):
-      area-thresholded flash policy + `[pn-refresh]` intent tracing in
-      the device target, panel blank+wash before KOReader spawns, and
-      the rung-4v visual loop. Phase B: the trace-replay workbench —
-      extend the rung-7a verbatim-driver harness + rastersim to replay
-      captured intent traces under candidate policies (waveform choices,
-      flash thresholds, runtime param flips) and emit per-frame PGMs +
-      metrics (flash count, frames-to-settle, est. ms/page-turn).
+      because nothing cleared the retained panel. Phase A (landed,
+      hardware-validated): area-thresholded flash policy +
+      `[pn-refresh]` intent tracing in the device target, panel
+      blank+wash before KOReader spawns, and the rung-4v visual loop.
+      Phase A.2 (landed, awaiting the os2 write): GL16 globals + the
+      input-architecture rework. Phase B workbench **built 2026-07-05**
+      (`ebc-replay` in `pinenote/tools/ebc-logic/`, runs in
+      `make ebc-logic-check`): replays `[pn-refresh]` traces through
+      the verbatim driver's refresh thread under candidate policies —
+      deferred-io band damage and the driver's auto-refresh accumulator
+      modeled, washes/black-flash census/settle/staleness reported.
+      First study in `doc/refresh-policy.md`: GL16-vs-GC16 quantified;
+      full_refresh_count's scrub value collapses under GL16 (a GC16
+      "deep clean" action becomes the load-bearing residue answer); the
+      accumulator ignores manual washes (ebc-logic README finding 7).
+      Phase B next: replay a real harvested trace, design the
+      deep-clean trigger, DU-partial experiments.
       Phase C: one hardware session validates the winning policy's
       optics. The `org.pinenote.ebc` dbus/UAPI compatibility story
       stays in scope for phase B design.

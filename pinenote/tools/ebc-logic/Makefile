@@ -1,12 +1,18 @@
 # Host-side tests for the EBC driver (offline testing ladder).
 #
-# Two binaries over the same verbatim driver sources (extracted from the
-# forward-port patch at build time):
+# Three binaries over the same verbatim driver sources (extracted from
+# the forward-port patch at build time):
 #   ebc-logic-test    rung 2: unit tests for the pure logic (blitters,
 #                     damage scheduling, threshold/dither paths)
 #   ebc-refresh-test  rung 7a: executes the refresh state machine against
 #                     a behavioral device model (shim/fake-ebc.h), built
 #                     with ASan; see doc/ebc-harness-spike.md
+#   ebc-replay        the rung-7a phase-B workbench: replays KOReader
+#                     [pn-refresh] traces through the same machine under
+#                     candidate refresh policies (doc/refresh-policy.md).
+#                     Built without ASan — it is a measurement tool that
+#                     scans full-panel buffers per frame; the same driver
+#                     paths run under ASan in ebc-refresh-test.
 #
 #   guix shell gcc-toolchain python -- make check [WBF=/path/to/ebc.wbf]
 #
@@ -34,7 +40,7 @@ EXTRACTED := $(BUILD)/drivers/gpu/drm/rockchip/rockchip_ebc.c \
              $(BUILD)/include/drm/drm_epd_helper.h \
              $(BUILD)/include/uapi/drm/rockchip_ebc_drm.h
 
-all: $(BUILD)/ebc-logic-test $(BUILD)/ebc-refresh-test
+all: $(BUILD)/ebc-logic-test $(BUILD)/ebc-refresh-test $(BUILD)/ebc-replay
 
 $(EXTRACTED) &: $(PATCH) $(EXTRACT)
 	python3 $(EXTRACT) $(PATCH) $(BUILD) \
@@ -54,6 +60,10 @@ $(BUILD)/ebc-refresh-test: ebc-refresh-test.c $(EXTRACTED) shim/kernel-shim.h \
                            shim/fake-ebc.h $(BUILD)/rastersim-asan.o
 	$(CC) $(CFLAGS) $(ASAN) $(CPPFLAGS) -o $@ ebc-refresh-test.c \
 	  $(BUILD)/rastersim-asan.o
+
+$(BUILD)/ebc-replay: ebc-replay.c $(EXTRACTED) shim/kernel-shim.h \
+                     shim/fake-ebc.h
+	$(CC) $(CFLAGS) $(CPPFLAGS) -o $@ ebc-replay.c -lm
 
 check: all
 	./run-tests.sh $(BUILD) "$(WBF)"

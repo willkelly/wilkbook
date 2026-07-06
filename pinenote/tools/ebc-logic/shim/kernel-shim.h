@@ -817,6 +817,10 @@ static inline dma_addr_t dma_map_single(struct device *dev, void *ptr,
 		m->active = true;
 		m->cpu = ptr;
 		m->size = size;
+		/* handle 0 is dma_mapping_error's sentinel; long sessions
+		 * (ebc-replay) allocate enough mappings to wrap the u32 */
+		if (!ebc_shim.dma_next)
+			ebc_shim.dma_next = EBC_SHIM_DMA_BASE;
 		m->handle = ebc_shim.dma_next;
 		ebc_shim.dma_next += 0x01000000u;
 		return m->handle;

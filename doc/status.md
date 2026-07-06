@@ -301,6 +301,46 @@ fix):
   all tests pass; see `pinenote/tools/wbf/README.md` for what the
   waveform contains).
 
+## 2026-07-05 (late, offline) phase B trace-replay workbench built and its first study run
+
+The display-quality program can now iterate without the device.
+`ebc-replay` (third binary in `pinenote/tools/ebc-logic/`, in `make
+ebc-logic-check`, all suites green with and without `WBF=`) replays
+KOReader `[pn-refresh]` traces through the **verbatim driver's refresh
+thread** on the rung-7a fake device with an 85 Hz frame-clock model,
+re-deciding every intent under a candidate policy. It models the two
+layers the trace does not record — fbdev deferred-io page-band damage
+and the driver's auto-refresh accumulator — and reports washes by cause,
+a per-wash black-flash census (believed-white pixels driven dark),
+pixel-phases, per-event settle latency, and end-of-session scrub
+staleness. Deterministic; seconds per run at `scale=2`; synthetic
+sessions via `ebc-replay synth` until real traces are harvested.
+
+First study (120 synthetic pages, results + table in
+`doc/refresh-policy.md`): the A.2 GL16 decision quantified (12.0 M
+believed-white pixels driven dark per session under GC16 fulls, zero
+under GL16, at 2.3× fewer wash pixel-phases); **full_refresh_count's
+scrub value collapses under GL16** (staleness identical at full-every
+6/12/never — a GC16 "deep clean" action is now the load-bearing residue
+answer); settle = 38 frames/447 ms per GC16 partial page turn, scheduler
+overhead zero; modeling the device's real ~50 ms deferred-io lag
+(`defio-delay-ms=50`) reproduces the "draws black then redraws" verdict
+mechanically — the wash ioctl beats the flush, inverts the *old* page,
+and a follow-up partial draws the new one (+22 % partial work); and a
+new driver finding, reported not patched (ebc-logic README finding 7,
+executed as a discriminating `quirk:` test): **manual global washes
+never reset the auto-refresh accumulator**, so auto washes fire on
+partial-damage volume regardless of interleaved user washes.
+
+The tool went through a 19-agent adversarial review before landing;
+the two highest-severity catches (content painted across the whole
+deferred-io band would have defeated diff-masking and faked the
+staleness metric; globals due mid-wash could mint a phantom wash
+misattributed to "auto") were fixed and the study re-run — headline
+conclusions unchanged, numbers corrected.  One harness fix rode along:
+the shim's DMA handle allocator wrapped to the error-sentinel handle 0
+after 192 mappings (only long replay sessions allocate that many).
+
 ## 2026-07-05 (evening, offline) refresh-policy phase A built — NOT yet on hardware
 
 Built and offline-validated the first refresh-policy pass plus its
