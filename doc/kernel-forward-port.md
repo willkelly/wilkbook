@@ -214,8 +214,18 @@ Record anything that took a hardware session to discover:
   `Image.gz`.
 - Kernel arguments that matter are centralized in
   `pinenote/images/pinenote-initramfs.scm`
-  (`earlycon console=tty0 console=ttyS2,1500000n8 fw_devlink=off` plus the
-  `rockchip_ebc` parameters).
+  (`earlycon console=tty0 console=ttyS2,1500000n8 fw_devlink=off`).
+- **`module.param=` cmdline tokens are inert for our modules**
+  (2026-07-05, found live on the A.2 boot): the kernel only applies
+  cmdline parameters to *built-in* modules; for loadable ones it is
+  modprobe that reads `/proc/cmdline` — and the Guix initrd raw-loads
+  `rockchip_ebc` with `load-linux-modules-from-directory`, which passes
+  no parameters at all. The A.2 image shipped
+  `rockchip_ebc.refresh_waveform=6` on the cmdline and booted with the
+  driver default (4). EBC parameters must go through the
+  `pinenote-ebc-params` one-shot (`pinenote/packages/firmware.scm`),
+  which writes and verifies them via sysfs post-boot; rung 4 asserts
+  the live value from inside the guest (`VIRTCHK-WF-6`).
 - `console=tty0` + `ignore_loglevel` means every kernel message redraws
   fbcon on the e-ink panel, and the fbdev emulation's flushes overwrite
   whatever userspace put there (2026-07-05 first-light root cause). Any

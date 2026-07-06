@@ -206,6 +206,7 @@ probe_round() {
     "if grep -q 'Service udev has been started' /var/log/messages; then u=yes; else u=no; fi; echo VIRTCHK-UDEV-\$u" \
     "if grep -q 'Service pinenote-waveform has been started' /var/log/messages; then w=yes; else w=no; fi; echo VIRTCHK-WVF-\$w" \
     "if grep -q 'Service pinenote-ebc-params has been started' /var/log/messages; then e=yes; else e=no; fi; echo VIRTCHK-EBCP-\$e" \
+    "v=\$(cat /sys/module/rockchip_ebc/parameters/refresh_waveform 2>/dev/null || echo absent); echo VIRTCHK-WF-\$v" \
     "if grep -q 'Service reader-session has been started' /var/log/messages; then r=yes; else r=no; fi; echo VIRTCHK-RDR-\$r" \
     "if [ \"\$r\" = yes ]; then timeout 20 herd stop reader-session > /dev/null 2>&1; fi" \
     2>/dev/null || true
@@ -215,6 +216,7 @@ all_sentinels_present() {
   grep -aq 'VIRTCHK-UDEV-yes' "$log" && \
   grep -aq 'VIRTCHK-WVF-yes'  "$log" && \
   grep -aq 'VIRTCHK-EBCP-yes' "$log" && \
+  grep -aq 'VIRTCHK-WF-6'     "$log" && \
   grep -aq 'VIRTCHK-RDR-yes'  "$log"
 }
 
@@ -312,6 +314,12 @@ printf '\nRequired service milestones (in-guest probe of /var/log/messages):\n'
 require 'udev service completes'       'VIRTCHK-UDEV-yes'
 require 'waveform one-shot ran'        'VIRTCHK-WVF-yes'
 require 'ebc-params one-shot ran'      'VIRTCHK-EBCP-yes'
+# The live parameter value, not the intent: the 2026-07-05 A.2 image
+# carried refresh_waveform=6 on the cmdline, which the raw initrd module
+# loader silently ignores — the device booted GC16.  Reading the sysfs
+# value from inside the guest is the only check that catches the whole
+# chain (module loaded, one-shot ran, parameter actually took).
+require 'live refresh_waveform is GL16' 'VIRTCHK-WF-6'
 require 'reader-session started'       'VIRTCHK-RDR-yes'
 require 'clean poweroff'               'reboot: Power down'
 

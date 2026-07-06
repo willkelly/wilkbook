@@ -224,20 +224,14 @@ partition and loading PineNote display modules from the initrd.")
     "earlycon"
      "console=tty0"
      "console=ttyS2,1500000n8"
-     "fw_devlink=off"
-     "rockchip_ebc.direct_mode=0"
-     "rockchip_ebc.auto_refresh=1"
-     "rockchip_ebc.refresh_threshold=60"
-     "rockchip_ebc.split_area_limit=0"
-     "rockchip_ebc.panel_reflection=1"
-     "rockchip_ebc.prepare_prev_before_a2=0"
-     "rockchip_ebc.dclk_select=0"
-     ;; Global refreshes use GL16 (enum 6) instead of GC16: decoded from
-     ;; the device's own waveform (doc/refresh-policy.md), GL16 is GC16
-     ;; minus the white->white drive — the page background stays white
-     ;; through a full wash instead of flashing to a negative for
-     ;; ~165 ms, at identical duration and ghost-clearing everywhere
-     ;; else.  Residue in believed-white pixels is the one thing GL16
-     ;; never scrubs; a deliberate GC16 deep-clean action can cover
-     ;; that later if hardware shows it accumulating.
-     "rockchip_ebc.refresh_waveform=6"))
+     "fw_devlink=off"))
+
+;; Do NOT put rockchip_ebc.* parameters on the kernel command line: they
+;; are inert.  module.param=value cmdline tokens only reach loadable
+;; modules via modprobe (which reads /proc/cmdline), and our initrd
+;; raw-loads rockchip_ebc with load-linux-modules-from-directory, which
+;; passes no parameters at all.  Hardware-confirmed 2026-07-05: an image
+;; carrying rockchip_ebc.refresh_waveform=6 here booted with the driver
+;; default (4).  EBC parameters belong in the pinenote-ebc-params
+;; one-shot (pinenote/packages/firmware.scm), which writes them through
+;; /sys/module/rockchip_ebc/parameters after boot and verifies each one.

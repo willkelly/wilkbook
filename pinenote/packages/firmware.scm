@@ -240,11 +240,26 @@ Debian screen image from device backups.")
                 (display "set_parameter split_area_limit 0\n" port)
                 (display "set_parameter panel_reflection 1\n" port)
                 (display "set_parameter prepare_prev_before_a2 0\n" port)
-                (display "set_parameter dclk_select 0\n" port)))
+                (display "set_parameter dclk_select 0\n" port)
+                ;; Global refreshes use GL16 (enum 6) instead of GC16:
+                ;; decoded from the device's own waveform
+                ;; (doc/refresh-policy.md), GL16 is GC16 minus the
+                ;; white->white drive — the page background stays white
+                ;; through a full wash instead of flashing to a negative
+                ;; for ~165 ms, at identical duration and ghost-clearing
+                ;; everywhere else.  Residue in believed-white pixels is
+                ;; the one thing GL16 never scrubs; the reader-session
+                ;; boot blank runs one deliberate GC16 deep clean to
+                ;; cover the boot console, and a user-facing deep-clean
+                ;; action can follow if hardware shows it accumulating.
+                ;; This must live here, not on the kernel cmdline: the
+                ;; initrd raw-loads the module, so module.param= tokens
+                ;; never apply (hardware-confirmed 2026-07-05).
+                (display "set_parameter refresh_waveform 6\n" port)))
             (chmod params-script #o555)
             (call-with-output-file config
               (lambda (port)
-                (display "options rockchip_ebc direct_mode=0 auto_refresh=1 refresh_threshold=60 split_area_limit=0 panel_reflection=1 prepare_prev_before_a2=0 dclk_select=0\n" port)))))))
+                (display "options rockchip_ebc direct_mode=0 auto_refresh=1 refresh_threshold=60 split_area_limit=0 panel_reflection=1 prepare_prev_before_a2=0 dclk_select=0 refresh_waveform=6\n" port)))))))
     (home-page "https://github.com/PNDeb/pinenote-debian-image")
     (synopsis "PineNote firmware helper scripts and EBC module options")
     (description
