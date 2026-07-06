@@ -10,7 +10,7 @@ ARTIFACTS ?= /tmp/opencode/pinenote-rootfs-artifacts
 FLAVORS = minimal slim networked dev usb-console usb-console-linux-6-6 reader
 
 .PHONY: help packages kernel kernel-drv qemu-smoke qemu-virt qemu-virt-check \
-        wbf-check ebc-logic-check rastersim-check \
+        wbf-check ebc-logic-check rastersim-check koreader-input-check \
         $(FLAVORS) $(addprefix image-,$(FLAVORS)) $(addprefix rootfs-,$(FLAVORS))
 
 help:
@@ -123,3 +123,10 @@ ebc-logic-check:
 # skipped: make rastersim-check [WBF=/path/to/ebc.wbf]
 rastersim-check:
 	guix shell gcc-toolchain python -- $(MAKE) -C pinenote/tools/rastersim check WBF=$(WBF)
+
+# KOReader input-routing tests against the verbatim bundle sources
+# (native koreader-bin, resolved via `guix build` -- cached; override
+# with KOREADER_BUNDLE=/gnu/store/...): proves the pen-hover tap-capture
+# bug and validates the mixedrouter fix.
+koreader-input-check:
+	$(MAKE) -C pinenote/tools/koreader-input check KOREADER_BUNDLE=$(KOREADER_BUNDLE)

@@ -49,17 +49,18 @@ and `doc/kernel-forward-port.md`.
 
 ## The host tools (`pinenote/tools/`)
 
-All three build with `guix shell gcc-toolchain python -- make -C <dir>
-check` and have a root-level convenience target. Waveform-dependent tests
-need the per-device `.wbf` (never committed — see the firmware policy):
-pass `WBF=/path/to/ebc.wbf`; without it those tests skip with a clear
-message rather than fail.
+The C tools build with `guix shell gcc-toolchain python -- make -C <dir>
+check` and every tool has a root-level convenience target.
+Waveform-dependent tests need the per-device `.wbf` (never committed —
+see the firmware policy): pass `WBF=/path/to/ebc.wbf`; without it those
+tests skip with a clear message rather than fail.
 
 | Tool | Ladder rung | What it validates | Run |
 | --- | --- | --- | --- |
 | `pinenote/tools/wbf` | 1 | PVI `.wbf` parsing/decode (header, modes, temperature bins, LUT decode) exactly as `rockchip_ebc` loads it; `--dump-lut` exports a decoded LUT for the simulator | `make wbf-check WBF=…` |
 | `pinenote/tools/ebc-logic` | 2 + 7a | Rung 2 (`ebc-logic-test`): the driver's pure logic — XRGB8888/R4→Y4 blitters, damage split/collision scheduling, threshold/dither paths — vs independent references.  Rung 7a (`ebc-refresh-test`): *executes* the refresh state machine (probe, global/partial orchestration, LUT upload, DMA windowing, IRQ/completion, buffer switching) against a behavioral device model under ASan — with non-coherent DMA (the device reads only synced shadows, so a missing `dma_sync` fails a test) — incl. a drive-sequence differential vs rastersim's independent waveform decode.  Phase B (`ebc-replay`): replays KOReader `[pn-refresh]` traces through the same machine under candidate refresh policies — the display-quality workbench, results in `doc/refresh-policy.md` | `make ebc-logic-check WBF=…` |
 | `pinenote/tools/rastersim` | 3 | A standalone Gray8→Y4 raster library + waveform *simulator* (state model + LUT playback), with golden-image and convergence tests | `make rastersim-check WBF=…` |
+| `pinenote/tools/koreader-input` | 2 | KOReader's *verbatim* `device/input.lua` + `gesturedetector.lua` (from the native `koreader-bin` bundle, under its own luajit) fed synthetic pen+touch evdev streams: reproduces the pen-hover tap-capture `quirk:` (finger tap → swipe) and validates the `mixedrouter.lua` fix, with pen-contact/pinch/baseline-tap regression guards | `make koreader-input-check` |
 
 Each tool's `README.md` documents what it does and does **not** cover.
 The recurring caveat: **none of this models electrophoretic optics.**
