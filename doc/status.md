@@ -127,7 +127,19 @@ os2 currently holds the **phase A.2 build**, SHA
 confirmed, p6 unmounted, dd with fsync, readback of the exact
 1 903 321 088-byte range SHA-matched). Staged copy on os1 at
 `/home/user/wilkbook-artifacts/pinenote-reader-PNGuixRoot-20260705-a2.ext4`.
-**First boot pending** (user-present step).
+**First-booted the same night** (session record below): pinch-zoom
+validated; the GL16 config never applied (the refresh_waveform bug —
+fixed in the repo, but the image on os2 still carries it and will boot
+GC16 again); the TOC-tap bug is open.
+
+**Staged for the next write — phase A.2.1**, SHA
+`4b97c382918c5ef5441a351b7c55f2eadb567aada05ed5a55ee12bb02b391b6b`, at
+`/tmp/opencode/pinenote-rootfs-artifacts/pinenote-reader-PNGuixRoot-20260705-a21.ext4`
+(host; not yet staged to os1). Over A.2 it fixes the refresh_waveform
+config bug (the ebc-params one-shot now sets GL16; inert cmdline tokens
+removed) and upgrades the boot blank to a GC16 deep clean. Rung-4
+assertions on this exact rootfs include the new live-parameter check
+(`VIRTCHK-WF-6`).
 
 Phase A.2 adds over the phase A build it replaced: GL16 global refreshes
 (`rockchip_ebc.refresh_waveform=6` — the full wash no longer drives the
@@ -184,6 +196,73 @@ boot, touch, pen, frontlight, fonts). Harvest
 The previously deployed `pinenote-reader-PNGuixRoot-20260704.ext4` (SHA
 `23e597fd…`) was **booted and live-debugged 2026-07-04/05** — session
 record below; its staged copy remains on os1 for rollback.
+
+## 2026-07-05 (night) phase A.2 first boot — pinch validated, two bugs found live, one fixed in-session
+
+The A.2 build (`52cf8e8a…`) booted unattended to KOReader. Debugging ran
+over the ACM gadget console with the user present; the device was
+rebooted to os1 before the visual GL16/GC16 A/B was judged, and the
+post-mortem harvest below completed the session offline.
+
+**Validated on hardware:**
+
+- **Two-finger pinch-zoom works** — the input-architecture rework's
+  structural fix (handleMixedTouchEv + per-source conditioning)
+  confirmed on the panel.
+- **GC16 deep-clean scrubs believed-white residue** — see below; this
+  was demonstrated live and is now the boot-blank behavior.
+
+**Bug 1 (config, root-caused and fixed same session):** the live
+`refresh_waveform` read **4 (GC16), not 6** — the A.2 GL16 policy never
+applied. Root cause: the Guix initrd raw-loads `rockchip_ebc` with
+`load-linux-modules-from-directory`, which passes no module parameters;
+`module.param=` kernel-cmdline tokens only reach loadable modules via
+modprobe (which reads /proc/cmdline), so every `rockchip_ebc.*` cmdline
+token we ever shipped was inert — the other parameters only ever worked
+because the `pinenote-ebc-params` one-shot re-applies them post-boot,
+and that script did not set `refresh_waveform`. Worked around live
+(sysfs write), then fixed in the repo: the one-shot now sets
+`refresh_waveform 6`, the modprobe options line is synced, the dead
+cmdline tokens are removed, and **rung 4 now asserts the live sysfs
+value from inside the guest** (`VIRTCHK-WF-6`) — the gate that would
+have caught this before the device did.
+
+**Residue diagnosis (user's question answered):** the black background
+texture was fbcon boot-text residue in believed-white pixels. The boot
+sequence (panel blank partial + global) ran under GC16 this boot so it
+*should* have scrubbed — but the boot wash raced KOReader's own first
+washes; a deliberate GC16 global fired live via the ioctl visibly
+scrubbed the residue. Under the intended GL16 policy such residue would
+*never* scrub (GL16's white→white sequence is neutral), so the
+reader-session boot blank now runs its wash as an explicit GC16 deep
+clean and restores the shipped waveform after (validated live).
+
+**Bug 2 (open): the TOC-tap bug.** Tapping a link in the quickstart
+guide's table of contents always navigates to the same wrong
+destination ("the user interface page"), regardless of the link tapped;
+pinch and menu navigation work. Offline diagnosis so far: the os1
+oracle exonerated the DT axis config (the working stock system has the
+*identical* touchscreen node — no inversion/swap properties), which
+narrows it to the KOReader input stack or the mainline-vs-m-weigand
+cyttsp5 driver difference (os1 runs the fork; our kernel runs
+mainline). Input captures armed during the session expired unused
+(empty files recovered post-mortem).
+
+**Post-mortem harvest (via the os1 oracle, p6 mounted read-only):**
+`/var/log/reader-session.log` recovered — the first **real device
+`[pn-refresh]` trace** (59 events / 153 s), committed as
+`pinenote/tools/ebc-logic/traces/2026-07-05-a2-first-boot.trace`.
+Replayed on the phase B workbench: settle med 38 frames / 447 ms —
+matching the synthetic study exactly; and the GC16-as-run vs GL16
+comparison on real usage reproduces the synthetic 2.3× ratio (385M vs
+165M wash px-phases; 9.19M believed-white px driven dark per wash cycle
+vs zero). The real session fired 22 global washes in 153 s — under
+GC16 that is a black flash every ~7 s, matching the felt experience.
+
+**Still pending from the A.2 checklist:** the GL16 wash optics verdict
+(the "letters shimmer, not negative flash" judgment) — the session
+never ran long under true GL16. The **A.2.1** build with the config
+fixes is staged (ledger below).
 
 ## 2026-07-04/05 reader first light (os2 boot of the 20260704 artifact)
 
@@ -576,21 +655,27 @@ validation on hardware.
 The next user-present device session, in order (everything here is
 pre-verified offline; the session is judgment + harvest):
 
-1. ~~os2 write of the phase A.2 candidate~~ **Done 2026-07-05 late
-   evening** (readback-verified; ledger above). **Boot os2 and judge:**
-   - GL16 full-refresh optics: the every-N-pages wash should read as
-     "the letters shimmer", not "the screen shows a negative". Watch
-     for believed-white residue accumulating over a long session — the
-     one thing GL16 never scrubs (`doc/refresh-policy.md`).
-   - Input rework feel: two-finger pinch (structurally fixed), palm
-     resting near the screen while the pen hovers (ghost taps fixed),
-     ws8100 pen-button page turns (barrel long-press: pen-side =
-     forward, eraser-side = back; needs the BLE pen connected).
-2. **Harvest for the phase B workbench** (this is the payload that makes
-   future display tuning offline): `/var/log/reader-session.log` after
-   a real reading session — it carries the `[pn-refresh]` intent trace;
-   plus `evtest` captures of a pinch and a palm-while-writing episode,
-   and the gpio-keys node contents.
+1. **os2 write of the A.2.1 candidate** (`4b97c382…`, ledger above) —
+   the A.2 image still on os2 carries the refresh_waveform bug and
+   boots GC16. Then boot and judge what A.2 left unjudged:
+   - GL16 full-refresh optics (now actually applied at boot): the
+     every-N-pages wash should read as "the letters shimmer", not "the
+     screen shows a negative". Watch for believed-white residue
+     accumulating over a long session (`doc/refresh-policy.md`); the
+     boot blank's GC16 deep clean should leave a clean page at start.
+   - Input rework feel, remaining items: palm resting near the screen
+     while the pen hovers (ghost taps fixed), ws8100 pen-button page
+     turns (barrel long-press: pen-side = forward, eraser-side = back;
+     needs the BLE pen connected). Pinch is already validated.
+2. **TOC-tap bug evidence** (unless the offline diagnosis lands a fix
+   first): reproduce one tap on a named quickstart TOC link inside an
+   armed `cat /dev/input/eventN > /tmp/cap-*.bin` capture window, so
+   the 24-byte event stream shows what the kernel actually emitted.
+3. **Harvest for the phase B workbench**: `/var/log/reader-session.log`
+   after a real reading session (the first real trace from the A.2
+   boot is already committed — a longer organic-reading one is the
+   next payload); plus `evtest` captures of a pinch and a
+   palm-while-writing episode, and the gpio-keys node contents.
 
 Still queued behind the display program:
 

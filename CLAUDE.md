@@ -119,11 +119,16 @@ waveforms, Wi-Fi/BT, USB gadget console, and PREEMPT_RT — all confirmed on
 hardware. **Reader first light achieved**: KOReader runs natively on the
 framebuffer (no compositor — the cage/SDL kiosk died on hardware evidence,
 `doc/koreader-spike.md` §3) with pen- and finger-navigable UI (cyttsp5
-touch hardware-validated). Offline ladder rungs 1–4 (+4v visual loop) are
-built and green, and the refresh-policy program has its offline workbench
-(`ebc-replay`, rung 7a phase B — `doc/refresh-policy.md`). Staged for the
-next device session: the phase A.2 image (GL16 globals + input rework;
-os2 ledger in `doc/status.md`). Open next steps (ROADMAP): the A.2
-hardware verdict + trace harvest, refresh-policy tuning on the workbench,
+touch hardware-validated; pinch-zoom confirmed on the A.2 boot). Offline
+ladder rungs 1–4 (+4v visual loop) are built and green, and the
+refresh-policy program has its offline workbench plus its first real
+device trace (`ebc-replay`, rung 7a phase B — `doc/refresh-policy.md`).
+The A.2 boot surfaced two bugs: the refresh_waveform config bug (fixed —
+cmdline module params are inert; the params one-shot owns them now, and
+rung 4 asserts the live value) and the open TOC-tap bug (taps always
+land on the same wrong link; `doc/status.md`). Staged for the next
+device session: the A.2.1 image (config fix + GC16 boot deep clean; os2
+ledger in `doc/status.md`). Open next steps (ROADMAP): the GL16 optics
+verdict + TOC-tap evidence, refresh-policy tuning on the workbench,
 a Wi-Fi networking/credentials story. See `ROADMAP.md` and
 `doc/status.md` for specifics.
