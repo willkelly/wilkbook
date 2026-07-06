@@ -154,6 +154,30 @@ where stated.
 turn, matching the waveform decode exactly; the scheduler adds zero
 frames.)
 
+### First real trace (A.2 first boot, 2026-07-05)
+
+`pinenote/tools/ebc-logic/traces/2026-07-05-a2-first-boot.trace` — 59
+events / 153 s harvested post-mortem from the device's
+reader-session.log (quickstart navigation, menus, the TOC-tap-bug
+reproduction attempts).  The device ran GC16 globals that boot (the
+refresh_waveform config bug, fixed same day), so the replay pair is the
+policy A/B on real usage:
+
+| refresh waveform | wash px-phases | white px driven dark | staleness p90 |
+| --- | --- | --- | --- |
+| GC16 (as run)    | 385 M | 9.19 M | 13.3 s |
+| GL16 (intended)  | 165 M | 0      | 154 s (whole session) |
+
+The synthetic study's 2.3× wash-cost ratio and the zero-vs-millions
+dark-drive split reproduce exactly on real usage, and settle stays
+38 frames / 447 ms.  One new observation the synthetic sessions did not
+predict: the real session fired **22 ioctl washes in 153 s** (~every
+7 s — quickstart page jumps + promoted flashes), so under GC16 the felt
+experience was a black flash every few seconds.  That wash *rate* is a
+policy lever the workbench should explore next (full_refresh_count and
+flash-frac interact with navigation-heavy usage very differently than
+with linear reading).
+
 ### What the numbers say
 
 1. **The A.2 GL16 decision, quantified.**  Same trace, same washes:

@@ -1,0 +1,64 @@
+# Real device trace: A.2 image first boot, 2026-07-05 hardware session.
+# Harvested post-mortem from os2 /var/log/reader-session.log via the os1 oracle.
+# KOReader v2026.03 quickstart auto-open + user finger/pen interaction (~2.5 min).
+# NOTE: the session ran with refresh_waveform=4 (GC16) due to the cmdline-params
+# config bug fixed the same day — washes in this trace are GC16 on-device.
+[pn-refresh] ui partial rect=237,610,1398,184 dither=nil t=1783299453.949499 
+[pn-refresh] full global rect=0,0,1872,1404 dither=nil t=1783299454.744384 
+[pn-refresh] ui partial rect=237,639,1398,126 dither=nil t=1783299457.432123 
+[pn-refresh] full global rect=0,0,1872,1404 dither=nil t=1783299463.202363 
+[pn-refresh] full global rect=0,0,1872,1404 dither=nil t=1783299465.583038 
+[pn-refresh] partial partial rect=0,0,1872,1404 dither=nil t=1783299468.080099 
+[pn-refresh] full global rect=0,0,1872,1404 dither=nil t=1783299470.005473 
+[pn-refresh] full global rect=0,0,1872,1404 dither=nil t=1783299472.209213 
+[pn-refresh] full global rect=0,0,1872,1404 dither=nil t=1783299474.370263 
+[pn-refresh] full global rect=0,0,1872,1404 dither=nil t=1783299476.019360 
+[pn-refresh] partial partial rect=0,0,1872,1404 dither=nil t=1783299477.594985 
+[pn-refresh] partial partial rect=0,0,1872,1404 dither=nil t=1783299478.693938 
+[pn-refresh] full global rect=0,0,1872,1404 dither=nil t=1783299480.219932 
+[pn-refresh] full global rect=0,0,1872,1404 dither=nil t=1783299482.633470 
+[pn-refresh] ui partial rect=674,12,523,131 dither=nil t=1783299486.318024 
+[pn-refresh] partial partial rect=0,0,1872,1404 dither=nil t=1783299486.463109 
+[pn-refresh] ui partial rect=674,12,523,262 dither=nil t=1783299487.284163 
+[pn-refresh] ui partial rect=666,12,539,131 dither=nil t=1783299488.118321 
+[pn-refresh] partial partial rect=0,0,1872,1404 dither=nil t=1783299488.273956 
+[pn-refresh] ui partial rect=666,12,539,131 dither=nil t=1783299490.137054 
+[pn-refresh] ui partial rect=697,143,478,131 dither=nil t=1783299490.278330 
+[pn-refresh] full global rect=0,0,1872,1404 dither=nil t=1783299496.523981 
+[pn-refresh] ui partial rect=666,12,539,131 dither=nil t=1783299500.399483 
+[pn-refresh] full global rect=0,0,1872,1404 dither=nil t=1783299500.572087 
+[pn-refresh] ui partial rect=666,12,539,131 dither=nil t=1783299502.420380 
+[pn-refresh] ui partial rect=697,143,478,131 dither=nil t=1783299502.552906 
+[pn-refresh] full global rect=0,0,1872,1404 dither=nil t=1783299503.207608 
+[pn-refresh] partial partial rect=0,0,1872,1404 dither=nil t=1783299509.044779 
+[pn-refresh] partial partial rect=0,0,1872,1404 dither=nil t=1783299510.405107 
+[pn-refresh] partial partial rect=0,0,1872,1404 dither=nil t=1783299511.690307 
+[pn-refresh] partial partial rect=0,0,1872,1404 dither=nil t=1783299514.347728 
+[pn-refresh] full global rect=0,0,1872,1404 dither=nil t=1783299515.899601 
+[pn-refresh] ui partial rect=0,408,1872,220 dither=nil t=1783299516.944018 
+[pn-refresh] ui partial rect=237,610,1398,184 dither=nil t=1783299516.979492 
+[pn-refresh] full global rect=0,0,1872,1404 dither=nil t=1783299517.330506 
+[pn-refresh] partial partial rect=0,0,1872,1404 dither=nil t=1783299520.038895 
+[pn-refresh] partial partial rect=0,0,1872,1404 dither=nil t=1783299525.916104 
+[pn-refresh] partial partial rect=0,0,1872,1404 dither=nil t=1783299527.737420 
+[pn-refresh] partial partial rect=0,0,1872,1404 dither=nil t=1783299531.808526 
+[pn-refresh] full global rect=0,0,1872,1404 dither=nil t=1783299542.702539 
+[pn-refresh] full global rect=0,0,1872,1404 dither=nil t=1783299545.219816 
+[pn-refresh] full global rect=0,0,1872,1404 dither=nil t=1783299550.180981 
+[pn-refresh] ui partial rect=0,1368,1872,36 dither=nil t=1783299553.014124 
+[pn-refresh] ui partial rect=-28,956,1928,448 dither=nil t=1783299555.566598 
+[pn-refresh] full global rect=-28,0,1928,1404 dither=nil t=1783299557.756210 
+[pn-refresh] partial partial rect=-28,956,1928,448 dither=nil t=1783299564.207827 
+[pn-refresh] flashui global rect=-28,0,1928,1404 dither=nil t=1783299567.105777 
+[pn-refresh] fast partial rect=12,128,1848,105 dither=nil t=1783299570.412068 
+[pn-refresh] flashui global rect=-28,0,1928,1404 dither=nil t=1783299570.515481 
+[pn-refresh] fast partial rect=0,421,1854,82 dither=nil t=1783299575.744695 
+[pn-refresh] full global rect=0,0,1872,1404 dither=nil t=1783299575.824323 
+[pn-refresh] fast partial rect=936,984,14,52 dither=nil t=1783299576.267120 
+[pn-refresh] ui partial rect=936,984,14,52 dither=nil t=1783299577.270439 
+[pn-refresh] partial partial rect=0,0,1872,1404 dither=nil t=1783299578.176540 
+[pn-refresh] partial partial rect=0,0,1872,1404 dither=nil t=1783299579.523504 
+[pn-refresh] partial partial rect=0,0,1872,1404 dither=nil t=1783299590.506252 
+[pn-refresh] full global rect=0,0,1872,1404 dither=nil t=1783299594.208851 
+[pn-refresh] fast partial rect=0,0,294,200 dither=nil t=1783299607.002322 
+[pn-refresh] ui partial rect=0,0,1872,1404 dither=nil t=1783299607.049189 
