@@ -27,12 +27,19 @@
 ;; boot console text does not linger on the e-ink (which retains it
 ;; unpowered) for the several seconds KOReader takes to start.  Runs via
 ;; the bundle's own luajit: Guile cannot issue the DRM ioctl, and the
-;; ~10 lines of ffi below beat shipping a C helper.  Best-effort on
-;; purpose — on qemu-virt the ioctl fails harmlessly (no EBC), and a
-;; missing fb0 just skips the fill.
+;; ffi below beats shipping a C helper.  Best-effort on purpose — on
+;; qemu-virt the ioctl fails harmlessly (no EBC), and a missing fb0
+;; just skips the fill.
+;;
+;; The wash runs as GC16 regardless of the shipped refresh_waveform:
+;; under the GL16 policy a global never drives believed-white pixels,
+;; so residue of the boot text would survive every subsequent wash.
+;; One deliberate GC16 deep clean here scrubs it (hardware-validated
+;; 2026-07-05, when exactly that residue was observed and a live GC16
+;; wash removed it); the shipped waveform is restored afterwards.
 (define %panel-blank-lua "
 local ffi = require('ffi')
-ffi.cdef('int open(const char*,int); long write(int,const void*,unsigned long); int close(int); int ioctl(int,unsigned long,...);')
+ffi.cdef('int open(const char*,int); long write(int,const void*,unsigned long); int close(int); int ioctl(int,unsigned long,...); int poll(void*,unsigned long,int);')
 local C = ffi.C
 local fb = C.open('/dev/fb0', 1)
 if fb >= 0 then
@@ -42,12 +49,24 @@ if fb >= 0 then
   while C.write(fb, buf, n) > 0 do end
   C.close(fb)
 end
+local wf = '/sys/module/rockchip_ebc/parameters/refresh_waveform'
+local prior
+local f = io.open(wf, 'r')
+if f then prior = f:read('*l'); f:close() end
+local function set_wf(v)
+  local g = io.open(wf, 'w')
+  if g then g:write(v); g:close(); return true end
+  return false
+end
+local deep = (prior ~= nil) and set_wf('4')
 local card = C.open('/dev/dri/card0', 2)
 if card >= 0 then
   local arg = ffi.new('uint8_t[1]', 1)
-  C.ioctl(card, 0xC0016440, arg)
+  local rc = C.ioctl(card, 0xC0016440, arg)
+  if deep and rc == 0 then C.poll(nil, 0, 3000) end
   C.close(card)
 end
+if deep then set_wf(prior) end
 ")
 
 (define (pinenote-reader-session-shepherd-service _config)
