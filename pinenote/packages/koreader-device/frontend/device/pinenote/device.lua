@@ -256,8 +256,15 @@ function PineNote:init()
     -- single-touch aliases are misread as slot coordinates — corrupting
     -- the second finger of every two-finger frame (pinch was
     -- structurally broken) — and collide with pen coordinate scaling.
+    --
+    -- On top of it, mixedrouter fixes upstream's src-blind cur_slot:
+    -- with the pen in hover range, finger taps were swallowed into the
+    -- pen slot and re-classified as swipes (the TOC-tap bug, found on
+    -- the 2026-07-05 A.2 boot; mechanism in mixedrouter.lua).
     if devs.pen and devs.touch then
         self.input.handleTouchEv = self.input.handleMixedTouchEv
+        require("device/pinenote/mixedrouter").install(
+            self.input, devs.pen, devs.touch)
     end
 
     -- Per-source event conditioning.  Our evdev backend tags every
@@ -266,10 +273,12 @@ function PineNote:init()
     --  * pen: scale digitizer units (20966x15725) to screen pixels,
     --    unconditionally — the mixed handler only consumes plain ABS
     --    in the pen slot, so touch is unaffected;
-    --  * touchscreen: neutralize its legacy BTN_TOUCH alias — while
-    --    the pen hovers it would poison the wacom contact gate (ghost
-    --    pen taps from a resting palm); its MT tracking IDs carry the
-    --    real finger state;
+    --  * touchscreen: neutralize its legacy single-touch aliases —
+    --    BTN_TOUCH would poison the wacom contact gate while the pen
+    --    hovers (ghost pen taps from a resting palm), and the
+    --    pointer-emulation ABS_X/ABS_Y/ABS_PRESSURE would be honored
+    --    as PEN coordinates whenever cur_slot sits on the pen slot;
+    --    the MT events carry all the real finger state;
     --  * ws8100 pen buttons: neutralize the BTN_TOOL_PEN/RUBBER
     --    wrappers the driver emits around every button event — they
     --    would fight the digitizer's true proximity state; the KEY_*
@@ -305,6 +314,10 @@ function PineNote:init()
         elseif ev.src == devs.touch then
             if ev.type == C.EV_KEY and ev.code == C.BTN_TOUCH then
                 ev.type = EV_MSC -- handleMiscEv is a no-op here
+            elseif ev.type == C.EV_ABS and
+                   (ev.code == C.ABS_X or ev.code == C.ABS_Y or
+                    ev.code == C.ABS_PRESSURE) then
+                ev.type = EV_MSC
             end
         elseif ev.src == devs.penbtn then
             if ev.type == C.EV_KEY and
