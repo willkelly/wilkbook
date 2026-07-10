@@ -52,8 +52,9 @@ Grounded in the waveform decode in `doc/refresh-policy.md`:
 
 ## Status — what is built now
 
-Two offline-validated pieces, both green (`make optics-check`, or from this
-directory `guix shell python python-numpy python-pillow -- make check`):
+The **entire offline pipeline round-trips**, all green (`make optics-check`):
+test card → synthetic camera → ingest → panel reflectance → defect report,
+with no hardware and no camera.
 
 - **Analysis core** (`optics.py`): `synth.py` generates clips with *known*
   injected defects and `test_optics.py` asserts the classifiers report exactly
@@ -65,32 +66,33 @@ directory `guix shell python python-numpy python-pillow -- make check`):
   fiducials, a black→white gray-step reference strip, a page-ID barcode, and an
   opening black/white sync sequence; `manifest.json` records marker geometry (as
   page fractions, so ingest is resolution-independent) and the labelled page +
-  transition-pair sequence. `test_epub.py` verifies page count, that markers
-  render where the manifest claims, that the page-ID barcode round-trips, and
-  that the epub is well formed. Build one: `make testcard OUT=build/testcard`.
-
-No hardware, no camera yet — this is the project's "prove it offline first" rung
-for the optics program: the scripts and the stimulus are correct before real
-capture exists.
+  transition-pair sequence. `test_epub.py` verifies it round-trips. Build one:
+  `make testcard OUT=build/testcard`.
+- **Real-video ingest** (`ingest.py`): decode (ffmpeg) → per-frame fiducial
+  detection + homography rectification to panel space → reflectance (a
+  photometric fit held fixed across a transition, from a stable pre-wash frame,
+  so the flash survives) → page-ID decode → change-point segmentation into
+  transitions paired with their intended before/after pages. `synthcam.py`
+  forward-warps a known panel clip into a realistic camera view (perspective,
+  dark bezel, lighting, nonlinear response, noise) and `test_ingest.py` asserts
+  homography, reflectance, page-IDs, and **end-to-end defect detection**
+  (synthetic camera of a GC16 page turn → flash *severe*; GL16 → *none*) all
+  recover — plus a lossless ffmpeg decode round-trip.
 
 Severity thresholds in `optics.py` are deliberate conservative placeholders —
 **re-calibrating them against the first real multi-panel captures is the whole
-point of collecting friends' data.**
+point of collecting friends' data.** A few robustness notes are in "Honest
+limits" below (top-only reference patches; change-point `change_eps`).
 
 ## Next (in build order)
 
-1. **Real-video ingest** — the front of `optics.py`: detect the sync flash,
-   solve the per-frame homography from the corner fiducials, normalize to
-   reflectance from the in-frame patches, and segment the clip into transitions
-   by the page-ID markers. Turns a phone video into the `[T,H,W]` reflectance
-   clips the detectors already consume.
-2. **The on-device scenario player + bundle format** — a script that drives the
+1. **The on-device scenario player + bundle format** — a script that drives the
    test epub through KOReader (or raw `/dev/fb0`) on the device over the
    network, flips `rockchip_ebc` params per run, emits the sync pattern, and
    logs timestamps + params + the *waveform-decode summary* (mode/phase counts
    per temp bin from `../wbf` — never the raw per-device `.wbf`, per repo
    policy). Plus the friend-facing recording instructions.
-3. **Scoring + optimization** — once multi-panel data lands, feed the per-panel
+2. **Scoring + optimization** — once multi-panel data lands, feed the per-panel
    defect vectors back to rank waveform/threshold/flash-frac candidates, and
    ground-truth `ebc-replay`'s proxies against measured optics.
 
@@ -107,3 +109,13 @@ point of collecting friends' data.**
 - A 30–60 fps camera captures the flash *envelope* (depth, duration), not
   per-phase structure — which is fine, because the per-phase detail already
   comes from the waveform decode in `../wbf`.
+- **Reference patches are top-only**, so the photometric fit is a single global
+  curve — fine under the frontlight (fairly uniform), but a strong *spatial*
+  lighting gradient would need distributed references (patches at the bottom /
+  corners, or a per-region fit). The synthetic camera's gradient is kept mild to
+  match the frontlight assumption.
+- **Segmentation uses a change-point threshold** (`change_eps`) to find washes
+  between quiet page plateaus. It is tuned for the synthetic noise floor; real
+  captures (noisier) may need it raised, and a genuinely static page turn with
+  no visible change would be missed — the sync flashes and page-ID plateaus
+  bound this, but it is the parameter most likely to need field tuning.

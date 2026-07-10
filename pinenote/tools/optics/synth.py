@@ -55,11 +55,12 @@ def simulate_transition(before, after, fps=30.0, pre_frames=3, settle_frames=14,
     """
     before = before.astype(np.float32)
     after = after.astype(np.float32)
+    hh, ww = before.shape                  # size from the pages, not module dims
     white = after >= 0.85
     content = ~white
     post_frames = int(round(fps * 1.5))   # tail so the window has room to settle
     T = pre_frames + settle_frames + post_frames
-    clip = np.empty((T, H, W), np.float32)
+    clip = np.empty((T, hh, ww), np.float32)
 
     # pre: steady 'before'
     for t in range(pre_frames):

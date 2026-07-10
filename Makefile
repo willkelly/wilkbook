@@ -136,4 +136,4 @@ koreader-input-check:
 # synthetic clips with known injected defects; no camera, no device.
 #   make optics-check
 optics-check:
-	guix shell python python-numpy python-pillow -- $(MAKE) -C pinenote/tools/optics check
+	guix shell python python-numpy python-scipy python-pillow ffmpeg -- $(MAKE) -C pinenote/tools/optics check

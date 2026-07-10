@@ -10,6 +10,7 @@
 check:
 	python3 test_optics.py
 	python3 test_epub.py
+	python3 test_ingest.py
 
 # Generate the test card (epub + manifest + optional page PNGs) into OUT.
 OUT ?= build/testcard
