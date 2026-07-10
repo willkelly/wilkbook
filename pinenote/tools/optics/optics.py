@@ -40,11 +40,40 @@ SETTLE_EPS = 0.008           # per-frame mean |Δreflectance| below this = quies
 SETTLE_QUIET_FRAMES = 3      # consecutive quiet frames required to call it settled
 SETTLE_ONTIME_FACTOR = 1.3   # settle within expected*factor = on-time
 
+# grayscale corruption: DU/A2 washes crush antialiased mid-grays toward binary
+# (0/1). We look at pixels the page *intends* to be mid-gray and measure the
+# fraction that settled to an extreme (near black or near white). Placeholders,
+# like the rest -- recalibrate against real captures.
+GRAY_MID_LO = 0.12           # intended reflectance below this is ink/black, not gray
+GRAY_MID_HI = 0.85           # intended reflectance at/above this is white, not gray
+GRAY_EXTREME_LO = 0.10       # settled below this = crushed to black
+GRAY_EXTREME_HI = 0.90       # settled above this = crushed to white
+GRAY_CRUSH_NONE = 0.15       # crushed-fraction below this = grays preserved
+GRAY_CRUSH_SEVERE = 0.50     # crushed-fraction at/above this = severe binarization
+
+# contrast / uniformity (photometric; read off the gray-step reference patches
+# and a should-be-uniform background region -- present on the test card, so
+# these run only when the caller supplies the region masks). Placeholders --
+# recalibrate against real captures.
+CONTRAST_NONE_ABOVE = 0.80   # white-patch minus black-patch at/above this = healthy
+CONTRAST_SEVERE_BELOW = 0.50 # at/below this = severely degraded (grayed-out extremes)
+BLOTCH_STD_NONE = 0.020      # background reflectance sigma below this = uniform
+BLOTCH_STD_SEVERE = 0.060    # at/above this = severe mottling / blotchy clearing
+
 
 def _severity(value: float, none_below: float, severe_at: float) -> str:
     if value < none_below:
         return "none"
     if value >= severe_at:
+        return "severe"
+    return "mild"
+
+
+def _severity_low(value: float, none_above: float, severe_below: float) -> str:
+    """Severity for metrics where a LOWER value is worse (e.g. contrast)."""
+    if value >= none_above:
+        return "none"
+    if value <= severe_below:
         return "severe"
     return "mild"
 
@@ -57,6 +86,14 @@ class Transition:
     after: np.ndarray             # intended page AFTER, reflectance [H, W]
     white_mask: np.ndarray = None       # pixels that should be white in `after`
     clean_mask: np.ndarray = None       # pixels that should be a uniform background
+    gray_mask: np.ndarray = None        # pixels that should be mid-gray in `after`
+    # Reference-region masks for the photometric contrast/uniformity detectors.
+    # These live on the test card (gray-step patch strip + a uniform background),
+    # so they are supplied by ingest from the manifest; left None otherwise and
+    # the contrast/blotch detectors simply do not run.
+    white_patch_mask: np.ndarray = None  # gray-step white reference patch
+    black_patch_mask: np.ndarray = None  # gray-step black reference patch
+    bg_mask: np.ndarray = None           # a should-be-uniform background region
     expected_settle_s: float = 0.447    # GC16/GL16 at >=24C decode from refresh-policy.md
     window_s: float = 1.5               # how long after t0 to analyze
 
@@ -67,6 +104,10 @@ class Transition:
             # "clean" = should be uniform background (white here); ghosting shows up
             # as prior-page structure leaking into it.
             self.clean_mask = self.after >= 0.85
+        if self.gray_mask is None:
+            # intended mid-gray content: neither ink/black nor white. This is the
+            # antialiased tonal content that a DU/A2 wash would binarize.
+            self.gray_mask = (self.after > GRAY_MID_LO) & (self.after < GRAY_MID_HI)
 
 
 @dataclass
@@ -82,6 +123,12 @@ class DefectReport:
     settle_s: float = 0.0
     settled: bool = True
     settle_severity: str = "none"
+    gray_crush_frac: float = 0.0     # fraction of intended mid-grays crushed to 0/1
+    gray_severity: str = "none"
+    contrast: float = 1.0            # white-patch minus black-patch reflectance
+    contrast_severity: str = "none"
+    blotch_std: float = 0.0          # reflectance sigma over a uniform background
+    blotch_severity: str = "none"
     notes: list = field(default_factory=list)
 
     @property
@@ -95,6 +142,12 @@ class DefectReport:
             out.append(f"ghost:{self.ghost_severity}")
         if self.settle_severity != "none":
             out.append(f"settle:{self.settle_severity}")
+        if self.gray_severity != "none":
+            out.append(f"gray-corrupt:{self.gray_severity}")
+        if self.contrast_severity != "none":
+            out.append(f"contrast:{self.contrast_severity}")
+        if self.blotch_severity != "none":
+            out.append(f"blotch:{self.blotch_severity}")
         return out
 
 
@@ -198,6 +251,53 @@ def detect_settle(clip, t0, fps, roi_mask, expected_settle_s, window_s):
     return {"settle_s": settle_s, "settled": True, "severity": sev}
 
 
+def detect_gray_corruption(settled_frame, after, gray_mask):
+    """Grayscale corruption: a DU/A2 wash crushes antialiased mid-grays to binary.
+
+    We take the pixels the page *intends* to be mid-gray (`gray_mask`, from
+    `after`) and measure the fraction whose *settled* reflectance landed at an
+    extreme (near black or near white) -- i.e. how much of the intended tonal
+    content binarized. This is the settled histogram vs. expected-levels test
+    reduced to one scalar: a clean grayscale keeps its mid-tones (fraction ~0),
+    a binarized one pushes them all to 0/1 (fraction ~1).
+    """
+    m = gray_mask
+    if m is None or int(m.sum()) < 4:
+        return {"crush_frac": 0.0, "severity": "none"}
+    vals = settled_frame[m]
+    crushed = (vals < GRAY_EXTREME_LO) | (vals > GRAY_EXTREME_HI)
+    frac = float(np.count_nonzero(crushed) / crushed.size)
+    return {"crush_frac": frac,
+            "severity": _severity(frac, GRAY_CRUSH_NONE, GRAY_CRUSH_SEVERE)}
+
+
+def detect_contrast(settled_frame, white_patch_mask, black_patch_mask):
+    """Contrast: settled reflectance of the should-be-white reference patch minus
+    the should-be-black one (the extremes of the gray-step strip). Full contrast
+    is ~1.0; a tired panel whose white reads dim and whose black washes out reads
+    low. LOWER is worse, so severity is graded downward."""
+    if white_patch_mask is None or black_patch_mask is None:
+        return {"contrast": 1.0, "white": 1.0, "black": 0.0, "severity": "none"}
+    if white_patch_mask.sum() < 1 or black_patch_mask.sum() < 1:
+        return {"contrast": 1.0, "white": 1.0, "black": 0.0, "severity": "none"}
+    white_r = float(settled_frame[white_patch_mask].mean())
+    black_r = float(settled_frame[black_patch_mask].mean())
+    contrast = white_r - black_r
+    return {"contrast": contrast, "white": white_r, "black": black_r,
+            "severity": _severity_low(contrast, CONTRAST_NONE_ABOVE,
+                                      CONTRAST_SEVERE_BELOW)}
+
+
+def detect_blotch(settled_frame, bg_mask):
+    """Blotchy background: standard deviation of settled reflectance over a
+    should-be-uniform region. A clean background sits at the camera noise floor;
+    mottled / uneven clearing raises it. HIGHER is worse."""
+    if bg_mask is None or int(bg_mask.sum()) < 4:
+        return {"std": 0.0, "severity": "none"}
+    std = float(settled_frame[bg_mask].std())
+    return {"std": std, "severity": _severity(std, BLOTCH_STD_NONE, BLOTCH_STD_SEVERE)}
+
+
 def classify_transition(clip: np.ndarray, fps: float, tr: Transition) -> DefectReport:
     """Run every detector for one transition and return a structured report."""
     rep = DefectReport()
@@ -219,4 +319,15 @@ def classify_transition(clip: np.ndarray, fps: float, tr: Transition) -> DefectR
         content = np.ones_like(tr.after, dtype=bool)
     s = detect_settle(clip, tr.t0, fps, content, tr.expected_settle_s, tr.window_s)
     rep.settle_s, rep.settled, rep.settle_severity = s["settle_s"], s["settled"], s["severity"]
+
+    # grayscale corruption (content defect; mask derived from the intended page)
+    gc = detect_gray_corruption(settled_frame, tr.after, tr.gray_mask)
+    rep.gray_crush_frac, rep.gray_severity = gc["crush_frac"], gc["severity"]
+
+    # contrast / uniformity (photometric; only when the reference regions of the
+    # test card are supplied -- e.g. by ingest from the manifest patch geometry)
+    c = detect_contrast(settled_frame, tr.white_patch_mask, tr.black_patch_mask)
+    rep.contrast, rep.contrast_severity = c["contrast"], c["severity"]
+    b = detect_blotch(settled_frame, tr.bg_mask)
+    rep.blotch_std, rep.blotch_severity = b["std"], b["severity"]
     return rep

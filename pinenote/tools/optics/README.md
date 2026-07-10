@@ -47,8 +47,8 @@ Grounded in the waveform decode in `doc/refresh-policy.md`:
 | **ghost / residue** | prior page still correlated in a should-be-clean region | RMS of the settled residual *and* its correlation with the previous page — spatial |
 | **slow / incomplete settle** | panel still changing past the ~447 ms window | luminance-derivative decay time; never-quiescent = incomplete — temporal |
 | **double-flash** | one page turn → two washes (the ioctl-races-deferred-io two-pass) | count of distinct dip events per transition — temporal |
-| **grayscale corruption** | DU/A2 crushing antialiased grays to binary | settled histogram vs expected levels — spatial *(planned)* |
-| **contrast / uniformity** | black not black, white not white, blotchy background | reference-patch reflectance + background σ — photometric *(planned)* |
+| **grayscale corruption** | DU/A2 crushing antialiased grays to binary | fraction of intended mid-grays that settled at the extremes (0/1) — spatial |
+| **contrast / uniformity** | black not black, white not white, blotchy background | white-patch minus black-patch reflectance + background σ — photometric |
 
 ## Status — what is built now
 
@@ -59,7 +59,13 @@ with no hardware and no camera.
 - **Analysis core** (`optics.py`): `synth.py` generates clips with *known*
   injected defects and `test_optics.py` asserts the classifiers report exactly
   them — black flash vs GL16 no-flash, ghosting (with prior-page correlation),
-  slow and never-quiescent settle, double-flash, and a clean baseline.
+  slow and never-quiescent settle, double-flash, grayscale corruption (a gray
+  ramp binarized to 1-bit vs. a clean control), contrast (dim-white/washed-black
+  reference patches vs. full contrast) and background blotchiness (mottled vs.
+  uniform clearing), and a clean baseline. Grayscale corruption runs on every
+  transition (its mask is the intended mid-gray content); contrast/uniformity
+  read the gray-step reference patches + a uniform background region, so they
+  run when those region masks are supplied (ingest wiring is the next step).
 - **Self-calibrating test epub** (`testepub.py`): a deterministic generator for
   the fixed-layout epub3 KOReader pages through — content per the taxonomy
   (novel / graphic / textbook / blank / ux / index) plus baked-in corner

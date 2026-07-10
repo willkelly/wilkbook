@@ -75,6 +75,48 @@ def main():
     rep, _ = transition_for(text, synth.text_page(seed=1), wash="gl16")
     check("baseline has no defects", rep.defects == [], f"defects={rep.defects}")
 
+    def classify(builder, **kw):
+        clip, t0, before, after, tr_kw = builder(**kw)
+        tr = optics.Transition(t0=t0, before=before, after=after, **tr_kw)
+        return optics.classify_transition(clip, FPS, tr)
+
+    print("case: grayscale corruption (gray ramp binarized to 1-bit) -- expect SEVERE")
+    rep = classify(synth.grayscale_transition, binarized=True)
+    check("gray corruption severe", rep.gray_severity == "severe",
+          f"crush_frac={rep.gray_crush_frac:.3f}")
+    check("gray corruption listed", "gray-corrupt:severe" in rep.defects,
+          f"defects={rep.defects}")
+
+    print("case: clean grayscale control (ramp settles to its mid-tones) -- expect NONE")
+    rep = classify(synth.grayscale_transition, binarized=False)
+    check("clean grayscale not flagged", rep.gray_severity == "none",
+          f"crush_frac={rep.gray_crush_frac:.3f}")
+    check("clean grayscale has no defects", rep.defects == [], f"defects={rep.defects}")
+
+    print("case: contrast degraded (white dim, black washed) -- expect SEVERE")
+    rep = classify(synth.contrast_transition, degraded=True)
+    check("contrast flagged severe", rep.contrast_severity == "severe",
+          f"contrast={rep.contrast:.3f}")
+    check("contrast listed", "contrast:severe" in rep.defects, f"defects={rep.defects}")
+
+    print("case: clean contrast control (full black/white) -- expect NONE")
+    rep = classify(synth.contrast_transition, degraded=False)
+    check("full contrast not flagged", rep.contrast_severity == "none",
+          f"contrast={rep.contrast:.3f}")
+    check("clean contrast has no defects", rep.defects == [], f"defects={rep.defects}")
+
+    print("case: blotchy background (mottled clearing) -- expect SEVERE")
+    rep = classify(synth.blotch_transition, blotchy=True)
+    check("blotch flagged severe", rep.blotch_severity == "severe",
+          f"std={rep.blotch_std:.4f}")
+    check("blotch listed", "blotch:severe" in rep.defects, f"defects={rep.defects}")
+
+    print("case: clean uniform background -- expect NONE")
+    rep = classify(synth.blotch_transition, blotchy=False)
+    check("uniform background not flagged", rep.blotch_severity == "none",
+          f"std={rep.blotch_std:.4f}")
+    check("clean background has no defects", rep.defects == [], f"defects={rep.defects}")
+
     print()
     if _fails:
         print(f"optics: {len(_fails)} FAILED: {', '.join(_fails)}")
