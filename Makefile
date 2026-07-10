@@ -10,7 +10,7 @@ ARTIFACTS ?= /tmp/opencode/pinenote-rootfs-artifacts
 FLAVORS = minimal slim networked dev usb-console usb-console-linux-6-6 reader
 
 .PHONY: help packages kernel kernel-drv qemu-smoke qemu-virt qemu-virt-check \
-        wbf-check ebc-logic-check rastersim-check koreader-input-check \
+        wbf-check ebc-logic-check rastersim-check koreader-input-check optics-check \
         $(FLAVORS) $(addprefix image-,$(FLAVORS)) $(addprefix rootfs-,$(FLAVORS))
 
 help:
@@ -130,3 +130,10 @@ rastersim-check:
 # bug and validates the mixedrouter fix.
 koreader-input-check:
 	$(MAKE) -C pinenote/tools/koreader-input check KOREADER_BUNDLE=$(KOREADER_BUNDLE)
+
+# E-ink optical-defect detectors (optics harness analysis core). Deterministic
+# validation of the flash/ghost/settle/double-flash classifiers against
+# synthetic clips with known injected defects; no camera, no device.
+#   make optics-check
+optics-check:
+	guix shell python python-numpy -- $(MAKE) -C pinenote/tools/optics check

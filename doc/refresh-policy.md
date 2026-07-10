@@ -244,3 +244,19 @@ with linear reading).
 - Harvest next hardware session: `/var/log/reader-session.log` traces,
   evtest captures of a pinch, a palm-while-writing trace, gpio-keys
   contents.
+
+## Measuring the optics directly (the harness that ends "hardware-only")
+
+Every "stays hardware-only, human eyeball" caveat above — how much residue
+accumulates before a GL16 wash needs a GC16 deep clean, whether the flash is
+actually gone, how a page turn settles — is what `pinenote/tools/optics` is
+being built to *measure*, repeatably, off a webcam-in-a-box (device frontlight
+as the illuminant). It is deliberately portable so friends with PineNotes (not
+just Fable's) can contribute captures — multi-panel data matters because each
+unit has its own waveform calibration. The deterministic defect classifiers
+(black flash, ghost, settle, double-flash) are built and validated offline on
+synthetic clips (`make optics-check`); the self-calibrating test epub,
+real-video ingest, and on-device recorder are the next pieces. Once it lands it
+also **ground-truths this workbench's proxies** ("white driven dark", wash
+px-phases, staleness) against measured optics. See
+`pinenote/tools/optics/README.md`.
