@@ -9,5 +9,11 @@
 
 check:
 	python3 test_optics.py
+	python3 test_epub.py
 
-.PHONY: check
+# Generate the test card (epub + manifest + optional page PNGs) into OUT.
+OUT ?= build/testcard
+testcard:
+	python3 testepub.py $(OUT)
+
+.PHONY: check testcard

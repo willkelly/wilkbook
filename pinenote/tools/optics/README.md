@@ -52,19 +52,26 @@ Grounded in the waveform decode in `doc/refresh-policy.md`:
 
 ## Status — what is built now
 
-The **analysis core** (`optics.py`) and its **offline validation** are done and
-green: `synth.py` generates clips with *known* injected defects and
-`test_optics.py` asserts the classifiers report exactly them — black flash vs
-GL16 no-flash, ghosting (with prior-page correlation), slow and never-quiescent
-settle, double-flash, and a clean baseline. No hardware, no camera. This is the
-project's "prove it offline first" rung for the optics program: the scripts are
-correct before real capture exists.
+Two offline-validated pieces, both green (`make optics-check`, or from this
+directory `guix shell python python-numpy python-pillow -- make check`):
 
-```
-guix shell python python-numpy -- make check      # from this directory
-# or, from the repo root:
-make optics-check
-```
+- **Analysis core** (`optics.py`): `synth.py` generates clips with *known*
+  injected defects and `test_optics.py` asserts the classifiers report exactly
+  them — black flash vs GL16 no-flash, ghosting (with prior-page correlation),
+  slow and never-quiescent settle, double-flash, and a clean baseline.
+- **Self-calibrating test epub** (`testepub.py`): a deterministic generator for
+  the fixed-layout epub3 KOReader pages through — content per the taxonomy
+  (novel / graphic / textbook / blank / ux / index) plus baked-in corner
+  fiducials, a black→white gray-step reference strip, a page-ID barcode, and an
+  opening black/white sync sequence; `manifest.json` records marker geometry (as
+  page fractions, so ingest is resolution-independent) and the labelled page +
+  transition-pair sequence. `test_epub.py` verifies page count, that markers
+  render where the manifest claims, that the page-ID barcode round-trips, and
+  that the epub is well formed. Build one: `make testcard OUT=build/testcard`.
+
+No hardware, no camera yet — this is the project's "prove it offline first" rung
+for the optics program: the scripts and the stimulus are correct before real
+capture exists.
 
 Severity thresholds in `optics.py` are deliberate conservative placeholders —
 **re-calibrating them against the first real multi-panel captures is the whole
@@ -72,23 +79,18 @@ point of collecting friends' data.**
 
 ## Next (in build order)
 
-1. **The test epub** — a deterministic generator producing the self-calibrating
-   pages above, sequencing the adjacent-page *pairs* that stress the driver
-   differently (text→image, image→image graphic-novel halftone, blank↔dense, UX
-   overlay open/close, sparse single-column index) — the content taxonomy that
-   makes one recording exercise every transition type.
-2. **Real-video ingest** — the front of `optics.py`: detect the sync flash,
+1. **Real-video ingest** — the front of `optics.py`: detect the sync flash,
    solve the per-frame homography from the corner fiducials, normalize to
    reflectance from the in-frame patches, and segment the clip into transitions
    by the page-ID markers. Turns a phone video into the `[T,H,W]` reflectance
    clips the detectors already consume.
-3. **The on-device scenario player + bundle format** — a script that drives the
+2. **The on-device scenario player + bundle format** — a script that drives the
    test epub through KOReader (or raw `/dev/fb0`) on the device over the
    network, flips `rockchip_ebc` params per run, emits the sync pattern, and
    logs timestamps + params + the *waveform-decode summary* (mode/phase counts
    per temp bin from `../wbf` — never the raw per-device `.wbf`, per repo
    policy). Plus the friend-facing recording instructions.
-4. **Scoring + optimization** — once multi-panel data lands, feed the per-panel
+3. **Scoring + optimization** — once multi-panel data lands, feed the per-panel
    defect vectors back to rank waveform/threshold/flash-frac candidates, and
    ground-truth `ebc-replay`'s proxies against measured optics.
 
