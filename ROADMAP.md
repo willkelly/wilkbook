@@ -237,7 +237,10 @@ the start of this track — no panel required. Policy background in
       hardening; a books-directory convention; upstreaming the device
       target to KOReader.
 - [ ] Wi-Fi credentials/networking story for the device (the networked
-      flavor has no credential handling yet).
+      flavor has no credential handling yet). Design in
+      `doc/networking.md`: minimal wpa_supplicant + dhcpcd on the reader
+      flavor, an out-of-band `/state` credential file (never in the
+      image), SSH as the optics-recorder control channel.
 - [ ] Later: wlroots session (sway or cage/KOReader-kiosk, following
       hrdl's `pinenote-dist` architecture; `pinenote-nixos` is the
       structural checklist for a Guix port); per-`app_id` refresh-mode

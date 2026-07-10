@@ -56,6 +56,9 @@ code review — before a single reboot. That's the standard.
   protocol and the device inventory/backup ledger.
 - `doc/eink-research.md` — domain background (waveforms, commercial e-ink
   stacks, the PineNote community lineage). Read before display work.
+- `doc/networking.md` — the Wi-Fi/networking design: what's proven
+  (firmware loads), the supplicant/connection-manager options, the
+  out-of-band credentials plan, and how it unblocks the optics recorder.
 - `doc/refresh-policy.md` — the display-quality program: waveform decodes
   from the device's own .wbf, policy decisions (flash thresholds, GL16
   globals, input architecture), and the replay-workbench plan.
