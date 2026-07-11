@@ -4,6 +4,21 @@ Last updated: 2026-07-10. This is the single place to record what has actually
 been proven on the device. Update it after every hardware session; the
 detailed evidence lives in session logs, not in git.
 
+**2026-07-11 (later): FIRST REAL DEFECT REPORT — the instrument works.** After
+three real-footage fixes (sync preamble 5s->240s for automated captures;
+panel-presence gate 15%->4% of frame; memory-bounded decode --max-fps/
+--analysis-scale), the analyzer segmented **all 49 transitions** from the first
+bundle, decoded page IDs off the dark 10%-of-frame panel, and attributed every
+metric to the baseline-gl16 run. Real signal: the full_refresh_count=6
+promotion cadence is VISIBLE in the optics (~8 transitions flash severe at
+depth 0.15-0.28 = the promoted fulls; partials mostly none/mild) — and even
+GL16 fulls flash to ~0.2 after partial-accumulated drift (vs GC16's ~0.6).
+Known calibration artifacts pending the noise pilot + a brighter locked
+exposure: settle:incomplete everywhere (SETTLE_EPS below this rig's noise
+floor), flash NaN/overcounting on frame noise, gray-corrupt false flags.
+Next: exposure bump + camera nudge (panel top edge sits at the frame boundary)
++ the 10-repeat noise pilot to set thresholds from measured sigma.
+
 **2026-07-11 (night): FIRST REAL OPTICS CAPTURE.** The production CLI
 (`recorder.py record` — SSH transport, KOReader backend, injector page turns,
 `--camera-lock`) produced the first real bundle from the boxed rig: 186 s of
