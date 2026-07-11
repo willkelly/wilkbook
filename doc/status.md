@@ -155,10 +155,9 @@ os2 currently holds the **phase A.2.5 build**, SHA
 readback of the exact 1 943 072 768-byte range SHA-matched from eMMC).
 Staged copy on os1 at
 `/home/user/wilkbook-artifacts/pinenote-reader-PNGuixRoot-20260711-a25.ext4`.
-**First boot confirmed 2026-07-11**: Wi-Fi auto-joined again (lease moved to
-`192.168.86.145` — dhcpcd mints a fresh DUID per reflash, so the address drifts
-across flashes; a router DHCP reservation for `c0:bf:be:70:86:d7` would pin it).
-One bug found + fixed live: the image ships `/var/empty` owned by a
+**First boot confirmed 2026-07-11**: Wi-Fi auto-joined again (note: dhcpcd
+mints a fresh DUID per reflash, so absent a router-side reservation the DHCP
+lease drifts across flashes). One bug found + fixed live: the image ships `/var/empty` owned by a
 build-container uid (998:981), so sshd fatal'd on every connection
 ("/var/empty must be owned by root..."); `chown root:root; chmod 555` fixed it
 on-device (persists on this image), and an activation snippet in the reader
