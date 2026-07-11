@@ -4,6 +4,18 @@ Last updated: 2026-07-10. This is the single place to record what has actually
 been proven on the device. Update it after every hardware session; the
 detailed evidence lives in session logs, not in git.
 
+**2026-07-11 (night): FIRST REAL OPTICS CAPTURE.** The production CLI
+(`recorder.py record` — SSH transport, KOReader backend, injector page turns,
+`--camera-lock`) produced the first real bundle from the boxed rig: 186 s of
+true MJPG 1080p60 off the Brio (stream-copied, no VFR — `exposure_dynamic_
+framerate=0` locked and recorded), schema-v2 session with split illuminant
+(153/153, dark-box), panel temps 23→24 °C, and the harvested [pn-refresh]
+trace showing 39 partial + 8 full — the full_refresh_count=6 cadence in a
+real capture. En route, four more live-found render bugs were fixed (portrait
+EBC wedge → landscape-native card; footer/margins splitting views; hardcoded
+rendition:orientation; absolute-px img CSS silently dropping the image — found
+by dumping /dev/fb0 and looking). Analysis of the first bundle runs offline.
+
 **2026-07-11 (evening): the optics capture stack is live-proven end to end.**
 On A.2.6 over SSH, the production path (SSHTransport + KOReaderBackend +
 run_scenario) drove a full 49-page card scenario: injector daemon -> uinput
