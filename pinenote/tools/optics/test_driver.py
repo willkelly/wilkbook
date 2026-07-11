@@ -34,6 +34,7 @@ class FakeTransport(driver.Transport):
     def __init__(self, responses=None):
         self.cmds = []
         self.files = {}
+        self.detached = []                 # cmds run with detach=True
         self.responses = responses or {}
 
     def connect(self):
@@ -43,8 +44,10 @@ class FakeTransport(driver.Transport):
     def close(self):
         self.cmds.append("__close__")
 
-    def run(self, cmd, timeout=None):
+    def run(self, cmd, timeout=None, detach=False):
         self.cmds.append(cmd)
+        if detach:
+            self.detached.append(cmd)
         for key, val in self.responses.items():
             if key in cmd:
                 return val(cmd) if callable(val) else val
@@ -198,6 +201,17 @@ def main():
           and "</dev/null" in launch_cmd and K.LOG in launch_cmd, launch_cmd)
     check("daemon launch is ssh-safe (</dev/null)",
           "</dev/null" in ftp.cmds[i_start])
+    # ...and both are fire-and-forget: the SSH client otherwise waits out the
+    # child's lifetime even with clean fds (live-found on the A.2.6 smoke)
+    check("both long-lived launches run detached (fire-and-forget)",
+          launch_cmd in ftp.detached and ftp.cmds[i_start] in ftp.detached,
+          f"{len(ftp.detached)} detached")
+    check("portrait rotation seeded (copt_rotation_mode=0; fb is landscape)",
+          '["copt_rotation_mode"] = 0' in
+          ftp.files[K.KO_HOME + "/settings.reader.lua"].decode())
+    i_sdr = idx("rm -rf '/root/optics-testcard.sdr'")
+    check("stale per-doc sidecar dropped before the seed (sdr overrides globals)",
+          0 <= i_sdr < i_seed, f"i_sdr={i_sdr}")
     check("the pushed daemon is optics-inject.lua verbatim (uinput, named device)",
           ftp.files[K.INJECT_DAEMON] == daemon_src
           and b"wilkbook-optics" in daemon_src and b"/dev/uinput" in daemon_src)

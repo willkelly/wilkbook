@@ -101,8 +101,13 @@ class Transport:
     def connect(self): raise NotImplementedError
     def close(self): pass
 
-    def run(self, cmd, timeout=None):
-        """Run `cmd` on the device; return (rc:int, stdout:str)."""
+    def run(self, cmd, timeout=None, detach=False):
+        """Run `cmd` on the device; return (rc:int, stdout:str).
+        detach=True: fire-and-forget for commands that background a
+        long-lived process -- the transport must NOT wait for the remote
+        side to finish (over SSH the client otherwise lingers for the
+        child's whole lifetime even with setsid + full fd redirection --
+        found live on the 2026-07-11 A.2.6 smoke, twice)."""
         raise NotImplementedError
 
     def push(self, data: bytes, remote_path):
@@ -178,7 +183,9 @@ class SerialTransport(Transport):
             os.close(self._fd)
             self._fd = None
 
-    def run(self, cmd, timeout=None):
+    def run(self, cmd, timeout=None, detach=False):
+        # detach is a no-op here: the console shell backgrounds via ( & )
+        # and the marker printf returns immediately.
         import os
         import time
         wrapped = "%s; printf '%%s%%d\\n' %s $?\n" % (cmd, shlex.quote(self.MARKER))
@@ -247,9 +254,20 @@ class SSHTransport(Transport):
             raise IOError("ssh connect failed to %s" % self.host)
         return self
 
-    def run(self, cmd, timeout=None):
+    def run(self, cmd, timeout=None, detach=False):
         import subprocess
         argv = self._base("ssh") + [self.host, cmd]
+        if detach:
+            # fire-and-forget: never wait on the ssh client. The remote runs
+            # a backgrounded long-lived process, and empirically the client
+            # lingers for its lifetime even with setsid + fds fully
+            # redirected; the lingering client dies when the remote process
+            # does (next prepare's pkill), so nothing accumulates.
+            subprocess.Popen(argv, stdin=subprocess.DEVNULL,
+                             stdout=subprocess.DEVNULL,
+                             stderr=subprocess.DEVNULL,
+                             start_new_session=True)
+            return 0, ""
         p = subprocess.run(argv, capture_output=True, text=True, timeout=timeout)
         return p.returncode, p.stdout.strip()
 
@@ -347,10 +365,17 @@ class KOReaderBackend(RenderBackend):
     #    refreshes before the next gets promoted to full"); 0 = the menu's
     #    "Never", 6 = KOReader's DEFAULT_FULL_REFRESH_COUNT.
     #  - pinenote_flash_area_fraction: device.lua's flash policy threshold.
+    #  - copt_rotation_mode: crengine's global rotation default (0 = portrait).
+    #    The fb is landscape 1872x1404 while the card's pages are portrait
+    #    1404x1872; without this the sterile optics profile opened the card in
+    #    landscape and crengine split every page into TWO views ("1/98" seen
+    #    live on the 2026-07-11 A.2.6 smoke), breaking the page<->view mapping.
+    #    A 4-rotation sweep is a future ko-param axis; portrait is the default.
     KO_DEFAULTS = {
         "refresh_on_pages_with_images": False,
         "full_refresh_count": 6,
         "pinenote_flash_area_fraction": 0.60,
+        "copt_rotation_mode": 0,
     }
 
     # Hard readiness check: FIFO present AND the daemon's pid (written only
@@ -402,6 +427,12 @@ class KOReaderBackend(RenderBackend):
         #     chatter draws over the panel mid-capture (seen live on the
         #     2026-07-11 A.2.6 smoke: a debugfs message stamped over the card).
         self.t.run("echo 0 > /sys/class/vtconsole/vtcon1/bind 2>/dev/null; true")
+        # 2c. drop the per-document sidecar: crengine saves doc-level settings
+        #     (incl. rotation) in <epub>.sdr NEXT TO THE BOOK, which overrides
+        #     the seeded globals -- stale sidecars would carry the previous
+        #     run's regime into this one.
+        self.t.run("rm -rf %s 2>/dev/null; true"
+                   % shlex.quote(os.path.splitext(self.EPUB_REMOTE)[0] + ".sdr"))
         # 3. seed the dedicated KO_HOME with this run's explicit regime
         self._seed_ko_home()
         # 4. relaunch KOReader on the test card so page 0 is deterministic.
@@ -417,7 +448,7 @@ class KOReaderBackend(RenderBackend):
                   "setsid ./luajit reader.lua %s </dev/null >%s 2>&1 & )"
                   % (shlex.quote(self._kodir), shlex.quote(self.KO_HOME),
                      shlex.quote(self.EPUB_REMOTE), self.LOG))
-        self.t.run(launch)
+        self.t.run(launch, detach=True)
         self._page = 0
 
     def _start_injector(self):
@@ -435,7 +466,8 @@ class KOReaderBackend(RenderBackend):
         self.t.run("kill -0 \"$(cat %s 2>/dev/null)\" 2>/dev/null || "
                    "( setsid %s/luajit %s </dev/null >>%s 2>&1 & )"
                    % (self.INJECT_PID, shlex.quote(self._kodir),
-                      shlex.quote(self.INJECT_DAEMON), self.INJECT_LOG))
+                      shlex.quote(self.INJECT_DAEMON), self.INJECT_LOG),
+                   detach=True)
 
     def _ensure_injector(self):
         """HARD check (PLAN task 1): raise unless the daemon is running and
