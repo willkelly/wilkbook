@@ -139,13 +139,21 @@ Also staged 2026-07-03:
 
 ## Current os2 contents
 
-os2 currently holds the **phase A.2.2 build**, SHA
-`b166d869fa765b3ef08b31c017bc632ef709848b084ca48afa7a8887cf1743c0` —
-**written 2026-07-05 night** with the full protocol (os1 root
-confirmed, p6 unmounted, dd with fsync, readback of the exact
-1 903 329 280-byte range SHA-matched). Staged copy on os1 at
-`/home/user/wilkbook-artifacts/pinenote-reader-PNGuixRoot-20260705-a22.ext4`.
+os2 currently holds the **phase A.2.3 build**, SHA
+`196d601c77da9d6250e7bf4794b008af5b65a6954196dee9bdaf960cbd4310f8` —
+**written 2026-07-10** with the full protocol (os1 root confirmed at
+`/dev/mmcblk0p5`, p6 unmounted, `dd conv=fsync`, then a `drop_caches`
+readback of the exact 1 916 416 000-byte range SHA-matched from eMMC).
+Staged copy on os1 at
+`/home/user/wilkbook-artifacts/pinenote-reader-PNGuixRoot-20260710-a23.ext4`.
 **First boot pending** (user-present step).
+
+Over A.2.2 it adds the **Phase 1 Wi-Fi userland** (`pinenote-wifi` service +
+`wpa_supplicant` + `dhcpcd`, reading an out-of-band conf from the `data`
+partition; `doc/networking.md §4.1`). Wi-Fi credentials for SSID
+`largeprofanity` are pre-staged on the `data` partition (`0600`, persists
+across reflashes), so first boot should associate on its own. The superseded
+A.2.2 (`b166d869…`) staged copy remains on os1 for rollback.
 
 Over A.2 it carries three fixes, each found on (or predicted by) the
 A.2 first boot the same night and proven offline before this write:
