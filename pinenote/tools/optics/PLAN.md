@@ -18,6 +18,36 @@ The instrument is sound — validated detectors, a self-calibrating card, real-v
 
 ---
 
+## 1a. Single-device stance (2026-07-11, Will's call)
+
+**We are optimizing THIS PineNote, not building a general instrument.** The
+portability layer already exists and stays working, but stops receiving
+investment. Priority adjustments over the tables below:
+
+- **Demoted**: task 13's phone-VFR robustness (keep the PTS timebase for our
+  own webcam's sake, drop the "friend phone" hardening), RECORDING.md
+  contributor polish, cross-panel schema care beyond what our own captures
+  need. Multi-panel threshold recalibration is dead; **this panel's measured
+  noise floor is the reference** (the 10-repeat noise pilot supplies it).
+- **Descoped**: cold-bin temperature machinery. Indoors this device lives in
+  the 24 °C waveform bin; keep start/end temp logging + the bin-straddle
+  guard, skip cold-sweep planning.
+- **Fixed-rig simplifications**: one camera, one geometry — calibrate
+  homography/photometry once per session and reuse; average repeats harder;
+  the subtle-ghost noise floor drops for free. (Self-calibration itself stays:
+  it is what makes the webcam quantitative at all.)
+- **Camera choice is a device decision**: the panel's waveform runs at 85 Hz
+  (A2 ≈ 118 ms, DU ≈ 224 ms). If the boxed webcam does 120 fps at reduced
+  resolution, prefer that for fast-mode sessions; 30 fps is fine for
+  GC16/GL16-only. Pin the actual webcam model in the bundle metadata.
+- **New option unlocked**: a *driver-side* wash trace (what the EBC actually
+  drove: wash start/end, waveform used, damage rect — via drm.debug or a
+  diagnostic in our own forward-port patch) would be a stronger ground-truth
+  join than KOReader's [pn-refresh] intents. Diagnostic-only, so consistent
+  with the "report driver bugs, don't fork behavior" policy. Investigate after
+  the [pn-refresh] harvest lands (task 6) — only if intent-level joins prove
+  insufficient.
+
 ## 2. Test card v2
 
 Ordered by value. All are `testepub.py` + manifest + synth-fixture changes: pure offline-ladder work.
