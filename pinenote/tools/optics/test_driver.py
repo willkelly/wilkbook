@@ -90,7 +90,6 @@ def main():
         "device-tree/model": (0, "Pine64 PineNote"),
         "PRETTY_NAME": (0, "wilkbook os2 7.0.x"),
         "temp1_input": (0, "24500"),
-        "/sys/class/backlight/*/": (0, "/sys/class/backlight/backlight/"),
         "brightness": (0, "42"),
         "parameters/refresh_waveform": (0, "6"),
         "sha256sum": (0, "deadbeefcafe"),
@@ -102,8 +101,9 @@ def main():
     check("panel temp converts millidegrees -> C", drv.read_panel_temp() == 24.5,
           f"{drv.read_panel_temp()}")
     fl = drv.set_frontlight(42)
-    check("frontlight writes brightness + reads back", fl == 42
-          and any("42 > /sys/class/backlight/backlight/brightness" in c for c in ft.ran("brightness")),
+    check("frontlight writes both warm+cool nodes + reads back", fl == 42
+          and any("42 > /sys/class/backlight/backlight_cool/brightness" in c for c in ft.cmds)
+          and any("42 > /sys/class/backlight/backlight_warm/brightness" in c for c in ft.cmds),
           f"applied={fl}")
     applied = drv.set_ebc_params({"refresh_waveform": 6, "refresh_threshold": 30})
     check("ebc params write each sysfs param", applied.get("refresh_waveform") == "6"
@@ -143,10 +143,10 @@ def main():
     small = te.build_manifest(te.build_pages())
     frames = driver.frames_from_manifest(small, lambda kind: np.asarray(
         te.render_page(te.Page(0, kind, 0)), np.float32) / 255.0)
-    check("frame builder yields one raw buffer per page, 8-bit gray",
+    check("frame builder yields one raw buffer per page, 32bpp XR24",
           len(frames) == len(small["pages"])
-          and all(len(b) == 300 * 400 for b in frames.values()),
-          f"{len(frames)} frames of {300*400}B")
+          and all(len(b) == 300 * 400 * 4 for b in frames.values()),
+          f"{len(frames)} frames of {300*400*4}B")
     ftf = FakeTransport()
     bef = driver.FramebufferBackend(ftf, small, frames=frames, waveform=6)
     drvf = driver.ShellDeviceDriver(ftf, bef)

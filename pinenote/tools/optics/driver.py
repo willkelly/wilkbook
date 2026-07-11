@@ -32,21 +32,18 @@ Transport.run/push/pull. FakeTransport (test_driver.py) records the exact
 command strings and returns scripted output, so we assert the whole protocol --
 param writes, frontlight, sync flashes, per-page turns -- with no device.
 
-HARDWARE_CHECKLIST: five device-specific facts can only be pinned on the
-hardware (or the os1 oracle). They are isolated as the module constants below
-so a hardware session fills them in with no structural change -- the same
-posture doc/networking.md takes for its unproven service wiring:
+HARDWARE_CHECKLIST -- all five device values were PINNED live on 2026-07-11
+(over the ACM console; see the constants below):
 
-  1. BACKLIGHT_NODE   -- which /sys/class/backlight node is the frontlight
-                         (the standardized illuminant), vs the panel's own.
-  2. PANEL_TEMP_HWMON -- the hwmon 'name' that carries the TPS65185 panel temp.
-  3. KOREADER_STORE   -- the on-device store path of the koreader bundle dir
-                         (glob below is derivable but unconfirmed).
-  4. NEXT_PAGE_INJECT -- the actual evdev/uinput mechanism + key/gesture that
-                         turns a KOReader page headlessly (the one genuinely
-                         unproven bit; see KOReaderBackend._turn).
-  5. FB_FORMAT        -- /dev/fb0 pixel format + stride (assumed 8-bit gray,
-                         full panel, no pad; confirm with `fbset`).
+  1. BACKLIGHT_NODES  -- frontlight is TWO nodes, backlight_{cool,warm}
+                         (max_brightness 255); illuminant sets both.  [ok]
+  2. PANEL_TEMP_HWMON -- hwmon2 name = tps65185, temp1_input in m°C.   [ok]
+  3. KOREADER_STORE   -- /gnu/store/*koreader*/lib/koreader confirmed.  [ok]
+  4. NEXT_PAGE_INJECT -- /dev/uinput exists; KOReader's pinenote target maps
+                         KEY_FORWARD(159)->next, KEY_BACK(158)->prev, so page
+                         turns inject via a uinput key device (KOReaderBackend).
+  5. FB_FORMAT        -- /dev/fb0 is 32bpp XR24, 1872x1404, stride 7488 (NOT
+                         8-bit); write + GLOBAL_REFRESH proven live.  [ok]
 """
 from __future__ import annotations
 
@@ -64,14 +61,24 @@ FB_DEV = "/dev/fb0"                                       # deferred-io framebuf
 EBC_REFRESH = "pinenote-ebc-refresh"                     # GLOBAL_REFRESH ioctl tool
 WAVEFORM_CANDIDATES = ("/run/pinenote/ebc.wbf", "/state/firmware/ebc.wbf")
 
-# --- device-specific, confirm on hardware (see HARDWARE_CHECKLIST) -----------
-BACKLIGHT_NODE = None                       # None -> auto-pick first backlight [?1]
-PANEL_TEMP_HWMON = ("tps65185", "ebc", "sy7636a")   # hwmon 'name' match      [?2]
-KOREADER_STORE = "/gnu/store/*koreader*/lib/koreader"                  #        [?3]
+# --- device values, PINNED on hardware 2026-07-11 (was the HARDWARE_CHECKLIST) -
+# Frontlight is TWO nodes (warm + cool natural-light LEDs); the standardized
+# illuminant sets both to the same level.  [?1 resolved]
+BACKLIGHT_NODES = ("/sys/class/backlight/backlight_cool",
+                   "/sys/class/backlight/backlight_warm")   # max_brightness 255 each
+PANEL_TEMP_HWMON = ("tps65185",)            # hwmon2/name = tps65185; temp1_input m°C [?2 ok]
+KOREADER_STORE = "/gnu/store/*koreader*/lib/koreader"       # confirmed present    [?3 ok]
 KOREADER_HOME = "/root/.config/koreader"
-NEXT_PAGE_KEY = "KEY_PAGEDOWN"              # evdev key KOReader maps to next   [?4]
-PREV_PAGE_KEY = "KEY_PAGEUP"
-FB_BYTES_PER_PIXEL = 1                       # 8-bit gray, full panel, no pad   [?5]
+# KOReader's pinenote target maps the ws8100 pen buttons: KEY_FORWARD(159)->next,
+# KEY_BACK(158)->prev (device.lua event_map).  /dev/uinput exists, so page turns
+# inject via a uinput device (see KOReaderBackend).  [?4 mechanism pinned]
+NEXT_PAGE_KEY = "KEY_FORWARD"               # evdev code 159
+PREV_PAGE_KEY = "KEY_BACK"                  # evdev code 158
+NEXT_PAGE_CODE, PREV_PAGE_CODE = 159, 158
+# Framebuffer is 32bpp XR24 at 1872x1404, stride 7488 (no pad) — NOT 8-bit gray;
+# grayscale content is B=G=R=v, X=0xFF.  Write + GLOBAL_REFRESH proven live.  [?5]
+FB_BYTES_PER_PIXEL = 4
+FB_WIDTH, FB_HEIGHT = 1872, 1404
 
 
 # ===========================================================================
@@ -441,18 +448,19 @@ class ShellDeviceDriver(recorder.DeviceDriver):
             return None
 
     def set_frontlight(self, level):
-        node = BACKLIGHT_NODE
-        if node is None:
-            rc, node = self.t.run("ls -d /sys/class/backlight/*/ 2>/dev/null | head -1")
-            node = node.strip().rstrip("/")
-        if not node:
-            return None
-        self.t.run("printf %%s %s > %s/brightness" % (int(level), node))
-        rc, back = self.t.run("cat %s/brightness 2>/dev/null" % node)
-        try:
-            return int(back.strip())
-        except (ValueError, AttributeError):
-            return level
+        """Set the frontlight (the standardized illuminant) to `level` on BOTH
+        the warm and cool LED nodes, and return the level read back from the
+        first that exists (or None if the frontlight is absent)."""
+        applied = None
+        for node in BACKLIGHT_NODES:
+            self.t.run("printf %%s %s > %s/brightness 2>/dev/null" % (int(level), node))
+            rc, back = self.t.run("cat %s/brightness 2>/dev/null" % node)
+            if rc == 0 and back.strip():
+                try:
+                    applied = int(back.strip())
+                except ValueError:
+                    applied = level
+        return applied
 
     def waveform_summary(self):
         """Identity only from the device (never the raw .wbf -- repo policy):
