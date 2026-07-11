@@ -41,7 +41,9 @@ HARDWARE_CHECKLIST -- all five device values were PINNED live on 2026-07-11
   3. KOREADER_STORE   -- /gnu/store/*koreader*/lib/koreader confirmed.  [ok]
   4. NEXT_PAGE_INJECT -- /dev/uinput exists; KOReader's pinenote target maps
                          KEY_FORWARD(159)->next, KEY_BACK(158)->prev, so page
-                         turns inject via a uinput key device (KOReaderBackend).
+                         turns inject via a uinput key device (KOReaderBackend +
+                         optics-inject.lua).  Mechanism identified + harness-
+                         proven offline; live end-to-end still unproven.
   5. FB_FORMAT        -- /dev/fb0 is 32bpp XR24, 1872x1404, stride 7488 (NOT
                          8-bit); write + GLOBAL_REFRESH proven live.  [ok]
 """
@@ -49,9 +51,18 @@ from __future__ import annotations
 
 import base64
 import gzip
+import os
 import shlex
 
 import recorder  # DeviceDriver ABC + run_scenario orchestration live there
+
+# Driver-side default for the trace-harvest contract (PLAN task 6): the
+# base DeviceDriver answers None ("no trace"), concrete drivers override.
+# recorder.py is where this belongs long-term; installed from here so the
+# recorder side of task 6 (the trace.<run_id>.log sidecar) can call
+# driver.harvest_trace() unconditionally the moment it lands.
+if not hasattr(recorder.DeviceDriver, "harvest_trace"):
+    recorder.DeviceDriver.harvest_trace = lambda self: None
 
 
 # --- known-good device surfaces (proven in-repo / on hardware) --------------
@@ -68,10 +79,16 @@ BACKLIGHT_NODES = ("/sys/class/backlight/backlight_cool",
                    "/sys/class/backlight/backlight_warm")   # max_brightness 255 each
 PANEL_TEMP_HWMON = ("tps65185",)            # hwmon2/name = tps65185; temp1_input m°C [?2 ok]
 KOREADER_STORE = "/gnu/store/*koreader*/lib/koreader"       # confirmed present    [?3 ok]
-KOREADER_HOME = "/root/.config/koreader"
+KOREADER_HOME = "/root/.config/koreader"    # the dogfooding profile; optics runs
+                                            # use KOReaderBackend.KO_HOME instead
 # KOReader's pinenote target maps the ws8100 pen buttons: KEY_FORWARD(159)->next,
-# KEY_BACK(158)->prev (device.lua event_map).  /dev/uinput exists, so page turns
-# inject via a uinput device (see KOReaderBackend).  [?4 mechanism pinned]
+# KEY_BACK(158)->prev (device.lua event_map).  /dev/uinput exists live, so page
+# turns inject via the optics-inject.lua uinput daemon (see KOReaderBackend).
+# Status [?4]: mechanism identified live 2026-07-11; the 159/158 ->
+# RPgFwd/RPgBack chain and the 'wilkbook-optics' device-name whitelist are
+# harness-proven offline (pinenote/tools/koreader-input); the live end-to-end
+# (daemon create -> KOReader enumerates -> injected turn) is still unproven
+# on hardware -- it is step 1 of the next SSH session.
 NEXT_PAGE_KEY = "KEY_FORWARD"               # evdev code 159
 PREV_PAGE_KEY = "KEY_BACK"                  # evdev code 158
 NEXT_PAGE_CODE, PREV_PAGE_CODE = 159, 158
@@ -289,52 +306,166 @@ class RenderBackend:
         raise NotImplementedError
 
 
+def _lua_repr(v):
+    """A Python value as a Lua literal for the seeded settings.reader.lua."""
+    if isinstance(v, bool):
+        return "true" if v else "false"
+    if isinstance(v, (int, float)):
+        return repr(v)
+    return '"%s"' % str(v).replace("\\", "\\\\").replace('"', '\\"')
+
+
 class KOReaderBackend(RenderBackend):
     """DEFAULT. Turns pages *in KOReader*, so the measured optics include
-    KOReader's own refresh policy. Pages are advanced by injecting the reader's
-    next/prev-page input event.
+    KOReader's own refresh policy.
 
-    The one genuinely unproven piece is _turn(): KOReader on the framebuffer
-    reads pure-Lua evdev input (reader-session.scm), so a headless page turn
-    means injecting a synthetic evdev event that KOReader is listening for. The
-    *command sequence* here is fixed and tested; the injection mechanism +
-    key/gesture (NEXT_PAGE_KEY) must be confirmed on hardware -- HARDWARE
-    CHECKLIST item 4. Kept behind one method so that confirmation is a one-line
-    change."""
+    Page turns go through a persistent uinput injector daemon
+    (optics-inject.lua, pushed and started by prepare() BEFORE the KOReader
+    relaunch -- KOReader enumerates input exactly once, at init, so the
+    'wilkbook-optics' device must already exist and must persist; device.lua
+    whitelists the name and opens it).  _turn() then just writes 'KEY <code>'
+    lines into the daemon's FIFO.  The whole chain short of hardware --
+    daemon protocol, device-name whitelist, 159/158 -> RPgFwd/RPgBack through
+    KOReader's verbatim input stack -- is proven offline (test_driver.py +
+    pinenote/tools/koreader-input); the live end-to-end is step 1 of the
+    next SSH session.
 
-    INJECT_HELPER = "/root/optics-inject"        # pushed uinput key injector
+    Reader-side knobs ('ko' param namespace, stashed here by
+    ShellDeviceDriver.set_ebc_params) are seeded into a DEDICATED
+    KO_HOME's settings.reader.lua in prepare()'s stop->relaunch window, so
+    every run records an explicit refresh regime and the dogfooding profile
+    at /root/.config/koreader stays untouched."""
+
+    INJECT_DAEMON = "/root/optics-inject.lua"    # the pushed uinput daemon
+    INJECT_FIFO = "/run/optics-inject.fifo"
+    INJECT_PID = "/run/optics-inject.pid"        # written by the daemon AFTER
+                                                 # UI_DEV_CREATE = ready marker
+    INJECT_LOG = "/var/log/optics-inject.log"
     EPUB_REMOTE = "/root/optics-testcard.epub"
+    KO_HOME = "/root/.config/koreader-optics"    # dedicated per-capture profile
+    LOG = "/var/log/optics-koreader.log"         # harvested per run (task 6)
 
+    # Always-explicit reader settings, so the bundle records the regime it
+    # measured (ko params override):
+    #  - refresh_on_pages_with_images: readerview.lua:289 gates image-page
+    #    full-refresh promotion on G_reader_settings:nilOrTrue(...) -- ABSENT
+    #    means ON, so the key must be PRESENT and false to disable
+    #    (makeFalse semantics; deleting it re-enables promotion).
+    #  - full_refresh_count: UIManager's promotion cadence ("partial
+    #    refreshes before the next gets promoted to full"); 0 = the menu's
+    #    "Never", 6 = KOReader's DEFAULT_FULL_REFRESH_COUNT.
+    #  - pinenote_flash_area_fraction: device.lua's flash policy threshold.
+    KO_DEFAULTS = {
+        "refresh_on_pages_with_images": False,
+        "full_refresh_count": 6,
+        "pinenote_flash_area_fraction": 0.60,
+    }
+
+    # Hard readiness check: FIFO present AND the daemon's pid (written only
+    # after UI_DEV_CREATE) alive, polled up to ~10 s.  Runs in a child shell
+    # so the `exit`s never touch the ACM console shell itself.
+    ENSURE_INJECTOR = ("sh -c 'n=0; while [ $n -lt 50 ]; do "
+                       "if [ -p {fifo} ] && "
+                       "kill -0 \"$(cat {pid} 2>/dev/null)\" 2>/dev/null; "
+                       "then exit 0; fi; sleep 0.2; n=$((n+1)); done; exit 1'")
+
+    def __init__(self, transport, manifest):
+        super().__init__(transport, manifest)
+        self._ko_params = {}
+        self._seeded_settings = None
+
+    # -- 'ko' param namespace ------------------------------------------------
+    def set_ko_params(self, ko):
+        """Stash this run's reader-side params (the 'ko' namespace); consumed
+        by prepare() into the seeded settings.reader.lua. Replaces the previous
+        run's set. Returns the normalized values ('never' -> 0)."""
+        norm = {}
+        for k, v in (ko or {}).items():
+            if k == "full_refresh_count" and isinstance(v, str):
+                v = 0 if v == "never" else int(v)
+            norm[k] = v
+        self._ko_params = norm
+        return dict(norm)
+
+    # -- prepare: injector daemon -> stop old reader -> seed -> relaunch ------
     def prepare(self, epub_local=None):
-        # 1. stage the test-card epub (once) and the input injector
+        # 0. stage the test-card epub (once per session)
         if epub_local is not None:
             with open(epub_local, "rb") as f:
                 self.t.push(f.read(), self.EPUB_REMOTE)
-        self._ensure_injector()
-        # 2. relaunch KOReader on the test card so page 0 is deterministic
         rc, kodir = self.t.run("ls -d " + KOREADER_STORE + " 2>/dev/null | head -1")
         self._kodir = kodir.strip() or KOREADER_STORE
+        # 1. injector daemon BEFORE KOReader: the uinput device must exist
+        #    when KOReader enumerates input, and must persist afterwards
+        #    (the daemon holds the fd; it survives across runs on purpose).
+        self._start_injector()
+        self._ensure_injector()
+        # 2. stop the dogfooding reader AND any previous optics run's
+        #    KOReader -- an exiting instance flushes G_reader_settings on
+        #    the way out and would overwrite the seed below.
         self.t.run("herd stop reader-session 2>/dev/null; true")
-        launch = ("cd %s && HOME=/root KO_HOME=%s "
+        self.t.run("pkill -f 'reader.lua %s' 2>/dev/null; true" % self.EPUB_REMOTE)
+        # 3. seed the dedicated KO_HOME with this run's explicit regime
+        self._seed_ko_home()
+        # 4. relaunch KOReader on the test card so page 0 is deterministic.
+        #    ( ... & ) keeps the trailing background token inside a subshell:
+        #    the serial transport appends '; printf <marker>' to every
+        #    command, and a bare '... &;' is a shell syntax error.
+        launch = ("( cd %s && HOME=/root KO_HOME=%s "
                   "PATH=/run/current-system/profile/bin LC_ALL=en_US.UTF-8 "
-                  "./luajit reader.lua %s >/var/log/optics-koreader.log 2>&1 &"
-                  % (shlex.quote(self._kodir), shlex.quote(KOREADER_HOME),
-                     shlex.quote(self.EPUB_REMOTE)))
+                  "./luajit reader.lua %s >%s 2>&1 & )"
+                  % (shlex.quote(self._kodir), shlex.quote(self.KO_HOME),
+                     shlex.quote(self.EPUB_REMOTE), self.LOG))
         self.t.run(launch)
         self._page = 0
 
+    def _start_injector(self):
+        """Stage optics-inject.lua and start it (idempotent): FIFO first, then
+        the daemon under setsid via the koreader bundle's own luajit."""
+        src = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                           "optics-inject.lua")
+        with open(src, "rb") as f:
+            self.t.push(f.read(), self.INJECT_DAEMON)
+        # FIFO created first: the daemon opens its read side at startup
+        self.t.run("test -p %s || mkfifo %s"
+                   % (self.INJECT_FIFO, self.INJECT_FIFO))
+        # start only if not already alive -- the uinput device persisting
+        # across KOReader relaunches is the whole point of the daemon
+        self.t.run("kill -0 \"$(cat %s 2>/dev/null)\" 2>/dev/null || "
+                   "( setsid %s/luajit %s >>%s 2>&1 & )"
+                   % (self.INJECT_PID, shlex.quote(self._kodir),
+                      shlex.quote(self.INJECT_DAEMON), self.INJECT_LOG))
+
     def _ensure_injector(self):
-        # A tiny uinput key emitter run by KOReader's own luajit (has ffi).
-        # It must exist as a device *before* KOReader enumerates input; prepare()
-        # creates it, then relaunches KOReader. Body is device-confirmed work
-        # (checklist 4); we only assert it is staged + invoked in tests.
-        self.t.run("test -x %s || : # inject helper staged out of band"
-                   % shlex.quote(self.INJECT_HELPER))
+        """HARD check (PLAN task 1): raise unless the daemon is running and
+        the FIFO exists. The pid file doubles as the UI_DEV_CREATE-succeeded
+        marker, so passing here also means the uinput device exists before
+        KOReader enumerates input."""
+        rc, _ = self.t.run(self.ENSURE_INJECTOR.format(
+            fifo=self.INJECT_FIFO, pid=self.INJECT_PID))
+        if rc != 0:
+            raise RuntimeError(
+                "optics-inject daemon not running (no live pid at %s / no "
+                "FIFO at %s): page turns cannot be injected -- check %s on "
+                "the device" % (self.INJECT_PID, self.INJECT_FIFO,
+                                self.INJECT_LOG))
+
+    def _seed_ko_home(self):
+        settings = dict(self.KO_DEFAULTS)
+        settings.update(self._ko_params)
+        body = "".join("    [%s] = %s,\n" % (_lua_repr(k), _lua_repr(v))
+                       for k, v in sorted(settings.items()))
+        content = ("-- seeded by the optics harness (driver.py); one dedicated\n"
+                   "-- KO_HOME per capture -- KOReader rewrites this file on exit\n"
+                   "return {\n%s}\n" % body)
+        self.t.run("mkdir -p " + shlex.quote(self.KO_HOME))
+        self.t.push(content.encode(), self.KO_HOME + "/settings.reader.lua")
+        self._seeded_settings = dict(settings)   # for bundle attribution
 
     def _turn(self, delta):
-        key = NEXT_PAGE_KEY if delta > 0 else PREV_PAGE_KEY
+        code = NEXT_PAGE_CODE if delta > 0 else PREV_PAGE_CODE
         for _ in range(abs(delta)):
-            self.t.run("%s %s" % (shlex.quote(self.INJECT_HELPER), key))
+            self.t.run("printf 'KEY %d\\n' > %s" % (code, self.INJECT_FIFO))
         self._page = (self._page or 0) + delta
 
     def emit_sync(self):
@@ -478,6 +609,37 @@ class ShellDeviceDriver(recorder.DeviceDriver):
 
     # -- driver params --
     def set_ebc_params(self, params):
+        """Apply one run's param set.  Two accepted shapes:
+
+          * flat dict (back-compat): every key is a rockchip_ebc sysfs param;
+          * namespaced {'ebc': {...}, 'ko': {...}}: 'ebc' goes to sysfs as
+            before, 'ko' holds reader-side settings (full_refresh_count,
+            pinenote_flash_area_fraction, ...) stashed on the KOReader
+            backend and seeded into its KO_HOME at prepare() -- which
+            run_scenario calls right after this, so ko params land in the
+            same stop->relaunch window with zero extra restarts.
+
+        Returns what was applied, in the same shape it was given."""
+        params = params or {}
+        if "ebc" in params or "ko" in params:
+            unknown = set(params) - {"ebc", "ko"}
+            if unknown:
+                raise ValueError("unknown param namespace(s): %s"
+                                 % ", ".join(sorted(unknown)))
+            ko = dict(params.get("ko") or {})
+            if hasattr(self.backend, "set_ko_params"):
+                applied_ko = self.backend.set_ko_params(ko)
+            elif ko:
+                raise ValueError(
+                    "'ko' params need the KOReader backend (the fb backend "
+                    "has no reader to configure): %s" % ", ".join(sorted(ko)))
+            else:
+                applied_ko = {}
+            return {"ebc": self._apply_ebc(params.get("ebc") or {}),
+                    "ko": applied_ko}
+        return self._apply_ebc(params)
+
+    def _apply_ebc(self, params):
         applied = {}
         for k, v in (params or {}).items():
             path = "%s/%s" % (EBC_PARAM_DIR, k)
@@ -485,6 +647,23 @@ class ShellDeviceDriver(recorder.DeviceDriver):
             rc, back = self.t.run("cat %s 2>/dev/null" % path)
             applied[k] = back.strip() if rc == 0 and back else v
         return applied
+
+    # -- trace harvest (PLAN task 6, driver side) --
+    def harvest_trace(self):
+        """The reader-side trace for the run that just finished: KOReader's
+        stdout/err log (the [pn-refresh] intent lines) as text, or None when
+        the backend has no reader log (fb backend) or the pull fails. The
+        recorder side turns this into the trace.<run_id>.log sidecar."""
+        log = getattr(self.backend, "LOG", None)
+        if not log:
+            return None
+        try:
+            data = self.t.pull(log)
+        except Exception:
+            return None
+        if not data:
+            return None
+        return data.decode("utf-8", "replace")
 
     # -- scenario playback (delegated to the backend) --
     def open_testcard(self, epub_path=None):

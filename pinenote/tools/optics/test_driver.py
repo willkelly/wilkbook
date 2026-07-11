@@ -11,6 +11,7 @@ drives a real capture with no structural change.
 
 Run: python3 test_driver.py  (needs numpy for the framebuffer frame builder).
 """
+import os
 import sys
 
 import driver
@@ -116,7 +117,11 @@ def main():
           and wf["active_refresh_waveform"] == "6" and wf["wbf_sha256"] == "deadbeefcafe",
           f"{wf}")
 
-    print("case: KOReaderBackend turns pages via injected next/prev events")
+    K = driver.KOReaderBackend
+    FWD_WRITE = "printf 'KEY %d" % driver.NEXT_PAGE_CODE
+    BACK_WRITE = "printf 'KEY %d" % driver.PREV_PAGE_CODE
+
+    print("case: KOReaderBackend turns pages via the injector FIFO")
     ftk = FakeTransport()
     be = driver.KOReaderBackend(ftk, manifest)
     drvk = driver.ShellDeviceDriver(ftk, be)
@@ -124,18 +129,140 @@ def main():
     check("prepare stops reader-session + relaunches KOReader on the card",
           ftk.count("herd stop reader-session") == 1
           and any("reader.lua" in c and driver.KOReaderBackend.EPUB_REMOTE in c
-                  for c in ftk.cmds), "launch")
-    injects_before = ftk.count(be.INJECT_HELPER)
+                  for c in ftk.ran("reader.lua")), "launch")
+    injects_before = ftk.count(FWD_WRITE)
     drvk.emit_sync()
     check("emit_sync steps through exactly the sync pages",
-          ftk.count(be.INJECT_HELPER) - injects_before == max(p["index"] for p in manifest["pages"]
-                                                              if p["kind"].startswith("sync")),
-          f"{ftk.count(be.INJECT_HELPER) - injects_before} turns for {n_sync} sync pages")
+          ftk.count(FWD_WRITE) - injects_before == max(p["index"] for p in manifest["pages"]
+                                                       if p["kind"].startswith("sync")),
+          f"{ftk.count(FWD_WRITE) - injects_before} turns for {n_sync} sync pages")
     at = be._page
+    fwd_before = ftk.count(FWD_WRITE)
     drvk.goto_page(content[0]["index"])
     fwd = content[0]["index"] - at
-    check("goto_page advances by the page delta with the next-page key",
-          ftk.count(driver.NEXT_PAGE_KEY) >= fwd and fwd > 0, f"delta={fwd}")
+    check("goto_page advances by the page delta via 'KEY 159' FIFO lines",
+          fwd > 0 and ftk.count(FWD_WRITE) - fwd_before == fwd
+          and all("> " + K.INJECT_FIFO in c for c in ftk.ran(FWD_WRITE)),
+          f"delta={fwd}")
+    drvk.goto_page(content[0]["index"] - 1)
+    check("backwards turns write 'KEY 158' FIFO lines",
+          ftk.count(BACK_WRITE) == 1
+          and all("> " + K.INJECT_FIFO in c for c in ftk.ran(BACK_WRITE)))
+
+    print("case: prepare sequence = daemon (fifo first) -> ensure -> stop -> seed -> launch")
+    with open(os.path.join(os.path.dirname(os.path.abspath(driver.__file__)),
+                           "optics-inject.lua"), "rb") as f:
+        daemon_src = f.read()
+    ftp = FakeTransport(responses={
+        "ls -d /gnu/store": (0, "/gnu/store/fake-koreader/lib/koreader"),
+    })
+    bep = driver.KOReaderBackend(ftp, manifest)
+    drvp = driver.ShellDeviceDriver(ftp, bep)
+    applied = drvp.set_ebc_params({
+        "ebc": {"refresh_waveform": 6},
+        "ko": {"full_refresh_count": "never",
+               "pinenote_flash_area_fraction": 0.4}})
+    drvp.open_testcard()
+
+    def idx(pred):
+        for i, c in enumerate(ftp.cmds):
+            if callable(pred):
+                if pred(c):
+                    return i
+            elif isinstance(c, str) and pred in c:
+                return i
+        return -1
+
+    i_daemon_push = idx(lambda c: isinstance(c, tuple) and c[1] == K.INJECT_DAEMON)
+    i_fifo = idx("mkfifo " + K.INJECT_FIFO)
+    i_start = idx("setsid")
+    i_ensure = idx("sleep 0.2; n=$((n+1))")
+    i_stop = idx("herd stop reader-session")
+    i_pkill = idx("pkill -f 'reader.lua")
+    i_seed = idx(lambda c: isinstance(c, tuple)
+                 and c[1] == K.KO_HOME + "/settings.reader.lua")
+    i_mkdir = idx("mkdir -p " + K.KO_HOME)
+    i_launch = idx("./luajit reader.lua")
+    order = [i_daemon_push, i_fifo, i_start, i_ensure, i_stop, i_pkill,
+             i_mkdir, i_seed, i_launch]
+    check("prepare orders daemon-push < fifo < start < ensure < stop < pkill"
+          " < mkdir < seed < launch",
+          all(i >= 0 for i in order) and order == sorted(order) and
+          len(set(order)) == len(order), f"{order}")
+    check("the pushed daemon is optics-inject.lua verbatim (uinput, named device)",
+          ftp.files[K.INJECT_DAEMON] == daemon_src
+          and b"wilkbook-optics" in daemon_src and b"/dev/uinput" in daemon_src)
+    start_cmd = ftp.cmds[i_start]
+    check("daemon start: setsid + bundle luajit + logfile, guarded by live-pid",
+          "/gnu/store/fake-koreader/lib/koreader/luajit" in start_cmd
+          and K.INJECT_DAEMON in start_cmd and K.INJECT_LOG in start_cmd
+          and "kill -0" in start_cmd and K.INJECT_PID in start_cmd,
+          start_cmd)
+    seeded = ftp.files[K.KO_HOME + "/settings.reader.lua"].decode()
+    check("seeded settings: image-page promotion PRESENT-and-false (makeFalse)",
+          '["refresh_on_pages_with_images"] = false' in seeded, seeded.strip())
+    check("seeded settings: ko full_refresh_count 'never' normalized to 0",
+          '["full_refresh_count"] = 0' in seeded)
+    check("seeded settings: flash_area_fraction reaches device.lua's knob",
+          '["pinenote_flash_area_fraction"] = 0.4' in seeded)
+    launch_cmd = ftp.cmds[i_launch]
+    check("launch: dedicated KO_HOME + stdout/err into the harvestable log",
+          "KO_HOME=" + K.KO_HOME in launch_cmd and ">" + K.LOG in launch_cmd
+          and K.EPUB_REMOTE in launch_cmd
+          and "cd /gnu/store/fake-koreader/lib/koreader" in launch_cmd,
+          launch_cmd)
+
+    print("case: namespaced vs flat param routing")
+    check("namespaced set_ebc_params returns {'ebc':applied,'ko':normalized}",
+          applied == {"ebc": {"refresh_waveform": 6},
+                      "ko": {"full_refresh_count": 0,
+                             "pinenote_flash_area_fraction": 0.4}},
+          f"{applied}")
+    check("ebc params (and only those) reach sysfs",
+          ftp.count("6 > /sys/module/rockchip_ebc/parameters/refresh_waveform") == 1
+          and ftp.count("parameters/full_refresh_count") == 0
+          and ftp.count("parameters/pinenote_flash_area_fraction") == 0)
+    try:
+        drvp.set_ebc_params({"ebc": {}, "bogus": {"x": 1}})
+        check("unknown param namespace rejected", False)
+    except ValueError:
+        check("unknown param namespace rejected", True)
+    ftfb = FakeTransport()
+    drvfb = driver.ShellDeviceDriver(
+        ftfb, driver.FramebufferBackend(ftfb, manifest, frames={}))
+    try:
+        drvfb.set_ebc_params({"ko": {"full_refresh_count": 1}})
+        check("'ko' params on the fb backend raise (no reader to configure)", False)
+    except ValueError:
+        check("'ko' params on the fb backend raise (no reader to configure)", True)
+    check("namespaced ebc-only still works on the fb backend",
+          drvfb.set_ebc_params({"ebc": {"refresh_waveform": 4}})
+          == {"ebc": {"refresh_waveform": 4}, "ko": {}})
+
+    print("case: harvest_trace pulls the KOReader log (and only that)")
+    ftp.files[K.LOG] = b"[pn-refresh] partial partial rect=0,0,10,10 dither=nil t=1.000000\n"
+    trace = drvp.harvest_trace()
+    check("KOReader-backend driver returns the log text",
+          isinstance(trace, str) and "[pn-refresh]" in trace, repr(trace)[:60])
+    check("fb-backend driver has no reader trace -> None",
+          drvfb.harvest_trace() is None)
+    ftk.files.pop(K.LOG, None)
+    check("missing/empty log -> None", drvk.harvest_trace() is None)
+    check("abstract DeviceDriver default answers None (driver-side shim)",
+          recorder.DeviceDriver().harvest_trace() is None)
+
+    print("case: _ensure_injector is a HARD check")
+    ftbad = FakeTransport(responses={"sleep 0.2; n=$((n+1))": (1, "")})
+    drvbad = driver.ShellDeviceDriver(ftbad, driver.KOReaderBackend(ftbad, manifest))
+    try:
+        drvbad.open_testcard()
+        check("prepare raises when the injector daemon is not running", False)
+    except RuntimeError as e:
+        check("prepare raises when the injector daemon is not running",
+              "optics-inject" in str(e), str(e)[:60])
+    check("the hard check fails BEFORE any KOReader relaunch",
+          ftbad.count("herd stop reader-session") == 0
+          and ftbad.count("./luajit reader.lua") == 0)
 
     print("case: FramebufferBackend pushes frames + fires GLOBAL_REFRESH")
     import numpy as np
@@ -167,15 +294,24 @@ def main():
     drv2.connect()
     runs = recorder.run_scenario(
         drv2, manifest,
-        param_sets=[("baseline", {}), ("gl16", {"refresh_waveform": 6})],
+        param_sets=[("baseline", {}), ("gl16", {"refresh_waveform": 6}),
+                    ("combo", {"ebc": {"refresh_waveform": 6},
+                               "ko": {"full_refresh_count": 1}})],
         page_period_s=1.5, clock=recorder.FakeClock())
     check("one run per param set with every content page logged",
-          len(runs) == 2
+          len(runs) == 3
           and sum(1 for e in runs[0]["events"] if e["event"] == "page") == len(content),
           f"{len(runs)} runs")
     check("the flipped GL16 param reached the device sysfs",
           any("6 > /sys/module/rockchip_ebc/parameters/refresh_waveform" in c
               for c in ft2.cmds), "param write")
+    check("a namespaced param set keeps its shape in the run's attribution",
+          runs[2]["params"] == {"ebc": {"refresh_waveform": 6},
+                                "ko": {"full_refresh_count": 1}},
+          f"{runs[2]['params']}")
+    check("the ko run seeded its full_refresh_count into the optics KO_HOME",
+          '["full_refresh_count"] = 1' in
+          ft2.files[K.KO_HOME + "/settings.reader.lua"].decode())
 
     print()
     if _fails:
