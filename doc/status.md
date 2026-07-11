@@ -4,6 +4,25 @@ Last updated: 2026-07-10. This is the single place to record what has actually
 been proven on the device. Update it after every hardware session; the
 detailed evidence lives in session logs, not in git.
 
+**2026-07-11 (calibration): the instrument is now precise.** Exposure sweep on
+the rig: v4l2 exposure units are 100 us, so 60 fps caps exposure at ~156 =
+unavoidably dark — captures now run 30 fps with calibrated locked values
+(exposure 312, gain 32, frontlight 255/255 → panel whites 214/255, zero
+clipping; camera_lock applies the values, not just freezing AE). The 10-repeat
+noise pilot (novel<->blank x10, full_refresh_count=never so every flip is the
+identical partial) exposed two analyzer defects, both fixed: the flash
+reference now uses STAYS-WHITE pixels (former text transiting dark while
+clearing had fabricated ~0.10 flash on clean partials), and _warp_all now fits
+ONE session homography (median of 5) — per-frame fit jitter at content edges
+had kept the settle ROI "never quiet" (22/26 clean dwells read incomplete;
+now 15 none / 5 slow / 1). Post-fix repeatability: **ghost rms sigma
+0.003-0.006** between identical repeats — ~0.01-rms config differences are
+now 3-sigma detectable off a webcam. One real optical finding already: whites
+adjacent to text dip ~0.15 transiently while text CLEARS under GL16 partials
+(0.148 +/- 0.032, absent in the appearing direction) — the visible
+text-clear shimmer, quantified. Mask-erosion knob to separate edge shimmer
+from background flash is queued.
+
 **2026-07-11 (later): FIRST REAL DEFECT REPORT — the instrument works.** After
 three real-footage fixes (sync preamble 5s->240s for automated captures;
 panel-presence gate 15%->4% of frame; memory-bounded decode --max-fps/
