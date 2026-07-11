@@ -2,6 +2,7 @@
   #:use-module (gnu services)
   #:use-module (gnu services base)
   #:use-module (gnu services networking)
+  #:use-module (gnu services ssh)
   #:use-module ((gnu packages admin) #:select (wpa-supplicant))
   #:use-module (gnu system)
   #:use-module (guix gexp)
@@ -35,6 +36,18 @@ reader ALL=(ALL) NOPASSWD: ALL
                 ;; enters the image or the store.
                 (service pinenote-wifi-service-type)
                 (service dhcpcd-service-type)
+                ;; SSH (key-only, no passwords) so the boxed device is
+                ;; reachable over Wi-Fi once the USB cable is removed — this is
+                ;; also the recorder's SSHTransport. Host keys land in /etc/ssh
+                ;; (regenerated on reflash; persistent /data host keys are a
+                ;; follow-up if the changing fingerprint becomes annoying).
+                (service openssh-service-type
+                         (openssh-configuration
+                          (password-authentication? #f)
+                          (permit-root-login 'prohibit-password)
+                          (authorized-keys
+                           `(("root" ,(plain-file "wkelly.pub"
+                                                  "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICMbOSX755vG0PSWm1z9WrGP+x8YRsPqJ0YtUnGjufGP wkelly@pop-os\n"))))))
                 (service pinenote-usb-acm-gadget-service-type)
                 (service pinenote-usb-acm-console-service-type)
                 (service agetty-service-type
