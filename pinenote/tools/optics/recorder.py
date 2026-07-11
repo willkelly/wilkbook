@@ -408,17 +408,29 @@ class _webcam:
     """Best-effort webcam capture around the scenario (hardware-only path).
     Starts ffmpeg recording `device` to `path`, stops it (graceful 'q') on exit.
     A no-op context if `device` is None -- then the operator films manually and
-    supplies --video, or runs `package` afterwards."""
+    supplies --video, or runs `package` afterwards.
+
+    `extra` are INPUT options (they precede -i: v4l2 format/size/rate selection
+    -- after -i they would silently become output options and the camera would
+    fall back to its default mode). Defaults select the Brio's MJPG 1080p60 and
+    STREAM-COPY it: re-encoding 1080p60 in realtime drops frames (observed live:
+    a '60fps' x264 capture yielded ~20-35 effective fps), and MJPEG is already
+    per-frame compressed, exactly what ingest wants."""
+
+    DEFAULT_IN = ["-input_format", "mjpeg", "-video_size", "1920x1080",
+                  "-framerate", "60"]
+    DEFAULT_OUT = ["-c:v", "copy"]
 
     def __init__(self, device, path, extra=None):
-        self.device, self.path, self.extra = device, path, list(extra or [])
+        self.device, self.path = device, path
+        self.extra = list(extra) if extra else list(self.DEFAULT_IN)
         self.proc = None
 
     def __enter__(self):
         if self.device:
             import subprocess
-            argv = (["ffmpeg", "-y", "-f", "v4l2", "-i", self.device]
-                    + self.extra + [self.path])
+            argv = (["ffmpeg", "-y", "-f", "v4l2"] + self.extra
+                    + ["-i", self.device] + list(self.DEFAULT_OUT) + [self.path])
             self.proc = subprocess.Popen(argv, stdin=subprocess.PIPE,
                                          stdout=subprocess.DEVNULL,
                                          stderr=subprocess.DEVNULL)
