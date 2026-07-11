@@ -148,20 +148,24 @@ Also staged 2026-07-03:
 
 ## Current os2 contents
 
-os2 currently holds the **phase A.2.4 build**, SHA
-`54579babf4462d05b4c572f6e09849f9f1f21e2bcd4a7054bfd50a8f6f49a4a7` —
-**written 2026-07-10** with the full protocol (os1 root confirmed at
+os2 currently holds the **phase A.2.5 build**, SHA
+`e0e7735ca4e1e21e8dde700e273d50e6b0139f415e023e61017432e7e97dfb6f` —
+**written 2026-07-11** with the full protocol (os1 root confirmed at
 `/dev/mmcblk0p5`, p6 unmounted, `dd conv=fsync`, then a `drop_caches`
-readback of the exact 1 916 416 000-byte range SHA-matched from eMMC).
+readback of the exact 1 943 072 768-byte range SHA-matched from eMMC).
 Staged copy on os1 at
-`/home/user/wilkbook-artifacts/pinenote-reader-PNGuixRoot-20260710-a24.ext4`.
-**First boot confirmed 2026-07-11**: from a cold boot with no intervention the
-full chain came up — `brcmfmac.feature_disable=0x82000` applied (`/proc/cmdline`),
-`pinenote-wifi` launched `wpa_supplicant` from the pre-staged conf, `wlan0`
-associated to `largeprofanity`, `dhcpcd` leased `192.168.86.144`, and it pinged
-`1.1.1.1` + resolved `gnu.org`. **Wi-Fi now works automatically on the reader.**
+`/home/user/wilkbook-artifacts/pinenote-reader-PNGuixRoot-20260711-a25.ext4`.
+**First boot pending.** A.2.5 = A.2.4 + **key-only SSH** (`openssh-service-type`,
+`PermitRootLogin prohibit-password`, `PasswordAuthentication no`, operator's
+ed25519 key authorized for root) so the device is reachable over Wi-Fi with the
+USB cable removed (also the recorder's SSHTransport). Host keys regenerate on
+reflash (persistent `/data` host keys are a follow-up). The superseded A.2.4
+(`54579bab…`) staged copy remains on os1 for rollback.
 
-A.2.4 = the **Phase 1 Wi-Fi userland** (`pinenote-wifi` service +
+A.2.4 (Wi-Fi, first-boot-confirmed 2026-07-11: cold boot brought the full chain
+up on its own — `feature_disable` applied, `wlan0` associated to `largeprofanity`,
+DHCP `192.168.86.144`, ping + DNS OK) = the **Phase 1 Wi-Fi userland**
+(`pinenote-wifi` service +
 `wpa_supplicant` + `dhcpcd`, out-of-band conf on the `data` partition;
 `doc/networking.md §4.1`) **plus the confirmed brcmfmac Wi-Fi fix**
 (`feature_disable=0x82000` via modprobe.d + kernel cmdline, `d911e57`; the
