@@ -42,8 +42,7 @@ HARDWARE_CHECKLIST -- all five device values were PINNED live on 2026-07-11
   4. NEXT_PAGE_INJECT -- /dev/uinput exists; KOReader's pinenote target maps
                          KEY_FORWARD(159)->next, KEY_BACK(158)->prev, so page
                          turns inject via a uinput key device (KOReaderBackend +
-                         optics-inject.lua).  Mechanism identified + harness-
-                         proven offline; live end-to-end still unproven.
+                         optics-inject.lua).  PROVEN LIVE 2026-07-11.  [ok]
   5. FB_FORMAT        -- /dev/fb0 is 32bpp XR24, 1872x1404, stride 7488 (NOT
                          8-bit); write + GLOBAL_REFRESH proven live.  [ok]
 """
@@ -76,11 +75,11 @@ KOREADER_HOME = "/root/.config/koreader"    # the dogfooding profile; optics run
 # KOReader's pinenote target maps the ws8100 pen buttons: KEY_FORWARD(159)->next,
 # KEY_BACK(158)->prev (device.lua event_map).  /dev/uinput exists live, so page
 # turns inject via the optics-inject.lua uinput daemon (see KOReaderBackend).
-# Status [?4]: mechanism identified live 2026-07-11; the 159/158 ->
-# RPgFwd/RPgBack chain and the 'wilkbook-optics' device-name whitelist are
-# harness-proven offline (pinenote/tools/koreader-input); the live end-to-end
-# (daemon create -> KOReader enumerates -> injected turn) is still unproven
-# on hardware -- it is step 1 of the next SSH session.
+# Status [?4]: PROVEN LIVE end-to-end 2026-07-11 on the A.2.6 smoke run --
+# daemon created the device, KOReader enumerated + opened it (event7), and 48
+# injected turns drove 48 [pn-refresh] events (39 partial + 8 full: exactly
+# the full_refresh_count=6 promotion cadence). Harness coverage remains in
+# pinenote/tools/koreader-input.
 NEXT_PAGE_KEY = "KEY_FORWARD"               # evdev code 159
 PREV_PAGE_KEY = "KEY_BACK"                  # evdev code 158
 NEXT_PAGE_CODE, PREV_PAGE_CODE = 159, 158
