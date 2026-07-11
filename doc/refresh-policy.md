@@ -273,6 +273,18 @@ bundles + reports under `pinenote/tools/optics/build/bundles/sweep1.*`):
    the trace->transition join (PLAN task 10) must land before that claim is
    made. It is the first question for the next sweep.
 
+6. **Cadence sweep (6/12/20, GL16 fulls): the accumulation curve is FLAT
+   through 18 turns since the last full** (blank-reveal ghost 0.117-0.132
+   across all distance buckets vs floor 0.121±0.009, 17 samples pooled across
+   the three cadences), while zero-fulls degrades to 0.309 by ~40 turns and
+   corrupts toggle-heavy regions. Accumulation is a cliff past ~20, not a
+   slope. **Recommendation: full_refresh_count=12** — half the flash events
+   of the current default 6 at zero measured ghost cost (20 also measured
+   clean but sits closer to the unmapped cliff with thinner data; mapping
+   the 20-40 turn cliff onset is the obvious follow-up sweep). Set via the
+   KOReader menu per Decision 4 (user's knob); 12 is now the evidence-based
+   suggestion. Bundles: `pinenote/tools/optics/build/bundles/cadence.*`.
+
 Instrument provenance: 30 fps / exposure 312 / gain 32 / frontlight 255-255;
 ghost-rms repeatability sigma 0.003-0.006 between identical transitions.
 
