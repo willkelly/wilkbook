@@ -140,6 +140,10 @@ offline-tested (`test_bundle.py`, wired into `make check`):
   keeping all four fiducials in frame, what to run, and exactly which files to
   send — never the `.wbf`).
 
+> **The current execution queue lives in [PLAN.md](PLAN.md)** — the 2026-07-11
+> four-critic review's verified findings and dependency-ordered build list. The
+> section below is the pre-review summary, kept until PLAN.md tasks land.
+
 ## Next (in build order)
 
 1. **Confirm the driver against a real device (tethered, no Wi-Fi).** The driver
