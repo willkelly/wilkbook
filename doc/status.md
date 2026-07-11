@@ -171,6 +171,16 @@ USB cable removed (also the recorder's SSHTransport). Host keys regenerate on
 reflash (persistent `/data` host keys are a follow-up). The superseded A.2.4
 (`54579bab…`) staged copy remains on os1 for rollback.
 
+**A.2.6 is built and pending the next os2 write** (local rootfs
+`pinenote-reader-PNGuixRoot-20260711-a26.ext4`, SHA
+`1a1e13669a17e258487d6f78d862517c9765b9f172e962e52e63ce4cc2bb9b68`; payload
+checks PASS; verified to carry the optics device.lua changes — the
+`wilkbook-optics` injector whitelist + G_reader_settings flash fraction — plus
+the `/var/empty` sshd activation fix, so SSH works with no manual step). It is
+A.2.5 + the integrated optics blocker work; flashing it is prerequisite to the
+injector live proof and the first valid optics capture
+(`pinenote/tools/optics/PLAN.md`).
+
 A.2.4 (Wi-Fi, first-boot-confirmed 2026-07-11: cold boot brought the full chain
 up on its own — `feature_disable` applied, `wlan0` associated to `largeprofanity`,
 DHCP `192.168.86.144`, ping + DNS OK) = the **Phase 1 Wi-Fi userland**
