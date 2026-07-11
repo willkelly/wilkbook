@@ -435,10 +435,15 @@ session):
   name** it gives the BCM43455 (`ip link` / `iw dev`). The sketches assume
   `wlan0`; modern predictable-naming could differ, and Guix's own udev
   naming needs its own confirmation.
-- **Association, not just firmware load.** Firmware/module load is proven
-  (2026-06-11); that the module *associates* with a real AP under our
-  chosen wpa_supplicant on the 7.0 kernel is not. This is the headline
-  unknown.
+- **Association — RESOLVED 2026-07-10.** The radio associates *and* completes
+  WPA (DHCP lease + ping) — but only with **`brcmfmac.feature_disable=0x82000`**.
+  Without it, the Apr-2021 BCM4345/6 firmware mis-negotiates its WPA offloads
+  with wpa_supplicant 2.11 (the reader ships 2.11; Debian os1 has 2.10) and the
+  firmware-side 4-way handshake times out on both WPA2-PSK and WPA3-SAE. A known
+  brcmfmac bug (Red Hat #2302577, raspberrypi/linux #4976), fixed via the module
+  option in the `pinenote-wifi` service + kernel cmdline (A.2.4). Full evidence:
+  `doc/status.md` (2026-07-10). The stuck-WORLD-regdomain / `set_channel reason
+  -52` symptoms were benign red herrings.
 - **Module autoload path.** brcmfmac is SDIO-attached and should coldplug
   via udev modalias, but Guix's kmod does not honor `LINUX_MODULE_DIRECTORY`
   and only the kernel *profile* carries `modules.dep`

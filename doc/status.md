@@ -4,26 +4,30 @@ Last updated: 2026-07-10. This is the single place to record what has actually
 been proven on the device. Update it after every hardware session; the
 detailed evidence lives in session logs, not in git.
 
-**2026-07-10: Wi-Fi userland proven; blocked by a 7.0 brcmfmac regression.**
+**2026-07-10: Wi-Fi working end-to-end — root-caused and fixed live.**
 A.2.3 (reader + the Phase 1 Wi-Fi userland) was built, written to os2 (rootfs
-SHA `196d601c…`, drop_caches readback-verified) and booted. Over the CDC-ACM
-console the whole chain was validated live: `wlan0` autoloads (brcmfmac
-coldplug), is unblocked, has a stable real MAC, and scans; the `pinenote-wifi`
-service ran, mounted the `data` partition, found the credential conf, and
-`wpa_supplicant` (after a PATH fix — it lives in the profile's `sbin`, not
-`bin`; commit `82f111c`) drives the radio to **associate** with the AP.
-**But WPA never completes on 7.0**: it associates, then the firmware-side 4-way
-handshake times out (`auth_failures`, `reason=CONN_FAILED`), leaving `wlan0`
-`DORMANT` and the radio stuck in the **WORLD** regdomain — independent of PMF
-on/off and of WPA2-PSK vs WPA3-SAE. The credential is **correct** (byte-for-byte
-equal to os1's working NetworkManager PSK, plain `wpa-psk`), and os1's **6.12**
-kernel connects to the same AP with **byte-identical firmware `.bin` / CLM /
-NVRAM, identical DT `compatible`, and identical creds** (`cmp`-verified against
-the mounted os1 rootfs). Every variable except the kernel is eliminated, so this
-is a **brcmfmac regression in the 7.0 forward-port** relative to the 6.12
-baseline — isolated entirely via the os1 oracle. Wi-Fi is a graceful no-op
-meanwhile (the reader boots and runs KOReader normally). Next: investigate the
-6.12→7.0 brcmfmac/regulatory delta (see the Wi-Fi row and `doc/networking.md`).
+SHA `196d601c…`, drop_caches readback-verified) and booted. The userland is
+proven over the CDC-ACM console: `wlan0` autoloads, is unblocked, scans; the
+`pinenote-wifi` service mounts the `data` partition, reads the credential conf,
+and (after a PATH fix — `wpa_supplicant` is in the profile's `sbin` not `bin`,
+`82f111c`) launches the supplicant. First boot did **not** connect: the radio
+associated but the 4-way handshake timed out (`auth_failures`,
+`reason=CONN_FAILED`, `wlan0 DORMANT`) on **both** WPA2-PSK and WPA3-SAE,
+regardless of PMF. **Root cause:** the shipped BCM4345/6 firmware (7.45.234,
+Apr 2021) mis-negotiates its WPA offloads (FWSUP + SAE) with **wpa_supplicant
+2.11** — the reader ships 2.11; Debian os1 ships **2.10**, which is why os1
+connects with byte-identical firmware/NVRAM/creds (all `cmp`-verified). A known
+brcmfmac bug on this chip family (Red Hat #2302577, raspberrypi/linux #4976),
+**not** a driver defect and **not** PineNote-specific. **Fix, confirmed live:**
+`brcmfmac feature_disable=0x82000` (disables FWSUP `0x2000` + SAE `0x80000`
+offloads → software handshake). Reloading brcmfmac with it on the A.2.3 boot
+made the same AP + creds **complete the handshake** (CTRL-EVENT-CONNECTED,
+`PTK/GTK=CCMP`), lease `192.168.86.143`, and ping `1.1.1.1` (~12 ms) + `gnu.org`
+(DNS OK). Baked into the image two ways (`d911e57`): `/etc/modprobe.d/
+brcmfmac.conf` (via the `pinenote-wifi` etc extension) and the kernel cmdline
+`brcmfmac.feature_disable=0x82000`. **A.2.4** (with the fix) is the next os2
+write. The stuck-WORLD-regdomain and `set_channel … reason -52` observations
+were benign red herrings (self-managed-regulatory noise), not the cause.
 
 **2026-07-05: reader first light, then the appliance path.** KOReader
 renders and is pen- and finger-navigable on the panel, running
@@ -52,7 +56,7 @@ axis: fbcon text on the panel, USB ACM gadget console working end-to-end
 | Bluetooth firmware (BCM4345C0.hcd) | yes | yes (2026-06-11: `BCM4345C0.pine64,pinenote-v1.2.hcd` patch applied, build 0382) |
 | Wi-Fi firmware (brcmfmac43455) | yes | yes (2026-06-11: brcmfmac 7.45.234 loaded on vanilla base — deblob problem confirmed solved) |
 | Wi-Fi radio (wlan0 up, scan) | works | **yes** (2026-07-10: wlan0 autoloads, unblocked, stable MAC, scans 6 APs) |
-| Wi-Fi WPA association | **yes** (6.12) | **NO — 7.0 regression** (2026-07-10: associates then firmware 4-way times out, stuck WORLD regdomain; byte-identical fw/CLM/NVRAM/DT/creds to working os1 6.12 → kernel is the only variable. Not userland (proven) or password (matches os1). PATH fix `82f111c` lets the service launch wpa_supplicant) |
+| Wi-Fi WPA association | yes | **yes — needs `brcmfmac.feature_disable=0x82000`** (2026-07-10: firmware WPA offload vs wpa_supplicant 2.11 broke the 4-way on 7.0; fix proven live — handshake completes, DHCP `192.168.86.143`, ping OK. In A.2.4 (`d911e57`) via modprobe.d + cmdline; A.2.3 on os2 lacks it. PATH fix `82f111c` lets the service launch the supplicant) |
 | KOReader on the panel (reader flavor) | n/a | **yes** (2026-07-05: native fbdev + evdev, pen- and finger-navigable, frontlight, MB Type fonts; unattended boot validated) |
 
 The `pinenote-usb-console-linux-6-6` flavor is the fully working baseline.
@@ -157,8 +161,15 @@ Over A.2.2 it adds the **Phase 1 Wi-Fi userland** (`pinenote-wifi` service +
 `wpa_supplicant` + `dhcpcd`, reading an out-of-band conf from the `data`
 partition; `doc/networking.md §4.1`). Wi-Fi credentials for SSID
 `largeprofanity` are pre-staged on the `data` partition (`0600`, persists
-across reflashes), so first boot should associate on its own. The superseded
-A.2.2 (`b166d869…`) staged copy remains on os1 for rollback.
+across reflashes). The superseded A.2.2 (`b166d869…`) staged copy remains on
+os1 for rollback.
+
+**A.2.4 is built and pending the next os2 write** (local rootfs SHA
+`54579babf4462d05b4c572f6e09849f9f1f21e2bcd4a7054bfd50a8f6f49a4a7`,
+cmdline-verified to carry `brcmfmac.feature_disable=0x82000`). It is A.2.3 plus
+the confirmed Wi-Fi fix (the two `feature_disable` mechanisms + the `82f111c`
+PATH fix). A.2.3 (currently on os2) associates but cannot complete WPA without
+that option, so A.2.4 is the build that brings Wi-Fi up automatically on boot.
 
 Over A.2 it carries three fixes, each found on (or predicted by) the
 A.2 first boot the same night and proven offline before this write:
