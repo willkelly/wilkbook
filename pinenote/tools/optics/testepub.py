@@ -445,7 +445,7 @@ def _opf(pages):
     <dc:title>wilkbook optics test card</dc:title>
     <dc:language>en</dc:language>
     <meta property="rendition:layout">pre-paginated</meta>
-    <meta property="rendition:orientation">portrait</meta>
+    <meta property="rendition:orientation">{"landscape" if W >= H else "portrait"}</meta>
   </metadata>
   <manifest>
 {chr(10).join(items)}
@@ -462,7 +462,7 @@ def _xhtml(index):
 <html xmlns="http://www.w3.org/1999/xhtml">
 <head><meta charset="utf-8"/>
 <meta name="viewport" content="width={W}, height={H}"/>
-<style>html,body{{margin:0;padding:0}}img{{width:{W}px;height:{H}px;display:block}}</style>
+<style>html,body{{margin:0;padding:0}}img{{width:100%;height:100%;display:block}}</style>
 </head>
 <body><img src="img/page_{index:03d}.png" alt="page {index}"/></body>
 </html>'''
