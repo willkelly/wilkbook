@@ -83,11 +83,14 @@ parameters (waveform mode, dithering, etc.), you can do several passes — one p
 setting — and note which pass used which parameters; otherwise one default pass
 is perfectly useful.
 
-> **Coming soon: an automatic player.** A script (`recorder.py record`) will
-> drive KOReader over the network — flipping parameters, paging, emitting the
-> sync flashes, and logging every timestamp for you — so all you do is film. It's
-> waiting on the device's Wi-Fi/networking story. Until then, the manual pass
-> above is the way, and you package it yourself (next section).
+> **Automatic player (optional, tethered).** A script (`recorder.py record`) can
+> drive the device *for* you — flipping parameters, paging, emitting the sync
+> flashes, and logging every timestamp — over the **USB cable** (the CDC-ACM
+> console), so all you do is aim the camera. It needs a bit of one-time setup on
+> the device and is aimed at the maintainers' own rigs first; over-the-network
+> driving (no cable) additionally needs the Wi-Fi story. Either way the **manual
+> pass above always works** and is the recommended path for contributors — you
+> package it yourself (next section).
 
 ---
 

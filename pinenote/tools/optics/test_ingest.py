@@ -101,6 +101,36 @@ def main():
             check(f"{wash}: flash classified '{expect}'", rep.flash_severity == expect,
                   f"depth={rep.flash_depth:.3f} sev={rep.flash_severity}")
 
+    print("case: auto change_eps segments across camera noise (no hand-tuning)")
+    before = page_refl("novel", pid=10)
+    after = page_refl("blank", pid=11)
+    panel_clip, _ = synth.simulate_transition(before, after, fps=20, pre_frames=3,
+                                              settle_frames=8, wash="gc16", flash_depth=0.6)
+    sync = np.stack([np.zeros((Hp, Wp), np.float32), np.ones((Hp, Wp), np.float32)])
+    full = np.concatenate([sync, panel_clip], axis=0)
+    ok_noise = []
+    for nz in (0.004, 0.012, 0.020, 0.030):        # a locked webcam .. a shaky phone
+        cam, _ = synthcam.make_camera_clip(full, H_true, Wp, Hp, (Hc, Wc), noise=nz)
+        # segmentation must recover the single 10->11 turn with change_eps=None (auto)
+        results, _, _ = ingest.ingest(cam, 20.0, manifest, lambda kind: page_refl(kind))
+        found = [(fr, to) for (_, _, fr, to) in results]
+        ok_noise.append(found == [(10, 11)])
+    check("auto-eps recovers the turn at every noise level", all(ok_noise),
+          f"{sum(ok_noise)}/4 noise levels")
+    # and the learned threshold rises with noise (adapts instead of a fixed 0.04)
+    lo_cam, _ = synthcam.make_camera_clip(full, H_true, Wp, Hp, (Hc, Wc), noise=0.004)
+    hi_cam, _ = synthcam.make_camera_clip(full, H_true, Wp, Hp, (Hc, Wc), noise=0.030)
+    def learned_eps(cam):
+        warped, valid = ingest._warp_all(cam, manifest, (Hp, Wp))
+        chg = np.full(len(cam), np.inf)
+        for i in range(1, len(cam)):
+            if valid[i] and valid[i - 1]:
+                chg[i] = float(np.mean(np.abs(warped[i] - warped[i - 1])))
+        return ingest.auto_change_eps(chg)
+    check("learned threshold adapts upward with noise",
+          learned_eps(hi_cam) > learned_eps(lo_cam),
+          f"lo={learned_eps(lo_cam):.4f} hi={learned_eps(hi_cam):.4f}")
+
     print("case: ffmpeg video decode round-trips (the real-capture entry point)")
     import os
     import shutil

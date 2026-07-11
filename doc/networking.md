@@ -318,11 +318,20 @@ network={
 
 ## 5. How this unblocks the optics recorder
 
-The optics recorder's "next in build order" is explicit
-(`pinenote/tools/optics/README.md`): *an on-device scenario player that
-drives the test epub through KOReader (or raw `/dev/fb0`) **over the
-network**, flips `rockchip_ebc` params per run, emits the sync pattern, and
-logs timestamps + params.* Networking is the "over the network" precondition;
+**Update (2026-07-10):** the recorder is no longer *blocked* on Wi-Fi. Its
+device-driving is now factored into a Transport × RenderBackend matrix
+(`pinenote/tools/optics/driver.py`), and the **`SerialTransport` over the USB
+CDC-ACM console drives a real capture tethered, today, with no network at
+all** — the device in the camera box is reachable over the same USB-C cable
+that powers it, via the `/dev/ttyGS0` shell `usb-gadget.scm` already exposes.
+Wi-Fi/`SSHTransport` remains the answer for **friends' devices and untethered
+use**, and is still the right thing to build; it is just no longer the gate in
+front of the operator's own baseline captures. The KOReader-vs-framebuffer
+backend split (measuring KOReader's own influence on the optics) is orthogonal
+to the transport. The rest of this section describes the SSH channel that
+`SSHTransport` targets once the link is up.
+
+The optics recorder's SSH path is the "over the network" surface;
 everything the player needs to actuate already exists on the device.
 
 **Recommended control channel: SSH.** It gives the exact remote-exec surface

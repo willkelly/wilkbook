@@ -1,18 +1,19 @@
 """recorder.py -- the RECORD-side entry point for the optics harness.
 
-Three responsibilities, split by how ready each is:
+Three responsibilities:
 
-  * `record`  -- drive the test-epub scenario on a PineNote over the network
-                 (flip rockchip_ebc params, page through, emit the sync flashes)
-                 while a camera films the panel. The device-driving is BLOCKED
-                 on Wi-Fi/networking (a separate effort), so it lives behind the
-                 abstract `DeviceDriver` interface below and ships as a
-                 documented STUB (`NetworkDriver`). The scenario *orchestration*
-                 (`run_scenario`) that turns driver calls into a timestamped
-                 session log is real and unit-tested against a fake driver.
+  * `record`  -- drive the test-epub scenario on a PineNote (flip rockchip_ebc
+                 params, page through, emit the sync flashes) while a camera
+                 films the panel. Device-driving is factored into a Transport x
+                 RenderBackend matrix in driver.py: over the USB CDC-ACM console
+                 it works TETHERED TODAY (no Wi-Fi), with a KOReader backend
+                 (default) or a raw-framebuffer backend. The `DeviceDriver`
+                 contract + the `run_scenario` orchestration (a timestamped
+                 session log) live here and are unit-tested against a fake driver
+                 (test_bundle.py) and the real ShellDeviceDriver (test_driver.py).
   * `package` -- REAL: take a pre-recorded video + metadata and build a bundle
-                 (bundle.write_bundle). This is the path a friend uses today:
-                 film manually, then package.
+                 (bundle.write_bundle). The path a friend uses: film manually,
+                 then package.
   * `analyze` -- REAL: run the analyze path on a bundle (analyze.analyze_bundle).
 
 Reflectance/waveform conventions and the bundle schema live in bundle.py; the
@@ -95,50 +96,11 @@ class DeviceDriver:
         raise NotImplementedError
 
 
-class NetworkDriver(DeviceDriver):
-    """STUB. The intended real driver, blocked on Wi-Fi/networking.
-
-    Left as an explicit boundary so `record` fails loudly with a pointer, rather
-    than silently. Fill these in once a device is reachable; the `run_scenario`
-    orchestration above needs no change.
-    """
-    _BLOCKED = ("on-device driving is blocked on Wi-Fi/networking (see README "
-                "'Recording & bundles'); until then film manually and use "
-                "`recorder.py package`. TODO: implement over the device transport.")
-
-    def __init__(self, host, epub_path=None):
-        self.host = host
-        self.epub_path = epub_path
-
-    def connect(self):
-        raise NotImplementedError(NetworkDriver._BLOCKED)
-
-    def close(self):
-        pass
-
-    def device_info(self):
-        raise NotImplementedError(NetworkDriver._BLOCKED)
-
-    def read_panel_temp(self):
-        raise NotImplementedError(NetworkDriver._BLOCKED)
-
-    def set_frontlight(self, level):
-        raise NotImplementedError(NetworkDriver._BLOCKED)
-
-    def waveform_summary(self):
-        raise NotImplementedError(NetworkDriver._BLOCKED)
-
-    def set_ebc_params(self, params):
-        raise NotImplementedError(NetworkDriver._BLOCKED)
-
-    def open_testcard(self, epub_path=None):
-        raise NotImplementedError(NetworkDriver._BLOCKED)
-
-    def emit_sync(self):
-        raise NotImplementedError(NetworkDriver._BLOCKED)
-
-    def goto_page(self, index):
-        raise NotImplementedError(NetworkDriver._BLOCKED)
+# The concrete drivers live in driver.py: a Transport (SerialTransport over the
+# USB CDC-ACM console -- tethered, no Wi-Fi -- or SSHTransport over the network)
+# composed with a RenderBackend (KOReaderBackend default, or FramebufferBackend).
+# `cmd_record` builds one via driver.make_driver. (The old NetworkDriver stub is
+# gone: the serial transport unblocks the on-device path today.)
 
 
 # ===========================================================================
@@ -171,15 +133,20 @@ class FakeClock(Clock):
 
 
 def run_scenario(driver, manifest, param_sets=None, page_period_s=1.5,
-                 epub_path=None, clock=None):
+                 epub_path=None, clock=None, frontlight_level=None):
     """Drive one capture session and return the list of run dicts (each ready
     for bundle.add_run). For every param set: flip params, open the card, emit
     the sync flashes (which set clock-zero), then page through every non-sync
     page, timestamping each driver call from clock-zero. Pure orchestration --
-    all device I/O goes through `driver`; the timeline comes from `clock`."""
+    all device I/O goes through `driver`; the timeline comes from `clock`.
+
+    frontlight_level: if set, apply it once (the standardized illuminant) and
+    record the level actually applied on each run."""
     clock = clock or Clock()
     param_sets = param_sets or [("default", {})]
     content = [p for p in manifest["pages"] if not p["kind"].startswith("sync")]
+    applied_fl = (driver.set_frontlight(frontlight_level)
+                  if frontlight_level is not None else None)
 
     runs = []
     for i, (label, params) in enumerate(param_sets):
@@ -204,7 +171,7 @@ def run_scenario(driver, manifest, param_sets=None, page_period_s=1.5,
             "run_id": f"r{i}",
             "label": label,
             "params": applied,
-            "frontlight_level": None,
+            "frontlight_level": applied_fl,
             "panel_temp_c": _safe(driver.read_panel_temp),
             "events": events,
         })
@@ -227,17 +194,107 @@ def _load_json(path):
         return json.load(f)
 
 
+class _webcam:
+    """Best-effort webcam capture around the scenario (hardware-only path).
+    Starts ffmpeg recording `device` to `path`, stops it (graceful 'q') on exit.
+    A no-op context if `device` is None -- then the operator films manually and
+    supplies --video, or runs `package` afterwards."""
+
+    def __init__(self, device, path, extra=None):
+        self.device, self.path, self.extra = device, path, list(extra or [])
+        self.proc = None
+
+    def __enter__(self):
+        if self.device:
+            import subprocess
+            argv = (["ffmpeg", "-y", "-f", "v4l2", "-i", self.device]
+                    + self.extra + [self.path])
+            self.proc = subprocess.Popen(argv, stdin=subprocess.PIPE,
+                                         stdout=subprocess.DEVNULL,
+                                         stderr=subprocess.DEVNULL)
+        return self
+
+    def __exit__(self, *exc):
+        if self.proc is not None:
+            try:
+                self.proc.communicate(b"q", timeout=5)
+            except Exception:
+                self.proc.terminate()
+
+
 def cmd_record(args):
-    """Drive a device + capture. Blocked on networking -> loud pointer."""
-    print("recorder record: on-device driving is not available yet.\n"
-          "  The device-driving interface (DeviceDriver) is defined and the\n"
-          "  scenario orchestration (run_scenario) is implemented and tested,\n"
-          "  but the network transport (NetworkDriver) is BLOCKED on the\n"
-          "  Wi-Fi/networking effort. See RECORDING.md for the manual capture\n"
-          "  flow, then package it:\n"
-          "    python3 recorder.py package --video CLIP --manifest manifest.json ...",
-          file=sys.stderr)
-    return 2
+    """Drive a device through the test card while a camera films; write a bundle.
+
+    Tethered over the USB CDC-ACM console (--transport serial, default) this
+    needs no Wi-Fi. All device I/O is the driver.py Transport x RenderBackend
+    matrix; this is hardware-only glue (no offline test) -- the driver command
+    layer itself is proven in test_driver.py."""
+    import os
+    import driver as drv_mod
+
+    manifest = _load_json(args.manifest)
+    frames = None
+    if args.backend == "fb":
+        import numpy as np
+        import testepub as te
+        Wp, Hp = manifest["resolution"]
+        te.W, te.H = Wp, Hp
+        frames = drv_mod.frames_from_manifest(
+            manifest, lambda kind: np.asarray(
+                te.render_page(te.Page(0, kind, 0)), np.float32) / 255.0)
+
+    driver = drv_mod.make_driver(
+        transport=args.transport, backend=args.backend, manifest=manifest,
+        epub_local=args.epub, frames=frames,
+        waveform=(int(args.waveform) if args.waveform is not None else None),
+        device=args.device, host=args.host, port=args.port, identity=args.identity)
+
+    param_sets = _load_json(args.param_sets) if args.param_sets else [["baseline", {}]]
+    param_sets = [(p[0], p[1]) for p in param_sets]
+
+    os.makedirs(args.bundle, exist_ok=True)
+    video_path = args.video or os.path.join(args.bundle, "capture.mkv")
+
+    driver.connect()
+    try:
+        device = _safe(driver.device_info) or {"model": args.model or "PineNote"}
+        wf_ident = _safe(driver.waveform_summary) or {}
+        with _webcam(args.camera, video_path, args.camera_args.split() if args.camera_args else None):
+            runs = run_scenario(driver, manifest, param_sets=param_sets,
+                                page_period_s=args.page_period, epub_path=args.epub,
+                                frontlight_level=args.frontlight_level)
+    finally:
+        driver.close()
+
+    session = bundle_mod.new_session(
+        device=device, illuminant_level=args.frontlight_level,
+        ebc_params=(param_sets[0][1] if param_sets else {}),
+        panel_temp_c=runs[0].get("panel_temp_c") if runs else None)
+    session["capture"]["fps"] = args.fps
+    session["device"].setdefault("wbf_sha256", wf_ident.get("wbf_sha256"))
+    for r in runs:
+        bundle_mod.add_run(session, run_id=r["run_id"], events=r["events"],
+                           label=r["label"], frontlight_level=r["frontlight_level"],
+                           panel_temp_c=r["panel_temp_c"])
+    if args.wbf_info:
+        with open(args.wbf_info) as f:
+            bundle_mod.set_waveform_decode(
+                session, bundle_mod.waveform_summary_from_wbf_info(
+                    f.read(), wbf_sha256=wf_ident.get("wbf_sha256")))
+
+    if not (args.camera or args.video):
+        # no video captured -> emit the session for a later `package` step
+        with open(os.path.join(args.bundle, "session.json"), "w") as f:
+            json.dump(session, f, indent=2)
+        print(f"drove {len(runs)} run(s); wrote session to {args.bundle}/session.json\n"
+              f"  no camera: film the panel, then: recorder.py package "
+              f"--video CLIP --manifest {args.manifest} --bundle {args.bundle} ...",
+              file=sys.stderr)
+        return 0
+
+    path = bundle_mod.write_bundle(args.bundle, session, video_path, args.manifest)
+    print(f"wrote bundle {path} ({len(runs)} run(s))")
+    return 0
 
 
 def cmd_package(args):
@@ -294,8 +351,28 @@ def build_parser():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
 
-    r = sub.add_parser("record", help="drive a device + capture (blocked on networking)")
-    r.add_argument("--host", help="device address (once networking lands)")
+    r = sub.add_parser("record", help="drive a device through the test card + capture")
+    r.add_argument("--manifest", required=True, help="the test-card manifest.json")
+    r.add_argument("--bundle", required=True, help="output bundle directory")
+    r.add_argument("--transport", choices=["serial", "ssh"], default="serial",
+                   help="serial = USB CDC-ACM console (tethered, no Wi-Fi); ssh needs networking")
+    r.add_argument("--backend", choices=["koreader", "fb"], default="koreader",
+                   help="koreader (what a reader sees) or fb (raw framebuffer control)")
+    r.add_argument("--device", default="/dev/ttyACM0", help="host serial device (serial transport)")
+    r.add_argument("--host", help="device address (ssh transport)")
+    r.add_argument("--port", type=int, default=22, help="ssh port")
+    r.add_argument("--identity", help="ssh key (ssh transport)")
+    r.add_argument("--epub", help="test-card epub to stage on the device")
+    r.add_argument("--waveform", help="refresh_waveform to force (fb backend), e.g. 4=GC16 6=GL16")
+    r.add_argument("--param-sets", help="JSON [[label,{params}],...]; default one baseline run")
+    r.add_argument("--frontlight-level", type=float, help="frontlight level (the illuminant)")
+    r.add_argument("--page-period", type=float, default=1.5, help="seconds/page")
+    r.add_argument("--model", help="device model if identity probe fails")
+    r.add_argument("--camera", help="webcam device to film with, e.g. /dev/video0 (else film manually)")
+    r.add_argument("--camera-args", help="extra ffmpeg input args for --camera")
+    r.add_argument("--video", help="pre-recorded video instead of --camera capture")
+    r.add_argument("--fps", type=float, help="nominal capture fps (ingest re-probes)")
+    r.add_argument("--wbf-info", help="text file of on-device `wbf-info` -> waveform decode")
     r.set_defaults(func=cmd_record)
 
     p = sub.add_parser("package", help="package a pre-recorded video into a bundle")

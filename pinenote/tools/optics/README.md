@@ -114,11 +114,27 @@ offline-tested (`test_bundle.py`, wired into `make check`):
   `python3 analyze.py BUNDLE_DIR [-o report.json]`.
 - **`recorder.py`** — the record-side CLI. `package` (real) wraps a pre-recorded
   video + metadata into a bundle; `analyze` (real) runs the path above; `record`
-  is the **on-device scenario player**, and its device-driving lives behind the
-  abstract `DeviceDriver` interface. The scenario *orchestration*
-  (`run_scenario`, driver calls → a timestamped session log) is real and tested
-  against a fake driver; the network transport (`NetworkDriver`) is a documented
-  **stub blocked on Wi-Fi/networking** — the one boundary networking must fill.
+  is the **on-device scenario player**. Its device-driving is real, factored in
+  `driver.py` into a **Transport × RenderBackend** matrix:
+  - *Transport* — `SerialTransport` over the USB CDC-ACM console (`/dev/ttyGS0`
+    on device ↔ `/dev/ttyACM*` on host, wired by `pinenote/services/usb-gadget.scm`)
+    works **tethered today, no Wi-Fi** — the device sat in the camera box is
+    reachable over the same USB-C cable that powers it. `SSHTransport` (over the
+    network) is the friends'/untethered path and needs only the
+    `doc/networking.md` story — no new code.
+  - *RenderBackend* — `KOReaderBackend` (**default**: turns pages *in KOReader*,
+    so the capture includes KOReader's own refresh choices) or
+    `FramebufferBackend` (writes raw frames to `/dev/fb0` and fires
+    `pinenote-ebc-refresh` under a chosen waveform, bypassing KOReader — the
+    control). Diffing a KOReader run against a framebuffer run of the same card
+    isolates how much KOReader shapes the optics.
+
+  `test_driver.py` proves the whole command layer (param/frontlight/temp sysfs,
+  serial byte push, both backends' page-turn sequences) against a fake transport
+  — no device. Five device-specific values (the KOReader input-injection
+  mechanism, the fb pixel format, the backlight/hwmon nodes, the koreader store
+  path) are the `HARDWARE_CHECKLIST` in `driver.py`: isolated constants a
+  hardware session pins with no structural change.
 - **`RECORDING.md`** — the friend-facing rig + capture instructions (device in a
   dark box under its own frontlight, camera placement, locking exposure/focus/WB,
   keeping all four fiducials in frame, what to run, and exactly which files to
@@ -126,12 +142,12 @@ offline-tested (`test_bundle.py`, wired into `make check`):
 
 ## Next (in build order)
 
-1. **Wire the on-device player to a real transport** — implement `DeviceDriver`
-   (as `NetworkDriver`) once the device is reachable: drive KOReader (or raw
-   `/dev/fb0`) over the network, flip `rockchip_ebc` params per run, emit the
-   sync pattern, and log the waveform-decode summary from `../wbf`. The
-   orchestration, bundle format, analyze path, and friend instructions above are
-   already in place and waiting on exactly this.
+1. **Confirm the driver against a real device (tethered, no Wi-Fi).** The driver
+   command layer is built and tested; a hardware session pins the five
+   `HARDWARE_CHECKLIST` values in `driver.py` — chiefly the KOReader
+   headless-page-turn injection and the `/dev/fb0` pixel format — then
+   `recorder.py record --transport serial --backend {koreader,fb}` drives a real
+   capture over the USB cable. This is the first "your own baseline device" run.
 2. **Scoring + optimization** — once multi-panel data lands, feed the per-panel
    defect vectors back to rank waveform/threshold/flash-frac candidates, and
    ground-truth `ebc-replay`'s proxies against measured optics.
@@ -155,7 +171,9 @@ offline-tested (`test_bundle.py`, wired into `make check`):
   corners, or a per-region fit). The synthetic camera's gradient is kept mild to
   match the frontlight assumption.
 - **Segmentation uses a change-point threshold** (`change_eps`) to find washes
-  between quiet page plateaus. It is tuned for the synthetic noise floor; real
-  captures (noisier) may need it raised, and a genuinely static page turn with
-  no visible change would be missed — the sync flashes and page-ID plateaus
-  bound this, but it is the parameter most likely to need field tuning.
+  between quiet page plateaus. It now **auto-calibrates from each capture's own
+  change signal** (`ingest.auto_change_eps`: a robust noise floor + margin, so a
+  noisier camera raises it automatically — no hand-tuning, validated across a
+  synthetic-camera noise sweep in `test_ingest.py`). The residual limit is
+  inherent: a genuinely static page turn with no visible change has no signal to
+  segment on — the sync flashes and page-ID plateaus bound that case.

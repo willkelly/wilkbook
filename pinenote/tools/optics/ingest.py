@@ -247,13 +247,35 @@ def _warp_all(frames, manifest, panel_hw):
     return out, valid
 
 
-def segment_transitions(warped, valid, manifest, change_eps=0.04):
+def auto_change_eps(change, k=8.0, floor=0.008):
+    """Learn the quiet/active split from the capture's OWN frame-to-frame change
+    signal, so a noisier camera raises the threshold automatically instead of
+    needing a hand-tuned constant (the parameter the README flagged as most
+    likely to need field tuning -- now it tunes itself, no human in the loop).
+
+    Page plateaus dominate the timeline (a page dwells far longer than its
+    ~0.5 s wash), so the median and MAD are anchored to the quiet noise floor
+    even with many washes present -- MAD ignores the wash minority by design.
+    The threshold sits `k` robust-sigmas above that floor, with an absolute
+    floor so a perfectly noise-free clip (MAD=0) still separates."""
+    v = change[np.isfinite(change)]
+    if v.size < 3:
+        return floor
+    med = float(np.median(v))
+    sigma = 1.4826 * float(np.median(np.abs(v - med)))   # robust std via MAD
+    return med + max(k * sigma, floor)
+
+
+def segment_transitions(warped, valid, manifest, change_eps=None):
     """Return transitions as (onset, from_pid, to_pid) via change-point
     detection: stable page plateaus are 'quiet' (low frame-to-frame change),
     separated by 'active' washes. The onset is the last quiet frame of the OLD
     page + 1 -- i.e. the wash start, BEFORE the flash. Onset must precede the
     flash: the barcode still reads as the old page during the early wash, so a
-    page-ID-change onset would land mid-wash, past the flash."""
+    page-ID-change onset would land mid-wash, past the flash.
+
+    change_eps=None (default) auto-calibrates the quiet/active threshold from
+    the clip itself (auto_change_eps); pass a float only to override."""
     T = warped.shape[0]
     ids = []
     for i in range(T):
@@ -266,6 +288,8 @@ def segment_transitions(warped, valid, manifest, change_eps=0.04):
     for i in range(1, T):
         if valid[i] and valid[i - 1]:
             change[i] = float(np.mean(np.abs(warped[i] - warped[i - 1])))
+    if change_eps is None:
+        change_eps = auto_change_eps(change)
     quiet = change < change_eps
     trans = []
     prev_id, prev_idx = None, None
