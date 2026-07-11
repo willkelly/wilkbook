@@ -35,7 +35,7 @@
            (display "\
 #!/bin/sh
 set -u
-export PATH=\"/run/current-system/profile/bin${PATH:+:$PATH}\"
+export PATH=\"/run/current-system/profile/bin:/run/current-system/profile/sbin${PATH:+:$PATH}\"
 
 mnt=/run/pinenote-wifi
 conf=\"$mnt/wifi/wlan0.conf\"
