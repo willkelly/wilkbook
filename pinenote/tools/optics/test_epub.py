@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 """Validate the self-calibrating test-epub generator: page count, that the
 calibration markers render where the manifest claims, that the page-ID barcode
-round-trips (a preview of the ingest decoder), and that the epub is well formed.
-Run: python3 test_epub.py  (needs Pillow).
+round-trips (a preview of the ingest decoder), that pid-varied content makes
+same-kind adjacent pages visibly different, that the page-number + parity
+marks render inside their manifest-reserved rects (clear of every calibration
+marker), and that the epub is well formed.
+Run: python3 test_epub.py  (needs Pillow + numpy).
 """
 import io
 import sys
@@ -21,6 +24,23 @@ def check(name, cond, detail=""):
     print(f"  [{'ok  ' if cond else 'FAIL'}] {name}{('  -- ' + detail) if detail else ''}")
     if not cond:
         _fails.append(name)
+
+
+def rects_overlap(r1, r2):
+    """Open-interval overlap of two fractional {x,y,w,h} rects."""
+    return (r1["x"] < r2["x"] + r2["w"] and r2["x"] < r1["x"] + r1["w"]
+            and r1["y"] < r2["y"] + r2["h"] and r2["y"] < r1["y"] + r1["h"])
+
+
+def crop_f(arr, r, W, H):
+    """Crop a fractional {x,y,w,h} rect out of a [H,W] array."""
+    x0, y0 = int(r["x"] * W), int(r["y"] * H)
+    x1, y1 = int((r["x"] + r["w"]) * W), int((r["y"] + r["h"]) * H)
+    return arr[y0:y1, x0:x1]
+
+
+def page_arr(kind, pid):
+    return np.asarray(te.render_page(te.Page(0, kind, pid)), np.float32) / 255.0
 
 
 def decode_pageid(arr, pageid_geom, W, H):
@@ -74,6 +94,92 @@ def main():
         patch_ok.append(abs(arr[py, px] - patch["reflectance"]) < 0.12)
     check("gray-step patches match intended reflectance", all(patch_ok),
           f"{sum(patch_ok)}/{len(patch_ok)}")
+
+    print("case: pid-varied content -- same-kind adjacent pages differ visibly")
+    x0f, y0f, x1f, y1f = te.content_rect_f()
+    reserved = manifest["markers"]["reserved"]
+    mask = np.zeros((H, W), bool)
+    mask[int(y0f * H):int(y1f * H), int(x0f * W):int(x1f * W)] = True
+    for r in reserved:      # exclude the per-page marks: content only
+        mask[int(r["y"] * H):int((r["y"] + r["h"]) * H),
+             int(r["x"] * W):int((r["x"] + r["w"]) * W)] = False
+    same_kind = [(a, b) for a, b in zip(pages, pages[1:])
+                 if a.kind == b.kind and not a.kind.startswith("sync")]
+    check("card holds same-kind adjacent pairs", len(same_kind) >= 3,
+          f"{[(a.kind, a.pid, b.pid) for a, b in same_kind]}")
+    diff_ok, worst = [], None
+    for a, b in same_kind:
+        if a.kind == "blank":
+            continue                    # blank stays blank; marks carry the turn
+        d = np.abs(page_arr(a.kind, a.pid) - page_arr(b.kind, b.pid))[mask]
+        frac, mean = float((d > 0.1).mean()), float(d.mean())
+        diff_ok.append(frac > 0.02 and mean > 0.02)
+        if worst is None or frac < worst[0]:
+            worst = (frac, mean, a.kind, a.pid)
+    check("every non-blank same-kind pair differs above the floor",
+          bool(diff_ok) and all(diff_ok),
+          f"worst frac={worst[0]:.3f} mean={worst[1]:.3f} ({worst[2]} pid {worst[3]})"
+          if worst else "no pairs")
+    blank_pairs = [(a, b) for a, b in same_kind if a.kind == "blank"]
+    marks_ok = []
+    for a, b in blank_pairs:            # marks alone must make the turn visible
+        d = np.abs(page_arr(a.kind, a.pid) - page_arr(b.kind, b.pid))
+        changed = max(float((crop_f(d, r, W, H) > 0.5).mean()) for r in reserved)
+        marks_ok.append(changed > 0.2)
+    check("blank->blank turns still visible via the page marks",
+          all(marks_ok), f"{len(blank_pairs)} pairs" if blank_pairs else "none yet")
+
+    print("case: page-number + parity marks in the reserved cells")
+    check("digit height in the 0.10-0.12 spec band",
+          0.10 <= te.PAGENUM_H <= 0.12, f"{te.PAGENUM_H}")
+    rnum = next(r for r in reserved if r["what"] == "pagenum")
+    rpa = next(r for r in reserved if r["what"] == "parity_a")
+    rpb = next(r for r in reserved if r["what"] == "parity_b")
+    crops = [crop_f(page_arr("blank", pid), rnum, W, H)
+             for pid in (0, 1, 7, 8, 11, 25, 34, 48)]
+    distinct = all(not np.array_equal(crops[i], crops[j])
+                   for i in range(len(crops)) for j in range(i + 1, len(crops)))
+    check("distinct pids render distinct page numbers", distinct)
+    check("page number is dark ink inside its reserved cell",
+          all(c.min() < 0.2 for c in crops))
+    even, odd = page_arr("blank", 6), page_arr("blank", 7)
+    check("even pid -> parity tile in corner A only",
+          crop_f(even, rpa, W, H).mean() < 0.6
+          and crop_f(even, rpb, W, H).mean() > 0.9)
+    check("odd pid -> parity tile in corner B only",
+          crop_f(odd, rpb, W, H).mean() < 0.6
+          and crop_f(odd, rpa, W, H).mean() > 0.9)
+
+    print("case: reserved rects vs calibration-marker geometry")
+    check("manifest lists pagenum + both parity corners",
+          [r["what"] for r in reserved] == ["pagenum", "parity_a", "parity_b"])
+    check("reserved rects inside the content rect",
+          all(r["x"] >= x0f and r["y"] >= y0f and r["x"] + r["w"] <= x1f
+              and r["y"] + r["h"] <= y1f for r in reserved))
+    half_fx = (te.FID * min(W, H) / 2) / W
+    half_fy = (te.FID * min(W, H) / 2) / H
+    markers = [{"x": f["cx"] - half_fx, "y": f["cy"] - half_fy,
+                "w": 2 * half_fx, "h": 2 * half_fy,
+                "what": f"fiducial_{f['corner']}"}
+               for f in manifest["markers"]["fiducials"]]
+    markers += [dict(p, what=p["name"]) for p in manifest["markers"]["patches"]]
+    markers.append(dict(manifest["markers"]["pageid"], what="pageid"))
+    clashes = [(r["what"], m["what"]) for r in reserved for m in markers
+               if rects_overlap(r, m)]
+    check("reserved rects clear of fiducials/patches/barcode", not clashes,
+          f"{clashes}")
+    self_clash = [(a["what"], b["what"]) for i, a in enumerate(reserved)
+                  for b in reserved[i + 1:] if rects_overlap(a, b)]
+    check("reserved rects don't overlap each other", not self_clash,
+          f"{self_clash}")
+
+    print("case: render_kind (kind, pid) adapter")
+    check("render_kind(kind, pid) matches render_page",
+          np.array_equal(np.asarray(te.render_kind("novel", pid=7)),
+                         np.asarray(te.render_page(te.Page(0, "novel", 7)))))
+    check("render_kind defaults to pid 0",
+          np.array_equal(np.asarray(te.render_kind("blank")),
+                         np.asarray(te.render_page(te.Page(0, "blank", 0)))))
 
     print("case: page-ID barcode round-trips")
     ok = []
