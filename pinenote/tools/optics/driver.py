@@ -397,15 +397,24 @@ class KOReaderBackend(RenderBackend):
         #    the way out and would overwrite the seed below.
         self.t.run("herd stop reader-session 2>/dev/null; true")
         self.t.run("pkill -f 'reader.lua %s' 2>/dev/null; true" % self.EPUB_REMOTE)
+        # 2b. reader-session's STOP handler re-binds fbcon as its rescue path
+        #     (reader-session.scm) -- un-bind it again, or kernel console
+        #     chatter draws over the panel mid-capture (seen live on the
+        #     2026-07-11 A.2.6 smoke: a debugfs message stamped over the card).
+        self.t.run("echo 0 > /sys/class/vtconsole/vtcon1/bind 2>/dev/null; true")
         # 3. seed the dedicated KO_HOME with this run's explicit regime
         self._seed_ko_home()
         # 4. relaunch KOReader on the test card so page 0 is deterministic.
         #    ( ... & ) keeps the trailing background token inside a subshell:
         #    the serial transport appends '; printf <marker>' to every
         #    command, and a bare '... &;' is a shell syntax error.
+        #    setsid + </dev/null matter over SSH: without them the remote
+        #    child holds the ssh session's fds and `ssh host '( cmd & )'`
+        #    never returns (found live on the 2026-07-11 A.2.6 smoke -- the
+        #    scenario hung at this exact step for 11 minutes).
         launch = ("( cd %s && HOME=/root KO_HOME=%s "
                   "PATH=/run/current-system/profile/bin LC_ALL=en_US.UTF-8 "
-                  "./luajit reader.lua %s >%s 2>&1 & )"
+                  "setsid ./luajit reader.lua %s </dev/null >%s 2>&1 & )"
                   % (shlex.quote(self._kodir), shlex.quote(self.KO_HOME),
                      shlex.quote(self.EPUB_REMOTE), self.LOG))
         self.t.run(launch)
@@ -424,7 +433,7 @@ class KOReaderBackend(RenderBackend):
         # start only if not already alive -- the uinput device persisting
         # across KOReader relaunches is the whole point of the daemon
         self.t.run("kill -0 \"$(cat %s 2>/dev/null)\" 2>/dev/null || "
-                   "( setsid %s/luajit %s >>%s 2>&1 & )"
+                   "( setsid %s/luajit %s </dev/null >>%s 2>&1 & )"
                    % (self.INJECT_PID, shlex.quote(self._kodir),
                       shlex.quote(self.INJECT_DAEMON), self.INJECT_LOG))
 

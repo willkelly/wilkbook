@@ -179,16 +179,25 @@ def main():
     i_ensure = idx("sleep 0.2; n=$((n+1))")
     i_stop = idx("herd stop reader-session")
     i_pkill = idx("pkill -f 'reader.lua")
+    i_fbcon = idx("echo 0 > /sys/class/vtconsole/vtcon1/bind")
     i_seed = idx(lambda c: isinstance(c, tuple)
                  and c[1] == K.KO_HOME + "/settings.reader.lua")
     i_mkdir = idx("mkdir -p " + K.KO_HOME)
     i_launch = idx("./luajit reader.lua")
     order = [i_daemon_push, i_fifo, i_start, i_ensure, i_stop, i_pkill,
-             i_mkdir, i_seed, i_launch]
+             i_fbcon, i_mkdir, i_seed, i_launch]
     check("prepare orders daemon-push < fifo < start < ensure < stop < pkill"
-          " < mkdir < seed < launch",
+          " < fbcon-unbind < mkdir < seed < launch",
           all(i >= 0 for i in order) and order == sorted(order) and
           len(set(order)) == len(order), f"{order}")
+    # ssh-safety on both backgrounded launches (found live on the A.2.6 smoke:
+    # `ssh host '( cmd & )'` hangs unless the child drops the session's fds)
+    launch_cmd = ftp.cmds[i_launch]
+    check("KOReader launch is ssh-safe (setsid + </dev/null + logfile)",
+          "setsid ./luajit reader.lua" in launch_cmd
+          and "</dev/null" in launch_cmd and K.LOG in launch_cmd, launch_cmd)
+    check("daemon launch is ssh-safe (</dev/null)",
+          "</dev/null" in ftp.cmds[i_start])
     check("the pushed daemon is optics-inject.lua verbatim (uinput, named device)",
           ftp.files[K.INJECT_DAEMON] == daemon_src
           and b"wilkbook-optics" in daemon_src and b"/dev/uinput" in daemon_src)
