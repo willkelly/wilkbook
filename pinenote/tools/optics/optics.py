@@ -368,12 +368,21 @@ def classify_transition(clip: np.ndarray, fps: float, tr: Transition) -> DefectR
     else:
         change = None
         settled_frame = seg[-1]
-    settled_white = float(settled_frame[tr.white_mask].mean()) if tr.white_mask.sum() else 1.0
+    # FLASH reference = STAYS-WHITE pixels only (white in `before` AND
+    # `after`): pixels that were dark content before legitimately pass
+    # through dark states while clearing, and reading them as the white
+    # region fabricates flash depth (~0.10 on clean partials, measured on
+    # the 2026-07-11 rig noise pilot). Ghost/clean semantics keep the
+    # after-white mask -- residue is judged where the AFTER page is white.
+    stays_white = tr.white_mask & (tr.before >= 0.85)
+    if not stays_white.any():
+        stays_white = tr.white_mask
+    settled_white = float(settled_frame[stays_white].mean()) if stays_white.sum() else 1.0
 
-    f = detect_flash(clip, tr.t0, fps, tr.white_mask, settled_white, tr.window_s)
+    f = detect_flash(clip, tr.t0, fps, stays_white, settled_white, tr.window_s)
     rep.flash_depth, rep.flash_energy = f["depth"], f["energy"]
     rep.flash_duration_s, rep.flash_severity = f["duration_s"], f["severity"]
-    rep.flash_count = count_flashes(clip, tr.t0, fps, tr.white_mask, settled_white, tr.window_s)
+    rep.flash_count = count_flashes(clip, tr.t0, fps, stays_white, settled_white, tr.window_s)
 
     g = detect_ghost(settled_frame, tr.after, tr.before, tr.clean_mask)
     rep.ghost_rms, rep.ghost_corr, rep.ghost_severity = g["rms"], g["corr"], g["severity"]

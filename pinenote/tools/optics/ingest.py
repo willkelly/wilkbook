@@ -345,26 +345,44 @@ def _sync_means(frames, H_panel_to_cam, panel_hw):
     return [float(f[mask].mean()) for f in frames]
 
 
-def _warp_all(frames, manifest, panel_hw):
+def _warp_all(frames, manifest, panel_hw, fixed_h=True):
     """Detect fiducials + rectify (geometry only) every frame to warped panel
     *intensity*. Frames without clear markers (sync flashes) are left NaN and
     flagged invalid. Photometry is applied later, per transition, from a stable
-    frame -- see fit_photometry. Also returns the first valid frame's
-    panel->camera homography (None if no frame validates): on the fixed rig it
-    stands in for the marker-less sync frames' geometry (_sync_means)."""
+    frame -- see fit_photometry. Also returns the SESSION homography (None if
+    no frame validates): on the fixed rig it stands in for the marker-less
+    sync frames' geometry (_sync_means).
+
+    fixed_h=True (the default -- PLAN §1a fixed-rig stance): fit ONE session
+    homography as the median of the first few valid frames' fits and warp
+    every frame with it. Per-frame fits jitter by sub-pixel amounts, which at
+    high-contrast content edges (page-number digits, markers) fabricates
+    frame-to-frame change that keeps the settle detector's edge-dominated ROI
+    "never quiet" (measured live on the 2026-07-11 noise pilot: 22/26 clean
+    dwells read settle:incomplete). Fiducial detection still runs per frame
+    for the validity flags (sync/wash frames must stay excluded)."""
     out = np.full((len(frames),) + panel_hw, np.nan, np.float32)
     valid = np.zeros(len(frames), bool)
-    H_first = None
+    all_fids = [detect_fiducials(f, manifest) for f in frames]
+    H_session = None
+    if fixed_h:
+        # median-of-fits over the first few valid frames: robust to one bad fit
+        Hs = []
+        for fids in all_fids:
+            if fids is not None:
+                Hs.append(homography_from_fiducials(fids, manifest))
+            if len(Hs) >= 5:
+                break
+        if Hs:
+            H_session = np.median(np.stack(Hs), axis=0)
     for i, f in enumerate(frames):
-        fids = detect_fiducials(f, manifest)
-        if fids is None:
+        if all_fids[i] is None:
             continue
-        H = homography_from_fiducials(fids, manifest)
-        if H_first is None:
-            H_first = H
+        H = H_session if H_session is not None else \
+            homography_from_fiducials(all_fids[i], manifest)
         out[i] = warp_to_panel(f, H, panel_hw)
         valid[i] = True
-    return out, valid, H_first
+    return out, valid, H_session
 
 
 def auto_change_eps(change, k=8.0, floor=0.008):
