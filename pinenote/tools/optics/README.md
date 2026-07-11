@@ -90,14 +90,48 @@ Severity thresholds in `optics.py` are deliberate conservative placeholders —
 point of collecting friends' data.** A few robustness notes are in "Honest
 limits" below (top-only reference patches; change-point `change_eps`).
 
+## Recording & bundles
+
+The record/analyze seam is a **bundle**: a self-describing folder a contributor
+sends back, holding one capture and just enough metadata to analyze it without
+their hardware. This is the sendable-to-friends layer, and it is built and
+offline-tested (`test_bundle.py`, wired into `make check`):
+
+- **`bundle.py`** — the bundle format + `session.json` schema and the
+  create/write/load/validate helpers. A bundle is `capture.<ext>` +
+  `manifest.json` + `session.json`, where the session log records device
+  model/revision, the frontlight level (the standardized illuminant), panel
+  temperature if known, the `rockchip_ebc` params, the timestamped page/param
+  sequence (clock-zeroed on the opening sync flash), and the device's
+  **waveform-decode summary**. That summary is the *decoded* mode/phase-per-temp
+  counts parsed from `../wbf`'s `wbf-info` **text** output
+  (`waveform_summary_from_wbf_info`) — never the raw per-device `.wbf`, which the
+  format actively refuses to carry (`assert_no_raw_waveform`), per repo policy.
+- **`analyze.py`** — the real end-to-end analyze path: `analyze_bundle(dir)`
+  loads + validates a bundle, decodes its video (`ingest.frames_from_video`),
+  runs the full `ingest` → `optics.classify_transition` pipeline, and emits a
+  per-panel defect report (JSON + a human-readable table). CLI:
+  `python3 analyze.py BUNDLE_DIR [-o report.json]`.
+- **`recorder.py`** — the record-side CLI. `package` (real) wraps a pre-recorded
+  video + metadata into a bundle; `analyze` (real) runs the path above; `record`
+  is the **on-device scenario player**, and its device-driving lives behind the
+  abstract `DeviceDriver` interface. The scenario *orchestration*
+  (`run_scenario`, driver calls → a timestamped session log) is real and tested
+  against a fake driver; the network transport (`NetworkDriver`) is a documented
+  **stub blocked on Wi-Fi/networking** — the one boundary networking must fill.
+- **`RECORDING.md`** — the friend-facing rig + capture instructions (device in a
+  dark box under its own frontlight, camera placement, locking exposure/focus/WB,
+  keeping all four fiducials in frame, what to run, and exactly which files to
+  send — never the `.wbf`).
+
 ## Next (in build order)
 
-1. **The on-device scenario player + bundle format** — a script that drives the
-   test epub through KOReader (or raw `/dev/fb0`) on the device over the
-   network, flips `rockchip_ebc` params per run, emits the sync pattern, and
-   logs timestamps + params + the *waveform-decode summary* (mode/phase counts
-   per temp bin from `../wbf` — never the raw per-device `.wbf`, per repo
-   policy). Plus the friend-facing recording instructions.
+1. **Wire the on-device player to a real transport** — implement `DeviceDriver`
+   (as `NetworkDriver`) once the device is reachable: drive KOReader (or raw
+   `/dev/fb0`) over the network, flip `rockchip_ebc` params per run, emit the
+   sync pattern, and log the waveform-decode summary from `../wbf`. The
+   orchestration, bundle format, analyze path, and friend instructions above are
+   already in place and waiting on exactly this.
 2. **Scoring + optimization** — once multi-panel data lands, feed the per-panel
    defect vectors back to rank waveform/threshold/flash-frac candidates, and
    ground-truth `ebc-replay`'s proxies against measured optics.
