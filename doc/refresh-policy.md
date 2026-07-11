@@ -245,6 +245,37 @@ with linear reading).
   evtest captures of a pinch, a palm-while-writing trace, gpio-keys
   contents.
 
+## First measured results (2026-07-11, the calibrated boxed rig)
+
+The first four-config sweep (GL16/GC16 fulls x full_refresh_count 6/never/1;
+bundles + reports under `pinenote/tools/optics/build/bundles/sweep1.*`):
+
+1. **Full refreshes are load-bearing under GL16.** With
+   `full_refresh_count=never`, ghost rms on blank-reveal pairs hits **0.309**
+   vs ~0.121 for every config with fulls (2.5x the floor) — and after ~40
+   fulls-free partial turns the accumulated residue in frequently-toggled
+   regions reached 0.2-0.4 reflectance, enough to corrupt the test card's own
+   1-bit barcode (cells read 0.63-0.82 instead of ~0/~1; the static reference
+   patches stayed clean, so this is real reflectance, not calibration). The
+   deep-clean/promotion cadence question is answered: REQUIRED, not optional.
+2. **Partial page turns are near-flash-free in every config** (depth
+   0.00-0.05) — the diff-masked partial regime is clean regardless of the
+   global waveform choice. The one partial artifact is the text-CLEAR
+   shimmer: whites adjacent to erasing text dip 0.148±0.032 transiently
+   (absent when text appears) — quantified on the 10-repeat noise pilot.
+3. **full_refresh_count=1 is pure cost**: ghost 0.121 (same as cadence 6)
+   for 48 flashes instead of 8.
+4. **KOReader pays two washes to leave the menu-style page** (`ux->novel`
+   double-flash x2 on every repetition) — a policy fix candidate.
+5. **GL16-vs-GC16 full flash depth: NOT yet concluded.** Both measured
+   ~0.15-0.19 on n=2 clean samples — suggestive that GL16's advantage
+   shrinks once drift exists, but the NaN guard (tiny stays-white masks) and
+   the trace->transition join (PLAN task 10) must land before that claim is
+   made. It is the first question for the next sweep.
+
+Instrument provenance: 30 fps / exposure 312 / gain 32 / frontlight 255-255;
+ghost-rms repeatability sigma 0.003-0.006 between identical transitions.
+
 ## Measuring the optics directly (the harness that ends "hardware-only")
 
 Every "stays hardware-only, human eyeball" caveat above — how much residue
