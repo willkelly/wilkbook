@@ -1,9 +1,23 @@
 # koreader-input — host tests for KOReader's input routing (offline ladder)
 
-Proves the pen-hover tap-capture bug in upstream KOReader's input stack
-and validates the repo's fix
-(`pinenote/packages/koreader-device/frontend/device/pinenote/mixedrouter.lua`),
-entirely on the workstation — no device, no KOReader UI.
+Two proof sets, entirely on the workstation — no device, no KOReader UI:
+
+1. **`test-mixedrouter.lua`** — the pen-hover tap-capture bug in
+   upstream KOReader's input stack and the repo's fix
+   (`pinenote/packages/koreader-device/frontend/device/pinenote/mixedrouter.lua`).
+2. **`test-optics-inject.lua`** — the optics harness's page-turn
+   injector chain (`pinenote/tools/optics/PLAN.md` task 1): the REPO
+   `device.lua`'s `wilkbook-optics` device-name whitelist (real
+   `findInputDevices` against a fake sysfs tree) and the exact event
+   stream `optics-inject.lua` emits (`KEY 159`/`KEY 158` → press + SYN +
+   release + SYN) mapping to `RPgFwd`/`RPgBack` through the bundle's
+   verbatim `Input:handleKeyBoardEv` with `device.lua`'s `event_map` —
+   including amid pen hover + finger taps with the mixedrouter
+   installed.  Where the host grants `/dev/uinput` write access,
+   `run-tests.sh` additionally runs the **daemon body live**: it must
+   create a uinput device named `wilkbook-optics` with exactly keybits
+   139/158/159 + EV_SYN|EV_KEY and destroy it on `QUIT` (no key event is
+   ever emitted); skipped cleanly elsewhere.
 
 **The bug** (hardware-observed 2026-07-05, mechanism in
 `mixedrouter.lua`'s header): upstream `Input` keeps ONE global
@@ -62,10 +76,15 @@ behavior) and with it (expects the fix):
 ## What this does and does not cover
 
 Covers the slot-routing logic and gesture classification for the mixed
-pen+touch protocol.  Does **not** cover: evdev delivery (`ffi/input_evdev`
-is stubbed), the adjust hooks themselves, timer-driven gestures (hold,
-double-tap), or real touch panel timing/noise — those stay on the
-QEMU-visual and hardware rungs.
+pen+touch protocol, the `findInputDevices` name→slot mapping, the
+injector's key-event chain (159/158 → RPgFwd/RPgBack), and — where the
+host permits — the injector daemon's uinput create/destroy path.  Does
+**not** cover: evdev delivery (`ffi/input_evdev` is stubbed), the
+adjust hooks themselves, `device.lua` `init()` glue (the
+`input:open(devs.optics_inject, ...)` line), the live
+create-before-KOReader-enumerates ordering, timer-driven gestures
+(hold, double-tap), or real touch panel timing/noise — those stay on
+the QEMU-visual and hardware rungs.
 
 ```sh
 # from the repo root:

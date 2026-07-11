@@ -25,11 +25,15 @@ local function no() return false end
 -- kernels (adding the cyttsp5 touchscreen moved the pen from event2 to
 -- event3).  "Stylus" matches the w9013's pen interface only (its second
 -- interface, "w9013 2D1F:0095", is not opened).
-local function findInputDevices()
+--
+-- sysfs_base is only ever passed by the koreader-input host harness
+-- (a fake /sys/class/input tree); on the device it defaults.
+local function findInputDevices(sysfs_base)
+    sysfs_base = sysfs_base or "/sys/class/input"
     local found = {}
     for n = 0, 31 do
         local f = io.open(string.format(
-            "/sys/class/input/event%d/device/name", n), "r")
+            "%s/event%d/device/name", sysfs_base, n), "r")
         if f then
             local name = f:read("*line") or ""
             f:close()
@@ -44,6 +48,13 @@ local function findInputDevices()
                 found.gpiokeys = node
             elseif name == "ws8100_pen" then
                 found.penbtn = node
+            -- The optics harness's uinput page-turn injector
+            -- (pinenote/tools/optics/optics-inject.lua): a persistent
+            -- keyboard device with KEY_BACK/KEY_FORWARD/KEY_MENU, only
+            -- ever present when a capture session created it.  Its
+            -- 158/159 ride the same event_map as the pen buttons.
+            elseif name == "wilkbook-optics" then
+                found.optics_inject = node
             -- QEMU virt visual loop (offline testing ladder): scripted
             -- input arrives via virtio-input devices.  Only ever present
             -- inside the VM; harmless to look for on hardware.
@@ -132,8 +143,24 @@ function PineNote:init()
         end
     end
     -- Flash intents wash the panel only when they cover at least this
-    -- fraction of it.
+    -- fraction of it.  Tunable via the G_reader_settings key
+    -- "pinenote_flash_area_fraction" so the optics harness can sweep it
+    -- per capture run (driver.py seeds it into the dedicated KO_HOME's
+    -- settings.reader.lua).  G_reader_settings is initialized in
+    -- reader.lua before the device module loads (reader.lua:39 vs the
+    -- device require), but nil-guard anyway: host harnesses stub it.
     local flash_area_fraction = 0.60
+    do
+        local ok, v = pcall(function()
+            return G_reader_settings and G_reader_settings.readSetting
+                and G_reader_settings:readSetting("pinenote_flash_area_fraction")
+        end)
+        if ok and type(v) == "number" and v > 0 and v <= 1 then
+            flash_area_fraction = v
+        end
+    end
+    logger.info(string.format(
+        "PineNote: flash_area_fraction=%.2f", flash_area_fraction))
     local function flash_policy(intent)
         return function(_, x, y, w, h, d)
             if not screen_area then
@@ -195,6 +222,13 @@ function PineNote:init()
     if devs.pwrkey then self.input:open(devs.pwrkey, "rk805 pwrkey") end
     if devs.gpiokeys then self.input:open(devs.gpiokeys, "gpio-keys") end
     if devs.penbtn then self.input:open(devs.penbtn, "ws8100 pen buttons") end
+    -- The optics injector is opened unconditionally when present: it
+    -- only exists while a capture session's daemon holds it, and its
+    -- KEY_BACK/KEY_FORWARD events use the pen buttons' event_map
+    -- entries above (proven offline on the koreader-input harness).
+    if devs.optics_inject then
+        self.input:open(devs.optics_inject, "wilkbook-optics injector")
+    end
     if not (devs.pen or devs.touch) then
         -- Offline visual loop on qemu-virt: no PineNote input hardware
         -- exists, but the harness attaches virtio tablet/keyboard.
@@ -343,5 +377,10 @@ PineNote.battery_sysfs = firstExistingDir{
     "/sys/class/power_supply/rk817-battery",
     "/sys/class/power_supply/battery",
 }
+
+-- Exposed for the koreader-input host harness ONLY (it proves the
+-- name->slot mapping against a fake sysfs tree, offline); nothing on
+-- the device calls this.
+PineNote._findInputDevices = findInputDevices
 
 return PineNote

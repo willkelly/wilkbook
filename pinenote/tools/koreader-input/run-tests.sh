@@ -1,9 +1,16 @@
 #!/bin/sh
 # Assertions over KOReader's verbatim input stack (offline testing
-# ladder): runs test-mixedrouter.lua under the native koreader-bin
-# bundle's own luajit, against the bundle's own frontend/device/input.lua
-# + gesturedetector.lua, with the REPO's mixedrouter.lua as the fix
-# under test.  Usage: run-tests.sh [/gnu/store/...-koreader-bin-...]
+# ladder), run under the native koreader-bin bundle's own luajit against
+# the bundle's own frontend/device/input.lua + gesturedetector.lua:
+#
+#   * test-mixedrouter.lua   -- the pen-hover tap-capture bug + the
+#                               REPO's mixedrouter.lua fix under test;
+#   * test-optics-inject.lua -- the optics page-turn injector chain:
+#                               the REPO device.lua's 'wilkbook-optics'
+#                               whitelist + the 159/158 -> RPgFwd/RPgBack
+#                               key mapping (optics PLAN task 1).
+#
+# Usage: run-tests.sh [/gnu/store/...-koreader-bin-...]
 #
 # The bundle is resolved (in order) from: $1, $KOREADER_BUNDLE, or
 # `guix build -L <repo> koreader-bin` (native, cached -- seconds).
@@ -19,7 +26,9 @@ fi
 
 luajit=$bundle/lib/koreader/luajit
 koreader=$bundle/lib/koreader
-router=$repo_root/pinenote/packages/koreader-device/frontend/device/pinenote/mixedrouter.lua
+pinenote_dev=$repo_root/pinenote/packages/koreader-device/frontend/device/pinenote
+router=$pinenote_dev/mixedrouter.lua
+device_lua=$pinenote_dev/device.lua
 
 if [ ! -x "$luajit" ]; then
   echo "FAIL: no luajit at $luajit (is $bundle a koreader-bin bundle?)" >&2
@@ -27,6 +36,10 @@ if [ ! -x "$luajit" ]; then
 fi
 if [ ! -f "$router" ]; then
   echo "FAIL: mixedrouter.lua not found at $router" >&2
+  exit 1
+fi
+if [ ! -f "$device_lua" ]; then
+  echo "FAIL: device.lua not found at $device_lua" >&2
   exit 1
 fi
 
@@ -38,30 +51,93 @@ fail=0
 
 echo "bundle: $bundle"
 
-if "$luajit" "$tool_dir/test-mixedrouter.lua" "$koreader" "$router" > "$out"; then
-  :
+# run_case <label> <script> [args...]: run twice (PASS/FAIL scan +
+# RESULT marker + output determinism across runs).
+run_case() {
+  label=$1; script=$2; shift 2
+  if "$luajit" "$script" "$@" > "$out"; then
+    :
+  else
+    echo "FAIL: $label exited nonzero" >&2
+    fail=1
+  fi
+
+  cat "$out"
+
+  if grep -q '^FAIL' "$out"; then
+    fail=1
+  fi
+  if ! grep -q '^RESULT: ok$' "$out"; then
+    echo "FAIL: $label missing RESULT: ok" >&2
+    fail=1
+  fi
+
+  "$luajit" "$script" "$@" > "$out2" || true
+  if cmp -s "$out" "$out2"; then
+    echo "PASS: $label deterministic output"
+  else
+    echo "FAIL: $label output differs between runs" >&2
+    fail=1
+  fi
+}
+
+run_case test-mixedrouter.lua "$tool_dir/test-mixedrouter.lua" \
+  "$koreader" "$router"
+run_case test-optics-inject.lua "$tool_dir/test-optics-inject.lua" \
+  "$koreader" "$device_lua" "$router"
+
+# --- opportunistic: the injector daemon body against the HOST's real
+# /dev/uinput (needs write access; skipped cleanly where root-only).
+# Proves the ffi struct layout + ioctl numbers + naming live: create ->
+# a device named 'wilkbook-optics' appears in sysfs with EXACTLY the
+# declared capabilities (EV_SYN|EV_KEY; keybits 139/158/159 = key
+# bitmap word 'c0000800') -> QUIT destroys it.  No key event is ever
+# emitted, so nothing can leak into the host's input session.
+optics_daemon=$repo_root/pinenote/tools/optics/optics-inject.lua
+if [ -w /dev/uinput ] && [ -f "$optics_daemon" ]; then
+  tmpd=$(mktemp -d)
+  mkfifo "$tmpd/fifo"
+  ( setsid "$luajit" "$optics_daemon" "$tmpd/fifo" "$tmpd/pid" \
+      > "$tmpd/log" 2>&1 & )
+  i=0
+  while [ "$i" -lt 50 ] && [ ! -s "$tmpd/pid" ]; do sleep 0.1; i=$((i+1)); done
+  node=$(grep -l '^wilkbook-optics$' /sys/class/input/event*/device/name \
+           2>/dev/null | head -n 1 || true)
+  if [ -s "$tmpd/pid" ] && [ -n "$node" ]; then
+    devdir=$(dirname "$node")
+    caps=$(cat "$devdir/capabilities/key")
+    evs=$(cat "$devdir/capabilities/ev")
+    # shellcheck disable=SC2086
+    set -- $caps
+    caps_ok=1
+    [ "$1" = "c0000800" ] || caps_ok=0
+    shift
+    for w in "$@"; do [ "$w" = "0" ] || caps_ok=0; done
+    if [ "$caps_ok" -eq 1 ] && [ "$evs" = "3" ]; then
+      echo "PASS: uinput-live: 'wilkbook-optics' created with exactly keybits 139/158/159 + EV_SYN|EV_KEY"
+    else
+      echo "FAIL: uinput-live: wrong capabilities (key='$caps' ev='$evs')" >&2
+      fail=1
+    fi
+    kill -0 "$(cat "$tmpd/pid")" 2>/dev/null && printf 'QUIT\n' > "$tmpd/fifo"
+    sleep 0.5
+    if grep -q '^wilkbook-optics$' /sys/class/input/event*/device/name 2>/dev/null; then
+      echo "FAIL: uinput-live: device survived QUIT" >&2
+      fail=1
+    elif [ -e "$tmpd/pid" ]; then
+      echo "FAIL: uinput-live: pid file not removed on QUIT" >&2
+      fail=1
+    else
+      echo "PASS: uinput-live: QUIT destroyed the device and cleaned up"
+    fi
+  else
+    echo "FAIL: uinput-live: daemon did not come up (log follows)" >&2
+    cat "$tmpd/log" >&2 || true
+    fail=1
+  fi
+  rm -rf -- "$tmpd"
 else
-  echo "FAIL: test-mixedrouter.lua exited nonzero" >&2
-  fail=1
-fi
-
-cat "$out"
-
-if grep -q '^FAIL' "$out"; then
-  fail=1
-fi
-if ! grep -q '^RESULT: ok$' "$out"; then
-  echo "FAIL: missing RESULT: ok" >&2
-  fail=1
-fi
-
-# --- determinism: identical output across runs ---
-"$luajit" "$tool_dir/test-mixedrouter.lua" "$koreader" "$router" > "$out2" || true
-if cmp -s "$out" "$out2"; then
-  echo "PASS: deterministic output"
-else
-  echo "FAIL: output differs between runs" >&2
-  fail=1
+  echo "SKIP: uinput-live (no writable /dev/uinput on this host)"
 fi
 
 [ "$fail" -eq 0 ] && echo "ALL TESTS PASSED" || { echo "TESTS FAILED" >&2; }
