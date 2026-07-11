@@ -12,25 +12,39 @@ Bundle layout (a directory; a friend zips it and sends the zip):
       session.json      # the metadata + per-run log (schema below)
       capture.<ext>     # the panel capture video (mkv/mp4/mov/...)
       manifest.json     # the test-card manifest (the analyzer's ground truth)
+      trace.<run_id>.log  # optional: the harvested on-device [pn-refresh] trace
 
-`session.json` schema (schema="wilkbook-optics-bundle", version=1):
+`session.json` schema (schema="wilkbook-optics-bundle", version=2):
 
     {
-      "schema": "wilkbook-optics-bundle", "version": 1,
+      "schema": "wilkbook-optics-bundle", "version": 2,
       "created_utc": "2026-07-10T00:00:00Z",
-      "device":   {"model","revision","os","kernel","notes"},
+      "device":   {"model","revision","os","kernel","notes","wbf_sha256"?},
       "capture":  {"file","container","fps","sha256"},
+      "camera":   {"model","fps_mode","controls","exposure_locked"},
+      "reader":   {"full_refresh_count","flash_area_fraction"},
       "testcard": {"card_id","card_version","manifest_file","manifest_sha256"},
-      "illuminant": {"source"="frontlight","level","ambient"},
+      "illuminant": {"source"="frontlight","cool_level","warm_level","ambient"},
       "panel_temp_c": <float|null>,          # session default; a run may override
       "ebc_params": { ... },                 # baseline rockchip_ebc params
       "runs": [ {                            # one pass of the scenario per param set
         "run_id","label","params",          # params = per-run overrides flipped first
-        "frontlight_level","panel_temp_c",
-        "events": [ {"t": <s from clock-zero>, "event": "sync|page|param", ...} ]
+        "frontlight_level",
+        "panel_temp_c",                     # legacy mirror of _start
+        "panel_temp_c_start","panel_temp_c_end",
+        "events_source": "measured|nominal",  # nominal = synthesized timeline
+        "trace": "trace.<run_id>.log"|null,   # harvested [pn-refresh] sidecar
+        "events": [ {"t": <s from clock-zero>,
+                     "event": "sync|page|param|clean", ...} ]
       } ],
       "waveform_decode": { ...summary... }   # decoded SUMMARY ONLY, never a raw .wbf
     }
+
+Version history: v1 had a single `illuminant.level` scalar (both frontlight
+channels pinned equal -- so old bundles are NOT underspecified), no camera /
+reader / trace metadata and no per-run temperature endpoints. `load_bundle`
+migrates v1 sessions to the v2 shape in memory (`migrate_session`); files on
+disk are never rewritten.
 
 Why these fields
 ----------------
@@ -58,7 +72,13 @@ import re
 import shutil
 
 SCHEMA = "wilkbook-optics-bundle"
-VERSION = 1
+VERSION = 2
+
+# runs[].events_source: how the event timeline was produced. 'measured' = the
+# recorder timestamped real driver calls (run_scenario); 'nominal' = synthesized
+# from the manifest (scenario_events -- the manual `package` path). Consumers
+# (e.g. the turn-latency join) must gate on this before trusting event times.
+EVENTS_SOURCES = ("measured", "nominal")
 
 SESSION_NAME = "session.json"
 MANIFEST_NAME = "manifest.json"
@@ -95,17 +115,31 @@ def _utc_now_iso():
 
 # --- session construction ---------------------------------------------------
 
-def new_session(device, illuminant_level, ebc_params=None, panel_temp_c=None,
+def new_session(device, illuminant_level=None, ebc_params=None, panel_temp_c=None,
                 card_id="wilkbook-optics-testcard", card_version=1,
-                illuminant_ambient="dark-box", created_utc=None):
+                illuminant_ambient="dark-box", created_utc=None,
+                illuminant_cool=None, illuminant_warm=None,
+                camera=None, reader=None):
     """Build an in-memory session dict (no files yet). `device` is a dict with
     at least {'model'}; the rest default. `write_bundle` fills capture/manifest
-    hashes when it copies the files in."""
+    hashes when it copies the files in.
+
+    Illuminant: pass per-channel `illuminant_cool`/`illuminant_warm`, or the
+    single `illuminant_level` which pins both channels equal (the driver
+    convention -- exactly what v1's scalar meant). `camera` and `reader` are
+    optional dicts merged over the v2 defaults (see the module docstring)."""
     dev = {"model": None, "revision": None, "os": None, "kernel": None,
            "notes": ""}
     dev.update(device or {})
     if not dev.get("model"):
         raise ValueError("device['model'] is required")
+    cool = illuminant_cool if illuminant_cool is not None else illuminant_level
+    warm = illuminant_warm if illuminant_warm is not None else illuminant_level
+    cam = {"model": None, "fps_mode": None, "controls": None,
+           "exposure_locked": False}
+    cam.update(camera or {})
+    rdr = {"full_refresh_count": None, "flash_area_fraction": None}
+    rdr.update(reader or {})
     return {
         "schema": SCHEMA,
         "version": VERSION,
@@ -113,10 +147,13 @@ def new_session(device, illuminant_level, ebc_params=None, panel_temp_c=None,
         "device": dev,
         "capture": {"file": None, "container": None, "fps": None,
                     "sha256": None},
+        "camera": cam,
+        "reader": rdr,
         "testcard": {"card_id": card_id, "card_version": card_version,
                      "manifest_file": MANIFEST_NAME, "manifest_sha256": None},
         "illuminant": {"source": STANDARD_ILLUMINANT,
-                       "level": illuminant_level, "ambient": illuminant_ambient},
+                       "cool_level": cool, "warm_level": warm,
+                       "ambient": illuminant_ambient},
         "panel_temp_c": panel_temp_c,
         "ebc_params": dict(ebc_params or {}),
         "runs": [],
@@ -125,22 +162,38 @@ def new_session(device, illuminant_level, ebc_params=None, panel_temp_c=None,
 
 
 def add_run(session, run_id, events, label="", params=None,
-            frontlight_level=None, panel_temp_c=None):
+            frontlight_level=None, panel_temp_c=None,
+            panel_temp_c_start=None, panel_temp_c_end=None,
+            events_source="measured", trace=None):
     """Append one scenario pass. `events` is a list of event dicts (see
     scenario_events / recorder.run_scenario); they are normalized and checked to
-    be non-negative and time-ordered."""
+    be non-negative and time-ordered.
+
+    `panel_temp_c_start`/`_end` bracket the run (ME6: refuse comparisons that
+    straddle a waveform temp bin); the legacy `panel_temp_c` mirrors the start.
+    `events_source` must be 'measured' (recorder-timestamped) or 'nominal'
+    (synthesized). `trace` names the harvested [pn-refresh] log sidecar inside
+    the bundle (a bare filename like 'trace.r0.log'), or None."""
     evs = [_norm_event(e) for e in events]
     ts = [e["t"] for e in evs]
     if any(t < 0 for t in ts):
         raise ValueError(f"run {run_id}: event timestamps must be >= 0")
     if ts != sorted(ts):
         raise ValueError(f"run {run_id}: events must be time-ordered")
+    if events_source not in EVENTS_SOURCES:
+        raise ValueError(f"run {run_id}: events_source must be one of "
+                         f"{EVENTS_SOURCES} (got {events_source!r})")
+    start = panel_temp_c_start if panel_temp_c_start is not None else panel_temp_c
     session["runs"].append({
         "run_id": run_id,
         "label": label,
         "params": dict(params or {}),
         "frontlight_level": frontlight_level,
-        "panel_temp_c": panel_temp_c,
+        "panel_temp_c": start,
+        "panel_temp_c_start": start,
+        "panel_temp_c_end": panel_temp_c_end,
+        "events_source": events_source,
+        "trace": trace,
         "events": evs,
     })
     return session["runs"][-1]
@@ -150,7 +203,7 @@ def _norm_event(e):
     if "t" not in e or "event" not in e:
         raise ValueError(f"event needs 't' and 'event': {e!r}")
     out = {"t": round(float(e["t"]), 4), "event": str(e["event"])}
-    for k in ("page_index", "pid", "kind", "params", "detail"):
+    for k in ("page_index", "pid", "kind", "params", "detail", "n"):
         if k in e and e[k] is not None:
             out[k] = e[k]
     return out
@@ -163,7 +216,7 @@ def set_waveform_decode(session, summary):
     session["waveform_decode"] = summary
 
 
-def scenario_events(manifest, start_t=0.0, sync_dwell_s=0.75, page_period_s=1.5,
+def scenario_events(manifest, start_t=0.0, sync_dwell_s=0.75, page_period_s=3.0,
                     include_sync=True):
     """A default event list for one scenario pass, derived from the manifest's
     page sequence. Real driving happens in recorder.run_scenario (which times
@@ -202,8 +255,12 @@ def write_bundle(bundle_dir, session, video_path, manifest_path):
 
     ext = os.path.splitext(video_path)[1].lstrip(".").lower() or "bin"
     cap_name = f"capture.{ext}"
-    shutil.copyfile(video_path, os.path.join(bundle_dir, cap_name))
-    shutil.copyfile(manifest_path, os.path.join(bundle_dir, MANIFEST_NAME))
+    # tolerate sources already at their destination (the recorder films
+    # straight into the bundle dir; copyfile would raise SameFileError)
+    for src, dst in ((video_path, os.path.join(bundle_dir, cap_name)),
+                     (manifest_path, os.path.join(bundle_dir, MANIFEST_NAME))):
+        if os.path.abspath(src) != os.path.abspath(dst):
+            shutil.copyfile(src, dst)
 
     session["capture"]["file"] = cap_name
     session["capture"]["container"] = ext
@@ -241,12 +298,52 @@ class Bundle:
             return json.load(f)
 
 
+def migrate_session(session):
+    """Upgrade an older session dict to the current (v2) shape IN MEMORY -- the
+    file on disk is never rewritten. v1 -> v2:
+
+      * illuminant.level -> cool_level + warm_level, split pinned-equal (the v1
+        recorder drove both frontlight channels to the same value, so old
+        bundles are not underspecified -- this is exact, not a guess);
+      * camera / reader blocks default to unknown;
+      * runs gain panel_temp_c_start (from the old panel_temp_c), a null
+        panel_temp_c_end, no trace, and events_source='nominal' (v1 never
+        distinguished measured from synthesized timelines, so consumers must
+        not trust v1 event times as measured).
+
+    Returns the same dict, with `migrated_from` recording the original version.
+    """
+    if session.get("version") == VERSION:
+        return session
+    if session.get("version") == 1:
+        ill = dict(session.get("illuminant") or {})
+        if "cool_level" not in ill:
+            level = ill.pop("level", None)
+            ill["cool_level"] = level
+            ill["warm_level"] = level
+        session["illuminant"] = ill
+        session.setdefault("camera", {"model": None, "fps_mode": None,
+                                      "controls": None, "exposure_locked": False})
+        session.setdefault("reader", {"full_refresh_count": None,
+                                      "flash_area_fraction": None})
+        for r in session.get("runs") or []:
+            r.setdefault("panel_temp_c_start", r.get("panel_temp_c"))
+            r.setdefault("panel_temp_c_end", None)
+            r.setdefault("events_source", "nominal")
+            r.setdefault("trace", None)
+        session["migrated_from"] = 1
+        session["version"] = VERSION
+    return session
+
+
 def load_bundle(bundle_dir, verify_hashes=False):
-    """Load and validate a bundle directory. Raises on a malformed session or a
-    policy violation (a raw .wbf present). With verify_hashes, also re-checks the
+    """Load and validate a bundle directory. Older schema versions are migrated
+    in memory (migrate_session). Raises on a malformed session or a policy
+    violation (a raw .wbf present). With verify_hashes, also re-checks the
     capture/manifest sha256 recorded at write time."""
     with open(os.path.join(bundle_dir, SESSION_NAME)) as f:
         session = json.load(f)
+    session = migrate_session(session)
     problems = validate_session(session)
     if problems:
         raise ValueError("bundle invalid: " + "; ".join(problems))
@@ -256,6 +353,10 @@ def load_bundle(bundle_dir, verify_hashes=False):
         raise ValueError(f"capture missing: {session['capture']['file']}")
     if not os.path.exists(b.manifest_path):
         raise ValueError("manifest.json missing")
+    for r in session.get("runs") or []:
+        tr = r.get("trace")
+        if tr and not os.path.exists(os.path.join(b.path, tr)):
+            raise ValueError(f"run {r.get('run_id')}: trace sidecar missing: {tr}")
     if verify_hashes:
         got = sha256_file(b.capture_path)
         if got != session["capture"]["sha256"]:
@@ -289,12 +390,14 @@ def assert_no_raw_waveform(bundle_dir):
 
 
 def validate_session(session):
-    """Return a list of human-readable problems (empty = valid)."""
+    """Return a list of human-readable problems (empty = valid). Validates the
+    CURRENT (v2) shape; older on-disk versions go through migrate_session first
+    (load_bundle does this automatically)."""
     p = []
     if session.get("schema") != SCHEMA:
         p.append(f"schema must be {SCHEMA!r}")
     if session.get("version") != VERSION:
-        p.append(f"version must be {VERSION}")
+        p.append(f"version must be {VERSION} (load_bundle migrates v1)")
     dev = session.get("device") or {}
     if not dev.get("model"):
         p.append("device.model required")
@@ -305,8 +408,8 @@ def validate_session(session):
     if ill.get("source") != STANDARD_ILLUMINANT:
         p.append(f"illuminant.source should be {STANDARD_ILLUMINANT!r} for "
                  f"comparability (got {ill.get('source')!r})")
-    if ill.get("level") is None:
-        p.append("illuminant.level (frontlight level) required")
+    if ill.get("cool_level") is None or ill.get("warm_level") is None:
+        p.append("illuminant.cool_level + warm_level (frontlight split) required")
     runs = session.get("runs")
     if not isinstance(runs, list) or not runs:
         p.append("at least one run required")
@@ -325,16 +428,30 @@ def validate_session(session):
 def _validate_run(r):
     p = []
     rid = r.get("run_id", "?")
+    if r.get("events_source") not in EVENTS_SOURCES:
+        p.append(f"run {rid}: events_source must be one of {EVENTS_SOURCES} "
+                 f"(got {r.get('events_source')!r})")
+    tr = r.get("trace")
+    if tr is not None:
+        if not isinstance(tr, str) or not tr or os.sep in tr or "/" in tr:
+            p.append(f"run {rid}: trace must be a bare filename inside the "
+                     f"bundle (got {tr!r})")
+        elif tr.lower().endswith(".wbf"):
+            p.append(f"run {rid}: trace must not be a raw waveform (policy)")
+    for k in ("panel_temp_c_start", "panel_temp_c_end"):
+        v = r.get(k)
+        if v is not None and not isinstance(v, (int, float)):
+            p.append(f"run {rid}: {k} must be a number or null (got {v!r})")
     evs = r.get("events")
     if not isinstance(evs, list) or not evs:
-        return [f"run {rid}: needs events"]
+        return [f"run {rid}: needs events"] + p
     ts = []
     for e in evs:
         if "t" not in e or "event" not in e:
             p.append(f"run {rid}: event missing t/event: {e!r}")
             continue
         ts.append(e["t"])
-        if e["event"] not in ("sync", "page", "param"):
+        if e["event"] not in ("sync", "page", "param", "clean"):
             p.append(f"run {rid}: unknown event {e['event']!r}")
     if any(t < 0 for t in ts):
         p.append(f"run {rid}: negative timestamp")
