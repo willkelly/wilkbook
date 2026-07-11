@@ -35,15 +35,26 @@ REPORT_VERSION = 1
 
 
 def _render_page_factory(manifest):
-    """A render_page(kind) -> reflectance [Hp,Wp] closure at the manifest's
-    resolution, for ingest to re-render the intended before/after pages. Sets
-    the testepub module dims from the manifest (its geometry is fraction-based,
-    so this is resolution-independent -- same trick test_ingest.py uses)."""
+    """A render_page(kind, pid) -> reflectance [Hp,Wp] closure at the
+    manifest's resolution, for ingest to re-render the intended before/after
+    pages. Sets the testepub module dims from the manifest (its geometry is
+    fraction-based, so this is resolution-independent -- same trick
+    test_ingest.py uses).
+
+    Contract: the NEW two-arg form render_page(kind, pid) so pid-varied
+    content (card v2) re-renders exactly; pid defaults to 0 so an ingest that
+    still calls render_page(kind) keeps working, and the inner testepub call
+    falls back through TypeError while testepub/ingest are restructured
+    concurrently."""
     Wp, Hp = manifest["resolution"]
     testepub.W, testepub.H = Wp, Hp
 
-    def render_page(kind):
-        img = testepub.render_page(testepub.Page(0, kind, 0))
+    def render_page(kind, pid=0):
+        try:
+            img = testepub.render_page(testepub.Page(0, kind, pid))
+        except TypeError:
+            # a testepub revision without the pid slot in Page/render_page
+            img = testepub.render_page(testepub.Page(0, kind))
         return np.asarray(img, np.float32) / 255.0
 
     return render_page
@@ -96,10 +107,33 @@ def analyze_frames(frames, fps, manifest):
     return out, len(frames), sync_end
 
 
-def analyze_bundle(bundle_dir, frames=None, fps=None):
+def _select_run(session, run_id=None):
+    """Pick the run whose events belong to THIS capture, explicitly. Per-run
+    bundles (schema v2 recorder) hold exactly one run, so the join is 1:1 by
+    construction; a legacy pooled bundle (several runs filmed into one video)
+    is genuinely ambiguous -- we take the first run and say so in the report
+    rather than silently pretending. `run_id` forces the choice."""
+    runs = session.get("runs") or []
+    if not runs:
+        raise ValueError("session has no runs")
+    if run_id is not None:
+        for r in runs:
+            if r.get("run_id") == run_id:
+                return r, "explicit"
+        raise ValueError(f"run_id {run_id!r} not in session "
+                         f"(have {[r.get('run_id') for r in runs]})")
+    if len(runs) == 1:
+        return runs[0], "single"
+    return runs[0], f"ambiguous-first-of-{len(runs)}"
+
+
+def analyze_bundle(bundle_dir, frames=None, fps=None, run_id=None):
     """Full end-to-end analyze of a bundle directory. By default decodes the
     bundle's capture video with ffmpeg; `frames`/`fps` override that for tests
-    that already hold the array. Returns the report dict."""
+    that already hold the array. `run_id` selects which run's events/params
+    this capture carries (unneeded for per-run bundles -- see _select_run).
+    Returns the report dict, with every transition attributed to the selected
+    run (run_id + that run's params)."""
     b = bundle_mod.load_bundle(bundle_dir)
     manifest = b.load_manifest()
 
@@ -113,6 +147,11 @@ def analyze_bundle(bundle_dir, frames=None, fps=None):
     transitions, n_frames, sync_end = analyze_frames(frames, float(fps), manifest)
 
     sess = b.session
+    run, selection = _select_run(sess, run_id=run_id)
+    run_params = dict(run.get("params") or {})
+    for t in transitions:
+        t["run_id"] = run.get("run_id")
+        t["params"] = run_params
     report = {
         "schema": REPORT_SCHEMA,
         "version": REPORT_VERSION,
@@ -122,16 +161,27 @@ def analyze_bundle(bundle_dir, frames=None, fps=None):
         "panel_temp_c": sess["panel_temp_c"],
         "ebc_params": sess["ebc_params"],
         "waveform_decode": sess.get("waveform_decode"),
+        "run": {
+            "run_id": run.get("run_id"),
+            "label": run.get("label", ""),
+            "params": run_params,
+            "events_source": run.get("events_source"),
+            "panel_temp_c_start": run.get("panel_temp_c_start"),
+            "panel_temp_c_end": run.get("panel_temp_c_end"),
+            "trace": run.get("trace"),
+            "selection": selection,
+        },
         "capture": {"fps": float(fps), "n_frames": int(n_frames),
                     "sync_end_frame": int(sync_end)},
         "transitions": transitions,
-        "summary": _summarize(transitions),
+        "summary": _summarize(transitions, run=run),
     }
     return report
 
 
-def _summarize(transitions):
-    """Roll the per-transition reports into a per-panel headline."""
+def _summarize(transitions, run=None):
+    """Roll the per-transition reports into a per-panel headline, attributed to
+    the run (config) that produced the capture."""
     counts = {"flash": {}, "ghost": {}, "settle": {}}
     worst = {"flash": 0.0, "ghost": 0.0}
     n_double = 0
@@ -147,6 +197,9 @@ def _summarize(transitions):
         if t["defects"]:
             n_with_defects += 1
     return {
+        "run_id": (run or {}).get("run_id"),
+        "label": (run or {}).get("label", ""),
+        "params": dict((run or {}).get("params") or {}),
         "n_transitions": len(transitions),
         "n_with_defects": n_with_defects,
         "n_double_flash": n_double,
@@ -163,10 +216,25 @@ def format_report_text(report):
     L.append(f"optics defect report -- {dev.get('model')} "
              f"rev {dev.get('revision')}  ({dev.get('os') or 'os?'})")
     ill = report["illuminant"]
-    L.append(f"illuminant: {ill.get('source')} @ level {ill.get('level')} "
+    if "cool_level" in ill or "warm_level" in ill:
+        level = f"cool {ill.get('cool_level')} / warm {ill.get('warm_level')}"
+    else:                                 # a pre-v2 report dict
+        level = f"level {ill.get('level')}"
+    L.append(f"illuminant: {ill.get('source')} @ {level} "
              f"({ill.get('ambient')});  panel_temp: {report['panel_temp_c']} C")
     if report["ebc_params"]:
         L.append(f"ebc params: {report['ebc_params']}")
+    run = report.get("run")
+    if run:
+        temps = ""
+        if run.get("panel_temp_c_start") is not None:
+            temps = (f";  panel {run.get('panel_temp_c_start')} -> "
+                     f"{run.get('panel_temp_c_end')} C")
+        L.append(f"run: {run.get('run_id')} "
+                 f"{('(' + run['label'] + ') ') if run.get('label') else ''}"
+                 f"params {run.get('params') or {}} "
+                 f"[{run.get('events_source')} events, {run.get('selection')}]"
+                 f"{temps}")
     wd = report.get("waveform_decode")
     if wd:
         L.append(f"waveform: {wd.get('panel', '?')}  mode_version "
@@ -199,11 +267,13 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description="Analyze an optics recording bundle.")
     ap.add_argument("bundle", help="path to the bundle directory")
     ap.add_argument("-o", "--out", help="write the JSON report here")
+    ap.add_argument("--run-id", help="which run's events belong to this capture "
+                    "(only needed for legacy multi-run bundles)")
     ap.add_argument("--quiet", action="store_true",
                     help="suppress the human-readable summary on stdout")
     args = ap.parse_args(argv)
 
-    report = analyze_bundle(args.bundle)
+    report = analyze_bundle(args.bundle, run_id=args.run_id)
     if args.out:
         with open(args.out, "w") as f:
             json.dump(report, f, indent=2)
