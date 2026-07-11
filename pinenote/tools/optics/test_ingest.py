@@ -112,10 +112,14 @@ def main():
     check("two-run clip -> first block only",
           ingest.find_sync(means, fps=fps) == 10,
           f"got {ingest.find_sync(means, fps=fps)} want 10")
-    # preamble tolerance: a block starting later than a few seconds is no sync
+    # preamble tolerance: a block starting past the window is no sync (window
+    # parameterized; the default is generous for automated captures that film
+    # the deep-clean + KOReader relaunch before the sync flashes)
     means = [G] * 200 + run + [0.6] * 20
     check("block past the preamble window -> 0",
-          ingest.find_sync(means, fps=fps) == 0)
+          ingest.find_sync(means, fps=fps, max_preamble_s=5.0) == 0)
+    check("automated-capture default tolerates a long preamble",
+          ingest.find_sync(means, fps=fps) == 210)
     # mid-block gaps: real cameras catch mid-wash grays between the sync pages
     means = [G] * 4 + [B, G, Wt, G, B, G, Wt] + [0.6] * 20
     check("mid-wash gaps inside the block are tolerated",

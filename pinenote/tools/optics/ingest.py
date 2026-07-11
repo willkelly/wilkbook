@@ -233,7 +233,11 @@ def decode_pageid(panel_intensity, manifest):
 
 # --- sync + segmentation ----------------------------------------------------
 
-SYNC_MAX_PREAMBLE_S = 5.0   # the sync block must BEGIN within this of clip start
+SYNC_MAX_PREAMBLE_S = 240.0   # automated captures film the deep-clean +
+                              # KOReader relaunch before sync (~30-60 s);
+                              # manual captures should start rolling early
+                              # anyway. The >=2-alternations rule is the
+                              # real discriminator against false blocks.
 SYNC_MAX_GAP_S = 0.75       # tolerated non-extreme stretch INSIDE the block
                             # (the camera catches frames mid-refresh between the
                             # black and white sync pages)
