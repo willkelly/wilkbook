@@ -1,8 +1,25 @@
 # Hardware status
 
-Last updated: 2026-07-05. This is the single place to record what has actually
+Last updated: 2026-07-10. This is the single place to record what has actually
 been proven on the device. Update it after every hardware session; the
 detailed evidence lives in session logs, not in git.
+
+**2026-07-10: Wi-Fi radio hardware-validated; Phase 1 userland built.** On the
+live device (reader flavor, 7.0.11) over the CDC-ACM console: `wlan0` autoloads
+(brcmfmac coldplug, no manual modprobe), is **not** rfkill-blocked, has a stable
+real MAC (`c0:bf:be:70:86:d7`, not a random locally-administered one), and
+**passively scanned 6 nearby APs** — the radio works end to end, not merely
+"firmware loads." But the deployed image ships **no supplicant/DHCP**
+(`wpa_supplicant`/`wpa_cli`/`dhcpcd` absent), so nothing can *associate* —
+which is exactly why KOReader's Wi-Fi toggle is a no-op (its device target also
+sets `hasWifiManager = no`). The **A.2.3 reader image** adds the Phase 1 Wi-Fi
+userland (`pinenote-wifi` service + `wpa_supplicant` + `dhcpcd`, reading an
+out-of-band conf from the `data` partition; `doc/networking.md §4.1`); it is
+built and closure-verified (rootfs SHA
+`196d601c77da9d6250e7bf4794b008af5b65a6954196dee9bdaf960cbd4310f8`, the
+`pinenote-wifi-up` boot script + both packages present in the system closure),
+**staged for the next os2 write**. Association from a real conf is the one
+remaining hardware step.
 
 **2026-07-05: reader first light, then the appliance path.** KOReader
 renders and is pen- and finger-navigable on the panel, running
@@ -30,6 +47,7 @@ axis: fbcon text on the panel, USB ACM gadget console working end-to-end
 | PREEMPT_RT | n/a (not supported on 6.6) | **yes** (2026-07-04: `#1 SMP PREEMPT_RT`, tainted=0, no sleeping-function/atomic splats) |
 | Bluetooth firmware (BCM4345C0.hcd) | yes | yes (2026-06-11: `BCM4345C0.pine64,pinenote-v1.2.hcd` patch applied, build 0382) |
 | Wi-Fi firmware (brcmfmac43455) | yes | yes (2026-06-11: brcmfmac 7.45.234 loaded on vanilla base — deblob problem confirmed solved) |
+| Wi-Fi radio (wlan0 up, scan) | — | **yes** (2026-07-10: wlan0 autoloads, unblocked, stable MAC, scanned 6 APs over the ACM console). Association needs userland — A.2.3 built, os2 write pending |
 | KOReader on the panel (reader flavor) | n/a | **yes** (2026-07-05: native fbdev + evdev, pen- and finger-navigable, frontlight, MB Type fonts; unattended boot validated) |
 
 The `pinenote-usb-console-linux-6-6` flavor is the fully working baseline.
