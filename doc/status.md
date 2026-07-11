@@ -4,6 +4,20 @@ Last updated: 2026-07-10. This is the single place to record what has actually
 been proven on the device. Update it after every hardware session; the
 detailed evidence lives in session logs, not in git.
 
+**2026-07-11 (close): THE CALIBRATED BASELINE — coherent physics.** Fresh
+full-card capture at calibrated settings (`build/bundles/cal-baseline`,
+report alongside): 47/49 transitions, sync auto-detected. The GL16 reading
+regime measured: **partial page turns are essentially flash-free (0.00-0.06)**
+with settle 0.1-0.6 s; **the every-6th promoted fulls flash at 0.16-0.23** —
+about a third of GC16's 0.6, so GL16's no-flash property holds for partials
+but NOT for fulls. Ghost: none across the board (the correlation gate
+correctly rejects the render-mismatch bias). New behavioral discovery:
+**ux->novel double-flashes (x2) on every repetition** — exiting the menu-style
+page costs two refreshes, a real KOReader pattern worth a policy look.
+Remaining calibration debt (queued): NaN guard for tiny stays-white masks,
+gray-corrupt thresholds, settle-incomplete tail. Next experiment: GL16 vs
+GC16 x full_refresh_count sweep — one --param-sets file away.
+
 **2026-07-11 (calibration): the instrument is now precise.** Exposure sweep on
 the rig: v4l2 exposure units are 100 us, so 60 fps caps exposure at ~156 =
 unavoidably dark — captures now run 30 fps with calibrated locked values
