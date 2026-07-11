@@ -148,14 +148,20 @@ Also staged 2026-07-03:
 
 ## Current os2 contents
 
-os2 currently holds the **phase A.2.5 build**, SHA
-`e0e7735ca4e1e21e8dde700e273d50e6b0139f415e023e61017432e7e97dfb6f` —
+os2 currently holds the **phase A.2.6 build**, SHA
+`1a1e13669a17e258487d6f78d862517c9765b9f172e962e52e63ce4cc2bb9b68` —
 **written 2026-07-11** with the full protocol (os1 root confirmed at
 `/dev/mmcblk0p5`, p6 unmounted, `dd conv=fsync`, then a `drop_caches`
-readback of the exact 1 943 072 768-byte range SHA-matched from eMMC).
+readback of the exact 1 943 080 960-byte range SHA-matched from eMMC).
 Staged copy on os1 at
-`/home/user/wilkbook-artifacts/pinenote-reader-PNGuixRoot-20260711-a25.ext4`.
-**First boot confirmed 2026-07-11**: Wi-Fi auto-joined again (note: dhcpcd
+`/home/user/wilkbook-artifacts/pinenote-reader-PNGuixRoot-20260711-a26.ext4`.
+**First boot pending.** A.2.6 = A.2.5 + the integrated optics blocker work
+(the `wilkbook-optics` injector whitelist + configurable flash fraction in the
+koreader graft) + the `/var/empty` sshd activation fix (first image where SSH
+needs no manual step). The superseded A.2.5 (`e0e7735c…`) staged copy remains
+on os1 for rollback; its record follows.
+
+A.2.5 — **first boot confirmed 2026-07-11**: Wi-Fi auto-joined again (note: dhcpcd
 mints a fresh DUID per reflash, so absent a router-side reservation the DHCP
 lease drifts across flashes). One bug found + fixed live: the image ships `/var/empty` owned by a
 build-container uid (998:981), so sshd fatal'd on every connection
