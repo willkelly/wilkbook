@@ -316,6 +316,57 @@ network={
    lease, and answers SSH on the key. Harvest the association dmesg and
    `iw`/`ip` output for the doc.
 
+### 4.1 Phase 1 — implemented (2026-07-10), offline-gated
+
+The Wi-Fi userland now ships on the **reader** flavor and is gated through
+`guix system build pinenote-reader` (derivation graph sound) with the boot
+script `sh -n` + shellcheck clean and its no-op path verified. **Association
+itself is the hardware step still pending** (§6, the headline unknown).
+
+- `pinenote/services/wifi.scm` — `pinenote-wifi-service-type`, a one-shot
+  that runs a boot script (a `computed-file`, so no secret and no edit to the
+  rebase-fragile `firmware.scm`). It finds the persistent `data` partition
+  (`/dev/disk/by-partlabel/data`, sysfs `PARTNAME=data` fallback), mounts it
+  read-only, and if `…/wifi/wlan0.conf` exists: `rfkill unblock` (best-effort),
+  waits for the SDIO-coldplugged `wlan0`, then `wpa_supplicant -B -i wlan0 -c
+  <conf>`. **Every missing piece is a graceful no-op** — no partition, no conf,
+  or no `wlan0` and the reader boots exactly as before (which is what keeps
+  QEMU-virt and a credential-less device booting cleanly).
+- `pinenote/systems/pinenote-reader.scm` — adds `pinenote-wifi-service-type`
+  + `dhcpcd-service-type` to the services and `wpa-supplicant` (brings
+  `wpa_supplicant` **and** `wpa_cli` into the profile — Phase 2 needs the
+  latter) to the packages.
+
+**Provisioning (once, over the USB serial console — no Wi-Fi required).** The
+reader user has passwordless `sudo` (its sudoers), so this works over the
+cdc-acm console or the UART. Write the credential file to the `data` partition
+(survives os2 reflashes), storing the **PSK hash**, not the passphrase:
+
+```sh
+# hash the passphrase (use the psk= hex line; discard the #psk= plaintext):
+wpa_passphrase "YourSSID" "your-passphrase"
+
+# then, on the device:
+sudo mount /dev/disk/by-partlabel/data /mnt
+sudo mkdir -p /mnt/wifi
+sudo tee /mnt/wifi/wlan0.conf >/dev/null <<'EOF'
+ctrl_interface=/run/wpa_supplicant
+update_config=1
+country=US
+network={
+    ssid="YourSSID"
+    psk=<64-hex-from-wpa_passphrase>
+}
+EOF
+sudo chmod 600 /mnt/wifi/wlan0.conf
+sudo umount /mnt
+sudo herd start pinenote-wifi          # or reboot
+```
+
+`ctrl_interface` + `update_config=1` are inert for Phase 1 but are what
+Phase 2 (KOReader's own Wi-Fi UI) drives `wpa_cli` against, so networks you
+later pick *on-device* are written back to this same file and persist.
+
 ## 5. How this unblocks the optics recorder
 
 **Update (2026-07-10):** the recorder is no longer *blocked* on Wi-Fi. Its
