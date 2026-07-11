@@ -185,3 +185,67 @@ kthread's scheduling class before chasing pen latency.
    there (or they rebase onto our work — we're first).
 5. The mxcfb-shaped contract is worth emulating *faithfully or not at
    all* (PocketBook B288 cautionary tale) if we ever add a compat shim.
+
+## 8. Community sweep, 2026-07-11 (fresh; feeds the optics program)
+
+A targeted re-sweep of the display-stack lineages, done when the optics
+harness reached "ready for first capture". Primary sources cached under the
+session scratchpad (`ebc/`); adoptability verdicts recorded in
+`pinenote/tools/optics/PLAN.md`.
+
+- **m-weigand kernel is dormant** (tip `branch_pinenote_6-12-11`,
+  2025-02-16). Post-6.6 driver delta vs ours is one behavioral param —
+  **`globre_convert_before`** (bool: on global refresh, first convert the
+  prev buffer into the target waveform's reachable color space, so
+  A2/DU4 draws start from a known state; also applied on resume) — plus two
+  trivial fixes. Confirmed 6.x driver defaults worth knowing:
+  `diff_mode=true, refresh_threshold=20, split_area_limit=12,
+  bw_threshold=7, fourtone=4/7/12`. Our lineage already carries the three
+  debug ioctls; **`EXTRACT_FBS` dumps the live prev/next buffers — free
+  driver-side ground truth for the optics rig** (userspace example in
+  m-weigand/mw_pinenote_misc).
+- **PNDeb ships field-tested defaults** on m-weigand 6.12: `auto_refresh=1
+  refresh_threshold=60 split_area_limit=0 panel_reflection=1 dclk_select=0`
+  (dev branch bumps **`dclk_select=1`**, 250 MHz — evidence the higher pixel
+  clock is now considered stable); user guide recommends `refresh_threshold=20`
+  for redraw-heavy apps. They also ship **`trim_waveform.py`** — removes
+  frames from the A2 waveform for faster pen writing (accepted tradeoff:
+  black sometimes gray). A shipped, user-validated instance of waveform
+  surgery; concept-portable to a workbench experiment (we have our own
+  decoder; per-device .wbf policy unchanged — the trim happens on-device).
+- **hrdl's driver is a redesign** (sourcehut `~hrdl/linux`, branch
+  `v6.19_pinenote`, ~349 patches; web UI 502s, raw/git endpoints work):
+  per-pixel waveform scheduling (obsoletes `split_area_limit`), an
+  offline-compiled custom LUT (`CLUT0002`; **A2 dropped entirely** — DU +
+  early cancellation replaces it; their mode map independently confirms the
+  GL16-family tables are duplicates), per-rect hint bytes
+  (Y1/Y2/Y4 × threshold/dither × REDRAW) via a `RECT_HINTS` ioctl,
+  **`redraw_delay`** (automatic GC16-quality repaint ~2.4 s after a fast
+  update settles — "fast now, clean later" in-kernel), early cancellation of
+  in-flight updates (`early_cancellation_addition=2`), and in-driver
+  **blue-noise/Bayer dithering** (NEON). Userspace: pinenote-dist maps
+  app→hint over sway IPC (KOReader gets plain Y4, no REDRAW — the reader
+  manages itself); phantomas's Rust `pinenote-service` is a
+  compositor-agnostic hint manager. Porting the driver is rebase-scale;
+  three ideas transplant: (1) **delayed-quality-redraw as a userspace
+  policy** in our KOReader layer, (2) blue-noise dither tables for
+  A2/DU/bw_mode quality, (3) the A2-abandonment datapoint for our A2-vs-DU
+  decisions.
+- **ayakael/postmarketOS** packages hrdl's stack (kernel 6.19.3); first
+  boot compiles `custom_wf.bin` from the device's own waveform partition
+  (same never-bundle stance as ours). One operational quirk to remember:
+  they ship a **module-reload workaround because "rockchip_ebc sometimes
+  fails to load the initial waveform"** — worth a defensive check in our
+  boot path.
+- **Panel/controller**: `dclk_select` semantics confirmed (-1 mode/0=200 MHz
+  /1=250 MHz); `split_area_limit` = max damage splits per scheduling pass.
+  ED103TC2C6 datasheet remains unobtainable (403s); search snippets:
+  GL16 intended for sparse-on-white, A2 should transition through white,
+  DU4 targets gray tones 1/6/11/16 only.
+- **Nobody has built an optical measurement rig** in the
+  PineNote/reMarkable/Kobo communities — our camera-in-a-box is novel.
+  Closest prior art: Ben Krasnow's scope/high-speed-camera waveform hacking
+  (2017); academic EPD papers use LED + photodiode + scope and define
+  response time off the reflectance-curve derivative and ghosting as
+  residual reflectance delta — metric definitions worth mirroring in
+  `pinenote/tools/optics`.

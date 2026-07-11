@@ -44,9 +44,51 @@ investment. Priority adjustments over the tables below:
   drove: wash start/end, waveform used, damage rect — via drm.debug or a
   diagnostic in our own forward-port patch) would be a stronger ground-truth
   join than KOReader's [pn-refresh] intents. Diagnostic-only, so consistent
-  with the "report driver bugs, don't fork behavior" policy. Investigate after
-  the [pn-refresh] harvest lands (task 6) — only if intent-level joins prove
-  insufficient.
+  with the "report driver bugs, don't fork behavior" policy. SUPERSEDED by §1b:
+  the driver already ships `EXTRACT_FBS` — use that instead of adding anything.
+
+## 1b. Community steals (2026-07-11 sweep — full record in doc/eink-research.md §8)
+
+Nobody in the PineNote/reMarkable/Kobo communities has built an optical
+measurement rig — this program is novel. But the sweep changed four things:
+
+- **`EXTRACT_FBS` supersedes the "investigate a driver-side trace" idea (§1a)**:
+  our driver lineage ALREADY ships an ioctl that dumps the live prev/next
+  buffers. That is exact, per-pixel driver-side ground truth (what the EBC
+  believes it displayed) to correlate against the camera — no driver patch, no
+  policy question. Harness it in the two-tier loop as the third data source:
+  camera (optical truth) ↔ EXTRACT_FBS (driver belief) ↔ [pn-refresh] (reader
+  intent). Divergence between the three IS the diagnosis.
+- **New policy candidate, likely the highest-value one**: hrdl's
+  *delayed-quality-redraw* ("fast now, clean later" — his kernel does a GC16
+  repaint ~2.4 s after a fast update settles). Implementable in OUR stack as a
+  KOReader-side policy (DU/partial during interaction, GL16/GC16 region repaint
+  after idle) with zero driver changes. The rig is exactly the instrument to
+  judge it: it trades a visible deferred wash for interaction speed.
+- **Parameter space additions**: (a) PNDeb's shipped config is a field-tested
+  baseline anchor (auto_refresh=1, refresh_threshold=60, split_area_limit=0);
+  their user guide's refresh_threshold=20 for redraw-heavy apps is a second
+  anchor; (b) `dclk_select=1` (250 MHz) is field-stable per PNDeb dev — cheap
+  on-device A/B; (c) `globre_convert_before` (m-weigand's one post-fork
+  behavioral param: convert prev buffer into the target waveform's reachable
+  space on global refresh — targets post-refresh ghosting under A2/DU4) is a
+  small portable patch, then a new bool in the sweep; (d) confirmed extra
+  knobs for the fb-backend partials cluster: bw_threshold=7, fourtone=4/7/12,
+  bw_dither_invert, delay_a/b/c.
+- **A2 may not be worth optimizing**: hrdl's stack dropped A2 entirely
+  (DU + early cancellation replaces it), and PNDeb ships an A2 waveform
+  *trimmer* accepting gray blacks. Treat A2 as a candidate to eliminate, not
+  tune; blue-noise dither tables (hrdl's, constants in his driver source) are
+  the portable quality lever for the low-bit modes.
+
+Build-order additions (all non-blocking, after the first capture):
+
+| # | Task | Size |
+|---|---|---|
+| 23 | EXTRACT_FBS harness: on-device dump helper + host decode + a camera↔driver-belief correlation check in analyze | M |
+| 24 | Delayed-quality-redraw prototype (KOReader-side, region GL16 repaint after idle) + rig evaluation scenario | M |
+| 25 | Port `globre_convert_before` into the forward-port patch (rung 1–3 offline proof) + add to paramspace | S |
+| 26 | Blue-noise dither tables into the bw_mode/low-bit path (or KOReader render) + grayramp rig evaluation | M–L |
 
 ## 2. Test card v2
 
