@@ -90,6 +90,16 @@ def main():
         ok.append(framed and val == pid)
     check("page ids decode through camera", all(ok), f"{sum(ok)}/3")
 
+    print("case: small-in-frame panel (real dark-box rig) still detects")
+    # the first real rig put the panel at ~10% of frame; the old 15% gate
+    # rejected every frame. A wide-inset camera view must still lock on.
+    H_far = synthcam.make_H_panel_to_cam(Wp, Hp, Wc * 2, Hc * 2, inset=0.33)
+    cam_far, _ = synthcam.make_camera_clip(novel[None], H_far, Wp, Hp,
+                                           (Hc * 2, Wc * 2))
+    f_far = ingest.detect_fiducials(cam_far[0], manifest)
+    check("fiducials found on a ~10%-of-frame panel", f_far is not None
+          and len(f_far or {}) == 4)
+
     print("case: find_sync -- alternation-block semantics (real-footage bug fix)")
     fps = 30.0
     B, Wt, G = 0.05, 0.95, 0.55                      # black / white / gray mean

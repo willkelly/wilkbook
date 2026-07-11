@@ -136,7 +136,12 @@ def detect_fiducials(frame, manifest):
     if n == 0:
         return None
     sizes = ndimage.sum(np.ones_like(lbl), lbl, index=range(1, n + 1))
-    if sizes.max() < 0.15 * frame.size:          # no big panel region
+    # Panel-presence gate: sized for a real dark-box rig, where the panel can
+    # sit well back from the camera (10% of frame on the first Brio rig; the
+    # old 15% gate rejected every real frame). The quad corners + per-marker
+    # checks below are the real validation -- this only screens out frames
+    # with no discernible panel at all (sync flashes, lids, hands).
+    if sizes.max() < 0.04 * frame.size:
         return None
     ys, xs = np.where(lbl == (np.argmax(sizes) + 1))
     # actual panel quad corners (robust to perspective tilt), not a bbox
