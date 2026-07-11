@@ -129,8 +129,12 @@ def main():
           f"got {ingest.find_sync(means, fps=fps, candidate=cand)} want 4")
 
     print("case: END-TO-END -- synthetic camera of a page turn -> defect report")
-    before = page_refl("novel", pid=10)      # sequence: idx10 novel -> idx11 blank
-    after = page_refl("blank", pid=11)
+    # dynamic pid lookup: the card sequence is being restructured concurrently,
+    # so find the first adjacent novel->blank pair instead of hardcoding pids
+    pid_a, pid_b, _ = adjacent_pair(manifest, "novel", "blank")
+    before = page_refl("novel", pid=pid_a)
+    after = page_refl("blank", pid=pid_b)
+    legacy_cam = None
     for wash, expect in (("gc16", "severe"), ("gl16", "none")):
         panel_clip, _ = synth.simulate_transition(
             before, after, fps=20, pre_frames=3, settle_frames=8,
@@ -141,11 +145,14 @@ def main():
                          np.ones((Hp, Wp), np.float32)] * 2)
         full = np.concatenate([sync, panel_clip], axis=0)
         cam, _ = synthcam.make_camera_clip(full, H_true, Wp, Hp, (Hc, Wc))
+        if wash == "gl16":
+            legacy_cam = cam
         results, _, sync_end = ingest.ingest(cam, 20.0, manifest,
-                                             lambda kind: page_refl(kind))
+                                             lambda kind, pid: page_refl(kind, pid))
         check(f"{wash}: sync block found through the camera (panel-region means)",
               sync_end == 4, f"sync_end={sync_end}")
-        pair = [(tr, seg) for (tr, seg, fr, to) in results if fr == 10 and to == 11]
+        pair = [(tr, seg) for (tr, seg, fr, to) in results
+                if fr == pid_a and to == pid_b]
         check(f"{wash}: novel->blank transition found", len(pair) == 1,
               f"{[(fr, to) for (_, _, fr, to) in results]}")
         if pair:
@@ -153,6 +160,13 @@ def main():
             rep = optics.classify_transition(seg, 20.0, tr)
             check(f"{wash}: flash classified '{expect}'", rep.flash_severity == expect,
                   f"depth={rep.flash_depth:.3f} sev={rep.flash_severity}")
+
+    print("case: legacy one-arg render_page(kind) adapters still work (fallback)")
+    results, _, _ = ingest.ingest(legacy_cam, 20.0, manifest,
+                                  lambda kind: page_refl(kind))
+    check("one-arg adapter ingests the same transition",
+          [(fr, to) for (_, _, fr, to) in results] == [(pid_a, pid_b)],
+          f"{[(fr, to) for (_, _, fr, to) in results]}")
 
     print("case: segment truncation -- a segment ends at the NEXT onset (ME7)")
     # Two back-to-back GC16 turns, 1.2 s apart: A(novel)->B(blank)->C. Without
@@ -179,7 +193,7 @@ def main():
     # (same level the auto-eps case labels 'a locked webcam')
     cam, _ = synthcam.make_camera_clip(full, H_true, Wp, Hp, (Hc, Wc), noise=0.004)
     results, warped, _ = ingest.ingest(cam, fps2, manifest,
-                                       lambda kind: page_refl(kind))
+                                       lambda kind, pid: page_refl(kind, pid))
     found = [(fr, to) for (_, _, fr, to) in results]
     check("both turns found", found == [(pa, pb), (pb, next_pg["pid"])], f"{found}")
     if len(results) == 2:
@@ -205,8 +219,8 @@ def main():
               f"settle_s={rep1.settle_s:.3f} sev={rep1.settle_severity}")
 
     print("case: auto change_eps segments across camera noise (no hand-tuning)")
-    before = page_refl("novel", pid=10)
-    after = page_refl("blank", pid=11)
+    before = page_refl("novel", pid=pid_a)
+    after = page_refl("blank", pid=pid_b)
     panel_clip, _ = synth.simulate_transition(before, after, fps=20, pre_frames=3,
                                               settle_frames=8, wash="gc16", flash_depth=0.6)
     sync = np.stack([np.zeros((Hp, Wp), np.float32), np.ones((Hp, Wp), np.float32)])
@@ -214,10 +228,11 @@ def main():
     ok_noise = []
     for nz in (0.004, 0.012, 0.020, 0.030):        # a locked webcam .. a shaky phone
         cam, _ = synthcam.make_camera_clip(full, H_true, Wp, Hp, (Hc, Wc), noise=nz)
-        # segmentation must recover the single 10->11 turn with change_eps=None (auto)
-        results, _, _ = ingest.ingest(cam, 20.0, manifest, lambda kind: page_refl(kind))
+        # segmentation must recover the single novel->blank turn with auto eps
+        results, _, _ = ingest.ingest(cam, 20.0, manifest,
+                                      lambda kind, pid: page_refl(kind, pid))
         found = [(fr, to) for (_, _, fr, to) in results]
-        ok_noise.append(found == [(10, 11)])
+        ok_noise.append(found == [(pid_a, pid_b)])
     check("auto-eps recovers the turn at every noise level", all(ok_noise),
           f"{sum(ok_noise)}/4 noise levels")
     # and the learned threshold rises with noise (adapts instead of a fixed 0.04)

@@ -405,11 +405,24 @@ MAX_WINDOW_S = 2.5    # analysis-window cap; below it the window is the segment
                       # gap minus 2 frames, so it can never reach the next wash
 
 
+def _render(render_page, kind, pid):
+    """Call the caller's page renderer with the (kind, pid) contract, falling
+    back to the legacy one-arg (kind) form on TypeError so old adapters keep
+    working during integration. pid matters once the card carries pid-varied
+    content and per-page markers (PLAN.md card v2): the intended before/after
+    must be THAT page's pixels, not a pid-0 stand-in."""
+    try:
+        return render_page(kind, pid)
+    except TypeError:
+        return render_page(kind)
+
+
 def ingest(frames, fps, manifest, render_page):
     """Full pipeline. `frames`: list/array of camera grayscale frames in [0,1].
-    `render_page(kind)` returns the intended page reflectance [Hp,Wp] (pass
-    testepub.render_page composed with the manifest resolution). Returns a list
-    of (optics.Transition, clip_segment) ready for optics.classify_transition.
+    `render_page(kind, pid)` returns the intended page reflectance [Hp,Wp]
+    (pass testepub.render_page composed with the manifest resolution; a legacy
+    one-arg render_page(kind) still works -- see _render). Returns a list of
+    (optics.Transition, clip_segment) ready for optics.classify_transition.
 
     Windowing semantics: each transition's segment is warped[onset:next_onset]
     (the last runs to clip end), so a segment's tail is THIS page's dwell and
@@ -444,8 +457,8 @@ def ingest(frames, fps, manifest, render_page):
         seg = apply_photometry(warped[onset:next_onset], coeffs)  # onset -> dwell end
         gap_s = (next_onset - onset) / fps
         window_s = max(2.0 / fps, min(MAX_WINDOW_S, gap_s - 2.0 / fps))
-        before = render_page(pages_by_pid[fr]["kind"])
-        after = render_page(pages_by_pid[to]["kind"])
+        before = _render(render_page, pages_by_pid[fr]["kind"], fr)
+        after = _render(render_page, pages_by_pid[to]["kind"], to)
         tr = optics.Transition(t0=0, before=before, after=after,
                                window_s=window_s)
         results.append((tr, seg, fr, to))
