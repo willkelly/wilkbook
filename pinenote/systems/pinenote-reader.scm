@@ -41,6 +41,17 @@ reader ALL=(ALL) NOPASSWD: ALL
                 ;; also the recorder's SSHTransport. Host keys land in /etc/ssh
                 ;; (regenerated on reflash; persistent /data host keys are a
                 ;; follow-up if the changing fingerprint becomes annoying).
+                ;;
+                ;; /var/empty (sshd's privilege-separation dir) ships from the
+                ;; image build owned by a build-container uid (998:981 observed
+                ;; on the A.2.5 first boot, 2026-07-11), and sshd then fatals on
+                ;; every connection: "/var/empty must be owned by root and not
+                ;; group or world-writable".  Re-assert ownership at activation.
+                (simple-service 'pinenote-fix-var-empty
+                                activation-service-type
+                                #~(when (file-exists? "/var/empty")
+                                    (chown "/var/empty" 0 0)
+                                    (chmod "/var/empty" #o555)))
                 (service openssh-service-type
                          (openssh-configuration
                           (password-authentication? #f)
