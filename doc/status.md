@@ -155,8 +155,11 @@ os2 currently holds the **phase A.2.4 build**, SHA
 readback of the exact 1 916 416 000-byte range SHA-matched from eMMC).
 Staged copy on os1 at
 `/home/user/wilkbook-artifacts/pinenote-reader-PNGuixRoot-20260710-a24.ext4`.
-**First boot pending** — expected to join Wi-Fi (SSID `largeprofanity`) on its
-own via the pre-staged creds + the `feature_disable` fix.
+**First boot confirmed 2026-07-11**: from a cold boot with no intervention the
+full chain came up — `brcmfmac.feature_disable=0x82000` applied (`/proc/cmdline`),
+`pinenote-wifi` launched `wpa_supplicant` from the pre-staged conf, `wlan0`
+associated to `largeprofanity`, `dhcpcd` leased `192.168.86.144`, and it pinged
+`1.1.1.1` + resolved `gnu.org`. **Wi-Fi now works automatically on the reader.**
 
 A.2.4 = the **Phase 1 Wi-Fi userland** (`pinenote-wifi` service +
 `wpa_supplicant` + `dhcpcd`, out-of-band conf on the `data` partition;
