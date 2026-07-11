@@ -148,21 +148,24 @@ Also staged 2026-07-03:
 
 ## Current os2 contents
 
-os2 currently holds the **phase A.2.3 build**, SHA
-`196d601c77da9d6250e7bf4794b008af5b65a6954196dee9bdaf960cbd4310f8` —
+os2 currently holds the **phase A.2.4 build**, SHA
+`54579babf4462d05b4c572f6e09849f9f1f21e2bcd4a7054bfd50a8f6f49a4a7` —
 **written 2026-07-10** with the full protocol (os1 root confirmed at
 `/dev/mmcblk0p5`, p6 unmounted, `dd conv=fsync`, then a `drop_caches`
 readback of the exact 1 916 416 000-byte range SHA-matched from eMMC).
 Staged copy on os1 at
-`/home/user/wilkbook-artifacts/pinenote-reader-PNGuixRoot-20260710-a23.ext4`.
-**First boot pending** (user-present step).
+`/home/user/wilkbook-artifacts/pinenote-reader-PNGuixRoot-20260710-a24.ext4`.
+**First boot pending** — expected to join Wi-Fi (SSID `largeprofanity`) on its
+own via the pre-staged creds + the `feature_disable` fix.
 
-Over A.2.2 it adds the **Phase 1 Wi-Fi userland** (`pinenote-wifi` service +
-`wpa_supplicant` + `dhcpcd`, reading an out-of-band conf from the `data`
-partition; `doc/networking.md §4.1`). Wi-Fi credentials for SSID
-`largeprofanity` are pre-staged on the `data` partition (`0600`, persists
-across reflashes). The superseded A.2.2 (`b166d869…`) staged copy remains on
-os1 for rollback.
+A.2.4 = the **Phase 1 Wi-Fi userland** (`pinenote-wifi` service +
+`wpa_supplicant` + `dhcpcd`, out-of-band conf on the `data` partition;
+`doc/networking.md §4.1`) **plus the confirmed brcmfmac Wi-Fi fix**
+(`feature_disable=0x82000` via modprobe.d + kernel cmdline, `d911e57`; the
+`82f111c` PATH fix). Wi-Fi credentials for SSID `largeprofanity` are pre-staged
+on the `data` partition (`0600`, persists across reflashes). The superseded
+A.2.3 (`196d601c…`) and A.2.2 (`b166d869…`) staged copies remain on os1 for
+rollback.
 
 **A.2.4 is built and pending the next os2 write** (local rootfs SHA
 `54579babf4462d05b4c572f6e09849f9f1f21e2bcd4a7054bfd50a8f6f49a4a7`,
