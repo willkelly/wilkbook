@@ -90,6 +90,27 @@ Build-order additions (all non-blocking, after the first capture):
 | 25 | Port `globre_convert_before` into the forward-port patch (rung 1–3 offline proof) + add to paramspace | S |
 | 26 | Blue-noise dither tables into the bw_mode/low-bit path (or KOReader render) + grayramp rig evaluation | M–L |
 
+## 1c. First-capture session ledger (2026-07-11, night)
+
+Where the rig actually stands after first light:
+
+- **Pilot-calibrated and precise**: 30 fps / exposure 312 / gain 32 /
+  frontlight 255-255 (whites 214/255, no clipping); ghost-rms repeatability
+  sigma 0.003-0.006 between identical partials; settle verdicts sane after the
+  fixed-session-homography change; flash reference is stays-white.
+- **First real finding**: GL16 text-CLEAR shimmer — whites adjacent to erasing
+  text dip 0.148 +/- 0.032 transiently (absent when text appears). Queue a
+  stays-white EROSION knob to separate edge shimmer from background flash.
+- **Legacy dark bundle retired**: `build/bundles/first-real` was captured at
+  the pre-calibration exposure (whites ~0.55, contrast 0.23 — at the validity
+  gate's edge). The corrected pipeline segments only 7/49 transitions on it
+  (blank-heavy pages fall below the contrast gate). Do NOT chase this: the
+  first calibrated full-card capture supersedes it. If the 7-vs-49 mechanism
+  still matters later, instrument the validity gate on that video first.
+- **Immediate next**: fresh full-card capture at calibrated settings ->
+  should segment ~49 cleanly -> then the GL16-vs-GC16 x full_refresh_count
+  sweep is one `--param-sets` file away.
+
 ## 2. Test card v2
 
 Ordered by value. All are `testepub.py` + manifest + synth-fixture changes: pure offline-ladder work.
