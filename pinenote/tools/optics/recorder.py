@@ -331,6 +331,14 @@ V4L2_LOCK_CONTROLS = (
     ("exposure_dynamic_framerate", 0),  # bool: Brio DEFAULT 1 = VFR -- lock it!
     ("focus_automatic_continuous", 0),
     ("white_balance_automatic", 0),
+    # Calibrated on the rig 2026-07-11 (frontlight 255/255, dark box, panel
+    # ~10% of frame): exposure units are 100 us, so 312 = 31.2 ms -- the max a
+    # 30 fps capture allows (60 fps caps at ~156 and is unavoidably dark).
+    # gain 32 puts panel whites at ~214/255 with zero clipping (64 -> 238,
+    # 128 clips). Locking VALUES (not just freezing AE) makes every capture
+    # photometrically comparable across sessions.
+    ("exposure_time_absolute", 312),
+    ("gain", 32),
 )
 
 
@@ -417,8 +425,13 @@ class _webcam:
     a '60fps' x264 capture yielded ~20-35 effective fps), and MJPEG is already
     per-frame compressed, exactly what ingest wants."""
 
+    # 30 fps: the calibrated exposure (312 x 100us = 31.2 ms) needs the full
+    # 33 ms frame budget; 60 fps caps exposure at ~156 and the capture is
+    # unavoidably dark at this rig distance. GC16/GL16 envelopes are fully
+    # sampled at 30 fps; fast-mode (A2/DU) studies will need 60+ fps AND more
+    # light (gain, or a brighter/closer rig).
     DEFAULT_IN = ["-input_format", "mjpeg", "-video_size", "1920x1080",
-                  "-framerate", "60"]
+                  "-framerate", "30"]
     DEFAULT_OUT = ["-c:v", "copy"]
 
     def __init__(self, device, path, extra=None):

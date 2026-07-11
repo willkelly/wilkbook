@@ -447,13 +447,15 @@ def main():
     state = {k: tuple(v) for k, v in BRIO_STATE.items()}
     runner = fake_v4l2(state)
     lock = recorder.camera_lock("/dev/video9", runner=runner)
-    check("all four auto controls locked",
+    check("auto controls locked + calibrated exposure/gain applied",
           lock["applied"] == {"auto_exposure": 1, "exposure_dynamic_framerate": 0,
                               "focus_automatic_continuous": 0,
-                              "white_balance_automatic": 0}, f"{lock['applied']}")
+                              "white_balance_automatic": 0,
+                              "exposure_time_absolute": 312, "gain": 32},
+          f"{lock['applied']}")
     check("readback persists ALL controls, incl. untouched ones",
-          lock["controls"]["exposure_time_absolute"] == 333
-          and lock["controls"]["gain"] == 0
+          lock["controls"]["exposure_time_absolute"] == 312
+          and lock["controls"]["gain"] == 32
           and lock["controls"]["power_line_frequency"] == 2
           and lock["controls"]["auto_exposure"] == 1
           and lock["controls"]["exposure_dynamic_framerate"] == 0,
