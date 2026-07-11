@@ -102,11 +102,37 @@ exit 0
          (zero? (system* #$%pinenote-wifi-up))))
     (stop #~(const #t)))))
 
+;; brcmfmac module options (2026-07-10, hardware-confirmed on the A.2.3 boot).
+;; feature_disable=0x82000 turns off the firmware's WPA offloads — FWSUP
+;; (0x2000, the WPA2-PSK 4-way handshake offload) and SAE (0x80000, WPA3) —
+;; forcing wpa_supplicant to run the handshake in software.  The shipped
+;; BCM4345/6 firmware (7.45.234, Apr 2021) mis-negotiates that offload with
+;; wpa_supplicant 2.11 (which the reader flavor ships; Debian os1 has 2.10,
+;; hence it connects and we did not): the radio ASSOCIATES then the 4-way
+;; times out (`auth_failures`, `reason=CONN_FAILED`, wlan0 DORMANT) on BOTH
+;; WPA2-PSK and WPA3-SAE, regardless of PMF.  Proven live: with this option
+;; the same AP + credentials complete the handshake, lease, and ping out
+;; (doc/status.md, 2026-07-10; doc/networking.md).  This is a known brcmfmac
+;; bug on this chip family (Red Hat #2302577, raspberrypi/linux #4976), not a
+;; PineNote-specific driver defect, so it is a module-option workaround, not a
+;; patch to the driver.
+(define %pinenote-brcmfmac-options
+  "options brcmfmac feature_disable=0x82000\n")
+
+(define (pinenote-wifi-modprobe-etc-files _config)
+  (list `("modprobe.d/brcmfmac.conf"
+          ,(plain-file "brcmfmac.conf" %pinenote-brcmfmac-options))))
+
 (define pinenote-wifi-service-type
   (service-type
    (name 'pinenote-wifi)
    (extensions
     (list (service-extension shepherd-root-service-type
-                             pinenote-wifi-shepherd-service)))
+                             pinenote-wifi-shepherd-service)
+          ;; brcmfmac is autoloaded by udev coldplug, which reads
+          ;; /etc/modprobe.d — so the option applies at boot without a
+          ;; cmdline token.
+          (service-extension etc-service-type
+                             pinenote-wifi-modprobe-etc-files)))
    (default-value #f)
-   (description "Bring up Wi-Fi on the reader from a credential file on the persistent data partition (mmcblk0p7), or no-op when none is present.  Credentials never enter the image or the store.")))
+   (description "Bring up Wi-Fi on the reader from a credential file on the persistent data partition (mmcblk0p7), or no-op when none is present.  Credentials never enter the image or the store.  Also installs the brcmfmac feature_disable module option required for WPA to complete on this chip.")))

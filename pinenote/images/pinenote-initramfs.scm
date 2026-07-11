@@ -224,6 +224,14 @@ partition and loading PineNote display modules from the initrd.")
     "earlycon"
      "console=tty0"
      "console=ttyS2,1500000n8"
+     ;; brcmfmac is udev-loaded post-boot (not from the initrd like
+     ;; rockchip_ebc), so a cmdline module param DOES apply here — belt to
+     ;; the /etc/modprobe.d brace in (pinenote services wifi).  Disables the
+     ;; firmware WPA offloads (FWSUP 0x2000 + SAE 0x80000) the Apr-2021
+     ;; BCM4345/6 firmware mis-negotiates with wpa_supplicant 2.11; without
+     ;; it the radio associates but the 4-way never completes
+     ;; (hardware-confirmed 2026-07-10; doc/status.md, doc/networking.md).
+     "brcmfmac.feature_disable=0x82000"
      "fw_devlink=off"))
 
 ;; Do NOT put rockchip_ebc.* parameters on the kernel command line: they
