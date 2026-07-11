@@ -316,11 +316,14 @@ class RenderBackend:
 
 
 def _lua_repr(v):
-    """A Python value as a Lua literal for the seeded settings.reader.lua."""
+    """A Python value as a Lua literal for the seeded settings.reader.lua.
+    Tuples/lists become Lua array tables (copt_h_page_margins = {l, r})."""
     if isinstance(v, bool):
         return "true" if v else "false"
     if isinstance(v, (int, float)):
         return repr(v)
+    if isinstance(v, (tuple, list)):
+        return "{%s}" % ", ".join(_lua_repr(x) for x in v)
     return '"%s"' % str(v).replace("\\", "\\\\").replace('"', '\\"')
 
 
@@ -364,17 +367,27 @@ class KOReaderBackend(RenderBackend):
     #    refreshes before the next gets promoted to full"); 0 = the menu's
     #    "Never", 6 = KOReader's DEFAULT_FULL_REFRESH_COUNT.
     #  - pinenote_flash_area_fraction: device.lua's flash policy threshold.
-    #  - copt_rotation_mode: crengine's global rotation default (0 = portrait).
-    #    The fb is landscape 1872x1404 while the card's pages are portrait
-    #    1404x1872; without this the sterile optics profile opened the card in
-    #    landscape and crengine split every page into TWO views ("1/98" seen
-    #    live on the 2026-07-11 A.2.6 smoke), breaking the page<->view mapping.
-    #    A 4-rotation sweep is a future ko-param axis; portrait is the default.
+    #  - copt_rotation_mode: PINNED to 0 (fb-native landscape). Rotation
+    #    constants are relative to the fb's native orientation (landscape
+    #    1872x1404 here): 0 = landscape, 1 = portrait. Portrait mode WEDGES
+    #    the rockchip_ebc driver (live-reproduced twice on 2026-07-11: the
+    #    first portrait refresh leaves the panel unresponsive to every fb
+    #    write until a module reload -- see doc/driver-findings-report.md),
+    #    so the test card is generated LANDSCAPE (testepub.py) and no
+    #    rotation ever happens. Do not seed 1 until the driver bug is fixed
+    #    upstream; the 4-rotation sweep idea is parked behind that.
     KO_DEFAULTS = {
         "refresh_on_pages_with_images": False,
         "full_refresh_count": 6,
         "pinenote_flash_area_fraction": 0.60,
         "copt_rotation_mode": 0,
+        # Full-bleed viewport: the landscape card is exactly fb-sized, and any
+        # margin or footer shrinks the viewport so a width-fit image overflows
+        # and crengine splits every page into two views ("/98" seen live).
+        "reader_footer_mode": 0,
+        "copt_h_page_margins": (0, 0),
+        "copt_t_page_margin": 0,
+        "copt_b_page_margin": 0,
     }
 
     # Hard readiness check: FIFO present AND the daemon's pid (written only

@@ -206,10 +206,11 @@ def main():
     check("both long-lived launches run detached (fire-and-forget)",
           launch_cmd in ftp.detached and ftp.cmds[i_start] in ftp.detached,
           f"{len(ftp.detached)} detached")
-    check("portrait rotation seeded (copt_rotation_mode=0; fb is landscape)",
+    check("rotation pinned to fb-native landscape (portrait wedges the EBC "
+          "driver -- live-reproduced 2026-07-11; card is landscape instead)",
           '["copt_rotation_mode"] = 0' in
           ftp.files[K.KO_HOME + "/settings.reader.lua"].decode())
-    i_sdr = idx("rm -rf '/root/optics-testcard.sdr'")
+    i_sdr = idx("rm -rf /root/optics-testcard.sdr")
     check("stale per-doc sidecar dropped before the seed (sdr overrides globals)",
           0 <= i_sdr < i_seed, f"i_sdr={i_sdr}")
     check("the pushed daemon is optics-inject.lua verbatim (uinput, named device)",

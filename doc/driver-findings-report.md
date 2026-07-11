@@ -110,3 +110,28 @@ suite.
 windows are acceptable). 4 should be fixed before anyone builds on
 direct mode. 5–7 matter once damage-aware clients land; fixing them
 together with 1 in one blitter-hygiene pass would be natural.
+
+## Finding (2026-07-11, live): portrait rotation wedges the EBC; module reload is not a safe recovery
+
+Reproduced twice on the A.2.6 image (7.0.11, rockchip_ebc 0.3.0, GL16 policy):
+with KOReader rendering in **portrait** (`copt_rotation_mode=1` on the
+landscape-native 1872x1404 fb), the first portrait refresh leaves the panel
+**unresponsive to every subsequent framebuffer write** — deferred-io partials
+and the GLOBAL_REFRESH ioctl are logged/accepted but nothing reaches glass,
+with no dmesg errors. Landscape rendering never triggers it (hundreds of
+refreshes across the same session, including a 48-turn scripted run).
+
+Recovery via `rmmod + modprobe` restores drive (verified: raw fb writes reach
+glass again) but the reloaded driver starts with `using zero-initialized flat
+cache, this may cause unexpected behavior` — and indeed it **re-wedged within
+~10 partial refreshes** of normal landscape use. A full reboot is the only
+clean recovery found. Workaround adopted by the optics harness: never rotate —
+the test card is generated landscape-native (1872x1404) and
+`copt_rotation_mode` is pinned to 0.
+
+Upstream relevance: hrdl's redesigned driver (per-pixel scheduling) likely
+does not share the wedge; m-weigand-lineage users running portrait readers
+would hit this on any mainline-ish kernel. Repro recipe: fbdev client renders
+90°-rotated full-screen content -> first full refresh -> panel frozen;
+`echo 1 > .../vtcon1/bind` unaffected. Needs a minimal fb-level reproducer
+(FBIOPUT_VSCREENINFO/rotated-blit sequence) before reporting upstream.

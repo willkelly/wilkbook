@@ -35,7 +35,14 @@ from PIL import Image, ImageDraw
 
 # Portrait reading geometry by default; ingest works off fractions so this is
 # not load-bearing, but matching the panel keeps KOReader's fit 1:1.
-W, H = 1404, 1872
+# LANDSCAPE-native card (2026-07-11): the panel's fb is natively 1872x1404,
+# and KOReader-side rotation to portrait WEDGES the rockchip_ebc driver (first
+# portrait refresh leaves the panel unresponsive to all fb writes until a
+# module reload -- live-reproduced twice; see doc/driver-findings-report.md).
+# A landscape card on the native-landscape screen needs no rotation at all and
+# fills the panel edge to edge. All marker geometry is fractional, so ingest
+# and the camera are orientation-agnostic.
+W, H = 1872, 1404
 
 # marker geometry as fractions of (W,H) -- the single source of truth, copied
 # into the manifest so ingest and generator can never disagree.
