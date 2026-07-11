@@ -95,7 +95,9 @@ class Transition:
     black_patch_mask: np.ndarray = None  # gray-step black reference patch
     bg_mask: np.ndarray = None           # a should-be-uniform background region
     expected_settle_s: float = 0.447    # GC16/GL16 at >=24C decode from refresh-policy.md
-    window_s: float = 1.5               # how long after t0 to analyze
+    window_s: float = 1.5               # how long after t0 to analyze; ingest sets
+                                        # min(2.5 s, segment gap - 2 frames) so the
+                                        # window never reaches the next page's wash
 
     def __post_init__(self):
         if self.white_mask is None:
@@ -164,6 +166,54 @@ def _region_means(clip: np.ndarray, mask: np.ndarray) -> np.ndarray:
     return flat.mean(axis=1)
 
 
+# --- shared quiet-scan (settle detector + settled-state estimate) -------------
+
+def segment_change(seg: np.ndarray, roi_mask: np.ndarray) -> np.ndarray:
+    """Per frame-pair mean |Δreflectance| over `roi_mask` -> shape [T-1].
+    The one change signal both the settle detector and the settled-state
+    estimate read, so 'quiet' means the same thing to both."""
+    diffs = np.abs(np.diff(seg, axis=0))
+    if roi_mask is not None and roi_mask.sum() > 0:
+        return diffs[:, roi_mask].mean(axis=1)
+    return diffs.reshape(diffs.shape[0], -1).mean(axis=1)
+
+
+def first_quiet_run(quiet, min_run: int = SETTLE_QUIET_FRAMES):
+    """Index opening the first run of `min_run` consecutive quiet frame-pairs,
+    or None if the signal never goes quiet for that long."""
+    run = 0
+    for i, q in enumerate(quiet):
+        run = run + 1 if q else 0
+        if run >= min_run:
+            return i - min_run + 1
+    return None
+
+
+def trailing_quiet_run(quiet):
+    """[a, b) frame-index range of the trailing consecutive-quiet frames of a
+    segment whose pairwise quiet flags are `quiet` (len T-1 for T frames).
+    Frame i joins the run when pair (i-1, i) is quiet; if the final pair is
+    active the run degenerates to the last frame alone, [T-1, T)."""
+    T = len(quiet) + 1
+    j = T - 1
+    while j >= 1 and quiet[j - 1]:
+        j -= 1
+    return j, T
+
+
+def settled_state(seg: np.ndarray, roi_mask: np.ndarray,
+                  eps: float = SETTLE_EPS) -> np.ndarray:
+    """The segment's settled state: the temporal AVERAGE of its last
+    consecutive quiet frames (a ~sqrt(n) camera-noise win over any single
+    frame). Reading the segment END -- not a fixed frame inside the analysis
+    window -- is what un-confounds this page's settled state from the next
+    page's wash once ingest truncates segments at the next onset."""
+    if seg.shape[0] < 2:
+        return seg[-1]
+    a, b = trailing_quiet_run(segment_change(seg, roi_mask) < eps)
+    return seg[a:b].mean(axis=0)
+
+
 def detect_flash(clip, t0, fps, white_mask, settled_white, window_s):
     """Black flash: should-be-white pixels driven dark during the wash.
 
@@ -222,25 +272,22 @@ def detect_ghost(settled_frame, after, before, clean_mask):
     return {"rms": rms, "corr": corr, "severity": sev}
 
 
-def detect_settle(clip, t0, fps, roi_mask, expected_settle_s, window_s):
-    """Settle time: when the ROI stops changing after the trigger."""
+def detect_settle(clip, t0, fps, roi_mask, expected_settle_s, window_s,
+                  change=None):
+    """Settle time: when the ROI stops changing after the trigger.
+
+    `change`, if given, is the precomputed segment_change(clip[t0:], roi_mask)
+    signal (classify_transition computes it once and shares it with the
+    settled-state estimate); its windowed prefix is used here."""
     a, b = _window_frames(clip, t0, fps, window_s)
-    seg = clip[a:b]
-    if seg.shape[0] < 2:
+    n = b - a
+    if n < 2:
         return {"settle_s": 0.0, "settled": True, "severity": "none"}
-    diffs = np.abs(np.diff(seg, axis=0))                  # [win-1, H, W]
-    if roi_mask.sum() > 0:
-        per_frame = diffs[:, roi_mask].mean(axis=1)
+    if change is None:
+        per_frame = segment_change(clip[a:b], roi_mask)
     else:
-        per_frame = diffs.reshape(diffs.shape[0], -1).mean(axis=1)
-    quiet = per_frame < SETTLE_EPS
-    settle_frame = None
-    run = 0
-    for i, q in enumerate(quiet):
-        run = run + 1 if q else 0
-        if run >= SETTLE_QUIET_FRAMES:
-            settle_frame = i - SETTLE_QUIET_FRAMES + 1
-            break
+        per_frame = np.asarray(change)[:n - 1]            # window starts at t0
+    settle_frame = first_quiet_run(per_frame < SETTLE_EPS)
     if settle_frame is None:
         return {"settle_s": float(window_s), "settled": False, "severity": "incomplete"}
     settle_s = float(settle_frame / fps)
@@ -299,11 +346,28 @@ def detect_blotch(settled_frame, bg_mask):
 
 
 def classify_transition(clip: np.ndarray, fps: float, tr: Transition) -> DefectReport:
-    """Run every detector for one transition and return a structured report."""
+    """Run every detector for one transition and return a structured report.
+
+    `clip` is the transition's SEGMENT (ingest slices [onset:next_onset], so
+    the segment end is this page's dwell, uncontaminated by the next wash).
+    One quiet-scan of the segment is shared by the settle detector and the
+    settled-state estimate: the settled state is the temporal average of the
+    segment's last consecutive quiet frames (settled_state), and every
+    settled-frame consumer (ghost, gray, contrast, blotch, the flash white
+    reference) reads that shared average."""
     rep = DefectReport()
-    # settled white reference: mean of the white region in the last analyzed frame
-    a, b = _window_frames(clip, tr.t0, fps, tr.window_s)
-    settled_frame = clip[b - 1]
+    content = tr.after < 0.85    # settle ROI: changing (content) pixels
+    if content.sum() < 4:
+        content = np.ones_like(tr.after, dtype=bool)
+
+    seg = clip[tr.t0:]
+    if seg.shape[0] >= 2:
+        change = segment_change(seg, content)             # computed ONCE
+        qa, qb = trailing_quiet_run(change < SETTLE_EPS)
+        settled_frame = seg[qa:qb].mean(axis=0)
+    else:
+        change = None
+        settled_frame = seg[-1]
     settled_white = float(settled_frame[tr.white_mask].mean()) if tr.white_mask.sum() else 1.0
 
     f = detect_flash(clip, tr.t0, fps, tr.white_mask, settled_white, tr.window_s)
@@ -314,10 +378,8 @@ def classify_transition(clip: np.ndarray, fps: float, tr: Transition) -> DefectR
     g = detect_ghost(settled_frame, tr.after, tr.before, tr.clean_mask)
     rep.ghost_rms, rep.ghost_corr, rep.ghost_severity = g["rms"], g["corr"], g["severity"]
 
-    content = tr.after < 0.85    # analyze settle over changing (content) pixels
-    if content.sum() < 4:
-        content = np.ones_like(tr.after, dtype=bool)
-    s = detect_settle(clip, tr.t0, fps, content, tr.expected_settle_s, tr.window_s)
+    s = detect_settle(clip, tr.t0, fps, content, tr.expected_settle_s, tr.window_s,
+                      change=change)
     rep.settle_s, rep.settled, rep.settle_severity = s["settle_s"], s["settled"], s["severity"]
 
     # grayscale corruption (content defect; mask derived from the intended page)
@@ -328,6 +390,6 @@ def classify_transition(clip: np.ndarray, fps: float, tr: Transition) -> DefectR
     # test card are supplied -- e.g. by ingest from the manifest patch geometry)
     c = detect_contrast(settled_frame, tr.white_patch_mask, tr.black_patch_mask)
     rep.contrast, rep.contrast_severity = c["contrast"], c["severity"]
-    b = detect_blotch(settled_frame, tr.bg_mask)
-    rep.blotch_std, rep.blotch_severity = b["std"], b["severity"]
+    bl = detect_blotch(settled_frame, tr.bg_mask)
+    rep.blotch_std, rep.blotch_severity = bl["std"], bl["severity"]
     return rep

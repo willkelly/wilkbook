@@ -401,11 +401,23 @@ def segment_transitions(warped, valid, manifest, change_eps=None):
     return trans, np.asarray(ids)
 
 
+MAX_WINDOW_S = 2.5    # analysis-window cap; below it the window is the segment
+                      # gap minus 2 frames, so it can never reach the next wash
+
+
 def ingest(frames, fps, manifest, render_page):
     """Full pipeline. `frames`: list/array of camera grayscale frames in [0,1].
     `render_page(kind)` returns the intended page reflectance [Hp,Wp] (pass
     testepub.render_page composed with the manifest resolution). Returns a list
-    of (optics.Transition, clip_segment) ready for optics.classify_transition."""
+    of (optics.Transition, clip_segment) ready for optics.classify_transition.
+
+    Windowing semantics: each transition's segment is warped[onset:next_onset]
+    (the last runs to clip end), so a segment's tail is THIS page's dwell and
+    the settled state (optics reads the temporal average of the segment's last
+    quiet frames) is never contaminated by the next page's wash. The
+    classification window is min(MAX_WINDOW_S, gap - 2 frames), floored at 2
+    frames -- the 2-frame guard keeps the window strictly inside the segment
+    even when onset detection lands a frame late."""
     Wp, Hp = manifest["resolution"]
     panel_hw = (Hp, Wp)
     warped, valid, H_first = _warp_all(frames, manifest, panel_hw)
@@ -416,8 +428,10 @@ def ingest(frames, fps, manifest, render_page):
     sync_end = find_sync(means, fps=fps, candidate=~valid)
     trans, ids = segment_transitions(warped, valid, manifest)
     pages_by_pid = {p["pid"]: p for p in manifest["pages"]}
+    onsets = [o for (o, _, _) in trans] + [warped.shape[0]]
     results = []
-    for (onset, fr, to) in trans:
+    for k, (onset, fr, to) in enumerate(trans):
+        next_onset = onsets[k + 1]
         if fr not in pages_by_pid or to not in pages_by_pid:
             continue
         # photometry fixed from the last stable pre-wash frame (patches un-driven)
@@ -427,9 +441,12 @@ def ingest(frames, fps, manifest, render_page):
         if not valid[ref_idx]:
             continue
         coeffs = fit_photometry(warped[ref_idx], manifest)
-        seg = apply_photometry(warped[onset:], coeffs)   # wash onset -> settle
+        seg = apply_photometry(warped[onset:next_onset], coeffs)  # onset -> dwell end
+        gap_s = (next_onset - onset) / fps
+        window_s = max(2.0 / fps, min(MAX_WINDOW_S, gap_s - 2.0 / fps))
         before = render_page(pages_by_pid[fr]["kind"])
         after = render_page(pages_by_pid[to]["kind"])
-        tr = optics.Transition(t0=0, before=before, after=after)
+        tr = optics.Transition(t0=0, before=before, after=after,
+                               window_s=window_s)
         results.append((tr, seg, fr, to))
     return results, warped, sync_end

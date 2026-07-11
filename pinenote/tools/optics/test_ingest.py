@@ -30,6 +30,18 @@ def page_refl(kind, pid=0):
     return np.asarray(te.render_page(te.Page(0, kind, pid)), np.float32) / 255.0
 
 
+def adjacent_pair(manifest, a_kind, b_kind):
+    """The first adjacent (a_kind, b_kind) pair in the manifest's page sequence
+    -> (pid_a, pid_b, next_page_or_None). Dynamic, because the card sequence is
+    being restructured concurrently -- no hardcoded pids."""
+    pages = manifest["pages"]
+    for p, q in zip(pages, pages[1:]):
+        if p["kind"] == a_kind and q["kind"] == b_kind:
+            nxt = pages[q["index"] + 1] if q["index"] + 1 < len(pages) else None
+            return p["pid"], q["pid"], nxt
+    raise AssertionError(f"no adjacent {a_kind}->{b_kind} pair in the manifest")
+
+
 def main():
     Wp, Hp = te.W, te.H
     manifest = te.build_manifest(te.build_pages())
@@ -141,6 +153,56 @@ def main():
             rep = optics.classify_transition(seg, 20.0, tr)
             check(f"{wash}: flash classified '{expect}'", rep.flash_severity == expect,
                   f"depth={rep.flash_depth:.3f} sev={rep.flash_severity}")
+
+    print("case: segment truncation -- a segment ends at the NEXT onset (ME7)")
+    # Two back-to-back GC16 turns, 1.2 s apart: A(novel)->B(blank)->C. Without
+    # truncation, turn 2's wash lands inside turn 1's old 1.5 s window and the
+    # white-region dip double-counts as a second flash; with [onset:next_onset]
+    # segments and window = min(2.5, gap - 2 frames) it cannot.
+    fps2 = 20.0
+    pa, pb, next_pg = adjacent_pair(manifest, "novel", "blank")
+    check("manifest has a page after the novel->blank pair", next_pg is not None)
+    A = page_refl("novel", pid=pa)
+    Bp = page_refl("blank", pid=pb)
+    C = page_refl(next_pg["kind"], pid=next_pg["pid"])
+    clipAB, _ = synth.simulate_transition(A, Bp, fps=fps2, pre_frames=3,
+                                          settle_frames=8, wash="gc16", flash_depth=0.6)
+    clipBC, _ = synth.simulate_transition(Bp, C, fps=fps2, pre_frames=3,
+                                          settle_frames=8, wash="gc16", flash_depth=0.6)
+    dwell = 15                                   # 0.75 s of B before the next turn
+    pad = np.repeat(clipBC[-1:], 25, axis=0)     # long final dwell -> window cap case
+    sync = np.stack([np.zeros((Hp, Wp), np.float32),
+                     np.ones((Hp, Wp), np.float32)] * 2)
+    full = np.concatenate([sync, clipAB[:3 + 8 + dwell], clipBC, pad], axis=0)
+    # locked-webcam noise: the settle assertion reads the content ROI, whose
+    # edge pixels flicker with camera noise -- 0.004 is the locked-rig grade
+    # (same level the auto-eps case labels 'a locked webcam')
+    cam, _ = synthcam.make_camera_clip(full, H_true, Wp, Hp, (Hc, Wc), noise=0.004)
+    results, warped, _ = ingest.ingest(cam, fps2, manifest,
+                                       lambda kind: page_refl(kind))
+    found = [(fr, to) for (_, _, fr, to) in results]
+    check("both turns found", found == [(pa, pb), (pb, next_pg["pid"])], f"{found}")
+    if len(results) == 2:
+        (tr1, seg1, _, _), (tr2, seg2, _, _) = results
+        # segments tile the clip from onset 1: [onset1:onset2] + [onset2:end]
+        valid_frames = np.isfinite(warped).all(axis=(1, 2))
+        onsets = ingest.segment_transitions(warped, valid_frames, manifest)[0]
+        o1, o2 = onsets[0][0], onsets[1][0]
+        check("segment 1 truncated at onset 2", seg1.shape[0] == o2 - o1,
+              f"len={seg1.shape[0]} gap={o2 - o1}")
+        check("segment 2 runs to clip end", seg2.shape[0] == full.shape[0] - o2,
+              f"len={seg2.shape[0]}")
+        gap1_s = (o2 - o1) / fps2
+        check("window 1 = gap - 2 frames (short dwell)",
+              np.isclose(tr1.window_s, gap1_s - 2.0 / fps2),
+              f"window={tr1.window_s:.3f}s gap={gap1_s:.3f}s")
+        check("window 2 capped at 2.5 s (long dwell)", tr2.window_s == 2.5,
+              f"window={tr2.window_s:.3f}s seg={seg2.shape[0] / fps2:.2f}s")
+        rep1 = optics.classify_transition(seg1, fps2, tr1)
+        check("turn 1 sees ONE flash (turn 2's wash is out of its window)",
+              rep1.flash_count == 1, f"count={rep1.flash_count}")
+        check("turn 1 settles inside its own dwell", rep1.settled,
+              f"settle_s={rep1.settle_s:.3f} sev={rep1.settle_severity}")
 
     print("case: auto change_eps segments across camera noise (no hand-tuning)")
     before = page_refl("novel", pid=10)

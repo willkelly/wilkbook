@@ -117,6 +117,29 @@ def main():
           f"std={rep.blotch_std:.4f}")
     check("clean background has no defects", rep.defects == [], f"defects={rep.defects}")
 
+    print("case: settled state is a temporal AVERAGE of the trailing quiet frames")
+    # Camera-like per-pixel noise: a single settled frame would carry the full
+    # noise sigma into blotch_std; averaging the trailing quiet run divides it
+    # by ~sqrt(n). Assert the reported std is well below the last-frame std.
+    clip, t0, before, after, tr_kw = synth.blotch_transition(blotchy=False)
+    rng = np.random.default_rng(7)
+    noisy = np.clip(clip + rng.normal(0.0, 0.005, clip.shape), 0, 1).astype(np.float32)
+    tr = optics.Transition(t0=t0, before=before, after=after, **tr_kw)
+    rep = optics.classify_transition(noisy, FPS, tr)
+    last_std = float(noisy[-1][tr_kw["bg_mask"]].std())
+    check("averaged settled state beats the single-frame noise floor",
+          rep.blotch_std < 0.5 * last_std,
+          f"avg std={rep.blotch_std:.4f} vs last-frame std={last_std:.4f}")
+    check("noisy-but-uniform background still not flagged",
+          rep.blotch_severity == "none", f"std={rep.blotch_std:.4f}")
+    # the shared quiet-scan helpers behave at the edges
+    check("trailing run degenerates to the last frame when never quiet",
+          optics.trailing_quiet_run(np.zeros(9, bool)) == (9, 10))
+    check("trailing run spans the whole segment when always quiet",
+          optics.trailing_quiet_run(np.ones(9, bool)) == (0, 10))
+    check("first_quiet_run finds the opening of the quiet run",
+          optics.first_quiet_run(np.array([0, 0, 1, 1, 1, 1], bool)) == 2)
+
     print()
     if _fails:
         print(f"optics: {len(_fails)} FAILED: {', '.join(_fails)}")
