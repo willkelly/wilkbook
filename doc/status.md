@@ -4,6 +4,20 @@ Last updated: 2026-07-10. This is the single place to record what has actually
 been proven on the device. Update it after every hardware session; the
 detailed evidence lives in session logs, not in git.
 
+**2026-07-11 (evening): the optics capture stack is live-proven end to end.**
+On A.2.6 over SSH, the production path (SSHTransport + KOReaderBackend +
+run_scenario) drove a full 49-page card scenario: injector daemon -> uinput
+`wilkbook-optics` -> KOReader (opened it as event7) -> 48 injected page turns
+-> 48 harvested `[pn-refresh]` events — **39 partial + 8 full, exactly the
+seeded full_refresh_count=6 promotion cadence**, i.e. the diff-masked partial
+regime real reading uses, measured for the first time. Panel temps recorded
+26->27 °C across the run. Three live-found bugs fixed en route (SSH clients
+lingering on detached launches -> fire-and-forget transport; fbcon rebound by
+reader-session's stop -> unbind in prepare; landscape default splitting
+portrait pages into two views -> seed copt_rotation_mode=0 + drop stale .sdr
+sidecars). The only thing between here and the first real optics bundle is
+pointing the camera at the panel.
+
 **2026-07-10: Wi-Fi working end-to-end — root-caused and fixed live.**
 A.2.3 (reader + the Phase 1 Wi-Fi userland) was built, written to os2 (rootfs
 SHA `196d601c…`, drop_caches readback-verified) and booted. The userland is
