@@ -319,6 +319,13 @@ def main():
                             "-i", "-", "-c:v", "ffv1", vid], input=raw, check=True)
             dec, fps = ingest.frames_from_video(vid)
             check("frame count round-trips", dec.shape[0] == 3, f"{dec.shape}")
+            # memory-bound decode knobs (added after the first real capture
+            # OOM-killed the analyzer): fps decimation + downscale at decode
+            half, hfps = ingest.frames_from_video(vid, max_fps=5, scale=0.5)
+            check("scale halves decode dims", half.shape[1:] == (gh // 2, gw // 2),
+                  f"{half.shape}")
+            check("max_fps decimates + is reported", hfps == 5
+                  and half.shape[0] < dec.shape[0], f"n={half.shape[0]} fps={hfps}")
             check("pixels round-trip losslessly",
                   float(np.max(np.abs(dec[:3] - frames_in))) < 0.01,
                   f"maxerr={float(np.max(np.abs(dec[:3] - frames_in))):.4f}")

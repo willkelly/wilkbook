@@ -30,10 +30,16 @@ import optics
 
 # --- real-video frame source (ffmpeg) ---------------------------------------
 
-def frames_from_video(path):
+def frames_from_video(path, max_fps=None, scale=None):
     """Decode a real capture to grayscale frames in [0,1]. Returns (frames, fps).
     The rest of the pipeline is array-based and validated on the synthetic
-    camera; this is the only piece that touches a real file. Needs ffmpeg."""
+    camera; this is the only piece that touches a real file. Needs ffmpeg.
+
+    max_fps / scale bound MEMORY on real captures: a 3-minute 1080p60 clip is
+    ~90 GB as float32 (plus a same-order warped panel array) -- the first real
+    bundle OOM-killed the analyzer. fps-decimate and downscale at DECODE time;
+    all downstream geometry is fraction-based, so a matching manifest-resolution
+    scale (analyze --analysis-scale) keeps everything consistent."""
     probe = subprocess.run(
         ["ffprobe", "-v", "quiet", "-print_format", "json",
          "-show_streams", "-select_streams", "v:0", path],
@@ -42,10 +48,19 @@ def frames_from_video(path):
     W, H = int(v["width"]), int(v["height"])
     num, den = (v.get("avg_frame_rate") or "0/1").split("/")
     fps = (float(num) / float(den)) if float(den) else 0.0
-    raw = subprocess.run(
-        ["ffmpeg", "-v", "quiet", "-i", path,
-         "-f", "rawvideo", "-pix_fmt", "gray", "-"],
-        capture_output=True, check=True).stdout
+    filters = []
+    if max_fps and fps and max_fps < fps:
+        filters.append("fps=%g" % max_fps)
+        fps = float(max_fps)
+    if scale and scale != 1.0:
+        W = max(2, int(W * scale) // 2 * 2)
+        H = max(2, int(H * scale) // 2 * 2)
+        filters.append("scale=%d:%d" % (W, H))
+    cmd = ["ffmpeg", "-v", "quiet", "-i", path]
+    if filters:
+        cmd += ["-vf", ",".join(filters)]
+    cmd += ["-f", "rawvideo", "-pix_fmt", "gray", "-"]
+    raw = subprocess.run(cmd, capture_output=True, check=True).stdout
     buf = np.frombuffer(raw, np.uint8)
     n = buf.size // (W * H)
     frames = buf[:n * W * H].reshape(n, H, W).astype(np.float32) / 255.0

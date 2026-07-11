@@ -127,7 +127,8 @@ def _select_run(session, run_id=None):
     return runs[0], f"ambiguous-first-of-{len(runs)}"
 
 
-def analyze_bundle(bundle_dir, frames=None, fps=None, run_id=None):
+def analyze_bundle(bundle_dir, frames=None, fps=None, run_id=None,
+                   max_fps=None, analysis_scale=None):
     """Full end-to-end analyze of a bundle directory. By default decodes the
     bundle's capture video with ffmpeg; `frames`/`fps` override that for tests
     that already hold the array. `run_id` selects which run's events/params
@@ -136,9 +137,18 @@ def analyze_bundle(bundle_dir, frames=None, fps=None, run_id=None):
     run (run_id + that run's params)."""
     b = bundle_mod.load_bundle(bundle_dir)
     manifest = b.load_manifest()
+    if analysis_scale and analysis_scale != 1.0:
+        # scale the panel-space working resolution to match the decode scale:
+        # all marker geometry is fractional, so a proportional resolution keeps
+        # ingest/render consistent while bounding the warped-array memory
+        Wp, Hp = manifest["resolution"]
+        manifest = dict(manifest, resolution=[
+            max(2, int(Wp * analysis_scale) // 2 * 2),
+            max(2, int(Hp * analysis_scale) // 2 * 2)])
 
     if frames is None:
-        frames, probed_fps = ingest.frames_from_video(b.capture_path)
+        frames, probed_fps = ingest.frames_from_video(
+            b.capture_path, max_fps=max_fps, scale=analysis_scale)
         if fps is None:
             fps = probed_fps or b.session["capture"].get("fps") or 30.0
     if not fps:
@@ -269,11 +279,19 @@ def main(argv=None):
     ap.add_argument("-o", "--out", help="write the JSON report here")
     ap.add_argument("--run-id", help="which run's events belong to this capture "
                     "(only needed for legacy multi-run bundles)")
+    ap.add_argument("--max-fps", type=float, default=None,
+                    help="decimate decode to this fps (memory bound; 30 is "
+                         "plenty for GC16/GL16 envelopes)")
+    ap.add_argument("--analysis-scale", type=float, default=None,
+                    help="downscale decode + panel working resolution by this "
+                         "factor (memory bound; 0.5 halves both dimensions)")
     ap.add_argument("--quiet", action="store_true",
                     help="suppress the human-readable summary on stdout")
     args = ap.parse_args(argv)
 
-    report = analyze_bundle(args.bundle, run_id=args.run_id)
+    report = analyze_bundle(args.bundle, run_id=args.run_id,
+                            max_fps=args.max_fps,
+                            analysis_scale=args.analysis_scale)
     if args.out:
         with open(args.out, "w") as f:
             json.dump(report, f, indent=2)
