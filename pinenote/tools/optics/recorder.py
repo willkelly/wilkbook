@@ -103,6 +103,14 @@ class DeviceDriver:
         been issued (not necessarily settled)."""
         raise NotImplementedError
 
+    # -- trace harvest ------------------------------------------------------
+    def harvest_trace(self):
+        """The reader-side [pn-refresh] trace for the run that just finished
+        (text or bytes), or None when the driver has none. Default: none --
+        concrete drivers override (ShellDeviceDriver pulls the KOReader log);
+        pull_trace() falls back to a raw transport pull on None."""
+        return None
+
 
 # The concrete drivers live in driver.py: a Transport (SerialTransport over the
 # USB CDC-ACM console -- tethered, no Wi-Fi -- or SSHTransport over the network)
@@ -199,13 +207,14 @@ def pull_trace(driver):
     driver.py concurrently -- duck-typed via hasattr so either lands first);
     else falls back to transport.pull of TRACE_LOG. Returns bytes or None --
     never raises, because a missing trace must not kill a hardware run."""
+    data = None
     fn = getattr(driver, "harvest_trace", None)
     if callable(fn):
         try:
             data = fn()
         except Exception:
-            return None
-    else:
+            data = None
+    if data is None:                       # base-class None -> raw transport pull
         t = getattr(driver, "t", None)
         if t is None:
             return None
@@ -509,11 +518,20 @@ def cmd_record(args):
 
     wrote = []
     for r, run_dir, video_path in captured:
+        # per-run reader regime: the KOReaderBackend records what it actually
+        # seeded into the dedicated KO_HOME (PLAN task 5 seam); fb backend and
+        # fakes have no seeded settings -> reader block stays at defaults
+        seeded = getattr(getattr(driver, "backend", None), "_seeded_settings",
+                         None) or {}
+        reader_meta = {
+            "full_refresh_count": seeded.get("full_refresh_count"),
+            "flash_area_fraction": seeded.get("pinenote_flash_area_fraction"),
+        } if seeded else None
         session = bundle_mod.new_session(
             device=dict(device), illuminant_level=args.frontlight_level,
             ebc_params=baseline_params,
             panel_temp_c=r.get("panel_temp_c_start"),
-            camera=dict(camera_meta))
+            camera=dict(camera_meta), reader=reader_meta)
         session["capture"]["fps"] = args.fps
         session["device"].setdefault("wbf_sha256", wf_ident.get("wbf_sha256"))
         trace_name = None

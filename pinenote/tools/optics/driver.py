@@ -54,15 +54,7 @@ import gzip
 import os
 import shlex
 
-import recorder  # DeviceDriver ABC + run_scenario orchestration live there
-
-# Driver-side default for the trace-harvest contract (PLAN task 6): the
-# base DeviceDriver answers None ("no trace"), concrete drivers override.
-# recorder.py is where this belongs long-term; installed from here so the
-# recorder side of task 6 (the trace.<run_id>.log sidecar) can call
-# driver.harvest_trace() unconditionally the moment it lands.
-if not hasattr(recorder.DeviceDriver, "harvest_trace"):
-    recorder.DeviceDriver.harvest_trace = lambda self: None
+import recorder  # DeviceDriver ABC (incl. the harvest_trace default) lives there
 
 
 # --- known-good device surfaces (proven in-repo / on hardware) --------------

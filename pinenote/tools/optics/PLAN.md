@@ -190,6 +190,19 @@ Core camera-facing factorial ≈ **54–72 configs** + a 4–6-config DU/bw_mode
 
 ## 6. Build order
 
+> **STATUS 2026-07-11: blocker tasks 1–8 are DONE** — implemented by four
+> parallel workstreams, integrated, and green (200 optics checks +
+> koreader-input ALL PASSED, incl. a live host-uinput proof of the injector
+> daemon). Two integration seams were wired at merge exactly as the
+> workstreams' seam notes prescribed (reserved-key no-op test vs the
+> always-reserved card; harvest_trace default moved into the DeviceDriver ABC
+> with pull-fallback-on-None). Remaining before the FIRST VALID CAPTURE:
+> **(a) flash A.2.6** (the device.lua whitelist + G_reader_settings read ride
+> in the koreader-bin graft — the deployed A.2.5 image predates them), and
+> **(b) the injector live proof** over SSH (create-before-KOReader-enumerates
+> ordering + evdev delivery — the precisely-stated residual gap), then the
+> smoke run + 10-repeat noise pilot. Tasks 9+ remain open.
+
 All tasks offline-provable except where noted. **[BLOCKER]** = blocks the first *valid* real capture; everything else can follow it.
 
 | # | Task | Why | Offline-provable | Size | Gate |

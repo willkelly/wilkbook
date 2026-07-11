@@ -180,8 +180,13 @@ def main():
           not rm[cy, int((rect["x"] + rect["w"] + 0.05) * Wp)])
     check("dilation margin absorbs registration blur",
           bool(rm[cy, int((rect["x"] + rect["w"]) * Wp) + 1]))
+    # card v2 always emits reserved rects, so prove the no-op on a stripped
+    # copy -- the point is that OLDER manifests (no key) stay behavior-identical
+    bare = dict(manifest,
+                markers={k: v for k, v in manifest["markers"].items()
+                         if k != "reserved"})
     check("no-op when the manifest has no reserved key",
-          not ingest.reserved_mask(manifest, (Hp, Wp)).any())
+          not ingest.reserved_mask(bare, (Hp, Wp)).any())
 
     # A region that changes every page (old page-number ink lingering) must
     # not read as ghost when reserved -- and MUST when not (detector intact).
