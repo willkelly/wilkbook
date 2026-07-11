@@ -168,6 +168,54 @@ def main():
           [(fr, to) for (_, _, fr, to) in results] == [(pid_a, pid_b)],
           f"{[(fr, to) for (_, _, fr, to) in results]}")
 
+    print("case: reserved cells (page number / parity tile) are excluded from masks")
+    import copy
+    rect = {"x": 0.25, "y": 0.30, "w": 0.50, "h": 0.35, "what": "pagenum"}
+    man_r = copy.deepcopy(manifest)
+    man_r["markers"]["reserved"] = [rect]
+    rm = ingest.reserved_mask(man_r, (Hp, Wp))
+    cy, cx = int((rect["y"] + rect["h"] / 2) * Hp), int((rect["x"] + rect["w"] / 2) * Wp)
+    check("reserved mask covers the rect", bool(rm[cy, cx]))
+    check("reserved mask stays local",
+          not rm[cy, int((rect["x"] + rect["w"] + 0.05) * Wp)])
+    check("dilation margin absorbs registration blur",
+          bool(rm[cy, int((rect["x"] + rect["w"]) * Wp) + 1]))
+    check("no-op when the manifest has no reserved key",
+          not ingest.reserved_mask(manifest, (Hp, Wp)).any())
+
+    # A region that changes every page (old page-number ink lingering) must
+    # not read as ghost when reserved -- and MUST when not (detector intact).
+    rect_px = np.zeros((Hp, Wp), bool)
+    rect_px[int(rect["y"] * Hp):int((rect["y"] + rect["h"]) * Hp),
+            int(rect["x"] * Wp):int((rect["x"] + rect["w"]) * Wp)] = True
+    corrupt = synth.residue_field(before, rect_px, strength=0.6)
+    clip_r, t0_r = synth.simulate_transition(before, after, fps=20, pre_frames=3,
+                                             settle_frames=8, wash="gl16",
+                                             blotch_field=corrupt)
+    white_excl = (after >= 0.85) & ~rm            # what ingest builds
+    tr_excl = optics.Transition(t0=t0_r, before=before, after=after,
+                                white_mask=white_excl, clean_mask=white_excl.copy())
+    tr_plain = optics.Transition(t0=t0_r, before=before, after=after)
+    rep_plain = optics.classify_transition(clip_r, 20.0, tr_plain)
+    rep_excl = optics.classify_transition(clip_r, 20.0, tr_excl)
+    check("un-reserved: the corrupted cell IS flagged as ghost",
+          rep_plain.ghost_severity in ("mild", "severe"),
+          f"rms={rep_plain.ghost_rms:.4f} corr={rep_plain.ghost_corr:.2f}")
+    check("reserved: the same corruption is NOT ghost",
+          rep_excl.ghost_severity == "none", f"rms={rep_excl.ghost_rms:.4f}")
+
+    # and ingest itself applies the exclusion to the masks it builds
+    results, _, _ = ingest.ingest(legacy_cam, 20.0, man_r,
+                                  lambda kind, pid: page_refl(kind, pid))
+    check("reserved-manifest ingest still finds the transition", len(results) == 1)
+    if results:
+        tr_i = results[0][0]
+        check("ingest-built white/clean masks exclude the reserved cell",
+              not (tr_i.white_mask & rect_px).any()
+              and not (tr_i.clean_mask & rect_px).any())
+        check("ingest-built masks keep unreserved white pixels",
+              bool(tr_i.white_mask[int(0.5 * Hp), int(0.85 * Wp)]))
+
     print("case: segment truncation -- a segment ends at the NEXT onset (ME7)")
     # Two back-to-back GC16 turns, 1.2 s apart: A(novel)->B(blank)->C. Without
     # truncation, turn 2's wash lands inside turn 1's old 1.5 s window and the

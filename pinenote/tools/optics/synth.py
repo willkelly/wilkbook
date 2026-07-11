@@ -88,6 +88,16 @@ def _blotch_field(seed: int, dark: float = 0.20, frac: float = 0.4,
     return coarse[np.ix_(ri, ci)]
 
 
+def residue_field(before: np.ndarray, region_mask: np.ndarray,
+                  strength: float = 0.6) -> np.ndarray:
+    """Additive settled-state field carrying the PRIOR page's ink as residue
+    inside `region_mask` only -- e.g. a page-number cell whose old digits
+    linger while the rest of the page clears. Darker prior pixels leave more
+    residue (same shape as simulate_transition's ghost), zero outside the
+    region. Feed to simulate_transition(blotch_field=...)."""
+    return (-strength * (1.0 - before) * region_mask).astype(np.float32)
+
+
 def _hump(p: np.ndarray, center: float, halfwidth: float) -> np.ndarray:
     """Triangular bump in [0,1], peak 1.0 at `center`, zero outside +-halfwidth."""
     d = np.abs(p - center)

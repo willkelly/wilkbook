@@ -404,6 +404,31 @@ def segment_transitions(warped, valid, manifest, change_eps=None):
 MAX_WINDOW_S = 2.5    # analysis-window cap; below it the window is the segment
                       # gap minus 2 frames, so it can never reach the next wash
 
+RESERVED_DILATE_FRAC = 0.005   # dilation margin around reserved rects (fraction
+                               # of each panel dimension), absorbing registration
+                               # blur so rect-edge pixels can't leak into masks
+
+
+def reserved_mask(manifest, panel_hw, margin=RESERVED_DILATE_FRAC):
+    """Boolean [Hp,Wp] mask of the card's reserved marker cells.
+
+    manifest['markers']['reserved'] (card v2) lists fractional
+    {'x','y','w','h','what'} rects for per-page bookkeeping regions -- the
+    human-visible page number and the parity tile -- whose pixels change on
+    EVERY page by design. They must be excluded from the should-be-white /
+    clean masks, or a page number that turns white on the next page reads as
+    digit-shaped ghost. Each rect is dilated by `margin` on every side.
+    All-False when the key is absent (older manifests): a no-op consumer."""
+    Hp, Wp = panel_hw
+    mask = np.zeros((Hp, Wp), bool)
+    for r in manifest.get("markers", {}).get("reserved", []) or []:
+        x0 = int(np.floor((r["x"] - margin) * Wp))
+        x1 = int(np.ceil((r["x"] + r["w"] + margin) * Wp))
+        y0 = int(np.floor((r["y"] - margin) * Hp))
+        y1 = int(np.ceil((r["y"] + r["h"] + margin) * Hp))
+        mask[max(0, y0):min(Hp, y1), max(0, x0):min(Wp, x1)] = True
+    return mask
+
 
 def _render(render_page, kind, pid):
     """Call the caller's page renderer with the (kind, pid) contract, falling
@@ -442,6 +467,7 @@ def ingest(frames, fps, manifest, render_page):
     trans, ids = segment_transitions(warped, valid, manifest)
     pages_by_pid = {p["pid"]: p for p in manifest["pages"]}
     onsets = [o for (o, _, _) in trans] + [warped.shape[0]]
+    rmask = reserved_mask(manifest, panel_hw)     # all-False on older manifests
     results = []
     for k, (onset, fr, to) in enumerate(trans):
         next_onset = onsets[k + 1]
@@ -458,8 +484,15 @@ def ingest(frames, fps, manifest, render_page):
         gap_s = (next_onset - onset) / fps
         window_s = max(2.0 / fps, min(MAX_WINDOW_S, gap_s - 2.0 / fps))
         before = _render(render_page, pages_by_pid[fr]["kind"], fr)
-        after = _render(render_page, pages_by_pid[to]["kind"], to)
+        after = np.asarray(_render(render_page, pages_by_pid[to]["kind"], to),
+                           np.float32)
+        # white/clean masks: intended-white pixels MINUS the reserved cells
+        # (page number, parity tile) -- those change every page by design and
+        # would otherwise read as ghost. Identical to the auto-derived masks
+        # when the manifest has no reserved rects.
+        white = (after >= 0.85) & ~rmask
         tr = optics.Transition(t0=0, before=before, after=after,
+                               white_mask=white, clean_mask=white.copy(),
                                window_s=window_s)
         results.append((tr, seg, fr, to))
     return results, warped, sync_end
