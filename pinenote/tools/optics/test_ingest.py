@@ -78,6 +78,44 @@ def main():
         ok.append(framed and val == pid)
     check("page ids decode through camera", all(ok), f"{sum(ok)}/3")
 
+    print("case: find_sync -- alternation-block semantics (real-footage bug fix)")
+    fps = 30.0
+    B, Wt, G = 0.05, 0.95, 0.55                      # black / white / gray mean
+    # (a) grayish UI preamble, then 4 sync frames (3 alternations), then content
+    means = [G] * 10 + [B, Wt, B, Wt] + [0.6] * 20
+    check("preamble + sync block -> sync_end past the block",
+          ingest.find_sync(means, fps=fps) == 14,
+          f"got {ingest.find_sync(means, fps=fps)} want 14")
+    # (b) no sync at all -> 0
+    check("no-sync clip -> 0",
+          ingest.find_sync([G, 0.6, 0.5, 0.65] * 10, fps=fps) == 0)
+    # a single dark flash (no alternation) never qualifies -- the OLD loop
+    # returned past it and truncated real pre-sync footage wrongly early
+    means = [G] * 5 + [B, B, B] + [0.6] * 20
+    check("single flash (0 alternations) -> 0",
+          ingest.find_sync(means, fps=fps) == 0)
+    # (c) concatenated two-run clip: only the FIRST block is found
+    run = [B, Wt, B, Wt]
+    means = [G] * 6 + run + [0.6] * 45 + run + [0.6] * 20
+    check("two-run clip -> first block only",
+          ingest.find_sync(means, fps=fps) == 10,
+          f"got {ingest.find_sync(means, fps=fps)} want 10")
+    # preamble tolerance: a block starting later than a few seconds is no sync
+    means = [G] * 200 + run + [0.6] * 20
+    check("block past the preamble window -> 0",
+          ingest.find_sync(means, fps=fps) == 0)
+    # mid-block gaps: real cameras catch mid-wash grays between the sync pages
+    means = [G] * 4 + [B, G, Wt, G, B, G, Wt] + [0.6] * 20
+    check("mid-wash gaps inside the block are tolerated",
+          ingest.find_sync(means, fps=fps) == 11,
+          f"got {ingest.find_sync(means, fps=fps)} want 11")
+    # candidate mask: frames marked non-candidate can't count as extremes
+    means = [B, Wt, B, Wt] + [0.95] * 3 + [0.6] * 10   # bright CONTENT pages follow
+    cand = [True] * 4 + [False] * 13
+    check("candidate mask keeps bright content out of the block",
+          ingest.find_sync(means, fps=fps, candidate=cand) == 4,
+          f"got {ingest.find_sync(means, fps=fps, candidate=cand)} want 4")
+
     print("case: END-TO-END -- synthetic camera of a page turn -> defect report")
     before = page_refl("novel", pid=10)      # sequence: idx10 novel -> idx11 blank
     after = page_refl("blank", pid=11)
@@ -85,13 +123,16 @@ def main():
         panel_clip, _ = synth.simulate_transition(
             before, after, fps=20, pre_frames=3, settle_frames=8,
             wash=wash, flash_depth=0.6)
-        # prepend sync flashes (markerless -> ingest skips them)
+        # prepend sync flashes (markerless -> ingest skips them; 4 flashes = 3
+        # alternations, enough for find_sync's block rule)
         sync = np.stack([np.zeros((Hp, Wp), np.float32),
-                         np.ones((Hp, Wp), np.float32)])
+                         np.ones((Hp, Wp), np.float32)] * 2)
         full = np.concatenate([sync, panel_clip], axis=0)
         cam, _ = synthcam.make_camera_clip(full, H_true, Wp, Hp, (Hc, Wc))
-        results, _, _ = ingest.ingest(cam, 20.0, manifest,
-                                      lambda kind: page_refl(kind))
+        results, _, sync_end = ingest.ingest(cam, 20.0, manifest,
+                                             lambda kind: page_refl(kind))
+        check(f"{wash}: sync block found through the camera (panel-region means)",
+              sync_end == 4, f"sync_end={sync_end}")
         pair = [(tr, seg) for (tr, seg, fr, to) in results if fr == 10 and to == 11]
         check(f"{wash}: novel->blank transition found", len(pair) == 1,
               f"{[(fr, to) for (_, _, fr, to) in results]}")
@@ -121,7 +162,7 @@ def main():
     lo_cam, _ = synthcam.make_camera_clip(full, H_true, Wp, Hp, (Hc, Wc), noise=0.004)
     hi_cam, _ = synthcam.make_camera_clip(full, H_true, Wp, Hp, (Hc, Wc), noise=0.030)
     def learned_eps(cam):
-        warped, valid = ingest._warp_all(cam, manifest, (Hp, Wp))
+        warped, valid, _H = ingest._warp_all(cam, manifest, (Hp, Wp))
         chg = np.full(len(cam), np.inf)
         for i in range(1, len(cam)):
             if valid[i] and valid[i - 1]:

@@ -218,33 +218,129 @@ def decode_pageid(panel_intensity, manifest):
 
 # --- sync + segmentation ----------------------------------------------------
 
-def find_sync(frame_means, lo=0.2, hi=0.8):
-    """Index just past the opening black/white sync run (frames that are all
-    near-black or near-white). Returns 0 if none detected."""
-    end = 0
-    for i, m in enumerate(frame_means):
-        if m < lo or m > hi:
-            end = i + 1
-        elif end > 0:
-            break
-    return end
+SYNC_MAX_PREAMBLE_S = 5.0   # the sync block must BEGIN within this of clip start
+SYNC_MAX_GAP_S = 0.75       # tolerated non-extreme stretch INSIDE the block
+                            # (the camera catches frames mid-refresh between the
+                            # black and white sync pages)
+
+
+def find_sync(frame_means, lo=0.2, hi=0.8, fps=30.0,
+              max_preamble_s=SYNC_MAX_PREAMBLE_S, max_gap_s=SYNC_MAX_GAP_S,
+              candidate=None):
+    """Index one past the opening black/white sync block; 0 if none.
+
+    The sync block is the initial run of ALTERNATING near-black / near-white
+    full-frame extremes, requiring >= 2 alternations (i.e. at least three
+    alternating extreme runs, B/W/B) -- so a lone dark frame, a bright UI page,
+    or a single content-turn flash can never end the search early (the bug the
+    old first-extreme-run loop had on real footage). Non-extreme frames are
+    tolerated in exactly two places:
+
+      * as a PREAMBLE before the block (UI frames while the scenario starts),
+        but only if the block begins within `max_preamble_s` of the clip start;
+      * as short mid-refresh gaps INSIDE the block (up to `max_gap_s`), since a
+        real camera catches frames mid-wash between the sync pages.
+
+    The scan stops at the end of the FIRST qualifying block, so a concatenated
+    multi-run clip yields only the first run's sync (per-run videos are the
+    norm; this keeps the function honest standalone).
+
+    `candidate`, if given, is a per-frame bool array: frames marked False are
+    never treated as extremes. ingest() passes the marker-detection validity
+    inverted (~valid), so a mostly-white CONTENT page -- which carries fiducials
+    and therefore validates -- cannot masquerade as a sync white."""
+    means = np.asarray(list(frame_means), float)
+    n = means.size
+    if n == 0:
+        return 0
+    state = np.zeros(n, int)                      # -1 black, +1 white, 0 neither
+    state[means < lo] = -1
+    state[means > hi] = 1
+    if candidate is not None:
+        state[~np.asarray(candidate, bool)] = 0
+    max_pre = int(round(max_preamble_s * fps))
+    max_gap = max(1, int(round(max_gap_s * fps)))
+    start = 0
+    while start < n and start <= max_pre:
+        if state[start] == 0:
+            start += 1
+            continue
+        # grow a candidate block from this extreme frame
+        alternations = 0
+        last_state = state[start]
+        last_extreme = start
+        j = start + 1
+        while j < n and (state[j] != 0 or j - last_extreme <= max_gap):
+            if state[j] != 0:
+                if state[j] != last_state:
+                    alternations += 1
+                    last_state = state[j]
+                last_extreme = j
+            j += 1
+        if alternations >= 2:
+            return last_extreme + 1               # one past the block's last extreme
+        start = max(start + 1, last_extreme + 1)  # skip past the failed block
+    return 0
+
+
+def _panel_quad_mask(H_panel_to_cam, cam_shape, panel_hw, shrink=0.03):
+    """Boolean camera-space mask of the (slightly shrunken) panel quad. Used to
+    read per-frame brightness over the PANEL, not the whole camera frame: the
+    dark bezel/box surround otherwise drags a full-white sync flash down to a
+    mid-gray mean and the white half of the sync block goes undetected (the
+    real-footage failure PLAN.md ME1 calls out). `shrink` pulls the quad edges
+    toward its center so bezel pixels never leak in."""
+    Hp, Wp = panel_hw
+    Hc, Wc = cam_shape
+    corners = np.array([[0, 0], [Wp, 0], [Wp, Hp], [0, Hp]], float)
+    center = corners.mean(axis=0)
+    corners = center + (1.0 - 2.0 * shrink) * (corners - center)
+    quad = _apply_H(H_panel_to_cam, corners)
+    qc = quad.mean(axis=0)
+    yy, xx = np.mgrid[0:Hc, 0:Wc]
+    mask = np.ones((Hc, Wc), bool)
+    for k in range(4):                            # convex quad: 4 half-planes
+        a, b = quad[k], quad[(k + 1) % 4]
+        cross = (b[0] - a[0]) * (yy - a[1]) - (b[1] - a[1]) * (xx - a[0])
+        side = (b[0] - a[0]) * (qc[1] - a[1]) - (b[1] - a[1]) * (qc[0] - a[0])
+        mask &= (cross * np.sign(side)) >= 0
+    return mask
+
+
+def _sync_means(frames, H_panel_to_cam, panel_hw):
+    """Per-frame mean brightness over the panel region for find_sync. The rig
+    is fixed (one camera, one geometry -- PLAN.md 1a), so one homography from
+    any marker-valid frame places the panel for every frame, including the
+    marker-less sync flashes themselves. Falls back to whole-frame means when
+    no frame validated (find_sync then still returns 0 or a best effort)."""
+    if H_panel_to_cam is None:
+        return [float(np.mean(f)) for f in frames]
+    mask = _panel_quad_mask(H_panel_to_cam, frames[0].shape, panel_hw)
+    if not mask.any():
+        return [float(np.mean(f)) for f in frames]
+    return [float(f[mask].mean()) for f in frames]
 
 
 def _warp_all(frames, manifest, panel_hw):
     """Detect fiducials + rectify (geometry only) every frame to warped panel
     *intensity*. Frames without clear markers (sync flashes) are left NaN and
     flagged invalid. Photometry is applied later, per transition, from a stable
-    frame -- see fit_photometry."""
+    frame -- see fit_photometry. Also returns the first valid frame's
+    panel->camera homography (None if no frame validates): on the fixed rig it
+    stands in for the marker-less sync frames' geometry (_sync_means)."""
     out = np.full((len(frames),) + panel_hw, np.nan, np.float32)
     valid = np.zeros(len(frames), bool)
+    H_first = None
     for i, f in enumerate(frames):
         fids = detect_fiducials(f, manifest)
         if fids is None:
             continue
         H = homography_from_fiducials(fids, manifest)
+        if H_first is None:
+            H_first = H
         out[i] = warp_to_panel(f, H, panel_hw)
         valid[i] = True
-    return out, valid
+    return out, valid, H_first
 
 
 def auto_change_eps(change, k=8.0, floor=0.008):
@@ -312,9 +408,12 @@ def ingest(frames, fps, manifest, render_page):
     of (optics.Transition, clip_segment) ready for optics.classify_transition."""
     Wp, Hp = manifest["resolution"]
     panel_hw = (Hp, Wp)
-    means = [float(np.mean(f)) for f in frames]
-    sync_end = find_sync(means)                        # reported for clock-zero
-    warped, valid = _warp_all(frames, manifest, panel_hw)
+    warped, valid, H_first = _warp_all(frames, manifest, panel_hw)
+    # clock-zero: sync detection reads the PANEL region (fixed-rig homography
+    # borrowed from the first marker-valid frame) and only marker-less frames
+    # may count as extremes -- a bright content page cannot pass as sync white.
+    means = _sync_means(frames, H_first, panel_hw)
+    sync_end = find_sync(means, fps=fps, candidate=~valid)
     trans, ids = segment_transitions(warped, valid, manifest)
     pages_by_pid = {p["pid"]: p for p in manifest["pages"]}
     results = []
