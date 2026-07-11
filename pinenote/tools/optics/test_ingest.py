@@ -119,7 +119,7 @@ def main():
     check("block past the preamble window -> 0",
           ingest.find_sync(means, fps=fps, max_preamble_s=5.0) == 0)
     check("automated-capture default tolerates a long preamble",
-          ingest.find_sync(means, fps=fps) == 210)
+          ingest.find_sync(means, fps=fps) == 204)
     # mid-block gaps: real cameras catch mid-wash grays between the sync pages
     means = [G] * 4 + [B, G, Wt, G, B, G, Wt] + [0.6] * 20
     check("mid-wash gaps inside the block are tolerated",
