@@ -78,6 +78,44 @@ def main():
           {"novel", "graphic", "textbook", "blank", "ux", "index"} <= kinds,
           f"kinds={sorted(kinds)}")
 
+    print("case: stress-block x3 sequence structure")
+    check("sequence = sync block + 3 stress repetitions",
+          te.SEQUENCE == te.SYNC_BLOCK + te.STRESS_BLOCK * te.STRESS_REPEATS
+          and te.STRESS_REPEATS == 3)
+    check("card length in the 45-60 page range", 45 <= len(te.SEQUENCE) <= 60,
+          f"{len(te.SEQUENCE)} pages")
+    pids = [p.pid for p in pages]
+    check("every page has a unique pid", len(set(pids)) == len(pids))
+    check("pids fit the barcode", max(pids) < 2 ** te.PAGEID_BITS,
+          f"max={max(pids)}, headroom {2 ** te.PAGEID_BITS}")
+    n_sync = len(te.SYNC_BLOCK)
+    check("pages carry their repetition index",
+          all(p.rep == (None if i < n_sync
+                        else (i - n_sync) // len(te.STRESS_BLOCK))
+              for i, p in enumerate(pages))
+          and {p["rep"] for p in manifest["pages"] if p["rep"] is not None}
+          == {0, 1, 2})
+    by_index = {p.index: p for p in pages}
+    rep_ok, counts = [], {0: 0, 1: 0, 2: 0}
+    for t in manifest["transitions"]:
+        if t["is_sync"]:
+            rep_ok.append(t["rep"] is None)
+        else:
+            rep_ok.append(t["rep"] == by_index[t["to"]].rep)
+            counts[t["rep"]] += 1
+    check("transition rep labels follow the to-page rule", all(rep_ok))
+    check("per-rep transition counts 14/15/15",
+          counts == {0: 14, 1: 15, 2: 15}, f"{counts}")
+    nb_per_rep = {0: 0, 1: 0, 2: 0}
+    for a, b in zip(pages, pages[1:]):
+        if (a.kind, b.kind) == ("novel", "blank") and a.rep == b.rep \
+                and a.rep is not None:
+            nb_per_rep[a.rep] += 1
+    check("every repetition holds an in-rep novel->blank pair",
+          all(v >= 1 for v in nb_per_rep.values()), f"{nb_per_rep}")
+    check("STRESS map stays kind-pair keyed",
+          all(isinstance(k, tuple) and len(k) == 2 for k in te.STRESS))
+
     print("case: calibration markers render where the manifest says")
     content_page = next(p for p in pages if p.kind == "novel")
     arr = np.asarray(te.render_page(content_page), np.float32) / 255.0

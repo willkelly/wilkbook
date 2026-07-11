@@ -16,7 +16,11 @@ Card v2 (PLAN.md section 2, items 1-3):
     page number bottom-right and a parity tile alternating corners -- whose
     footprints are published in manifest['markers']['reserved'] so ingest can
     exclude them from ghost/white/clean masks (a number that legitimately
-    changes every page must not read as ghost).
+    changes every page must not read as ghost);
+  * the sequence is the sync block + THREE repetitions of the stress
+    sub-sequence, with unique pids throughout (pid = sequence index) and
+    per-transition 'rep' labels so the analyzer can aggregate each kind-pair
+    across repetitions (mean/sigma/worst).
 
 Deterministic: no RNG, no clock. `python3 testepub.py OUTDIR` builds it.
 Needs Pillow. See README.md.
@@ -62,6 +66,7 @@ class Page:
     kind: str
     pid: int
     img: Image.Image = None
+    rep: int = None          # stress-block repetition (None for sync pages)
 
 
 def _ref(r):     # reflectance [0,1] -> 8-bit gray
@@ -345,14 +350,22 @@ def render_kind(kind, pid=0):
     return render_page(Page(index=0, kind=kind, pid=pid))
 
 
-# The sequence: opening sync flashes, then adjacent pairs that stress the
-# driver differently. Transition `pair` labels drive the analyzer's expectations.
-SEQUENCE = [
-    "sync_black", "sync_white", "sync_black", "sync_white",   # zero the clock
+# The sequence: an opening sync block that zeroes the clock, then THREE
+# repetitions of the stress sub-sequence -- adjacent pairs that stress the
+# driver differently; transition `pair` labels drive the analyzer's
+# expectations, and the per-transition `rep` label (0/1/2) lets it aggregate
+# each kind-pair across repetitions. Kinds repeat but every page keeps a
+# unique pid (= its sequence index; PAGEID_BITS=8 leaves 256-pid headroom).
+# Each repetition holds two fully-in-rep ('novel','blank') adjacent pairs
+# (block offsets 6->7 and 13->14).
+SYNC_BLOCK = ["sync_black", "sync_white", "sync_black", "sync_white"]
+STRESS_BLOCK = [
     "blank", "novel", "novel", "graphic", "graphic", "textbook",
     "novel", "blank", "index", "index", "ux", "novel",
     "graphic", "novel", "blank",
 ]
+STRESS_REPEATS = 3
+SEQUENCE = SYNC_BLOCK + STRESS_BLOCK * STRESS_REPEATS
 
 # which transitions are the interesting stress cases (for analyzer weighting)
 STRESS = {
@@ -367,9 +380,11 @@ STRESS = {
 
 
 def build_pages():
+    n_sync = len(SYNC_BLOCK)
     pages = []
     for i, kind in enumerate(SEQUENCE):
-        pages.append(Page(index=i, kind=kind, pid=i))
+        rep = None if i < n_sync else (i - n_sync) // len(STRESS_BLOCK)
+        pages.append(Page(index=i, kind=kind, pid=i, rep=rep))
     return pages
 
 
@@ -385,16 +400,23 @@ def build_manifest(pages):
     transitions = []
     for a, b in zip(pages, pages[1:]):
         pair = f"{a.kind}->{b.kind}"
+        is_sync = a.kind.startswith("sync") or b.kind.startswith("sync")
         transitions.append({
             "from": a.index, "to": b.index, "from_kind": a.kind,
             "to_kind": b.kind, "pair": pair,
             "stress": STRESS.get((a.kind, b.kind), []),
-            "is_sync": a.kind.startswith("sync") or b.kind.startswith("sync"),
+            "is_sync": is_sync,
+            # a transition belongs to the repetition its DESTINATION page
+            # lands in (the wash is scored on the arriving page; this also
+            # assigns the rep-boundary blank->blank turns unambiguously).
+            # Sync-adjacent transitions carry null.
+            "rep": None if is_sync else b.rep,
         })
     return {
         "resolution": [W, H],
         "markers": markers,
-        "pages": [{"index": p.index, "kind": p.kind, "pid": p.pid} for p in pages],
+        "pages": [{"index": p.index, "kind": p.kind, "pid": p.pid,
+                   "rep": p.rep} for p in pages],
         "transitions": transitions,
     }
 
