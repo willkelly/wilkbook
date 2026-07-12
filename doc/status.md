@@ -24,6 +24,25 @@ so the armC-era dmesg is gone — quirk F's timeout-correlation check is
 UNAVAILABLE, not negative; the instrumented auto=1 repro remains the
 confirmation path.
 
+**2026-07-12 (late): five instrumented corrupter repros — timeout variant
+dead, corruption not reproducible on demand, optics limits mapped.** Five
+`auto_refresh=1` runs with a live kernel-log watch (same-pair x3 across
+firing regimes incl. rapid-into-stream; diverse walks x2 at threshold=8):
+the kernel logged ZERO frame/refresh timeouts across ~45 verified threshold
+firings plus two diverse walks — the 25 ms-timeout straggler variant is
+ruled out; the timeout-free extra-credit variant is the prime suspect. No
+run corrupted (v4's apparent graying was a measurement artifact — blank
+pages carry no fiducials and the frame snaps fell back to unrelated frames;
+v5 with strict validated frames measured zero residue). Methods note in
+the findings report: GL16 threshold-globals are optically undetectable
+inside diverse content; same-pair regimes remain the only place the strip
+detector is trustworthy. The campaign's corruption (armC/neverx3) stands
+as real but its trigger is unisolated (cumulative state / environment
+candidates); per-event ground truth needs the straggler-detector debug
+kernel (built offline in a worktree; flashing it is the next user-present
+step). All runs ended with 3x GC16 recovery + `auto_refresh=0` readback;
+bundles `corrupter-repro-v1/-v2/-v3/-v4-void/` + `corrupter-repro` (v5).
+
 **2026-07-12: MECHANISM FOUND — the driver's auto-globals corrupt state;
 `auto_refresh=0` shipped.** A full experimental campaign (9 sweep runs + soaks
 + a 2x2 isolation, all on the boxed rig) found that threshold-triggered

@@ -368,6 +368,29 @@ lead with the correlation + the source-level asymmetry, and present the
 truncation mechanism as the best-supported hypothesis rather than a
 demonstrated fault.
 
+**Confirmation runs 4-5 (2026-07-12, diverse walks, threshold=8) and a
+methods correction:** v4 (out-and-back card walk ending on a BLANK page)
+initially measured dramatic dark-mark graying scrubbed by the recovery
+wash — that result is VOID: blank pages render no fiducials, frame
+validity collapses in the inspect window, and the measurement's frame
+snaps silently fell back to unrelated mid-walk frames (t=324/345 vs the
+requested 335/361). v5 (same walk ending on the graphic page; strict
+snaps that refuse fallbacks >2 s) measured on validated frames: ZERO
+residue (dark drift +0.001), kernel silent — fifth run. Methods
+limitation now documented: on diverse content NONE of our optical
+detectors can count GL16 threshold-globals — the patch-strip detector
+needs mark-bearing valid frames (blanks break it; it reported 20 events
+on v4 and 2 on v5 for near-identical panel activity), panel-delta scans
+confuse full-page partials, and dip scans confuse dark pages (a GL16
+wash only dips panel mean to ~0.6). The same-pair results (v1-v3,
+where every frame carries marks and the strip detector is reliable)
+stand: ~45 verified threshold firings, zero corruption, silent log.
+Net for upstream: the corrupting trigger seen in the campaign
+(armC/neverx3, older boot, long cumulative sessions) did not reproduce
+in five deliberate same-evening regimes; candidates now include
+cumulative cross-boot/session state and environment, and per-event
+ground truth requires the instrumented kernel, not optics.
+
 ### Upstream notification draft (m-weigand / PNDeb / hrdl / ayakael)
 
 > Subject: rockchip_ebc: auto_refresh threshold path can truncate its own
