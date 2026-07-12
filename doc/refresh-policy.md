@@ -338,7 +338,7 @@ bundles + reports under `pinenote/tools/optics/build/bundles/sweep1.*`):
    Bundle: `.../soak1` (+ soak-events.json).
 10. **MECHANISM FOUND: the driver's threshold-triggered auto-globals CAUSE
     the corruption (2x2 complete).** Arms: diverse+auto1 corrupts 3/4
-    (neverx3); diverse+auto0 CLEAN 45/48 (armB, replication pending);
+    (neverx3); diverse+auto0 CLEAN 2/2 (armB 45/48, armB2 49/48);
     same-pair+auto1 shows 4-5x dark-cell graying (armC); same-pair+auto0
     clean (soak1). A patch-strip wash detector (only globals redraw the
     static strip) caught unexplained globals exactly in the auto=1 runs:

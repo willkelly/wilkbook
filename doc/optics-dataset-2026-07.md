@@ -527,3 +527,18 @@ the capture workstation (gitignored; 12.28 GB for the 19 finalized
 captures). Verify against
 [`doc/datasets/2026-07-optics/checksums.txt`](datasets/2026-07-optics/checksums.txt);
 each session.json independently embeds its own video's sha256.
+
+
+## Addendum (2026-07-12, post-catalog captures)
+
+The 2x2 mechanism hunt completed after the catalog snapshot: `armB`
+(diverse+auto0) segmented 45/48 and its replicate `armB2` 49/48 — CLEAN 2/2;
+`armC` (same-pair+auto1) showed 4-5x dark-cell graying with an unexplained
+global at t≈90s (patch-strip wash detector). Combined with the cataloged
+neverx3 (3/4 corrupt, all auto1) and soak1 (clean, auto0), the 2x2 isolates
+`auto_refresh=1` as the corruption mechanism — finding 10 in
+doc/refresh-policy.md and the corresponding entry in
+doc/driver-findings-report.md. Consequence shipped: the image and the live
+device now run `auto_refresh=0` (commit b9bbc0e). These bundles' derived
+files are on disk under build/bundles/ but not yet copied into this dataset
+dir; fold them in at the next dataset refresh.

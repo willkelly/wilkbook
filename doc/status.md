@@ -4,6 +4,21 @@ Last updated: 2026-07-10. This is the single place to record what has actually
 been proven on the device. Update it after every hardware session; the
 detailed evidence lives in session logs, not in git.
 
+**2026-07-12: MECHANISM FOUND — the driver's auto-globals corrupt state;
+`auto_refresh=0` shipped.** A full experimental campaign (9 sweep runs + soaks
++ a 2x2 isolation, all on the boxed rig) found that threshold-triggered
+auto-globals progressively corrupt displayed fine structure, while
+ioctl-triggered globals are clean across ~20 sessions: diverse-page never-runs
+corrupt 3/4 under auto=1 but run CLEAN 2/2 under auto=0; a patch-strip wash
+detector caught the auto firings on camera in exactly the corrupting runs;
+quirk 3's cross-run damage accumulator explains the stochastic phase. Driver
+finding written for upstream (doc/driver-findings-report.md). Shipped:
+`auto_refresh=0` in the params one-shot + modprobe.d (b9bbc0e) and applied to
+the live device; userspace owns all full refreshes (KOReader promotion now;
+the idle-washer next). Full third-party dataset + review guide committed
+(doc/optics-dataset-2026-07.md, doc/datasets/2026-07-optics/ — 20 bundles,
+checksummed videos, per-claim evidence audit).
+
 **2026-07-11 (close): THE CALIBRATED BASELINE — coherent physics.** Fresh
 full-card capture at calibrated settings (`build/bundles/cal-baseline`,
 report alongside): 47/49 transitions, sync auto-detected. The GL16 reading
