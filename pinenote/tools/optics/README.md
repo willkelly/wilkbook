@@ -145,6 +145,52 @@ offline-tested (`test_bundle.py`, wired into `make check`):
   keeping all four fiducials in frame, what to run, and exactly which files to
   send — never the `.wbf`).
 
+## Trace → transition join (wash attribution)
+
+Each run's harvested `[pn-refresh]` trace (device-epoch timestamps of every
+refresh KOReader *issued*) is now JOINED to the camera transitions, so a
+report can attribute each visible wash: `src=ko-full` / `ko-partial` (the
+reader asked for it) vs `src=none` — a panel change with **no** issuing line,
+i.e. a driver-initiated global (or a trace gap), itself a finding. The report
+carries a per-transition `trace` block (matched lines with `dt_s`), a `src`
+column in the text table, and a `trace_join` summary.
+
+**Alignment anchor (a deliberate decision):** the k-th page turn's
+`[pn-refresh]` line vs that turn's camera wash onset, fitted as one rigid
+offset by a mode-of-pairwise-differences vote and refined as the median over
+the consistent pairs (`analyze.align_trace`). The bundle format's *sync*
+anchor (`events` t=0 = clock-zero, capture side = `find_sync`'s block end)
+was measured to be unusable for a sub-second join: `sync_end_frame` lands at
+the end of the settled sync-white *dwell*, up to a full page period after
+clock-zero, so `sync_end + t*fps` carries seconds of systematic error. The
+onset fit instead *measures* the offset and reports its own accuracy
+(`median_abs_residual_s` / `max_abs_residual_s` per bundle — the residuals
+are the per-turn issue-to-visible-wash latency jitter plus ±1–2 frames of
+onset granularity; expect ~0.1–0.3 s on the rig against a 1.0 s match window
+and ≥3 s page periods). Fewer than 3 mode-consistent pairs → the join
+declines explicitly rather than guessing.
+
+## Analyzer robustness notes (2026-07 regressions, fixed)
+
+- **`sync ends frame 0`** (every report after the cadence captures):
+  `find_sync`'s fixed thresholds missed the warm panel's plateaus (black read
+  0.207 raw vs `lo=0.2`; the "validating" full-white sync pages were excluded
+  by `candidate=~valid` — their corner windows straddle the bezel and the
+  dark bezel pixels satisfy the marker checks). Fixed three ways: thresholds
+  now adapt to the capture's own candidate range (`sync_thresholds`), a
+  uniform-panel-region frame is a sync candidate regardless of marker
+  validity (`SYNC_UNIFORM_STD`), and noise-flat marker windows are rejected
+  (`MIN_MARKER_CONTRAST`).
+- **`flash mild(nan)`**: whole-NaN frames (unreadable mid-wash) inside the
+  analysis window poisoned the flash depth into NaN, which graded "mild"
+  (NaN fails both severity comparisons) and fabricated extra flash counts
+  (false rising edges around each NaN gap). The flash metrics now read only
+  photometrically valid frames; detection, depth and count share the same
+  stays-white mask; a transition with *no* stays-white area is explicitly
+  not classifiable as flash (`notes`), instead of silently falling back to
+  the after-white mask (which fabricates depth from clearing pixels).
+  Reports can no longer carry NaN (strict-JSON guard).
+
 > **The current execution queue lives in [PLAN.md](PLAN.md)** — the 2026-07-11
 > four-critic review's verified findings and dependency-ordered build list. The
 > section below is the pre-review summary, kept until PLAN.md tasks land.

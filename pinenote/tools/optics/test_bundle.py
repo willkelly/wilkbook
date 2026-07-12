@@ -230,7 +230,16 @@ def make_bundle(tmpdir, wash, manifest, summ, fps):
     bundle_dir = os.path.join(tmpdir, f"bundle_{wash}")
     os.makedirs(bundle_dir, exist_ok=True)
     with open(os.path.join(bundle_dir, trace_name), "w") as f:
-        f.write("[pn-refresh] intent=full page=1\n[pn-refresh] intent=partial page=2\n")
+        # realistic [pn-refresh] lines (the on-device emitter format), so the
+        # analyze path exercises the trace parser; with a single camera
+        # transition the join must decline gracefully (min-pairs gate)
+        f.write(
+            "07/12/26-00:00:01 INFO  [pn-refresh] ui partial "
+            "rect=0,0,300,40 dither=nil t=1783900001.000000 \n"
+            "07/12/26-00:00:02 INFO  [pn-refresh] full global "
+            "rect=0,0,300,400 dither=nil t=1783900002.000000 \n"
+            "07/12/26-00:00:05 INFO  [pn-refresh] partial partial "
+            "rect=0,0,300,400 dither=nil t=1783900005.500000 \n")
     B.write_bundle(bundle_dir, session, video, manifest_path)
     return bundle_dir
 
@@ -514,6 +523,136 @@ def main():
     finally:
         drvmod.make_driver = orig_make
 
+    print("case: [pn-refresh] trace parses (kinds, rects, dither, waveform, epoch t)")
+    trace_text = (
+        "---------------------------------------------\n"
+        " [*] Current time: 07/11/26-23:41:03\n"
+        "ffi.load: rt.so.1 (RTLD_GLOBAL)\n"
+        "07/11/26-23:41:04 INFO  [pn-refresh] ui partial "
+        "rect=237,639,1398,126 dither=nil t=1783813264.503183 \n"
+        "07/11/26-23:41:05 INFO  [pn-refresh] full global "
+        "rect=0,0,1872,1404 dither=nil t=1783813265.080633 \n"
+        "07/11/26-23:41:09 INFO  [pn-refresh] partial partial "
+        "rect=0,0,1872,1404 dither=nil t=1783813269.672529 \n"
+        "07/11/26-23:41:13 INFO  [pn-refresh] full global "
+        "rect=0,0,1872,1404 dither=ordered waveform=4 t=1783813273.392400 \n"
+        "noise [pn-refresh] broken line without a timestamp\n")
+    evs = B.parse_pn_refresh_trace(trace_text)
+    check("four parseable lines found, noise ignored", len(evs) == 4, f"{len(evs)}")
+    if len(evs) == 4:
+        check("kinds collapse to partial / full-global",
+              [e["kind"] for e in evs] ==
+              ["partial", "full-global", "partial", "full-global"],
+              f"{[e['kind'] for e in evs]}")
+        check("intent/decision kept verbatim (ui paint distinguishable)",
+              evs[0]["intent"] == "ui" and evs[0]["decision"] == "partial"
+              and evs[1]["intent"] == "full" and evs[1]["decision"] == "global")
+        check("rects parse as (x, y, w, h)",
+              evs[0]["rect"] == (237, 639, 1398, 126)
+              and evs[1]["rect"] == (0, 0, 1872, 1404))
+        check("dither=nil -> None; a real value survives",
+              evs[0]["dither"] is None and evs[3]["dither"] == "ordered")
+        check("waveform parsed when present, None otherwise",
+              evs[3]["waveform"] == 4 and evs[0]["waveform"] is None)
+        check("device epoch timestamps parse to float seconds",
+              abs(evs[1]["t"] - 1783813265.080633) < 1e-6
+              and evs[2]["t"] > evs[1]["t"])
+
+    print("case: trace->transition join recovers the clock offset + attributes washes")
+    # Synthetic ground truth: 7 camera transitions at ~3.7 s cadence; the
+    # device issued a [pn-refresh] line for all but #5 (a driver-initiated
+    # global: no line -- itself the finding the join exists to surface), plus
+    # a 3-line sync burst well before the first turn. Device epoch = capture
+    # seconds + OFFSET (+ per-turn issue latency jitter).
+    fps = 30.0
+    OFFSET = 1_783_900_000.0
+    onsets = [150, 261, 372, 480, 591, 702, 810]
+    jitter = [0.08, -0.05, 0.12, 0.02, -0.09, None, 0.05]   # None = no line
+    kinds = ["partial partial", "partial partial", "full global",
+             "partial partial", "partial partial", None, "partial partial"]
+    lines = []
+    for dt in (-9.0, -8.6, -8.1):                            # sync burst
+        lines.append(f"x INFO  [pn-refresh] full global rect=0,0,1872,1404 "
+                     f"dither=nil t={OFFSET + onsets[0] / fps + dt:.6f} ")
+    for o, j, k in zip(onsets, jitter, kinds):
+        if j is None:
+            continue
+        lines.append(f"x INFO  [pn-refresh] {k} rect=0,0,1872,1404 "
+                     f"dither=nil t={OFFSET + o / fps + j:.6f} ")
+    trace_evs = B.parse_pn_refresh_trace("\n".join(lines))
+    transitions = [{"onset_frame": o, "pair": f"t{i}"}
+                   for i, o in enumerate(onsets)]
+    join = analyze.join_trace(transitions, trace_evs, fps)
+    check("join runs", join.get("status") == "ok", f"{join}")
+    if join.get("status") == "ok":
+        al = join["alignment"]
+        check("device->capture offset recovered within the jitter envelope",
+              abs(al["offset_s"] - OFFSET) < 0.2,
+              f"offset={al['offset_s']:.3f} true={OFFSET}")
+        check("alignment reports its own error bound (median |resid| <= jitter)",
+              al["median_abs_residual_s"] <= 0.15
+              and al["max_abs_residual_s"] <= 0.3,
+              f"median={al['median_abs_residual_s']} max={al['max_abs_residual_s']}")
+        srcs = [t["trace"]["src"] for t in transitions]
+        check("full global attributed ko-full, partials ko-partial",
+              srcs[2] == "ko-full"
+              and all(s == "ko-partial" for i, s in enumerate(srcs)
+                      if i not in (2, 5)), f"{srcs}")
+        check("the un-issued wash reads src=none (driver-initiated global)",
+              srcs[5] == "none" and join["n_transitions_without_trace"] == 1,
+              f"{srcs[5]}")
+        check("sync-burst lines stay unmatched (not force-joined to turn 1)",
+              join["n_unmatched_trace_events"] == 3,
+              f"{join['n_unmatched_trace_events']}")
+        check("matched events carry dt + kind for the report",
+              transitions[2]["trace"]["events"][0]["kind"] == "full-global"
+              and abs(transitions[2]["trace"]["events"][0]["dt_s"]) < 0.3,
+              f"{transitions[2]['trace']['events']}")
+        # a joined report renders the per-row src column + the join header line
+        for t in transitions:
+            t.update(flash={"depth": 0.05, "count": 1, "severity": "none"},
+                     ghost={"rms": 0.01, "corr": 0.0, "severity": "none"},
+                     settle={"settle_s": 0.4, "settled": True, "severity": "none"},
+                     defects=[])
+        mini = {"device": {"model": "PineNote", "revision": "1.2", "os": "os2"},
+                "illuminant": {"source": "frontlight", "cool_level": 255,
+                               "warm_level": 255, "ambient": "dark-box"},
+                "panel_temp_c": 24.0, "ebc_params": {}, "run": None,
+                "waveform_decode": None,
+                "capture": {"fps": fps, "n_frames": 900, "sync_end_frame": 120},
+                "trace_join": join, "transitions": transitions,
+                "summary": analyze._summarize(transitions)}
+        txt = analyze.format_report_text(mini)
+        rows = {t["pair"]: line for t in transitions
+                for line in txt.splitlines() if line.strip().startswith(t["pair"])}
+        check("joined report renders src per row (full / part / '-')",
+              " full " in rows["t2"] and " part " in rows["t0"]
+              and " - " in rows["t5"],
+              f"t2={rows['t2']!r}")
+        check("join header states the attribution rule (KOReader vs driver)",
+              "trace join: ok" in txt and "driver-initiated" in txt)
+    check("no trace events -> join declines with a reason",
+          analyze.join_trace(transitions, [], fps).get("status") == "no-trace-events")
+    check("too little overlap -> join declines (min-pairs gate)",
+          "no-alignment" in analyze.join_trace(
+              [{"onset_frame": 100}], trace_evs[:1], fps).get("status", ""),
+          f"{analyze.join_trace([{'onset_frame': 100}], trace_evs[:1], fps)}")
+
+    print("case: the report header carries find_sync's result verbatim (defect 1)")
+    # The `sync ends frame 0` regression class: whatever find_sync detects
+    # must reach report['capture']['sync_end_frame'] unmodified. Pin the
+    # plumbing with a sentinel, independent of detection.
+    import ingest
+    small_cam = np.full((6, 24, 18), 0.5, np.float32)   # content is irrelevant
+    orig_find_sync = ingest.find_sync
+    ingest.find_sync = lambda *a, **k: 123
+    try:
+        _trs, _n, sync_end = analyze.analyze_frames(list(small_cam), 30.0, manifest)
+    finally:
+        ingest.find_sync = orig_find_sync
+    check("analyze_frames plumbs find_sync's value into the header slot",
+          sync_end == 123, f"{sync_end}")
+
     print("case: build a synthetic bundle + validate it")
     if not (shutil.which("ffmpeg") and shutil.which("ffprobe")):
         print("  [skip] ffmpeg not on PATH (run inside guix shell ... ffmpeg)")
@@ -569,6 +708,17 @@ def main():
                       and t["params"] == {"refresh_waveform": 4}
                       for t in report["transitions"]),
                   f"{gc.get('run_id')} {gc.get('params')}")
+        check("report header carries the DETECTED sync end (4 opening flashes)",
+              report["capture"]["sync_end_frame"] == 4,
+              f"sync_end_frame={report['capture']['sync_end_frame']}")
+        check("single-transition bundle: trace join declines gracefully",
+              "no-alignment" in (report.get("trace_join") or {}).get("status", ""),
+              f"{report.get('trace_join')}")
+        check("transitions carry onset_frame + a stable trace slot",
+              all(isinstance(t["onset_frame"], int) and t["onset_frame"] >= 0
+                  and "trace" in t for t in report["transitions"]))
+        check("report is strict JSON (no NaN can reach a report)",
+              json.dumps(report, allow_nan=False) is not None)
         check("report echoes device identity",
               report["device"]["model"] == "PineNote")
         check("report selects the capture's run explicitly (1:1 per-run bundle)",
@@ -587,6 +737,11 @@ def main():
         check("human-readable summary renders with run attribution",
               "defect report" in text and "PineNote" in text.splitlines()[0]
               and "run: r0" in text)
+        check("text report explains the trace join + carries the src column",
+              "trace join:" in text and " src " in text.splitlines()[
+                  [i for i, l in enumerate(text.splitlines())
+                   if l.strip().startswith("pair")][0]],
+              f"header={[l for l in text.splitlines() if 'pair' in l][:1]}")
 
         print("case: END-TO-END -- analyze the GL16 bundle -> no flash report")
         report2 = analyze.analyze_bundle(gl16_dir)

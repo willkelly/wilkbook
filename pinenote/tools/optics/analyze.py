@@ -21,6 +21,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
+import os
 import sys
 
 import numpy as np
@@ -32,6 +34,14 @@ import testepub
 
 REPORT_SCHEMA = "wilkbook-optics-report"
 REPORT_VERSION = 1
+
+
+def _num(x, digits=4):
+    """Round for the report; a non-finite value becomes None (JSON null) --
+    NaN must never reach a report (defect-2 guard; the detectors themselves
+    now return finite values, this is the belt on top of those braces)."""
+    x = float(x)
+    return round(x, digits) if math.isfinite(x) else None
 
 
 def _render_page_factory(manifest):
@@ -85,23 +95,25 @@ def analyze_frames(frames, fps, manifest):
             "pair": meta.get("pair", f"{kind_by_pid.get(fr)}->{kind_by_pid.get(to)}"),
             "stress": meta.get("stress", []),
             "n_frames": int(seg.shape[0]),
+            "onset_frame": int(tr.onset_frame),
             "flash": {
-                "depth": round(rep.flash_depth, 4),
-                "energy_refl_s": round(rep.flash_energy, 4),
-                "duration_s": round(rep.flash_duration_s, 4),
+                "depth": _num(rep.flash_depth),
+                "energy_refl_s": _num(rep.flash_energy),
+                "duration_s": _num(rep.flash_duration_s),
                 "count": rep.flash_count,
                 "severity": rep.flash_severity,
             },
             "ghost": {
-                "rms": round(rep.ghost_rms, 4),
-                "corr": round(rep.ghost_corr, 4),
+                "rms": _num(rep.ghost_rms),
+                "corr": _num(rep.ghost_corr),
                 "severity": rep.ghost_severity,
             },
             "settle": {
-                "settle_s": round(rep.settle_s, 4),
+                "settle_s": _num(rep.settle_s),
                 "settled": rep.settled,
                 "severity": rep.settle_severity,
             },
+            "notes": list(rep.notes),
             "defects": rep.defects,
         })
     return out, len(frames), sync_end
@@ -125,6 +137,163 @@ def _select_run(session, run_id=None):
     if len(runs) == 1:
         return runs[0], "single"
     return runs[0], f"ambiguous-first-of-{len(runs)}"
+
+
+# ===========================================================================
+# Trace -> transition join (defect attribution: KOReader vs driver)
+#
+# The harvested [pn-refresh] trace timestamps every refresh KOReader ISSUED in
+# device epoch seconds; the camera transitions live on the capture frame
+# clock. Joining them is what lets a report say which washes KOReader asked
+# for (src=ko-full / ko-partial) and which the panel showed with NO issuing
+# line -- a driver-initiated global (or a trace gap), itself a finding.
+#
+# Alignment anchor (documented decision): the k-th page turn's [pn-refresh]
+# line vs that turn's camera wash onset (the change-point ingest already
+# detects). One rigid offset maps device epoch to capture seconds; it is
+# recovered with a mode-of-pairwise-differences scan (no seed needed, robust
+# to missing camera onsets, extra trace lines, and under/over-segmentation)
+# and refined as the median over the mode-consistent pairs.
+#
+# Why not the sync anchor the bundle format suggests (events t=0 = clock-zero
+# = opening sync flash, capture side = find_sync's sync_end)? Measured on the
+# real captures, sync_end lands at the END of the settled sync-white dwell --
+# anywhere from ~0 s to a full page period after the moment emit_sync
+# returned -- so `sync_end + t*fps` carries up to ~4 s of systematic error,
+# useless for a sub-second match window. The onset fit measures the offset
+# instead of assuming it; find_sync remains the report's scenario-start
+# marker and a coarse sanity check.
+#
+# Expected error: the fitted offset absorbs the constant part of the
+# issue-to-visible-wash latency; what remains per pair is its jitter plus
+# onset-detection granularity (+-1-2 frames). The join reports its own
+# median/max |residual| per bundle -- on synthetic fixtures the recovery is
+# exact; on the rig expect ~0.1-0.3 s, an order of magnitude inside the
+# TRACE_MATCH_WINDOW_S=1.0 matching window (page periods are >=3 s, so
+# matches stay unambiguous).
+# ===========================================================================
+
+TRACE_MATCH_WINDOW_S = 1.0   # |trace - onset| tolerance for attributing an
+                             # issued refresh to a camera transition; must stay
+                             # well under half the page period (>=3 s)
+TRACE_MIN_PAIRS = 3          # fewer mode-consistent pairs than this = no fit
+                             # (a 1-2 pair "mode" is indistinguishable from a
+                             # coincidence with a sync/ui line)
+
+
+def _mode_offset(ts_a, ts_b, bin_s=0.5):
+    """The most-supported rigid offset a-b over all pairs (coarse histogram
+    vote, then the median of the winning neighborhood). Returns
+    (offset_s, support) or (None, 0)."""
+    a = np.asarray(ts_a, float)
+    b = np.asarray(ts_b, float)
+    if a.size == 0 or b.size == 0:
+        return None, 0
+    diffs = (a[:, None] - b[None, :]).ravel()
+    bins = np.round(diffs / bin_s)
+    vals, counts = np.unique(bins, return_counts=True)
+    center = float(vals[np.argmax(counts)]) * bin_s
+    sel = diffs[np.abs(diffs - center) <= 1.5 * bin_s]   # winning bin + edges
+    return float(np.median(sel)), int(sel.size)
+
+
+def align_trace(trace_events, onsets_s, window_s=TRACE_MATCH_WINDOW_S,
+                min_pairs=TRACE_MIN_PAIRS):
+    """Fit the device-epoch -> capture-seconds offset from the trace's refresh
+    timestamps and the camera onsets (see the anchor discussion above).
+    Returns an alignment dict, or None when there is not enough overlap for an
+    unambiguous fit. capture_time(ev) = ev['t'] - alignment['offset_s']."""
+    ts = [e["t"] for e in trace_events]
+    off, _support = _mode_offset(ts, onsets_s)
+    if off is None:
+        return None
+    # refine: nearest trace line per onset under the coarse offset
+    resid = []
+    for o in onsets_s:
+        d = np.asarray(ts, float) - off - o
+        i = int(np.argmin(np.abs(d)))
+        if abs(d[i]) <= window_s:
+            resid.append(float(d[i]))
+    if len(resid) < min_pairs:
+        return None
+    off = off + float(np.median(resid))
+    resid = [r - float(np.median(resid)) for r in resid]
+    return {
+        "anchor": "page-turn [pn-refresh] lines vs camera wash onsets "
+                  "(mode-of-differences fit, median-refined)",
+        "offset_s": round(off, 4),
+        "n_pairs": len(resid),
+        "median_abs_residual_s": round(float(np.median(np.abs(resid))), 4),
+        "max_abs_residual_s": round(float(np.max(np.abs(resid))), 4),
+        "match_window_s": window_s,
+    }
+
+
+def join_trace(transitions, trace_events, fps,
+               window_s=TRACE_MATCH_WINDOW_S):
+    """Annotate every transition dict with its matching trace event(s) under a
+    fitted alignment. Adds t['trace'] = {'src', 'events': [...]} where src is:
+
+      ko-full     -- a [pn-refresh] full-global line matches this wash
+      ko-partial  -- only partial line(s) match (KOReader-issued partial)
+      ko-ui       -- only a ui paint matches
+      none        -- NO [pn-refresh] line near this wash: the panel changed
+                     without KOReader issuing anything -- a driver-initiated
+                     global (or a trace gap); itself a finding.
+
+    Each trace event is attributed to its NEAREST onset only, so one line can
+    never explain two transitions. Returns the join summary dict (also carrying
+    the alignment), or a {'status': ...} dict when the join cannot run."""
+    onsets = [t.get("onset_frame") for t in transitions]
+    if not trace_events:
+        return {"status": "no-trace-events"}
+    if not transitions or any(o is None for o in onsets):
+        return {"status": "no-onsets"}
+    onsets_s = [o / fps for o in onsets]
+    alignment = align_trace(trace_events, onsets_s, window_s=window_s)
+    if alignment is None:
+        return {"status": "no-alignment (insufficient mode-consistent pairs)"}
+    off = alignment["offset_s"]
+    matched = {i: [] for i in range(len(transitions))}
+    n_unmatched = 0
+    for ev in trace_events:
+        cap_t = ev["t"] - off
+        d = [abs(cap_t - o) for o in onsets_s]
+        i = int(np.argmin(d))
+        if d[i] <= window_s:
+            matched[i].append((cap_t - onsets_s[i], ev))
+        else:
+            n_unmatched += 1
+    for i, t in enumerate(transitions):
+        evs = sorted(matched[i], key=lambda p: p[0])
+        kinds = [ev["kind"] for _, ev in evs]
+        intents = [ev["intent"] for _, ev in evs]
+        if "full-global" in kinds:
+            src = "ko-full"
+        elif any(k == "partial" and it != "ui"
+                 for k, it in zip(kinds, intents)):
+            src = "ko-partial"
+        elif kinds:
+            src = "ko-ui"
+        else:
+            src = "none"
+        t["trace"] = {
+            "src": src,
+            "events": [{
+                "kind": ev["kind"], "intent": ev["intent"],
+                "decision": ev["decision"], "t": ev["t"],
+                "dt_s": round(dt, 4), "rect": list(ev["rect"]) if ev["rect"] else None,
+                "waveform": ev["waveform"],
+            } for dt, ev in evs],
+        }
+    return {
+        "status": "ok",
+        "alignment": alignment,
+        "n_trace_events": len(trace_events),
+        "n_unmatched_trace_events": n_unmatched,
+        "n_transitions_without_trace": sum(
+            1 for t in transitions if t["trace"]["src"] == "none"),
+    }
 
 
 def analyze_bundle(bundle_dir, frames=None, fps=None, run_id=None,
@@ -162,6 +331,19 @@ def analyze_bundle(bundle_dir, frames=None, fps=None, run_id=None,
     for t in transitions:
         t["run_id"] = run.get("run_id")
         t["params"] = run_params
+
+    # trace -> transition join (see the anchor discussion above join_trace)
+    trace_events = []
+    trace_name = run.get("trace")
+    if trace_name:
+        try:
+            with open(os.path.join(b.path, trace_name), errors="replace") as f:
+                trace_events = bundle_mod.parse_pn_refresh_trace(f.read())
+        except OSError:
+            trace_events = []
+    trace_join = join_trace(transitions, trace_events, float(fps))
+    for t in transitions:                     # stable shape even without a join
+        t.setdefault("trace", None)
     report = {
         "schema": REPORT_SCHEMA,
         "version": REPORT_VERSION,
@@ -183,6 +365,7 @@ def analyze_bundle(bundle_dir, frames=None, fps=None, run_id=None,
         },
         "capture": {"fps": float(fps), "n_frames": int(n_frames),
                     "sync_end_frame": int(sync_end)},
+        "trace_join": trace_join,
         "transitions": transitions,
         "summary": _summarize(transitions, run=run),
     }
@@ -200,8 +383,8 @@ def _summarize(transitions, run=None):
         for k in ("flash", "ghost", "settle"):
             s = t[k]["severity"]
             counts[k][s] = counts[k].get(s, 0) + 1
-        worst["flash"] = max(worst["flash"], t["flash"]["depth"])
-        worst["ghost"] = max(worst["ghost"], t["ghost"]["rms"])
+        worst["flash"] = max(worst["flash"], t["flash"]["depth"] or 0.0)
+        worst["ghost"] = max(worst["ghost"], t["ghost"]["rms"] or 0.0)
         if t["flash"]["count"] >= 2:
             n_double += 1
         if t["defects"]:
@@ -253,6 +436,19 @@ def format_report_text(report):
     cap = report["capture"]
     L.append(f"capture: {cap['n_frames']} frames @ {cap['fps']:.1f} fps, "
              f"sync ends frame {cap['sync_end_frame']}")
+    tj = report.get("trace_join") or {}
+    if tj.get("status") == "ok":
+        al = tj["alignment"]
+        L.append(f"trace join: ok -- {al['n_pairs']} turns matched to "
+                 f"[pn-refresh] (offset {al['offset_s']:.2f} s, median |resid| "
+                 f"{al['median_abs_residual_s']:.2f} s, max "
+                 f"{al['max_abs_residual_s']:.2f} s); "
+                 f"{tj['n_transitions_without_trace']} washes with NO trace "
+                 f"line.  src: full/part = KOReader-issued wash; '-' = no "
+                 f"[pn-refresh] line (driver-initiated global, or trace gap)")
+    else:
+        L.append(f"trace join: {tj.get('status', 'not run')} -- src column "
+                 f"unavailable")
     s = report["summary"]
     L.append(f"summary: {s['n_transitions']} transitions, "
              f"{s['n_with_defects']} with defects, "
@@ -260,17 +456,32 @@ def format_report_text(report):
              f"worst flash depth {s['worst_flash_depth']:.3f}, "
              f"worst ghost rms {s['worst_ghost_rms']:.3f}")
     L.append("")
-    L.append(f"  {'pair':<20} {'flash':<16} {'ghost':<14} {'settle':<14} defects")
-    L.append(f"  {'-' * 20} {'-' * 16} {'-' * 14} {'-' * 14} -------")
+    L.append(f"  {'pair':<20} {'flash':<16} {'ghost':<14} {'settle':<14} "
+             f"{'src':<7} defects")
+    L.append(f"  {'-' * 20} {'-' * 16} {'-' * 14} {'-' * 14} {'-' * 7} -------")
+    src_short = {"ko-full": "full", "ko-partial": "part", "ko-ui": "ui",
+                 "none": "-"}
     for t in report["transitions"]:
-        fl = f"{t['flash']['severity']}({t['flash']['depth']:.2f})"
+        fl = f"{t['flash']['severity']}({_fmt(t['flash']['depth'], '.2f')})"
         if t["flash"]["count"] >= 2:
             fl += f" x{t['flash']['count']}"
-        gh = f"{t['ghost']['severity']}({t['ghost']['rms']:.3f})"
-        st = f"{t['settle']['severity']}({t['settle']['settle_s']:.2f}s)"
-        L.append(f"  {t['pair']:<20} {fl:<16} {gh:<14} {st:<14} "
+        gh = f"{t['ghost']['severity']}({_fmt(t['ghost']['rms'], '.3f')})"
+        st = f"{t['settle']['severity']}({_fmt(t['settle']['settle_s'], '.2f')}s)"
+        tr = t.get("trace")
+        if tr is None:
+            src = "?"
+        else:
+            src = src_short.get(tr["src"], tr["src"])
+            if len(tr["events"]) > 1:
+                src += f" x{len(tr['events'])}"
+        L.append(f"  {t['pair']:<20} {fl:<16} {gh:<14} {st:<14} {src:<7} "
                  f"{','.join(t['defects']) or '-'}")
     return "\n".join(L)
+
+
+def _fmt(x, spec):
+    """Format a report number that may be None (the JSON-null NaN guard)."""
+    return format(x, spec) if x is not None else "?"
 
 
 def main(argv=None):

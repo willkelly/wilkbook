@@ -472,6 +472,73 @@ def _check_waveform_summary(wd):
             raise ValueError(f"waveform_decode[{k!r}] looks like raw LUT data")
 
 
+# --- the [pn-refresh] trace sidecar ------------------------------------------
+#
+# The KOReader pinenote device target logs one line per refresh decision (see
+# pinenote/packages/koreader-device/frontend/device/pinenote/device.lua):
+#
+#   ... [pn-refresh] <intent> <decision> rect=X,Y,W,H dither=<d> t=<sec>.<usec>
+#
+# intent   = what KOReader asked for: ui / partial / full
+# decision = what the device target did: partial / global
+# t        = device epoch seconds (ffi gettime at the moment the refresh was
+#            issued -- NOT when the panel finished washing)
+# A waveform=<n> token may appear in future emitter revisions; parsed if
+# present. The recorder harvests these lines per run into trace.<run_id>.log.
+
+_PN_REFRESH_RE = re.compile(
+    r"\[pn-refresh\]\s+(?P<intent>\w+)\s+(?P<decision>\w+)\s+(?P<rest>.*)")
+_PN_TOKEN_RE = re.compile(r"(\w+)=(\S+)")
+
+
+def parse_pn_refresh_trace(text):
+    """Parse harvested trace text into refresh-event dicts, ignoring every
+    non-[pn-refresh] line (KOReader logs plenty of other output around them).
+
+    Each event: {'intent', 'decision', 'kind', 'rect': (x,y,w,h)|None,
+    'dither': str|None, 'waveform': int|None, 't': float}. `kind` collapses
+    the pair the analyzers care about: 'full-global' when the decision was a
+    global wash, else 'partial'. Lines without a parseable t= are dropped (no
+    timestamp = nothing to join on)."""
+    events = []
+    for line in (text or "").splitlines():
+        m = _PN_REFRESH_RE.search(line)
+        if not m:
+            continue
+        tokens = dict(_PN_TOKEN_RE.findall(m.group("rest")))
+        try:
+            t = float(tokens["t"])
+        except (KeyError, ValueError):
+            continue
+        rect = None
+        if "rect" in tokens:
+            try:
+                x, y, w, h = (int(v) for v in tokens["rect"].split(","))
+                rect = (x, y, w, h)
+            except ValueError:
+                rect = None
+        dither = tokens.get("dither")
+        if dither in ("nil", "None"):
+            dither = None
+        waveform = None
+        if "waveform" in tokens:
+            try:
+                waveform = int(tokens["waveform"])
+            except ValueError:
+                waveform = None
+        decision = m.group("decision")
+        events.append({
+            "intent": m.group("intent"),
+            "decision": decision,
+            "kind": "full-global" if decision == "global" else "partial",
+            "rect": rect,
+            "dither": dither,
+            "waveform": waveform,
+            "t": t,
+        })
+    return events
+
+
 # --- waveform-decode summary from ../wbf ------------------------------------
 
 def waveform_summary_from_wbf_info(text, wbf_sha256=None, modes_at_c=None):
