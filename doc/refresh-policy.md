@@ -313,6 +313,23 @@ bundles + reports under `pinenote/tools/optics/build/bundles/sweep1.*`):
    single cadence owner) is under test — it is viable iff the driver's
    auto-global scrubs toggle regions the way KOReader's promoted fulls do.
    Bundles: `.../neverx3.*`, `.../driver-owned.*`.
+9. **Soak (both mechanisms OFF, 30 same-pair toggles + wash interventions):
+   NO accumulation — the simple toggle-count mechanism is refuted.** The
+   single toggling barcode cell tracked its never-toggling neighbors within
+   ~0.01 across all 30 washless flips (cell-level tracking at half-res;
+   parity square likewise ~2% at most); the GL16 and GC16 interventions had
+   nothing to scrub. Yet diverse-page never-runs corrupt 3/4. The corrupting
+   ingredient is therefore NOT how often a cell toggles but either (a)
+   DIVERSE gray-transition sequences per cell (many different pages — what
+   the card v2 accumulation block was designed to cycle), or (b) an
+   interaction with `auto_refresh=1` itself, which was ON in every corrupting
+   run and OFF in the clean soak — i.e. the driver's auto-globals may cause
+   the believed-white drift they are meant to prevent. Also noted:
+   `refresh_threshold=8` + never still corrupted (6/48), and the
+   GLOBAL_REFRESH ioctl works under a live DRM master (deep_clean was always
+   real). Next experiments: the diverse-page soak (accumulation block) x
+   auto_refresh on/off — a 2x2 that isolates the mechanism.
+   Bundle: `.../soak1` (+ soak-events.json).
 
 Instrument provenance: 30 fps / exposure 312 / gain 32 / frontlight 255-255;
 ghost-rms repeatability sigma 0.003-0.006 between identical transitions.
