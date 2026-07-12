@@ -284,6 +284,20 @@ bundles + reports under `pinenote/tools/optics/build/bundles/sweep1.*`):
    the 20-40 turn cliff onset is the obvious follow-up sweep). Set via the
    KOReader menu per Decision 4 (user's knob); 12 is now the evidence-based
    suggestion. Bundles: `pinenote/tools/optics/build/bundles/cadence.*`.
+7. **Cliff mapping (c25/c35/c40) found NO cliff — and exposed the driver's
+   backstop.** The pooled six-cadence curve is flat 0-33 turns since a
+   KOReader full (0.093-0.146, floor 0.121±0.009, 39 samples), and c40
+   segmented 47/48 (barcode healthy through 39-turn spans). The resolution of
+   the apparent 20->40 cliff: every run carries the SHIPPING driver config
+   `auto_refresh=1, refresh_threshold=60` half-screens, so the DRIVER injects
+   its own auto-global roughly every ~30 full-page turns — invisible to the
+   [pn-refresh] trace. KOReader promotion and the driver threshold are
+   overlapping cadence mechanisms; with the backstop present, ANY
+   full_refresh_count >= 12 is optically free. The `never` run's 0.309 +
+   barcode corruption stands as a single-run outlier pending the soak
+   scenario (PLAN task 19: full_refresh_count=never AND auto_refresh=0 —
+   exactly the confound its design anticipated), which is where the TRUE
+   material accumulation curve gets measured. Bundles: `.../cliff.*`.
 
 Instrument provenance: 30 fps / exposure 312 / gain 32 / frontlight 255-255;
 ghost-rms repeatability sigma 0.003-0.006 between identical transitions.
