@@ -353,7 +353,11 @@ bundles + reports under `pinenote/tools/optics/build/bundles/sweep1.*`):
     cadence.r01 (c12) quietly under-segmenting 19/48. **Policy consequence:
     set `auto_refresh=0` and own all washes from userspace via the ioctl
     (KOReader promotion at 12 today; the idle-washer later). Driver finding
-    written for upstream (doc/driver-findings-report.md).** Bundles:
+    written for upstream (doc/driver-findings-report.md).** Since
+    root-caused offline: the threshold path is the driver's only zero-gap
+    global launcher and the counting completion handshake lets a straggler
+    DSP_END truncate the wash mid-playback — quirk F in `ebc-refresh-test`,
+    mechanism + fix sketch in the report's 2026-07-12 entry. Bundles:
     `.../armB*`, `.../armC`.
 
 Instrument provenance: 30 fps / exposure 312 / gain 32 / frontlight 255-255;

@@ -158,6 +158,16 @@ What it executes and asserts (`quirk:`-policy applies as in rung 2):
   `split_area_limit=0`, the rung-2 chained-begin-together scenario makes
   overlap pixels' phase indices regress mid-sequence (conflicting drive
   data on real hardware).
+- **QUIRK F (the 2026-07-12 threshold-global finding), executed**: the
+  fake device gained an IRQ-latency knob (`defer_dsp_end` +
+  `fake_ebc_deliver_dsp_end()`), and one scripted session — partial
+  burst with its final frame's DSP_END delivered late, then a full
+  refresh, then more partial damage — runs through both launch
+  contexts: the driver's own threshold epilogue (zero-gap) vs the real
+  `GLOBAL_REFRESH` ioctl from idle.  Identical stream, identical
+  perturbation; only the threshold-fired variant ends with a residual
+  `display_end` credit (a wait satisfied by the straggler — on hardware,
+  mid-playback).  See Findings 8.
 - **The rung-2 teardown UAF, executed**: `run-tests.sh` runs
   `ebc-refresh-test quirk-ctx-free-uaf` as a subprocess and asserts it
   dies with an ASan heap-use-after-free.
@@ -332,6 +342,50 @@ these silently in the patch** — they are candidates for upstream discussion
    quantified in `doc/refresh-policy.md`'s replay study.  Policy-level
    inefficiency, not memory unsafety; an upstream fix would zero the
    accumulator in `rockchip_ebc_global_refresh`.
+
+8. **The threshold-fired auto-global launches zero-gap and lets a
+   straggling DSP_END satisfy its wait (QUIRK F; the 2026-07-12 hardware
+   finding's root-cause candidate).**  Both full-refresh paths run the
+   identical code from `do_one_full_refresh` onward, and the harness
+   confirms the CPU-side content bookkeeping (double-buffered `final`,
+   queue splice/delete, `prev`/`next` discipline) is coherent for both —
+   so the hardware divergence (threshold-path globals progressively
+   corrupt recently-updated pixels at 0.6–0.8 reflectance; ioctl-path
+   globals never do) has to come from launch context, and the code gives
+   the threshold path exactly one unique property: **zero-gap chaining**.
+   The flag is set in the epilogue of the very partial refresh that
+   crossed the threshold (patch 4271–4280) and consumed immediately
+   (4386–4387 skips the sleep, 4361–4369 consumes), so the global runs
+   microseconds after a partial burst.  Meanwhile the per-frame handshake
+   is fragile there: `display_end` is a *counting* completion that the
+   partial path never reinits, `EBC_FRAME_TIMEOUT` is only 25 ms (2.1
+   frame periods at 85 Hz, patch 2942), and a timed-out frame is logged
+   but never resynchronized — one late IRQ order-skews every following
+   wait (satisfied by the previous frame's END while its own frame still
+   plays) and the burst exits with its final END in flight.  In the
+   threshold path that straggler lands inside the global's
+   `reinit_completion`→wait window (patch 3446→3459) and the global's
+   wait returns while the num_phases-frame LUT playback is still driving
+   glass — after which the driver commits `prev <- next` (3463), writes
+   `DSP_OUT_LOW` (4265), uploads the next waveform's LUT (4211) and
+   starts three-window frames against a panel mid-wash.  Pixels with
+   `prev != next` (exactly the recently-updated ones) switch LUT rows
+   mid-waveform and land at intermediate reflectance; the bookkeeping
+   believes the wash landed, so the error compounds.  Ioctl washes
+   launch from thread-idle (the wash beats the deferred-io flush), so
+   stragglers land in the gap and the reinit absorbs them.  Executed as
+   `quirk F` in `ebc-refresh-test` using the fake device's IRQ-latency
+   knob (`defer_dsp_end`/`fake_ebc_deliver_dsp_end`): the identical
+   session with the identical late-IRQ perturbation ends with a residual
+   `display_end` credit **iff** the global was threshold-fired, and the
+   test also pins the model's limit — the synchronous playback shows
+   identical pixels for both paths, so the mid-playback corruption
+   itself stays hardware-only.  Which straggler source dominates on
+   silicon (late threaded-IRQ delivery, handler-vs-END coalescing losing
+   an END, or an unmodeled `DSP_OUT_LOW` completion) is an on-device
+   question; the zero-gap structure is what makes all of them land in
+   the global's wait window.  Full mechanism, fix sketch and upstream
+   draft in `doc/driver-findings-report.md` (2026-07-12 entry).
 
 The rung-7a WBF drive-sequence differential also re-confirmed the
 rastersim finding that **`blit_direct` reads the LUT transposed** from

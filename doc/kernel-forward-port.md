@@ -267,6 +267,19 @@ user-visible way today. Highlights, in upstream-fix priority order:
    cross-wired under `panel_reflection`, `panel_reflection=0` drops the
    last damage row, odd-`x1` "preserve" is a no-op that leaks one
    out-of-clip column.
+6. (2026-07-12, hardware-first) The `auto_refresh=1` threshold path
+   launches its global refresh zero-gap after the partial burst that
+   crossed the threshold, and the counting `display_end` handshake —
+   never reinit'd in the partial path, 25 ms frame timeout, no
+   resynchronization after a timeout — lets a straggling DSP_END satisfy
+   the global's wait mid-playback. The driver then rewrites `prev`,
+   drives outputs low, re-uploads the LUT and starts partial frames
+   against a panel mid-wash: recently-updated pixels land at
+   intermediate gray and the error compounds. Ioctl-fired washes launch
+   from idle and are immune. Pinned as quirk F in `ebc-refresh-test`;
+   root cause, fix sketch and upstream draft in
+   `doc/driver-findings-report.md`. Shipped mitigation: `auto_refresh=0`
+   (ebc.scm); PNDeb's defaults remain exposed.
 
 When refreshing the patch or cherry-picking from hrdl/ayakael, check
 whether their trees already fix any of these before re-pinning.
