@@ -1,0 +1,252 @@
+rockchip_ebc: printk-only DSP_END straggler instrumentation (quirk F)
+
+DIAGNOSTIC-ONLY debug patch for the wilkbook quirk F investigation
+(doc/driver-findings-report.md, finding 2026-07-12): detect the
+straggler DSP_END credit that the zero-gap threshold-global analysis
+predicts, directly in the kernel log, corruption visible or not.
+
+Applied AFTER linux-pinenote-7.0-forward-port.patch, and ONLY by the
+linux-pinenote-debug package variant (pinenote/packages/kernel.scm);
+the primary linux-pinenote kernel remains byte-identical.  To remove,
+delete this file and the linux-pinenote-debug variant.
+
+No driver logic changes: every hunk either adds a printk/counter or
+records which launch site set do_one_full_refresh.  Log lines:
+
+  "ebc-dbg: straggler credit present at global launch (...)"
+      completion_done(&ebc->display_end) was true immediately before
+      the global's reinit_completion() -- an unconsumed DSP_END from
+      the preceding activity existed at launch.
+
+  "ebc-dbg: global wait returned R after E ms (...)"
+      once per global refresh: wait_for_completion_timeout return
+      value, elapsed ms, launch provenance (init/reset/resume/ioctl/
+      threshold/offscreen), num_phases, nominal expected playback
+      duration (~85 Hz frame clock), and the frame-timeout counters
+      (last partial burst / total) so timeout-desync and extra-credit
+      stragglers are distinguishable per event.
+
+  "ebc-dbg: DSP_END irq with unconsumed credit" (rate-limited)
+      a DSP_END arrived while the previous credit was still pending;
+      completions are outrunning waits.
+
+---
+--- a/drivers/gpu/drm/rockchip/rockchip_ebc.c	2026-07-11 21:14:09.424107690 -0600
++++ b/drivers/gpu/drm/rockchip/rockchip_ebc.c	2026-07-11 21:16:40.535277253 -0600
+@@ -153,6 +153,29 @@
+ #define EBC_OFFCONTENT "rockchip/rockchip_ebc_default_screen.bin"
+ MODULE_FIRMWARE(EBC_OFFCONTENT);
+ 
++/*
++ * ebc-dbg: quirk F straggler-credit instrumentation (wilkbook debug patch
++ * linux-pinenote-debug-dspend-straggler.patch; printk-only, no behavior
++ * change; see doc/driver-findings-report.md, finding 2026-07-12).
++ * Records the provenance of the most recent global-refresh launch so the
++ * log lines can distinguish threshold-fired globals (the suspect zero-gap
++ * path) from ioctl-fired ones (the clean control).
++ */
++enum ebc_dbg_gsrc {
++	EBC_DBG_GSRC_UNKNOWN = 0,
++	EBC_DBG_GSRC_INIT,	/* probe-time initial full refresh */
++	EBC_DBG_GSRC_RESET,	/* RESET waveform at thread start */
++	EBC_DBG_GSRC_RESUME,	/* post-resume restore refresh */
++	EBC_DBG_GSRC_IOCTL,	/* GLOBAL_REFRESH ioctl */
++	EBC_DBG_GSRC_THRESHOLD,	/* auto_refresh damage-threshold epilogue */
++	EBC_DBG_GSRC_OFFSCREEN,	/* suspend/shutdown off-screen wash */
++};
++
++static const char *const ebc_dbg_gsrc_names[] = {
++	"unknown", "init", "reset", "resume", "ioctl", "threshold",
++	"offscreen",
++};
++
+ struct rockchip_ebc {
+ 	struct clk			*dclk;
+ 	struct clk			*hclk;
+@@ -192,6 +215,16 @@
+ 	u8				*final_buffer[2];
+ 	u8              *final_atomic_update;
+ 	u8				*phase[2];
++
++	/* ebc-dbg state (debug patch only).  dbg_pending_gsrc is written
++	 * under refresh_once_lock alongside do_one_full_refresh (except at
++	 * probe/resume, matching the unlocked flag writes there); dbg_gsrc
++	 * and the frame-timeout counters are touched only by the refresh
++	 * thread. */
++	int				dbg_pending_gsrc;
++	int				dbg_gsrc;
++	unsigned int			dbg_frame_timeouts;
++	unsigned int			dbg_burst_frame_timeouts;
+ };
+ 
+ static int default_waveform = DRM_EPD_WF_GC16;
+@@ -316,6 +349,7 @@
+ 		/* printk(KERN_INFO "[rockchip_ebc] ioctl_trigger_global_refresh"); */
+ 		spin_lock(&ebc->refresh_once_lock);
+ 		ebc->do_one_full_refresh = true;
++		ebc->dbg_pending_gsrc = EBC_DBG_GSRC_IOCTL;	/* ebc-dbg */
+ 		spin_unlock(&ebc->refresh_once_lock);
+ 		// try to trigger the refresh immediately
+ 		wake_up_process(ebc->refresh_thread);
+@@ -621,6 +655,12 @@
+ 	struct rockchip_ebc_area *area, *next_area;
+ 	LIST_HEAD(areas);
+ 
++	/* ebc-dbg locals (debug patch only) */
++	unsigned long dbg_wait_ret;
++	unsigned int dbg_expect_ms;
++	s64 dbg_elapsed_ms;
++	ktime_t dbg_t0;
++
+ 	spin_lock(&ctx->queue_lock);
+ 	list_splice_tail_init(&ctx->queue, &areas);
+ 	// switch buffers
+@@ -648,6 +688,23 @@
+ 	dma_sync_single_for_device(dev, next_handle, gray4_size, DMA_TO_DEVICE);
+ 	dma_sync_single_for_device(dev, prev_handle, gray4_size, DMA_TO_DEVICE);
+ 
++	/*
++	 * ebc-dbg (1): a credit already present in display_end at global
++	 * launch means a DSP_END from the preceding activity was produced
++	 * but never consumed by a wait -- the straggler the quirk F
++	 * zero-gap analysis predicts.  reinit_completion() below absorbs
++	 * it silently (the ioctl path's structural immunity); a straggler
++	 * that instead arrives AFTER the reinit satisfies the wait early,
++	 * which the elapsed-time log at (2) catches.
++	 */
++	if (completion_done(&ebc->display_end))
++		pr_warn("ebc-dbg: straggler credit present at global launch (threshold=%d src=%s burst_timeouts=%u total_timeouts=%u)\n",
++			ebc->dbg_gsrc == EBC_DBG_GSRC_THRESHOLD,
++			ebc_dbg_gsrc_names[ebc->dbg_gsrc],
++			ebc->dbg_burst_frame_timeouts,
++			ebc->dbg_frame_timeouts);
++	dbg_t0 = ktime_get();
++
+ 	reinit_completion(&ebc->display_end);
+ 	regmap_write(ebc->regmap, EBC_CONFIG_DONE,
+ 		     EBC_CONFIG_DONE_REG_CONFIG_DONE);
+@@ -661,10 +718,28 @@
+ 		kfree(area);
+ 	}
+ 
+-	if (!wait_for_completion_timeout(&ebc->display_end,
+-					 EBC_REFRESH_TIMEOUT))
++	dbg_wait_ret = wait_for_completion_timeout(&ebc->display_end,
++						   EBC_REFRESH_TIMEOUT);
++	if (!dbg_wait_ret)
+ 		drm_err(drm, "Refresh timed out!\n");
+ 
++	/*
++	 * ebc-dbg (2): elapsed wall time vs the expected LUT playback
++	 * duration.  The panel frame clock runs at ~85 Hz (~11.8 ms per
++	 * frame), so a full global should take about num_phases * 11.8 ms.
++	 * A wait that returns much earlier than expect~ is a truncated
++	 * wash, even when no prior credit was seen at (1) -- the straggler
++	 * arrived inside the reinit->wait window instead of before it.
++	 */
++	dbg_elapsed_ms = ktime_ms_delta(ktime_get(), dbg_t0);
++	dbg_expect_ms = ebc->lut.num_phases * 1000 / 85;
++	pr_info("ebc-dbg: global wait returned %lu after %lld ms (src=%s phases=%u expect~%u ms burst_timeouts=%u total_timeouts=%u)\n",
++		dbg_wait_ret, dbg_elapsed_ms,
++		ebc_dbg_gsrc_names[ebc->dbg_gsrc],
++		ebc->lut.num_phases, dbg_expect_ms,
++		ebc->dbg_burst_frame_timeouts,
++		ebc->dbg_frame_timeouts);
++
+ 	memcpy(ctx->prev, ctx->next, gray4_size);
+ 	// this was the first global refresh after resume, reset the variable
+ 	ebc->suspend_was_requested = 0;
+@@ -1105,6 +1180,9 @@
+ 	/* 	drm_err(drm, "phase_handles[0] dma mapping error"); */
+ 	/* } */
+ 
++	/* ebc-dbg (3): per-burst frame-timeout counter. */
++	ebc->dbg_burst_frame_timeouts = 0;
++
+ 	times[time_index] = ktime_get();
+ 	time_index++;
+ 	for (frame = 0;; frame++) {
+@@ -1294,8 +1372,14 @@
+ 		}
+ 
+ 		if (!wait_for_completion_timeout(&ebc->display_end,
+-						 EBC_FRAME_TIMEOUT))
++						 EBC_FRAME_TIMEOUT)) {
++			/* ebc-dbg (3): count handshake desyncs so the two
++			 * global-launch logs can distinguish timeout-desync
++			 * stragglers from extra-credit stragglers. */
++			ebc->dbg_frame_timeouts++;
++			ebc->dbg_burst_frame_timeouts++;
+ 			drm_err(drm, "Frame %d timed out!\n", frame);
++		}
+ 
+ 		// record time after frame completed
+ 		if (time_index <= 59){
+@@ -1477,6 +1561,7 @@
+ 		if (ctx->area_count >= refresh_threshold * one_screen_area){
+ 			spin_lock(&ebc->refresh_once_lock);
+ 			ebc->do_one_full_refresh = true;
++			ebc->dbg_pending_gsrc = EBC_DBG_GSRC_THRESHOLD;	/* ebc-dbg */
+ 			spin_unlock(&ebc->refresh_once_lock);
+ 			ctx->area_count = 0;
+ 		}
+@@ -1530,6 +1615,7 @@
+ 			memset(ctx->next, 0xff, ctx->gray4_size);
+ 			/* memset(ctx->final, 0xff, ctx->gray4_size); */
+ 			ebc->do_one_full_refresh = 1;
++			ebc->dbg_pending_gsrc = EBC_DBG_GSRC_RESUME;	/* ebc-dbg */
+ 		} else {
+ 			// only on first run
+ 			if (!ebc->reset_complete) {
+@@ -1558,6 +1644,7 @@
+ 		 */
+ 		if (!ebc->reset_complete) {
+ 			ebc->reset_complete = true;
++			ebc->dbg_gsrc = EBC_DBG_GSRC_RESET;	/* ebc-dbg */
+ 			rockchip_ebc_refresh(ebc, ctx, true, DRM_EPD_WF_RESET);
+ 		}
+ 
+@@ -1571,6 +1658,10 @@
+ 				/* printk(KERN_INFO "[rockchip_ebc] got one full refresh"); */
+ 				spin_lock(&ebc->refresh_once_lock);
+ 				ebc->do_one_full_refresh = false;
++				/* ebc-dbg: adopt the recorded launch provenance
++				 * for the global refresh consumed here. */
++				ebc->dbg_gsrc = ebc->dbg_pending_gsrc;
++				ebc->dbg_pending_gsrc = EBC_DBG_GSRC_UNKNOWN;
+ 				spin_unlock(&ebc->refresh_once_lock);
+ /* 				 * @DRM_EPD_WF_A2: Fast transitions between black and white only */
+ /* 				 * @DRM_EPD_WF_DU: Transitions 16-level grayscale to monochrome */
+@@ -1621,6 +1712,7 @@
+ 				memcpy(ctx->final, ebc->off_screen, ctx->gray4_size);
+ 			}
+ 			/* memcpy(ctx->final, ebc->off_screen, ctx->gray4_size); */
++			ebc->dbg_gsrc = EBC_DBG_GSRC_OFFSCREEN;	/* ebc-dbg */
+ 			rockchip_ebc_refresh(ebc, ctx, true, DRM_EPD_WF_GC16);
+ 		}
+ 		else{
+@@ -2679,6 +2771,16 @@
+ 
+ 	if (status & EBC_INT_STATUS_DSP_END_INT_ST) {
+ 		status |= EBC_INT_STATUS_DSP_END_INT_CLR;
++		/*
++		 * ebc-dbg (4): a DSP_END arriving while the previous credit
++		 * is still unconsumed means completions are outrunning the
++		 * waits -- the raw straggler signal at its source.  One
++		 * completion spinlock, dwarfed by the surrounding regmap
++		 * MMIO; rate-limited because a desynced burst could fire it
++		 * per-frame.
++		 */
++		if (completion_done(&ebc->display_end))
++			pr_warn_ratelimited("ebc-dbg: DSP_END irq with unconsumed credit\n");
+ 		complete(&ebc->display_end);
+ 	}
+ 
+@@ -2705,6 +2807,7 @@
+ 	// TODO: Error checking
+ 
+ 	ebc->do_one_full_refresh = true;
++	ebc->dbg_pending_gsrc = EBC_DBG_GSRC_INIT;	/* ebc-dbg */
+ 	ebc->suspend_was_requested = 0;
+ 
+ 	spin_lock_init(&ebc->refresh_once_lock);

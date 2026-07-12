@@ -113,6 +113,36 @@ or mutate bootloader state.")
     (license license:gpl2)))
 
 
+;; Diagnostic kernel for the quirk F investigation
+;; (doc/driver-findings-report.md, finding 2026-07-12): linux-pinenote plus
+;; one printk-only instrumentation patch that detects the straggler DSP_END
+;; credit at global-refresh launch.  A separate inheriting variant so the
+;; primary linux-pinenote stays byte-identical; delete this package and the
+;; debug patch together when the investigation closes.
+(define-public linux-pinenote-debug
+  (package
+    (inherit linux-pinenote)
+    (name "linux-pinenote-debug")
+    (source
+     (origin
+       (inherit (package-source %linux-pinenote-base))
+       (patches
+        (append (origin-patches (package-source %linux-pinenote-base))
+                %linux-pinenote-patches
+                (list (local-file
+                       "../patches/linux-pinenote-debug-dspend-straggler.patch"))))))
+    (synopsis "PineNote kernel with DSP_END straggler instrumentation")
+    (description
+     "The linux-pinenote kernel with an additional printk-only debug patch
+that instruments the rockchip_ebc global-refresh completion handshake: it
+warns when an unconsumed DSP_END credit is present at global launch, logs
+every global wait's return value and elapsed time against the expected LUT
+playback duration with launch provenance (threshold vs ioctl vs
+init/reset/resume/offscreen), counts per-burst frame timeouts, and
+rate-limit-warns when a DSP_END interrupt arrives while a previous credit
+is still unconsumed.  Driver logic is unchanged; this is a diagnostic
+artifact for the quirk F threshold-global corruption investigation.")))
+
 (define-public linux-pinenote-6.6.30
   (package
     (inherit linux-libre)
