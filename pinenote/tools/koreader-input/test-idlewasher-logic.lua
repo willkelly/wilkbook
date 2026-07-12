@@ -185,6 +185,43 @@ local cases = {
         post = function(c) return c.debt == 0, "debt=" .. c.debt end,
     },
     {
+        -- The 2026-07-11 acceptance-run bug: an idle span that ends below
+        -- debt_min re-arms the timer for the DEEP-CLEAN horizon (hundreds
+        -- of seconds out).  When reading resumes, on_input must pull the
+        -- deadline back in to idle_s after the new activity -- otherwise
+        -- the next idle window passes while the timer is still parked on
+        -- the old span's deep-clean deadline, and the idle wash NEVER
+        -- fires in normal reading (proven on glass: bundled washes fired,
+        -- idle washes did not).  on_timer may only fire at the armed
+        -- deadline -- this case respects that schedule throughout.
+        name = "resumed reading pulls a far (deep-clean) deadline back in",
+        cfg = { now = 0, debt_min = 5, debt_max = 10, idle_s = 20,
+                deepclean_idle_s = 600 },
+        steps = {
+            { "on_input", 0, { arm = 20 } },       -- deadline 20
+            { "on_input", 1, nil }, { "on_page_turn", 1, nil },
+            { "on_input", 2, nil }, { "on_page_turn", 2, nil },
+            -- deadline 20: idle 18 of 20 -> remainder
+            { "on_timer", 20, { rearm = 2 } },     -- deadline 22
+            -- deadline 22: idle 20, debt 2 < 5 -> no wash; chain re-arms
+            -- for the deep-clean horizon (600 - 20 = 580; deadline 602)
+            { "on_timer", 22, { rearm = 580 } },
+            -- reading resumes: the far deadline MUST come back to +idle_s
+            { "on_input", 100, { arm = 20 } },     -- deadline 120
+            { "on_page_turn", 100, nil },
+            { "on_input", 102, nil }, { "on_page_turn", 102, nil },
+            { "on_input", 104, nil }, { "on_page_turn", 104, nil },
+            { "on_input", 106, nil }, { "on_page_turn", 106, nil },
+            { "on_input", 108, nil }, { "on_page_turn", 108, nil },
+            -- deadline 120: idle 12 of 20 -> remainder (deadline 128)
+            { "on_timer", 120, { rearm = 8 } },
+            -- deadline 128: idle 20, debt 7 >= 5 (the sub-min span
+            -- retired nothing, so its 2 turns carry) -> THE IDLE WASH
+            { "on_timer", 128, { wash = "idle", debt = 7, rearm = 580 } },
+        },
+        post = function(c) return c.debt == 0, "debt=" .. c.debt end,
+    },
+    {
         name = "config overrides: debt_max=3, idle_s=10, deepclean=30",
         cfg = { now = 0, debt_min = 2, debt_max = 3, idle_s = 10,
                 deepclean_idle_s = 30 },

@@ -33,6 +33,16 @@ rearm = the remaining idle window.  Once the idle threshold is crossed
 the chain keeps re-arming toward the deep clean, then PARKS -- no
 wakeups on an untouched device -- until the next input re-arms it.
 
+One exception to "the timer stays armed": the chain has TWO horizons
+(idle_s and deepclean_idle_s), and after a below-debt_min idle span the
+timer is armed hundreds of seconds out, toward the deep clean.  When
+reading resumes, on_input must pull that deadline back in to idle_s
+after the new activity -- the core mirrors the caller's deadline in
+armed_deadline for exactly this comparison.  Without it the idle wash
+can never fire after any idle span that ends below debt_min (the
+2026-07-11 acceptance-run bug: proven on glass, regression-tested in
+test-idlewasher-logic.lua "resumed reading pulls a far deadline in").
+
 Policy grounding (doc/refresh-policy.md, findings 6-10 + Decisions):
 ioctl-path washes have never corrupted anything (finding 10) and GL16
 fulls are optically ~free (finding 6), but each wash still interrupts
@@ -64,6 +74,7 @@ function Core.new(cfg)
     self.debt = 0                 -- page turns since the last full wash
     self.last_activity = tonumber(cfg.now) or 0
     self.armed = false            -- caller's idle timer state, mirrored
+    self.armed_deadline = nil     -- ...and its absolute deadline
     self.deepclean_done = false   -- a deep clean ran this idle span
     self.last_wash_at = nil       -- introspection/logging only
     self.last_deepclean_at = nil  -- "last GC16 time"
@@ -86,8 +97,13 @@ function Core:on_input(now)
     if not self.enabled then return nil end
     self.last_activity = now
     self.deepclean_done = false   -- new activity opens a new idle span
-    if not self.armed then
+    local want = now + self.idle_s
+    if not self.armed
+       or (self.armed_deadline and self.armed_deadline > want) then
+        -- not armed, or armed far out (a prior span's deep-clean
+        -- horizon): pull the next check in to idle_s after THIS input
         self.armed = true
+        self.armed_deadline = want
         return { arm = self.idle_s }
     end
     return nil
@@ -96,11 +112,13 @@ end
 function Core:on_timer(now)
     if not self.enabled then return nil end
     self.armed = false
+    self.armed_deadline = nil
     local idle = now - self.last_activity
     if idle < self.idle_s then
         -- input happened since arming: not idle yet, check again when
         -- the current pause would reach the threshold
         self.armed = true
+        self.armed_deadline = now + (self.idle_s - idle)
         return { rearm = self.idle_s - idle }
     end
     local out = {}
@@ -124,6 +142,7 @@ function Core:on_timer(now)
         -- the timer parks until the next input re-arms it
         self.armed = true
         out.rearm = self.deepclean_idle_s - idle
+        self.armed_deadline = now + out.rearm
     end
     if out.wash or out.deep_clean or out.rearm then return out end
     return nil
