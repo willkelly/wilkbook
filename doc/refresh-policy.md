@@ -284,8 +284,11 @@ bundles + reports under `pinenote/tools/optics/build/bundles/sweep1.*`):
    the 20-40 turn cliff onset is the obvious follow-up sweep). Set via the
    KOReader menu per Decision 4 (user's knob); 12 is now the evidence-based
    suggestion. Bundles: `pinenote/tools/optics/build/bundles/cadence.*`.
-7. **Cliff mapping (c25/c35/c40) found NO cliff — and exposed the driver's
-   backstop.** The pooled six-cadence curve is flat 0-33 turns since a
+7. **Cliff mapping (c25/c35/c40) found NO cliff.** (CORRECTED, see 8: the
+   original explanation credited the driver's auto-refresh backstop; the
+   driver source says threshold units are whole SCREEN-AREAS, so at the
+   shipping 60 it fires ~every 60 turns — beyond every tested span. The flat
+   curve is real GL16-partial non-accumulation in normal content.) The pooled six-cadence curve is flat 0-33 turns since a
    KOReader full (0.093-0.146, floor 0.121±0.009, 39 samples), and c40
    segmented 47/48 (barcode healthy through 39-turn spans). The resolution of
    the apparent 20->40 cliff: every run carries the SHIPPING driver config
@@ -298,6 +301,18 @@ bundles + reports under `pinenote/tools/optics/build/bundles/sweep1.*`):
    scenario (PLAN task 19: full_refresh_count=never AND auto_refresh=0 —
    exactly the confound its design anticipated), which is where the TRUE
    material accumulation curve gets measured. Bundles: `.../cliff.*`.
+8. **`full_refresh_count=never` REFUTED by replication (3/3 corrupt).** Two
+   fresh never-runs both showed barcode-region corruption signatures (one
+   segmented 0/48; one shattered into 429 pseudo-transitions from decode
+   bits flickering on the threshold) — matching the original outlier. With
+   the driver threshold at 60 screen-areas, nothing washes within a 48-turn
+   pass, and high-frequency-toggle regions accumulate believed-white mud.
+   Synthesis: static reading content never accumulates; toggle-heavy regions
+   REQUIRE periodic washes; the washes in every clean run came from KOReader
+   promotion. The driver-owned architecture (never + refresh_threshold≈8,
+   single cadence owner) is under test — it is viable iff the driver's
+   auto-global scrubs toggle regions the way KOReader's promoted fulls do.
+   Bundles: `.../neverx3.*`, `.../driver-owned.*`.
 
 Instrument provenance: 30 fps / exposure 312 / gain 32 / frontlight 255-255;
 ghost-rms repeatability sigma 0.003-0.006 between identical transitions.
