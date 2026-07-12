@@ -241,12 +241,21 @@ def decode_pageid(panel_intensity, manifest):
                             fit_photometry(panel_intensity, manifest))
     g = manifest["markers"]["pageid"]
     span = g["w"] / g["cells"]
-    y = g["y"] + g["h"] / 2
     bits = []
     for i in range(g["cells"]):
         fx = g["x"] + i * span + span * 0.4
-        px, py = int(fx * Wp), int(y * Hp)
-        bits.append(1 if refl[py, px] < 0.5 else 0)
+        # Neighborhood MEAN inside the cell, not a single warped pixel: at
+        # analysis scales <=0.5 a lone pixel flips bits under MJPG noise --
+        # single-bit misreads (pid 4<->6, 0<->8) shattered real plateaus
+        # into ~2x spurious transitions on the 2026-07 bounded re-analyses.
+        # The window stays well inside the cell (+-0.15 span horizontally,
+        # the middle half of the strip vertically), so it is scale-robust
+        # and cannot leak neighbor cells.
+        x0 = int((fx - 0.15 * span) * Wp)
+        x1 = max(x0 + 1, int((fx + 0.15 * span) * Wp))
+        y0 = int((g["y"] + 0.25 * g["h"]) * Hp)
+        y1 = max(y0 + 1, int((g["y"] + 0.75 * g["h"]) * Hp))
+        bits.append(1 if float(refl[y0:y1, x0:x1].mean()) < 0.5 else 0)
     val = 0
     for b in bits[1:-1]:
         val = (val << 1) | b
@@ -395,6 +404,32 @@ SYNC_UNIFORM_STD = 0.05   # panel-region std below this = a UNIFORM panel (a
                           # std >~0.1 raw), while a sync fill's std is the
                           # camera noise floor (<~0.03 on the rig).
 
+SYNC_BLACK_FILL = 0.35    # a uniform frame at/below this panel mean is a BLACK
+                          # fill -- unambiguous: no card page and no UI screen
+                          # is both uniform and this dark (the darkest content
+                          # dwell measured ~0.31 mean but with std ~0.26)
+SYNC_NEAR_BLACK_S = 5.0   # uniform BRIGHT frames join sync candidacy only
+                          # within this many seconds of a black fill: the sync
+                          # block IS black<->white alternation, so every sync
+                          # white is bracketed by blacks at page-dwell range,
+                          # while an interior uniform-bright dwell (a blank
+                          # page the reader left up, a driver-blanked panel)
+                          # sits far from any black fill and must never extend
+                          # the block (it consumed the first content page on
+                          # the 2026-07-11 sweep1.r00 re-analysis, and a
+                          # true-blank card variant would be swallowed whole)
+
+
+def _near_black_fill(uniform, means, fps, radius_s=SYNC_NEAR_BLACK_S):
+    """Bool mask of frames within radius_s of a uniform BLACK fill."""
+    means = np.asarray(means)
+    blacks = uniform & (means <= SYNC_BLACK_FILL)
+    out = np.zeros(len(means), bool)
+    r = max(1, int(round(radius_s * fps)))
+    for i in np.nonzero(blacks)[0]:
+        out[max(0, i - r):i + r + 1] = True
+    return out
+
 
 def _sync_stats(frames, H_panel_to_cam, panel_hw):
     """Per-frame (mean, std) of brightness over the panel region for
@@ -407,15 +442,22 @@ def _sync_stats(frames, H_panel_to_cam, panel_hw):
     if H_panel_to_cam is not None:
         mask = _panel_quad_mask(H_panel_to_cam, frames[0].shape, panel_hw)
         if mask.any():
-            vals = [f[mask] for f in frames]
-            return ([float(v.mean()) for v in vals],
-                    [float(v.std()) for v in vals])
+            means, stds = [], []
+            for f in frames:              # streamed: one masked copy at a time
+                v = f[mask]
+                means.append(float(v.mean()))
+                stds.append(float(v.std()))
+            return means, stds
     return [float(np.mean(f)) for f in frames], None
 
 
 def _sync_means(frames, H_panel_to_cam, panel_hw):
     """Back-compat shim: the per-frame panel means only (see _sync_stats)."""
     return _sync_stats(frames, H_panel_to_cam, panel_hw)[0]
+
+
+SESSION_H_SCAN = 40   # how many valid frames _warp_all may probe while looking
+                      # for 5 trusted (framing-decoding) session-H fits
 
 
 def _warp_all(frames, manifest, panel_hw, fixed_h=True):
@@ -439,13 +481,38 @@ def _warp_all(frames, manifest, panel_hw, fixed_h=True):
     all_fids = [detect_fiducials(f, manifest) for f in frames]
     H_session = None
     if fixed_h:
-        # median-of-fits over the first few valid frames: robust to one bad fit
-        Hs = []
-        for fids in all_fids:
-            if fids is not None:
-                Hs.append(homography_from_fiducials(fids, manifest))
-            if len(Hs) >= 5:
+        # Median-of-fits over the first few TRUSTED valid frames. Trust is
+        # earned, not assumed: a frame's fit only shapes the session
+        # homography if the frame, rectified under its OWN fit, decodes the
+        # page-id FRAMING bits -- i.e. the fit provably lands the card
+        # geometry. Marker-less-but-bright frames (full-white sync fills,
+        # the pre-card UI) can pass the per-window marker checks on bezel
+        # pixels; their "fits" are bezel-noise centroids, and when they win
+        # the first-N race the garbage median poisons EVERY warp of the
+        # session -- page-ids then decode nowhere and the analyzer reports
+        # zero transitions (the 2026-07-11 sweep1.r00 full-resolution
+        # re-analysis regression). Sync fills carry no barcode, so they can
+        # never earn trust: a bezel-garbage warp reads mostly DARK, which
+        # satisfies the two framing bits alone (all bits 1), so the decoded
+        # value must also be a page id the manifest actually contains.
+        pid_set = {p["pid"] for p in manifest.get("pages", [])}
+        Hs, Hs_any = [], []
+        for i, fids in enumerate(all_fids):
+            if fids is None:
+                continue
+            H = homography_from_fiducials(fids, manifest)
+            Hs_any.append(H)
+            try:
+                val, framed = decode_pageid(
+                    warp_to_panel(frames[i], H, panel_hw), manifest)
+            except Exception:
+                val, framed = -1, False
+            if framed and (not pid_set or val in pid_set):
+                Hs.append(H)
+            if len(Hs) >= 5 or len(Hs_any) >= SESSION_H_SCAN:
                 break
+        if not Hs:
+            Hs = Hs_any[:5]     # no framing decode anywhere: legacy behavior
         if Hs:
             H_session = np.median(np.stack(Hs), axis=0)
     for i, f in enumerate(frames):
@@ -488,13 +555,20 @@ def segment_transitions(warped, valid, manifest, change_eps=None):
     change_eps=None (default) auto-calibrates the quiet/active threshold from
     the clip itself (auto_change_eps); pass a float only to override."""
     T = warped.shape[0]
+    # Only ids the card actually contains count as decoded. The framing bits
+    # alone are spoofable: a UNIFORM frame (sync fill, blanked panel) has no
+    # patch spread, so its per-frame photometry fit is degenerate and can
+    # invert the whole frame -- the barcode then reads all-dark, i.e. the
+    # all-ones id (255 for an 8-bit card) WITH both framing bits set, and a
+    # phantom page shatters the plateau chain around every uniform dwell.
+    pid_set = {p["pid"] for p in manifest.get("pages", [])}
     ids = []
     for i in range(T):
         if not valid[i]:
             ids.append(-1)
             continue
         v, ok = decode_pageid(warped[i], manifest)
-        ids.append(v if ok else -1)
+        ids.append(v if ok and (not pid_set or v in pid_set) else -1)
     change = np.full(T, np.inf)
     for i in range(1, T):
         if valid[i] and valid[i - 1]:
@@ -585,12 +659,31 @@ def ingest(frames, fps, manifest, render_page):
     # structural signature of a sync fill: every real card page carries
     # fiducials/patches/barcode, so this cannot re-admit a bright CONTENT
     # page (the false positive ~valid was introduced to prevent).
+    #
+    # Uniformity candidacy is CONFINED to the sync block's own structure: a
+    # uniform BRIGHT frame counts only near a uniform BLACK fill (the sync
+    # block is black<->white alternation; blacks are unambiguous). The
+    # confinement changes nothing on the rig captures -- there the extension
+    # past ~valid (sweep1.r00: 663 -> 774 at 30 fps) is the SETTLED sync-white
+    # dwell, exactly the correct block end -- but without it any uniform
+    # bright dwell elsewhere in the run (a driver-blanked panel, the
+    # true-blank card variant PLAN defers) would be annexed into "sync",
+    # proven on the synthetic real-footage fixture in test_ingest.py.
     means, stds = _sync_stats(frames, H_first, panel_hw)
     candidate = ~valid
     if stds is not None:
-        candidate = candidate | (np.asarray(stds) < SYNC_UNIFORM_STD)
+        uni = np.asarray(stds) < SYNC_UNIFORM_STD
+        candidate = candidate | (uni & _near_black_fill(uni, means, fps))
     sync_end = find_sync(means, fps=fps, candidate=candidate)
     trans, ids = segment_transitions(warped, valid, manifest)
+    # Scenario transitions begin at clock-zero: anything segmented BEFORE the
+    # sync block end is setup footage (deep clean, the KOReader relaunch UI),
+    # where the UI decodes garbage-but-consistent pseudo-ids that flap into
+    # dozens of junk transitions (sweep1.r00 at analysis scale 0.4: 45 of 48
+    # non-sequential rows had pre-sync onsets). trans is onset-ordered, so
+    # this drops a prefix and no kept segment's boundaries change. A capture
+    # with no detected sync (sync_end=0) is left untouched.
+    trans = [t for t in trans if t[0] >= sync_end]
     pages_by_pid = {p["pid"]: p for p in manifest["pages"]}
     onsets = [o for (o, _, _) in trans] + [warped.shape[0]]
     rmask = reserved_mask(manifest, panel_hw)     # all-False on older manifests

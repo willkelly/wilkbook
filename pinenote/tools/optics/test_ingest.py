@@ -181,6 +181,72 @@ def main():
     check("_sync_stats without a homography reports no stds (bezel would lie)",
           ingest._sync_stats(list(cam_u), None, (Hp, Wp))[1] is None)
 
+    print("case: real-footage shape -- sync block + content + interior uniform dwell")
+    # The 2026-07-11 sweep1.r00 re-analysis regression, reproduced end to end.
+    # Geometry matters: at a small-in-frame panel (real dark-box rig), the
+    # full-white sync fills VALIDATE (their corner windows straddle the bezel
+    # and dark bezel pixels satisfy the marker checks) and, being the first
+    # "valid" frames, their bezel-noise fits used to win the session-H median
+    # -- poisoning every warp, killing every page-id, and zeroing the report's
+    # transitions. The fix trusts a fit only after it decodes a real page-id
+    # under its own warp. The interior uniform-BRIGHT dwell (a driver-blanked
+    # panel / true-blank card page) additionally pins the sync-candidacy
+    # confinement: uniformity may extend the sync block only near a uniform
+    # BLACK fill, so sync_end stays at the LEADING block.
+    saved_wh = te.W, te.H
+    te.W, te.H = 748, 560                     # the 0.4-scale analysis geometry
+    man_rf = te.build_manifest(te.build_pages())
+    Wr, Hr = man_rf["resolution"]
+
+    def refl_rf(kind, pid=0):
+        return np.asarray(te.render_page(te.Page(0, kind, pid)),
+                          np.float32) / 255.0
+
+    clip_rf = []
+    for kind, pid in (("sync_black", 0), ("sync_white", 1),
+                      ("sync_black", 2), ("sync_white", 3)):
+        clip_rf += [refl_rf(kind, pid)] * 3
+    prev = refl_rf("blank", 4)
+    for i, (kind, pid) in enumerate((("blank", 4), ("novel", 5), ("blank", 11))):
+        cur = refl_rf(kind, pid)
+        clip_rf += [(prev + cur) / 2] + [cur] * 6
+        prev = cur
+        if i == 1:                            # interior uniform-bright dwell
+            prev = np.ones((Hr, Wr), np.float32)
+            clip_rf += [prev] * 5
+    clip_rf += [prev] * 6                     # trailing settle
+    clip_rf = np.stack(clip_rf)
+    H_rf = synthcam.make_H_panel_to_cam(Wr, Hr, 1920, 1080, inset=0.33)
+    cam_rf, _ = synthcam.make_camera_clip(clip_rf, H_rf, Wr, Hr, (1080, 1920))
+
+    warped_rf, valid_rf, _H = ingest._warp_all(cam_rf, man_rf, (Hr, Wr))
+    check("fixture premise: white sync fills 'validate' (bezel-window mode)",
+          bool(valid_rf[3:6].any()),
+          f"valid[3:6]={valid_rf[3:6].astype(int)}")
+    results_rf, _w, sync_end_rf = ingest.ingest(
+        cam_rf, 10.0, man_rf, lambda kind, pid=0: refl_rf(kind, pid))
+    check("sync ends at the LEADING block (interior uniform dwell not annexed)",
+          sync_end_rf == 12, f"sync_end={sync_end_rf} want 12")
+    found_rf = [(fr, to) for (_, _, fr, to) in results_rf]
+    check("content run segments despite 'validating' sync whites (session-H trust)",
+          found_rf == [(4, 5), (5, 11)], f"{found_rf}")
+
+    print("case: pre-sync junk transitions are dropped (scenario starts at clock-zero)")
+    # A decodable page shown BEFORE the sync flashes (stand-in for the UI /
+    # setup footage, which decodes garbage-but-consistent pseudo-ids: 45 of
+    # sweep1.r00's 48 junk rows had pre-sync onsets) must not produce report
+    # transitions; the content transitions and their pids are untouched.
+    pre = np.concatenate([np.stack([refl_rf("novel", 5)] * 4), clip_rf], axis=0)
+    cam_pre, _ = synthcam.make_camera_clip(pre, H_rf, Wr, Hr, (1080, 1920))
+    results_pre, _w2, sync_end_pre = ingest.ingest(
+        cam_pre, 10.0, man_rf, lambda kind, pid=0: refl_rf(kind, pid))
+    found_pre = [(fr, to) for (_, _, fr, to) in results_pre]
+    check("sync end shifts with the preamble", sync_end_pre == 16,
+          f"sync_end={sync_end_pre} want 16")
+    check("preamble->content junk transition filtered; content ones kept",
+          found_pre == [(4, 5), (5, 11)], f"{found_pre}")
+    te.W, te.H = saved_wh                     # restore the suite geometry
+
     print("case: END-TO-END -- synthetic camera of a page turn -> defect report")
     # dynamic pid lookup: the card sequence is being restructured concurrently,
     # so find the first adjacent novel->blank pair instead of hardcoding pids

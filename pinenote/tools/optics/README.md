@@ -181,6 +181,26 @@ declines explicitly rather than guessing.
   uniform-panel-region frame is a sync candidate regardless of marker
   validity (`SYNC_UNIFORM_STD`), and noise-flat marker windows are rejected
   (`MIN_MARKER_CONTRAST`).
+- **Zero transitions on re-analysis** (the sweep1.r00 full-resolution run):
+  those same bezel-"validating" bright frames, when they land among the
+  first valid frames, used to win the fixed session-homography median with
+  bezel-noise fits — poisoning every warp, killing every page-id decode,
+  and zeroing the report while sync detection still worked. `_warp_all` now
+  trusts a fit only after the frame, rectified under its *own* fit, decodes
+  a page id the manifest actually contains (sync fills carry no barcode, so
+  they can never earn trust). Hardenings from the same root-cause session:
+  uniformity candidacy is confined near uniform *black* fills, so an
+  interior uniform-bright dwell (driver-blanked panel, a true-blank card
+  page) cannot be annexed into "sync"; page-id bits are read as a
+  neighborhood mean (single-pixel reads flipped bits at analysis scales
+  ≤0.5, shattering plateaus ~2x); decoded ids must belong to the card (a
+  uniform frame's degenerate photometry fit can invert into a phantom
+  all-ones id); and transitions with pre-sync onsets are dropped — setup/UI
+  footage decodes garbage-but-consistent pseudo-ids (45 of sweep1.r00's 48
+  junk rows sat before the sync block). Re-verified on sweep1.r00
+  (`--max-fps 10 --analysis-scale 0.4`): 46 transitions vs the original 48,
+  zero NaN, and the trace join attributes exactly the trace's 8 full
+  globals as `ko-full`.
 - **`flash mild(nan)`**: whole-NaN frames (unreadable mid-wash) inside the
   analysis window poisoned the flash depth into NaN, which graded "mild"
   (NaN fails both severity comparisons) and fabricated extra flash counts
