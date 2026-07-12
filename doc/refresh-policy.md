@@ -262,8 +262,17 @@ bundles + reports under `pinenote/tools/optics/build/bundles/sweep1.*`):
    fulls-free partial turns the accumulated residue in frequently-toggled
    regions reached 0.2-0.4 reflectance, enough to corrupt the test card's own
    1-bit barcode (cells read 0.63-0.82 instead of ~0/~1; the static reference
-   patches stayed clean, so this is real reflectance, not calibration). The
-   deep-clean/promotion cadence question is answered: REQUIRED, not optional.
+   patches stayed clean, so this is real reflectance, not calibration).
+   (CORRECTED, 2026-07-12 evidence audit — driver-findings-report.md: this
+   run's barcode-corruption reading was a measurement artifact.
+   Geometry-verified re-analysis shows sweep1.r02's marks crisp
+   (0.007-0.024) with 100% decode through the whole washless pass; the
+   0.63-0.82 cells were displaced-geometry samples, and the 0.309 ghost is
+   the single corr~0 transition §5.1 of the dataset doc already demoted.
+   The washless-regime corruption evidence lives in finding 8's neverx3
+   runs, and the cadence recommendation stands on findings 6-7's data.)
+   The deep-clean/promotion cadence question is answered: REQUIRED, not
+   optional.
 2. **Partial page turns are near-flash-free in every config** (depth
    0.00-0.05) — the diff-masked partial regime is clean regardless of the
    global waveform choice. The one partial artifact is the text-CLEAR
@@ -313,12 +322,27 @@ bundles + reports under `pinenote/tools/optics/build/bundles/sweep1.*`):
    bits flickering on the threshold) — matching the original outlier. With
    the driver threshold at 60 screen-areas, nothing washes within a 48-turn
    pass, and high-frequency-toggle regions accumulate believed-white mud.
-   Synthesis: static reading content never accumulates; toggle-heavy regions
-   REQUIRE periodic washes; the washes in every clean run came from KOReader
-   promotion. The driver-owned architecture (never + refresh_threshold≈8,
-   single cadence owner) is under test — it is viable iff the driver's
-   auto-global scrubs toggle regions the way KOReader's promoted fulls do.
-   Bundles: `.../neverx3.*`, `.../driver-owned.*`.
+   (CORRECTED, 2026-07-12 evidence audit — driver-findings-report.md: the
+   0/48 and 429 COUNTS are instrument-dominated — a fixed session
+   homography poisoned by the captures' graphic-page openers displaced
+   every sample — but the corruption in never-a and never-b is REAL and
+   directly on camera: never-a's partials paint whole pages as
+   barely-visible ghosts (restored seconds later by an unexplained
+   global), and never-b's fine marks sit at 0.22-0.38 (~10x the crisp
+   floor) mid-run with a within-run onset. The FORM is corrected too:
+   episodic whole-page ghost paints and mark fade, already present at
+   never-a's first content pages — not toggle-region mud accumulating
+   over the pass. never-c audits clean; the original sweep1.r02 outlier
+   is voided (see finding 1) — so the replication tally is 2 corrupt of
+   3 fresh never-runs, and the corruption correlates with
+   `auto_refresh=1` sessions (finding 10) rather than with washlessness
+   itself.) Synthesis: static reading content never accumulates;
+   toggle-heavy regions REQUIRE periodic washes; the washes in every
+   clean run came from KOReader promotion. The driver-owned architecture
+   (never + refresh_threshold≈8, single cadence owner) is under test — it
+   is viable iff the driver's auto-global scrubs toggle regions the way
+   KOReader's promoted fulls do. Bundles: `.../neverx3.*`,
+   `.../driver-owned.*`.
 9. **Soak (both mechanisms OFF, 30 same-pair toggles + wash interventions):
    NO accumulation — the simple toggle-count mechanism is refuted.** The
    single toggling barcode cell tracked its never-toggling neighbors within
@@ -333,7 +357,16 @@ bundles + reports under `pinenote/tools/optics/build/bundles/sweep1.*`):
    the believed-white drift they are meant to prevent. Also noted:
    `refresh_threshold=8` + never still corrupted (6/48), and the
    GLOBAL_REFRESH ioctl works under a live DRM master (deep_clean was always
-   real). Next experiments: the diverse-page soak (accumulation block) x
+   real). (CORRECTED, 2026-07-12 evidence audit — driver-findings-report.md:
+   the driver-owned "6/48" was a session-homography instrument artifact;
+   that run is optically CLEAN on geometry-verified frames through ~11
+   camera-confirmed threshold firings, and becomes counter-evidence that
+   threshold firings corrupt per-event. The soak's own headline stands on
+   100%-valid frames, but its "two unexplained events" anomaly (below) is
+   upgraded: both are real static-region drives, and the second (t≈105,
+   mid-dwell, autos OFF) permanently grays a framing cell 0.01 -> ~0.10 —
+   so auto_refresh=0 was not event-free that boot either.) Next
+   experiments: the diverse-page soak (accumulation block) x
    auto_refresh on/off — a 2x2 that isolates the mechanism.
    Bundle: `.../soak1` (+ soak-events.json).
 10. **MECHANISM FOUND: the driver's threshold-triggered auto-globals CAUSE
@@ -345,12 +378,33 @@ bundles + reports under `pinenote/tools/optics/build/bundles/sweep1.*`):
     armC t≈90s, corrupted never-a t≈109s — the culprit on camera — while
     accounting for every manual/ioctl wash in soak1 (plus TWO unexplained
     events there at t≈100/105 with autos off: flagged anomaly, possibly the
-    spontaneous-global flakiness family). ioctl-fired globals (deep_clean,
+    spontaneous-global flakiness family). (CORRECTED, 2026-07-12 evidence
+    audit — driver-findings-report.md, per-claim verdicts: the 2x2's
+    headline correlation survives — every run with run-level
+    corruption/graying was auto=1, both auto=0 runs are free of run-level
+    corruption — but four cells are revised. Diverse+auto1 corrupts 2/4,
+    not 3/4 (never-c audits clean; the sweep1.r02 outlier is voided, see
+    finding 1). armC's graying is real on verified frames (0.08-0.10 vs
+    0.001-0.02 same-rig floors, with a per-event step 0.04 -> 0.09 across
+    the t≈90 wash) but the "4-5x" figure came through displaced geometry.
+    never-a's t≈109 global is real yet its role inverts: it RESTORED a
+    ghost-painted page — the corrupting agent on camera is the preceding
+    partial paint. And soak1's two auto=0 events are upgraded from anomaly
+    to evidence: real static-region drives, the second permanently graying
+    a framing cell 0.01 -> ~0.10 — so the damaging-drive phenomenon is not
+    exclusive to the threshold path. Finally, driver-owned (threshold=8)
+    audits optically CLEAN through ~11 on-camera firings, so "each
+    threshold firing does damage" is retracted; per-event damage is rare
+    and stochastic. The policy consequence below is unchanged and, if
+    anything, reinforced: ioctl washes remain corruption-free across ~30+
+    on-camera firings.) ioctl-fired globals (deep_clean,
     KOReader promotions) have never corrupted anything: the wash PATH is
     the variable, not the wash. Stochasticity explained by quirk 3 ("manual
     washes never reset the accumulator"): the damage counter accrues ACROSS
     runs, so auto firings are random-phase — also the likely story behind
-    cadence.r01 (c12) quietly under-segmenting 19/48. **Policy consequence:
+    cadence.r01 (c12) quietly under-segmenting 19/48 (the evidence audit
+    adds an instrument-first candidate for that count: the session-
+    homography opener artifact). **Policy consequence:
     set `auto_refresh=0` and own all washes from userspace via the ioctl
     (KOReader promotion at 12 today; the idle-washer later). Driver finding
     written for upstream (doc/driver-findings-report.md).** Since
