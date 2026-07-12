@@ -86,7 +86,7 @@ Build-order additions (all non-blocking, after the first capture):
 | # | Task | Size |
 |---|---|---|
 | 23 | EXTRACT_FBS harness: on-device dump helper + host decode + a camera↔driver-belief correlation check in analyze | M |
-| 24 | Delayed-quality-redraw prototype (KOReader-side, region GL16 repaint after idle) + rig evaluation scenario | M |
+| 24 | ~~Delayed-quality-redraw prototype~~ **DONE as the idle-washer** (`idlewasher.koplugin`: full-screen debt+idle washes, not region repaint — hardware-validated 2026-07-12, refresh-policy finding 11; thresholds sweepable via the `ko` namespace) | M |
 | 25 | Port `globre_convert_before` into the forward-port patch (rung 1–3 offline proof) + add to paramspace | S |
 | 26 | Blue-noise dither tables into the bw_mode/low-bit path (or KOReader render) + grayramp rig evaluation | M–L |
 

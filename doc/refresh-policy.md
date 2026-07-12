@@ -360,6 +360,22 @@ bundles + reports under `pinenote/tools/optics/build/bundles/sweep1.*`):
     mechanism + fix sketch in the report's 2026-07-12 entry. Bundles:
     `.../armB*`, `.../armC`.
 
+11. **The idle-washer is validated on glass (acceptance runs, 2026-07-12).**
+    The userspace refresh manager (`idlewasher.koplugin`: debt per page turn,
+    GL16 full via the ioctl path when debt >= debt_min AND idle >= idle_s,
+    bundled full riding the turn at debt_max, GC16 deep clean once per long
+    idle span) passed a three-phase on-glass acceptance: idle wash exactly
+    idle_s into a pause with debt over min, silence through a below-min
+    pause, and — the regression the first run caught — an idle wash after
+    reading RESUMES from a below-min span (the timer had been armed on the
+    deep-clean horizon; on_input now pulls the deadline back, b82bab1).
+    Log lines and the patch-strip detector agreed to ~0.5 s in every run;
+    bundled washes additionally proven twice (r0/r1). This completes the
+    finding-10 policy: `auto_refresh=0` + KOReader promotion off (`never`)
+    + the washer owning cadence is a fully working configuration; promotion
+    at 12 remains the belt-and-suspenders default until the washer has
+    dogfooding hours. Bundles: `.../idlewasher-accept*`.
+
 Instrument provenance: 30 fps / exposure 312 / gain 32 / frontlight 255-255;
 ghost-rms repeatability sigma 0.003-0.006 between identical transitions.
 

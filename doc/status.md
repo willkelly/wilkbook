@@ -1,8 +1,28 @@
 # Hardware status
 
-Last updated: 2026-07-10. This is the single place to record what has actually
+Last updated: 2026-07-12. This is the single place to record what has actually
 been proven on the device. Update it after every hardware session; the
 detailed evidence lives in session logs, not in git.
+
+**2026-07-12 (later): THE IDLE-WASHER IS HARDWARE-VALIDATED.** Three
+acceptance captures on the boxed rig (plugin pushed per run over SSH — no
+reflash; `build/bundles/idlewasher-accept*`). Run r0 proved the debt
+machinery on glass (two debt-max bundled washes, log lines matching the
+patch-strip detector to the second) and CAUGHT A REAL BUG the offline suite
+had missed: after an idle span ending below debt_min, the timer stays armed
+on the deep-clean horizon and `on_input` never pulls it back, so the idle
+wash could never fire in normal reading. Fixed in the pure core
+(armed-deadline mirroring, b82bab1) with the acceptance timeline as a
+table-driven regression that only fires on_timer at the armed deadline. Run
+v2 (idle-path-only protocol, bundling excluded via debt_max=50) passed all
+three phases: idle wash 20s into a pause at debt 9, silence through a
+below-min pause (debt 2), and the fix's exact shape — resumed reading then
+idle wash at debt 6, 20s in. Glass agreed with the log to ~0.5s (detector
+events t≈64.1/176.2 vs predicted 64.6/176.6, nothing in the silent window).
+Also noted: the device rebooted ~19:13 on 07-11 (boot-time kernel log only),
+so the armC-era dmesg is gone — quirk F's timeout-correlation check is
+UNAVAILABLE, not negative; the instrumented auto=1 repro remains the
+confirmation path.
 
 **2026-07-12: MECHANISM FOUND — the driver's auto-globals corrupt state;
 `auto_refresh=0` shipped.** A full experimental campaign (9 sweep runs + soaks
