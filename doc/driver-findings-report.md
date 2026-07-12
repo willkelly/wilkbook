@@ -561,6 +561,36 @@ HOW a wash damages state when it does; the instrumented kernel remains
 the decisive instrument. The upstream draft below has been revised to
 match the audited evidence.
 
+**Instrumented kernel (built offline, staged for the next device
+session):** point (3)'s decisive experiment exists as
+`linux-pinenote-debug` — the primary kernel (byte-identical, untouched)
+plus one printk-only patch
+(`pinenote/patches/linux-pinenote-debug-dspend-straggler.patch`, applied
+after the forward-port patch) — and ships in the `reader-debug` flavor
+(`make rootfs-reader-debug`), which differs from the production reader
+image only in kernel and host name. Three log lines: (a) `ebc-dbg:
+straggler credit present at global launch (threshold=… src=…
+burst_timeouts=… total_timeouts=…)` — `completion_done()` was true
+immediately before the global's `reinit_completion()`, i.e. an
+unconsumed DSP_END existed at launch; `src` is the launch provenance
+(threshold/ioctl/init/reset/resume/offscreen), recorded at every
+`do_one_full_refresh` set-site. (b) `ebc-dbg: global wait returned R
+after E ms (src=… phases=… expect~X ms …)` — once per global: the
+wait's return value and wall time against the nominal `num_phases` ×
+11.8 ms playback; E far below expect~ is a truncated wash even when (a)
+stayed silent (straggler landed inside the reinit→wait window instead
+of before it). (c) rate-limited `ebc-dbg: DSP_END irq with unconsumed
+credit` — the straggler at its source, in the IRQ handler. Frame
+timeouts are counted per-burst and in total and carried in (a)/(b), so
+timeout-desync and extra-credit stragglers separate per event. Decision
+table: (a)/(c) firing with `src=threshold` and never with `src=ioctl` →
+the zero-gap mechanism is confirmed as analyzed; (b) early returns
+without (a) → the straggler is real but arrives inside the wait window,
+and the timing numbers narrow which source (late IRQ, coalescing loss,
+DSP_OUT_LOW-raised END) fits; nothing ever firing across a corrupting
+workload → the straggler mechanism is refuted on this silicon and the
+investigation reopens at the content-bookkeeping evidence.
+
 ### Upstream notification draft (m-weigand / PNDeb / hrdl / ayakael)
 
 > Subject: rockchip_ebc: auto_refresh threshold path can truncate its own
