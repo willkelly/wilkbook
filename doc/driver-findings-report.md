@@ -149,9 +149,17 @@ diverse workload clean (45/48 marker decode vs 0-6/48), and a video-side
 detector (only globals redraw static screen regions) catches unexplained
 global events precisely in the auto=1 runs, including the corrupted ones.
 Lowering the threshold makes corruption FASTER (threshold=8 -> 6/48), i.e.
-each threshold-path firing does damage. GLOBAL_REFRESH ioctl firings
-(userspace-triggered, same waveform) never produced corruption across ~20
-multi-wash sessions, and the ioctl works with a live DRM master.
+each threshold-path firing does damage. (CORRECTED by the evidence audit
+below: the "0-6/48 marker decode" figures are instrument-dominated, the
+threshold=8 run was in fact optically CLEAN through ~11 on-camera threshold
+firings — the faster-corruption claim is retracted — and the "0.6-0.8"
+cell readings were displaced-geometry samples; the directly-measured
+corruption forms are whole-page ghost paints, fine marks at 0.2-0.4, and
+per-event graying of 0.04 -> 0.09 across a wash. The run-level correlation
+with `auto_refresh=1` survives on direct frame evidence.)
+GLOBAL_REFRESH ioctl firings (userspace-triggered, same waveform) never
+produced corruption across ~20 multi-wash sessions, and the ioctl works
+with a live DRM master.
 
 Suspected mechanism: the threshold path fires from the middle of the update
 stream and races in-flight partials' prev/next bookkeeping (same family as
@@ -390,6 +398,168 @@ Net for upstream: the corrupting trigger seen in the campaign
 in five deliberate same-evening regimes; candidates now include
 cumulative cross-boot/session state and environment, and per-event
 ground truth requires the instrumented kernel, not optics.
+(Superseded in part by the evidence audit below: the campaign runs were
+NOT an older boot — timeline forensics put every corrupting run on the
+same boot as the clean repros, hours apart — and one campaign
+"corrupt" run was itself a measurement artifact.)
+
+### Evidence audit (2026-07-12, post-v4 methods lesson)
+
+The v4 void raised the obvious next question: does any of the CAMPAIGN's
+corruption evidence rest on the same instrument failure modes? Every
+bundle behind findings 8-10 (neverx3.r00-r02, the cliff-era
+sweep1.r02-gl16-never, driver-owned, armC, armB/armB2, soak1) was
+re-analyzed offline with an explicit validity lens: per-frame fiducial
+validity accounting at 10 fps/half-res; a second pass that warps every
+frame with its OWN fiducial fit and self-checks the geometry in panel
+space (fiducial squares must be dark) before reading any cell; 30 fps
+frame-window extraction with per-frame tables and PNGs around every
+claimed event; and a verbatim rerun of the campaign's patch-strip
+detector, which reproduced every claimed event time exactly. Scripts:
+`audit-validity.py`, `audit2-perframe.py`, `inspect-window.py` (session
+scratchpad).
+
+**Instrument verdicts first.** The v4 blank-page mode did NOT drive the
+campaign numbers: every walk bundle holds 96-97% per-frame fiducial
+validity, the only >=1 s validity holes are the sync-flash blocks, and
+blank-KIND card pages carry fiducials and validate fine (v4's hole was
+the marker-less sync-white page). But the audit found a SECOND, worse
+failure mode: production ingest (and the campaign's cell-reading
+scripts) fit ONE session homography from the capture's opening frames.
+The corrupt-run captures all open on the PREVIOUS run's final page, and
+when that page is a `graphic` card page (large mid-gray panels), the
+Otsu panel-quad detection distorts, the session homography lands
+displaced, and every downstream sample — barcode cells, reference
+patches — reads fabricated mid-grays for the WHOLE run while the
+per-frame validity flags stay green. never-a, never-b, driver-owned and
+armC were all poisoned this way (their captures open on graphic page
+46); never-c, armB, armB2, soak1 and sweep1.r02 opened on crisp pages
+and their reports are quantitative. Consequence: **the campaign's
+segmentation-symptom numbers (0/48, 429 pseudo-transitions, 6/48) and
+armC's "4-5x" magnitude were all read through displaced geometry and
+are not corruption measurements.** (This also supplies an
+instrument-first candidate for cadence.r01's unexplained 19/48
+under-segmentation.)
+
+**Per-claim verdicts** (on the artifact-proof layers only:
+geometry-self-verified frames + 30 fps windows + direct PNGs):
+
+- **never-a corruption — STANDS**, on direct frame evidence, with its
+  form corrected. The panel genuinely corrupts: at t≈108 the page-25
+  partial paints the whole page as a barely-visible ghost (text, page
+  number, fiducials, patch strip, barcode all near-white on camera —
+  frames extracted and inspected), and an unexplained full-panel wash
+  at t≈109.2 repaints it crisp. Where geometry verifies, marks read
+  CRISP (framing cells 0.012-0.024) — the corruption is episodic
+  whole-page ghost-painting, not graded mud, and it was already present
+  in the run's first content pages (it did not accumulate over the
+  48-turn pass). The "segmented 0/48" figure is instrument-dominated
+  and should not be quoted as a residue measure.
+- **never-b corruption — STANDS.** Window-verified geometry mid-run
+  (t≈118-126 s) shows framing marks sustained at 0.22-0.38 reflectance
+  (~10x the same-rig crisp floor) with the barcode still decoding —
+  exactly the near-threshold regime that shattered segmentation. The
+  onset is WITHIN the run (early bins verify crisp at 0.013-0.021,
+  bins from ~90 s stop verifying, late bins partially recover) — the
+  only campaign run showing a mid-run degradation onset. The "429
+  pseudo-transitions" count itself is instrument-shaped (real
+  near-threshold cells + displaced sampling).
+- **never-c — stays clean** (as the campaign counted it): verified
+  frames read 0.005-0.037 with healthy decode end to end.
+- **cliff-era sweep1.r02 barcode corruption (finding 1's "cells read
+  0.63-0.82") — VOID.** Geometry-verified frames are crisp through the
+  entire 48-turn washless pass including the late run (framing
+  0.007-0.024, 100% decode); a 30 fps window through its one anomalous
+  stretch shows crisp marks and a clean partial turn. The 0.63-0.82
+  cell readings reproduce only under displaced sampling (a mid-cell
+  miss reads white-ish). The finding-8 "matching the original outlier"
+  framing falls with it: the replication set is never-a + never-b, not
+  3/3.
+- **driver-owned ("threshold=8 + never still corrupted, 6/48") — VOID,
+  and it flips to counter-evidence.** Its ~11 threshold auto-globals
+  are beautifully on camera (metronomic strip-redraw events every
+  ~14.8 s ≈ every 4th turn), and the panel is CRISP wherever geometry
+  verifies (framing 0.006-0.018, ~100% decode, 51% of frames verified
+  across the whole run); a 30 fps window straddling the t≈99.4 firing
+  shows the barcode at 0.01-0.02 before, THROUGH, and after the wash.
+  6/48 was the session-homography artifact. This run joins repro
+  v1-v5: threshold firings observed, zero optical corruption.
+- **armC same-pair graying — STANDS**, magnitude re-based. On verified
+  frames armC's framing cells/black patch read 0.08-0.10 versus
+  0.001-0.02 same-rig floors (soak1 phase A, armB, driver-owned) —
+  real graying, though the original "4-5x" was computed through
+  displaced geometry and should not be quoted as calibrated. Two
+  sharper facts replace it: the graying was already present at the
+  FIRST toggle, and its onset window (armC's own preamble: param flip
+  to auto=1 + card walk) contains an unrecorded global at t≈25 on
+  camera; and the t≈90 auto-global measurably grays the framing cells
+  per-event, 0.04 -> 0.09, in the 30 fps table. armB2's cleanliness
+  minutes later confirms the state resets with GC16 deep cleans.
+- **armB/armB2 clean controls — STAND.** Same instrument, same walk:
+  97% validity, 99%+ aligned decode, dark marks at the floor, and zero
+  mid-walk strip-detector events (their only events are the preamble
+  deep cleans). The corrupt-vs-clean contrast is not an instrument
+  asymmetry: the corrupt side is re-established above by direct
+  frames, the clean side measures clean on verified geometry.
+- **Detector event, armC t≈90 — STANDS** (and is upgraded): full
+  static-region drive in the 30 fps table (strip and framing cells
+  cycle through extremes, page-id drops out and returns) followed by
+  the permanent 0.04 -> 0.09 graying. Same-pair content, 100% validity
+  around it — the regime where the strip detector is reliable.
+- **Detector event, never-a t≈109 — STANDS as a real unexplained
+  global, with its ROLE inverted.** Direct inspection shows a genuine
+  whole-panel wash (static patch strip cycles dark and repaints) — but
+  it RESTORES the ghost-painted page; the corrupting agent on camera
+  is the preceding partial paint. "The culprit on camera" was the
+  wrong gloss; "the corruption and an unexplained global, both on
+  camera, seconds apart" is the defensible one.
+- **soak1's two unexplained events (t≈100/105, autos off) — STAND,
+  upgraded from anomaly to evidence.** Both are real static-region
+  drives (strip driven to 0.28/0.42 and back within ~0.3 s; alignment
+  to the soak event log is firm — the recorded GL16/GC16 interventions
+  land at exactly the detector's other two events). The second event
+  fires mid-dwell with NO page flip and leaves a framing cell
+  permanently grayer, 0.01 -> ~0.10 (partially healed to ~0.018 by the
+  later recorded GL16). So `auto_refresh=0` is NOT event-free on this
+  boot: whatever issues these spontaneous global-class drives can also
+  do per-event damage. The soak's headline (30 washless same-pair
+  flips, no accumulation, toggling cell tracks its neighbors) stands
+  on 100%-valid frames.
+
+**Timeline forensics** (capture mtimes; all 2026-07-11/12 local, one
+boot): neverx3 18:09/18:12/18:15, driver-owned 18:26, soak1 18:37, armB
+19:14, armC 19:17, armB2 19:28, idlewasher 20:16-20:34, repro v1-v5
+20:49-21:37. Every corrupting/graying run is on the SAME BOOT as the
+clean repros — cross-boot state is dead as a co-factor. So is protocol
+structure: driver-owned ran the full campaign protocol 11 minutes after
+the corrupt neverx3 runs and stayed clean. The corrupted state comes
+and goes within one boot (never-a catastrophic at 18:09, never-c clean
+at 18:15, driver-owned clean at 18:26, armC grayed at 19:17 between
+two clean armB runs), and GC16 deep cleans reset it — what distinguishes
+the runs where it appears remains unisolated.
+
+**What the audit does to the finding.** The run-level correlation
+survives: every run with run-level corruption or graying (never-a,
+never-b, armC) had `auto_refresh=1`, and both `auto_refresh=0` runs are
+free of run-level corruption. The per-event picture is now richer and
+honest: two on-camera wash events each followed by immediate permanent
+graying of fine dark marks (armC t≈90, auto path; soak1 t≈105,
+spontaneous with autos OFF) against ~13 on-camera threshold firings
+that left fine structure crisp (driver-owned, repro v1-v5) — wash
+events can do per-event damage, but rarely, which matches both the
+campaign's stochasticity and the repros' nulls. Two revisions cut
+against the original framing: threshold=8 did not corrupt faster (that
+claim is retracted), and the damaging-drive phenomenon is not exclusive
+to the auto-threshold path (soak1's events fired with autos off — the
+spontaneous-global family can carry the same signature). The shipped
+workaround (`auto_refresh=0`, ioctl-owned washes) remains the right
+call on this evidence: it removes the only REGULAR unexplained-global
+source, and every ioctl wash across the dataset (~30+ on camera,
+including 6 idlewasher acceptance washes) remains corruption-free. The
+zero-gap mechanism (quirk F) stays the best-supported hypothesis for
+HOW a wash damages state when it does; the instrumented kernel remains
+the decisive instrument. The upstream draft below has been revised to
+match the audited evidence.
 
 ### Upstream notification draft (m-weigand / PNDeb / hrdl / ayakael)
 
@@ -399,11 +569,21 @@ ground truth requires the instrumented kernel, not optics.
 >
 > On a PineNote v1.2 running the community rockchip_ebc (m-weigand
 > lineage, carried forward to 7.0.x in wilkbook) we measured, with a
-> camera rig, that full refreshes fired by the damage-threshold path
-> (`auto_refresh=1`) progressively corrupt recently-updated pixels
-> (1-bit test cells drift to 0.6–0.8 reflectance and the error
-> compounds), while GLOBAL_REFRESH-ioctl washes of the same waveform are
-> always clean. Lowering `refresh_threshold` corrupts faster.
+> camera rig, panel-state corruption that in our dataset appears only
+> in sessions running the damage-threshold path (`auto_refresh=1`):
+> partial refreshes painting entire pages as barely-visible ghosts
+> (restored by the next global), fine dark marks sitting at 0.2–0.4
+> reflectance instead of ~0.02, and — twice, directly on camera — a
+> global-class wash event followed by immediate permanent graying of
+> fine dark structure (0.04 -> 0.09 across one wash).
+> GLOBAL_REFRESH-ioctl washes of the same waveform were clean in every
+> one of ~30+ on-camera firings. The effect is stochastic, not
+> per-firing: a `refresh_threshold=8` session with ~11 camera-confirmed
+> threshold firings stayed clean, as did five deliberate same-evening
+> repro sessions (~45 more firings), so we cannot claim each
+> threshold firing does damage — only that every session that did
+> corrupt was an `auto_refresh=1` session, plus one anomalous pair of
+> spontaneous global-like events (one damaging) with autos off.
 >
 > Root cause (host-side analysis + a deterministic reproducer that
 > compiles the verbatim driver against a behavioral device model —
@@ -425,8 +605,9 @@ ground truth requires the instrumented kernel, not optics.
 >
 > Note PNDeb currently ships the exposed configuration
 > (`auto_refresh=1 refresh_threshold=60`), and its user guide suggests
-> `refresh_threshold=20` for redraw-heavy apps — which our measurements
-> say corrupts *faster*. Suggested minimal fix (sketch in the doc): on
+> `refresh_threshold=20` for redraw-heavy apps — lower thresholds mean
+> more threshold-path firings, i.e. more rolls of the same dice.
+> Suggested minimal fix (sketch in the doc): on
 > frame timeout keep waiting for that frame's END instead of proceeding,
 > and yield one frame period before a threshold-fired global; also reset
 > `ctx->area_count` in the global path so firings stop being
