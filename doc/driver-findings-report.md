@@ -310,6 +310,22 @@ log harvest only, plus one A/B kernel):
    whether `DSP_OUT_LOW` raises DSP_END on this silicon (TRM question to
    the community).
 
+**Confirmation run 1 result (2026-07-12, instrumented repro v1,
+`build/bundles/corrupter-repro-v1`):** 30 same-pair page toggles under
+`auto_refresh=1 refresh_threshold=2` with a live `dmesg --follow` watch.
+The patch-strip detector saw a threshold auto-global ride EVERY toggle
+(30/30, camera-confirmed) and the kernel log stayed COMPLETELY SILENT —
+zero `Frame %d timed out!` / `Refresh timed out!` lines. Point (1)'s
+timeout-correlation is therefore answered: the 25 ms frame-timeout
+desync is NOT the straggler source in this workload; the timeout-free
+candidate (extra DSP_END credit, point 3) is now the prime suspect.
+No graying was measurable in v1 (dark strokes 0.263 -> 0.263 over the
+run) — expected in hindsight: at threshold=2 a wash follows every
+toggle, so any truncated wash is healed ~2.5 s later by the next one.
+The corrupting regime needs RARE firings with long washless exposure
+(exactly armC's shape); repro v2 targets it (graphic pair, threshold=20,
+60 toggles, 30 s washless inspect window).
+
 ### Upstream notification draft (m-weigand / PNDeb / hrdl / ayakael)
 
 > Subject: rockchip_ebc: auto_refresh threshold path can truncate its own
