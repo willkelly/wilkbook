@@ -357,6 +357,16 @@ class KOReaderBackend(RenderBackend):
     KO_HOME = "/root/.config/koreader-optics"    # dedicated per-capture profile
     LOG = "/var/log/optics-koreader.log"         # harvested per run (task 6)
 
+    # Grafted KOReader plugins (the idle washer) live in the repo next to the
+    # rest of the pinenote device tree; prepare() pushes them into KO_HOME's
+    # plugins/ on every run, so plugin iteration needs NO reflash.  KOReader's
+    # PluginLoader loads both the bundle's plugins/ and the extra_plugin_paths
+    # seeded below; the plugins' own load-time sentinel makes the PUSHED copy
+    # win (PluginLoader loads path-sorted: "/root/..." < "plugins/...").
+    PLUGINS_SRC = os.path.normpath(os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        "..", "..", "packages", "koreader-device", "plugins"))
+
     # Always-explicit reader settings, so the bundle records the regime it
     # measured (ko params override):
     #  - refresh_on_pages_with_images: readerview.lua:289 gates image-page
@@ -388,6 +398,14 @@ class KOReaderBackend(RenderBackend):
         "copt_h_page_margins": (0, 0),
         "copt_t_page_margin": 0,
         "copt_b_page_margin": 0,
+        # The idle washer stays OFF for optics runs: its idle/debt washes
+        # would inject nondeterministic globals mid-scenario.  A run that
+        # MEASURES the washer opts in via ko={"idlewasher_enabled": True}.
+        "idlewasher_enabled": False,
+        # Explicit plugin search path (PluginLoader would default+save the
+        # same value when absent; seeding it keeps the regime recorded and
+        # independent of that fallback): where _push_plugins() lands.
+        "extra_plugin_paths": (KO_HOME + "/plugins/",),
     }
 
     # Hard readiness check: FIFO present AND the daemon's pid (written only
@@ -447,6 +465,10 @@ class KOReaderBackend(RenderBackend):
                    % shlex.quote(os.path.splitext(self.EPUB_REMOTE)[0] + ".sdr"))
         # 3. seed the dedicated KO_HOME with this run's explicit regime
         self._seed_ko_home()
+        # 3b. push the repo's grafted plugins (idle washer) into KO_HOME's
+        #     plugins/ -- live plugin iteration with no reflash; must land
+        #     before the relaunch (PluginLoader discovers at startup).
+        self._push_plugins()
         # 4. relaunch KOReader on the test card so page 0 is deterministic.
         #    ( ... & ) keeps the trailing background token inside a subshell:
         #    the serial transport appends '; printf <marker>' to every
@@ -506,6 +528,27 @@ class KOReaderBackend(RenderBackend):
         self.t.run("mkdir -p " + shlex.quote(self.KO_HOME))
         self.t.push(content.encode(), self.KO_HOME + "/settings.reader.lua")
         self._seeded_settings = dict(settings)   # for bundle attribution
+
+    def _push_plugins(self):
+        """Push every repo .koplugin (PLUGINS_SRC) file-by-file into the
+        dedicated KO_HOME's plugins/, where the seeded extra_plugin_paths
+        points.  The working tree is the source of truth: edit the plugin,
+        re-run a scenario, and KOReader runs the new code -- no image
+        rebuild, no reflash.  (The bundle's grafted copy self-disables via
+        the plugins' load-time sentinel; see PLUGINS_SRC above.)"""
+        if not os.path.isdir(self.PLUGINS_SRC):
+            return
+        for name in sorted(os.listdir(self.PLUGINS_SRC)):
+            src = os.path.join(self.PLUGINS_SRC, name)
+            if not name.endswith(".koplugin") or not os.path.isdir(src):
+                continue
+            dst = "%s/plugins/%s" % (self.KO_HOME, name)
+            self.t.run("mkdir -p " + shlex.quote(dst))
+            for fn in sorted(os.listdir(src)):
+                path = os.path.join(src, fn)
+                if os.path.isfile(path):
+                    with open(path, "rb") as f:
+                        self.t.push(f.read(), "%s/%s" % (dst, fn))
 
     def _turn(self, delta):
         code = NEXT_PAGE_CODE if delta > 0 else PREV_PAGE_CODE

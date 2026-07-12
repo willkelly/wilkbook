@@ -236,6 +236,53 @@ def main():
           and "cd /gnu/store/fake-koreader/lib/koreader" in launch_cmd,
           launch_cmd)
 
+    print("case: prepare pushes the idle-washer plugin into KO_HOME/plugins")
+    plug_dst = K.KO_HOME + "/plugins/idlewasher.koplugin"
+    plug_src = os.path.join(K.PLUGINS_SRC, "idlewasher.koplugin")
+    plug_files = sorted(fn for fn in os.listdir(plug_src)
+                        if os.path.isfile(os.path.join(plug_src, fn)))
+    check("the repo plugin dir has the three expected files",
+          plug_files == ["_meta.lua", "idlewasher_core.lua", "main.lua"],
+          f"{plug_files}")
+    pushed_ok = True
+    for fn in plug_files:
+        with open(os.path.join(plug_src, fn), "rb") as f:
+            if ftp.files.get(plug_dst + "/" + fn) != f.read():
+                pushed_ok = False
+    check("every plugin file is pushed VERBATIM into KO_HOME/plugins",
+          pushed_ok, f"{len(plug_files)} files -> {plug_dst}")
+    i_plug_mkdir = idx("mkdir -p " + plug_dst)
+    i_plug_push = idx(lambda c: isinstance(c, tuple)
+                      and c[1] == plug_dst + "/main.lua")
+    check("plugin pushes land after the seed and BEFORE the launch "
+          "(PluginLoader discovers at startup)",
+          i_seed < i_plug_mkdir < i_launch and i_seed < i_plug_push < i_launch,
+          f"seed={i_seed} mkdir={i_plug_mkdir} push={i_plug_push} "
+          f"launch={i_launch}")
+    check("seeded settings: idlewasher OFF by default (optics scenarios "
+          "stay deterministic)",
+          '["idlewasher_enabled"] = false' in seeded)
+    check("seeded settings: extra_plugin_paths points at the push target",
+          '["extra_plugin_paths"] = {"%s/plugins/"}' % K.KO_HOME in seeded,
+          seeded.strip().splitlines()[-2] if seeded else "")
+
+    print("case: a run can opt in to the idle washer via ko params")
+    ftw = FakeTransport(responses={
+        "ls -d /gnu/store": (0, "/gnu/store/fake-koreader/lib/koreader"),
+    })
+    drvw = driver.ShellDeviceDriver(ftw, driver.KOReaderBackend(ftw, manifest))
+    drvw.set_ebc_params({"ko": {"idlewasher_enabled": True,
+                                "idlewasher_idle_s": 20}})
+    drvw.open_testcard()
+    seeded_w = ftw.files[K.KO_HOME + "/settings.reader.lua"].decode()
+    check("ko opt-in overrides the default: idlewasher_enabled seeds true",
+          '["idlewasher_enabled"] = true' in seeded_w)
+    check("idlewasher_* knobs pass through the ko namespace to the seed",
+          '["idlewasher_idle_s"] = 20' in seeded_w)
+    check("...and never leak into the ebc sysfs params",
+          ftw.count("parameters/idlewasher_enabled") == 0
+          and ftw.count("parameters/idlewasher_idle_s") == 0)
+
     print("case: namespaced vs flat param routing")
     check("namespaced set_ebc_params returns {'ebc':applied,'ko':normalized}",
           applied == {"ebc": {"refresh_waveform": 6},
