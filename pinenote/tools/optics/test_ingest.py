@@ -142,6 +142,45 @@ def main():
           ingest.find_sync(means, fps=fps, candidate=cand) == 4,
           f"got {ingest.find_sync(means, fps=fps, candidate=cand)} want 4")
 
+    print("case: find_sync adapts its extremes to the capture's own range (defect 1)")
+    # The cliff-era regression (2026-07-11): the warm panel's black sync
+    # plateau read 0.207 raw -- the fixed lo=0.2 missed it by 0.007 -- and the
+    # white dwell read 0.79-0.81, so every report after cadence printed
+    # `sync ends frame 0`. Thresholds now anchor to the candidate pool's own
+    # [q02, q98]; this reproduces the measured plateau levels.
+    B3, W3 = 0.21, 0.79
+    means = [0.5] * 10 + [B3] * 8 + [W3] * 4 + [B3] * 8 + [W3] * 20 + [0.55] * 30
+    check("cliff-shaped plateaus (0.21/0.79) beat the fixed 0.2/0.8 thresholds",
+          ingest.find_sync(means, fps=fps) == 50,
+          f"got {ingest.find_sync(means, fps=fps)} want 50")
+    lo_a, hi_a = ingest.sync_thresholds(means)
+    check("adaptive thresholds sit inside the capture's own range",
+          0.21 < lo_a < 0.5 and 0.55 < hi_a < 0.79,
+          f"lo={lo_a:.3f} hi={hi_a:.3f}")
+    # narrow-span clip: nothing sync-like to adapt to -> absolute fallback
+    lo_f, hi_f = ingest.sync_thresholds([0.5, 0.62, 0.55, 0.6] * 10)
+    check("no black<->white swing -> absolute fallback thresholds",
+          (lo_f, hi_f) == (0.2, 0.8), f"lo={lo_f} hi={hi_f}")
+
+    print("case: uniform-panel candidacy -- sync fills are candidates even if 'valid'")
+    # The other half of the cliff-era failure: full-white sync pages VALIDATED
+    # (their corner windows straddle the bezel; dark bezel pixels satisfy the
+    # marker checks), so candidate=~valid excluded exactly the white half of
+    # the sync block. A sync fill's structural signature is a UNIFORM panel
+    # region; every card page carries fiducials/patches/barcode.
+    white_page = np.ones((Hp, Wp), np.float32)
+    both = np.stack([white_page, novel])
+    cam_u, _ = synthcam.make_camera_clip(both, H_true, Wp, Hp, (Hc, Wc))
+    f_u = ingest.detect_fiducials(cam_u[1], manifest)
+    H_u = ingest.homography_from_fiducials(f_u, manifest)
+    means_u, stds_u = ingest._sync_stats(list(cam_u), H_u, (Hp, Wp))
+    check("white sync fill reads uniform; the content page does not",
+          stds_u[0] < ingest.SYNC_UNIFORM_STD <= stds_u[1],
+          f"sync std={stds_u[0]:.3f} content std={stds_u[1]:.3f} "
+          f"(gate {ingest.SYNC_UNIFORM_STD})")
+    check("_sync_stats without a homography reports no stds (bezel would lie)",
+          ingest._sync_stats(list(cam_u), None, (Hp, Wp))[1] is None)
+
     print("case: END-TO-END -- synthetic camera of a page turn -> defect report")
     # dynamic pid lookup: the card sequence is being restructured concurrently,
     # so find the first adjacent novel->blank pair instead of hardcoding pids

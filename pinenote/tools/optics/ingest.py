@@ -164,12 +164,29 @@ def detect_fiducials(frame, manifest):
         sub = frame[a:b, c:dd]
         if sub.size == 0:
             return None
+        # Contrast gate: a marker window must actually contain dark ink on
+        # white. A noise-flat window otherwise "finds" a marker in pure
+        # camera noise: the relative dmark threshold sits ~0.6 sigma below
+        # the noise mean, so ~25% of pixels qualify and the 2%-70% fraction
+        # check passes. This is a hardening, not the whole story -- a window
+        # straddling the panel edge sees the dark bezel and passes any
+        # contrast gate, which is why marker-less full-white frames can still
+        # validate; find_sync therefore no longer trusts validity alone for
+        # its candidate mask (see the uniform-panel candidacy in ingest()).
+        if float(sub.max()) - float(sub.min()) < MIN_MARKER_CONTRAST:
+            return None
         dmark = sub < (sub.min() + 0.4 * (sub.max() - sub.min()))
         yy, xx = np.where(dmark)
         if not (0.02 * sub.size < len(xx) < 0.7 * sub.size):   # a real marker
             return None
         out[f["corner"]] = (c + xx.mean(), a + yy.mean())
     return out
+
+
+MIN_MARKER_CONTRAST = 0.15   # a real fiducial window spans near-black ink to
+                             # white paper (raw range >~0.5 on the rig); a
+                             # markerless window is noise-flat. Gate below this
+                             # and the window cannot be a marker.
 
 
 PANEL_ORDER = ["TL", "TR", "BR", "BL"]   # consistent point ordering
@@ -247,6 +264,42 @@ SYNC_MAX_GAP_S = 0.75       # tolerated non-extreme stretch INSIDE the block
                             # (the camera catches frames mid-refresh between the
                             # black and white sync pages)
 
+SYNC_SPAN_MIN = 0.45        # candidate-pool brightness span below which the
+                            # capture has no black<->white swing to adapt to
+SYNC_EDGE_FRAC = 0.08       # adaptive extremes sit this fraction inside the
+                            # pool's [q02, q98] range: tight enough that a
+                            # GC16 wash's brief mid-dip (grazes ~0.28 raw on
+                            # the rig) stays out, loose enough that a sync
+                            # plateau at 0.207 raw is caught (see below)
+
+
+def sync_thresholds(frame_means, candidate=None, lo=0.2, hi=0.8):
+    """Adapt the black/white extreme thresholds to THIS capture's own panel
+    brightness range, so sync detection does not hinge on absolute constants.
+
+    Why: the sync black/white plateaus are raw camera intensity, and where
+    they land drifts with exposure, panel temperature, and MJPG photometry.
+    On the 2026-07-11 rig the black sync plateau measured 0.207 -- the fixed
+    lo=0.2 missed it by 0.007 and every later report printed sync_end_frame=0
+    (cliff.*, neverx3.*, driver-owned), while earlier runs the same night sat
+    just under 0.2 and detected fine. The sync extremes are by construction
+    the extremes OF THE CAPTURE, so anchor the thresholds there.
+
+    The pool is the CANDIDATE frames (the marker-less ones that may count as
+    extremes; pass the same mask find_sync gets). Robust [q02, q98] bounds are
+    used, and the fixed lo/hi remain the fallback whenever the pool is too
+    small or its span too narrow to be a real black<->white swing."""
+    pool = np.asarray(list(frame_means), float)
+    if candidate is not None:
+        pool = pool[np.asarray(candidate, bool)]
+    pool = pool[np.isfinite(pool)]
+    if pool.size >= 8:
+        mn, mx = float(np.quantile(pool, 0.02)), float(np.quantile(pool, 0.98))
+        span = mx - mn
+        if span >= SYNC_SPAN_MIN:
+            return mn + SYNC_EDGE_FRAC * span, mx - SYNC_EDGE_FRAC * span
+    return lo, hi
+
 
 def find_sync(frame_means, lo=0.2, hi=0.8, fps=30.0,
               max_preamble_s=SYNC_MAX_PREAMBLE_S, max_gap_s=SYNC_MAX_GAP_S,
@@ -272,11 +325,16 @@ def find_sync(frame_means, lo=0.2, hi=0.8, fps=30.0,
     `candidate`, if given, is a per-frame bool array: frames marked False are
     never treated as extremes. ingest() passes the marker-detection validity
     inverted (~valid), so a mostly-white CONTENT page -- which carries fiducials
-    and therefore validates -- cannot masquerade as a sync white."""
+    and therefore validates -- cannot masquerade as a sync white.
+
+    `lo`/`hi` are fallback thresholds only: the working extremes adapt to the
+    capture's own candidate-frame brightness range (sync_thresholds), so a
+    black plateau at 0.207 raw is still black on a warm panel."""
     means = np.asarray(list(frame_means), float)
     n = means.size
     if n == 0:
         return 0
+    lo, hi = sync_thresholds(means, candidate=candidate, lo=lo, hi=hi)
     state = np.zeros(n, int)                      # -1 black, +1 white, 0 neither
     state[means < lo] = -1
     state[means > hi] = 1
@@ -331,18 +389,33 @@ def _panel_quad_mask(H_panel_to_cam, cam_shape, panel_hw, shrink=0.03):
     return mask
 
 
+SYNC_UNIFORM_STD = 0.05   # panel-region std below this = a UNIFORM panel (a
+                          # sync black/white fill). Every card page carries
+                          # structure (fiducials, patch strip, barcode, marks:
+                          # std >~0.1 raw), while a sync fill's std is the
+                          # camera noise floor (<~0.03 on the rig).
+
+
+def _sync_stats(frames, H_panel_to_cam, panel_hw):
+    """Per-frame (mean, std) of brightness over the panel region for
+    find_sync. The rig is fixed (one camera, one geometry -- PLAN.md 1a), so
+    one homography from any marker-valid frame places the panel for every
+    frame, including the marker-less sync flashes themselves. Falls back to
+    whole-frame stats when no frame validated (find_sync then still returns 0
+    or a best effort; stds are then reported as None -- a whole-frame std
+    always includes the bezel and can never read 'uniform')."""
+    if H_panel_to_cam is not None:
+        mask = _panel_quad_mask(H_panel_to_cam, frames[0].shape, panel_hw)
+        if mask.any():
+            vals = [f[mask] for f in frames]
+            return ([float(v.mean()) for v in vals],
+                    [float(v.std()) for v in vals])
+    return [float(np.mean(f)) for f in frames], None
+
+
 def _sync_means(frames, H_panel_to_cam, panel_hw):
-    """Per-frame mean brightness over the panel region for find_sync. The rig
-    is fixed (one camera, one geometry -- PLAN.md 1a), so one homography from
-    any marker-valid frame places the panel for every frame, including the
-    marker-less sync flashes themselves. Falls back to whole-frame means when
-    no frame validated (find_sync then still returns 0 or a best effort)."""
-    if H_panel_to_cam is None:
-        return [float(np.mean(f)) for f in frames]
-    mask = _panel_quad_mask(H_panel_to_cam, frames[0].shape, panel_hw)
-    if not mask.any():
-        return [float(np.mean(f)) for f in frames]
-    return [float(f[mask].mean()) for f in frames]
+    """Back-compat shim: the per-frame panel means only (see _sync_stats)."""
+    return _sync_stats(frames, H_panel_to_cam, panel_hw)[0]
 
 
 def _warp_all(frames, manifest, panel_hw, fixed_h=True):
@@ -501,11 +574,22 @@ def ingest(frames, fps, manifest, render_page):
     Wp, Hp = manifest["resolution"]
     panel_hw = (Hp, Wp)
     warped, valid, H_first = _warp_all(frames, manifest, panel_hw)
-    # clock-zero: sync detection reads the PANEL region (fixed-rig homography
-    # borrowed from the first marker-valid frame) and only marker-less frames
-    # may count as extremes -- a bright content page cannot pass as sync white.
-    means = _sync_means(frames, H_first, panel_hw)
-    sync_end = find_sync(means, fps=fps, candidate=~valid)
+    # clock-zero: sync detection reads the PANEL region (fixed-rig session
+    # homography) and a frame may count as an extreme when it is marker-less
+    # OR its panel region is uniform. ~valid alone proved insufficient on the
+    # 2026-07-11 cliff-era captures (sync_end_frame=0 in every later report):
+    # the full-white sync pages "validated" -- their corner windows straddle
+    # the bezel, and dark bezel pixels satisfy the marker checks -- so exactly
+    # the white half of the sync block was excluded and the >=2-alternations
+    # rule could never fire. A uniform panel (std at the noise floor) is the
+    # structural signature of a sync fill: every real card page carries
+    # fiducials/patches/barcode, so this cannot re-admit a bright CONTENT
+    # page (the false positive ~valid was introduced to prevent).
+    means, stds = _sync_stats(frames, H_first, panel_hw)
+    candidate = ~valid
+    if stds is not None:
+        candidate = candidate | (np.asarray(stds) < SYNC_UNIFORM_STD)
+    sync_end = find_sync(means, fps=fps, candidate=candidate)
     trans, ids = segment_transitions(warped, valid, manifest)
     pages_by_pid = {p["pid"]: p for p in manifest["pages"]}
     onsets = [o for (o, _, _) in trans] + [warped.shape[0]]
@@ -535,6 +619,6 @@ def ingest(frames, fps, manifest, render_page):
         white = (after >= 0.85) & ~rmask
         tr = optics.Transition(t0=0, before=before, after=after,
                                white_mask=white, clean_mask=white.copy(),
-                               window_s=window_s)
+                               window_s=window_s, onset_frame=int(onset))
         results.append((tr, seg, fr, to))
     return results, warped, sync_end
