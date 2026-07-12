@@ -301,18 +301,31 @@ Also staged 2026-07-03:
 
 ## Current os2 contents
 
-os2 currently holds the **phase A.2.6 build**, SHA
-`1a1e13669a17e258487d6f78d862517c9765b9f172e962e52e63ce4cc2bb9b68` —
-**written 2026-07-11** with the full protocol (os1 root confirmed at
-`/dev/mmcblk0p5`, p6 unmounted, `dd conv=fsync`, then a `drop_caches`
-readback of the exact 1 943 080 960-byte range SHA-matched from eMMC).
-Staged copy on os1 at
-`/home/user/wilkbook-artifacts/pinenote-reader-PNGuixRoot-20260711-a26.ext4`.
-**First boot pending.** A.2.6 = A.2.5 + the integrated optics blocker work
-(the `wilkbook-optics` injector whitelist + configurable flash fraction in the
-koreader graft) + the `/var/empty` sshd activation fix (first image where SSH
-needs no manual step). The superseded A.2.5 (`e0e7735c…`) staged copy remains
-on os1 for rollback; its record follows.
+os2 currently holds the **A.2.7-dbg build (`reader-debug` flavor)**, SHA
+`7620b453f7dec9ad49c2693b20fae2edb4df2659cb6928aa0bc6e1861251becb` —
+**written 2026-07-12** with the full protocol (os1 root confirmed at
+`/dev/mmcblk0p5`, p6 unmounted, `dd conv=fsync`, readback of the exact
+1 945 235 456-byte range SHA-matched from eMMC). Staged copy on os1 at
+`/home/user/wilkbook-artifacts/pinenote-reader-debug-PNGuixRoot-20260712.ext4`.
+**First boot pending.** A.2.7-dbg = the production reader flavor + the quirk F
+diagnostic kernel `linux-pinenote-debug` (primary kernel byte-identical + one
+printk-only DSP_END straggler-instrumentation patch; host name
+`pinenote-reader-dbg`). Userspace additions over A.2.6: the hardware-validated
+idle-washer plugin grafted into koreader-bin, `auto_refresh=0` in the params
+one-shot + modprobe.d (finding 10), the `/data` mount (by partlabel) + KOReader
+`home_dir=/data/books` first-boot seed, and **the `wait-cr` UART getty fix**
+(the PID-1-killing respawn loop from the 2026-07-12 wedge post-mortem). The
+superseded A.2.6 record follows.
+
+A.2.6 — **boot confirmed 2026-07-11; carried the entire optics campaign**
+(calibration, sweeps, the 2x2 isolation, idle-washer acceptance, five
+instrumented corrupter repros) until the 2026-07-12 PID-1 wedge (post-mortem
+above; not an image-data fault — p6 e2fsck clean). SHA `1a1e1366…`; staged
+copy remains on os1 for rollback. A.2.6 = A.2.5 + the integrated optics
+blocker work (the `wilkbook-optics` injector whitelist + configurable flash
+fraction in the koreader graft) + the `/var/empty` sshd activation fix (first
+image where SSH needs no manual step). The superseded A.2.5 (`e0e7735c…`)
+staged copy remains on os1 for rollback; its record follows.
 
 A.2.5 — **first boot confirmed 2026-07-11**: Wi-Fi auto-joined again (note: dhcpcd
 mints a fresh DUID per reflash, so absent a router-side reservation the DHCP
