@@ -15,7 +15,7 @@
 ;; actually applies parameters on the device (the initrd raw-loads the
 ;; module, so neither modprobe.d nor kernel-cmdline tokens reach it).
 (define pinenote-ebc-modprobe-options
-  "options rockchip_ebc direct_mode=0 auto_refresh=1 refresh_threshold=60 split_area_limit=0 panel_reflection=1 prepare_prev_before_a2=0 dclk_select=0 refresh_waveform=6\n")
+  "options rockchip_ebc direct_mode=0 auto_refresh=0 refresh_threshold=60 split_area_limit=0 panel_reflection=1 prepare_prev_before_a2=0 dclk_select=0 refresh_waveform=6\n")
 
 (define (pinenote-waveform-shepherd-service _config)
   (list
