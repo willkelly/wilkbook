@@ -430,6 +430,25 @@ bundles + reports under `pinenote/tools/optics/build/bundles/sweep1.*`):
     at 12 remains the belt-and-suspenders default until the washer has
     dogfooding hours. Bundles: `.../idlewasher-accept*`.
 
+12. **GL16 vs GC16 fulls on real content: optically indistinguishable
+    flash depth — the pair class dominates, not the waveform (first
+    attributed comparison, 2026-07-12).** With the hardened analyzer
+    (session-H trust, no-NaN flash, trace->transition join), sweep1
+    re-analysis attributes each run's promoted fulls exactly (8 GL16 /
+    7 GC16, matching the runs' own [pn-refresh] traces). Per-pair,
+    GL16 and GC16 fulls measure the same (~0.06 mean stays-white depth
+    both, n=7/6 shared pairs), novel->blank is noisy between runs in
+    BOTH directions (0.20/0.12 vs 0.06/0.17), and the waveform-decode
+    expectation (GL16 gentler on whites) does not dominate real content
+    transitions. One real outlier flagged, not explained: the GL16 run's
+    index->ux full flashed 0.35 deep (single 0.2 s event; GC16's same
+    pair: 0.04) — n=1, possibly the ux double-flash family. Policy
+    consequence: Decision 2 (GL16 for washes) stands — it costs nothing
+    optically and preserves the GC16 deep-clean contrast for
+    believed-white scrubbing — but the choice is architectural, not a
+    measured comfort win. Reports: `sweep1.r0{0,1}-report-v3.json`
+    (first generation with per-transition wash attribution).
+
 Instrument provenance: 30 fps / exposure 312 / gain 32 / frontlight 255-255;
 ghost-rms repeatability sigma 0.003-0.006 between identical transitions.
 
