@@ -346,6 +346,28 @@ the global's reinit) which detects the straggler credit directly,
 corruption visible or not. Faster-dwell repro (0.5-0.8 s toggles into
 the firing) is the remaining cheap lever before that.
 
+**Confirmation run 3 result (2026-07-12, repro v3):** 100 rapid
+graphic-pair toggles (~1.3 s effective dwell — inside the render+refresh
+window, so the 9 threshold globals launched into a CONTINUOUS damage
+stream) — kernel silent, and the washless inspect frame vs the same page
+post-GC16 shows ZERO scrubbed residue (dark drift +0.001, white +0.001).
+Fifteen deliberate threshold firings across three regimes (per-toggle,
+rare+exposed, rare-into-active-stream) have now produced no corruption.
+Standing assessment, stated honestly for upstream: the hardware
+correlation from the campaign is solid (auto=1 in every corrupting run,
+auto=0 always clean, the firings camera-caught in the corrupting runs),
+and quirk F's zero-gap launch asymmetry is source-verified — but the
+truncation event is NOT reproducible on demand; its trigger has an
+unisolated component (candidates: diverse-content damage shapes — the
+3/4 corrupting runs were diverse pages, all three repros same-pair;
+long-session accumulated state; low per-event interrupt-timing odds).
+The instrumented kernel (point 3) is the decisive next instrument: it
+logs the straggler credit / early wait-return per event, replacing
+optical inference entirely. Until it reports, the upstream claim should
+lead with the correlation + the source-level asymmetry, and present the
+truncation mechanism as the best-supported hypothesis rather than a
+demonstrated fault.
+
 ### Upstream notification draft (m-weigand / PNDeb / hrdl / ayakael)
 
 > Subject: rockchip_ebc: auto_refresh threshold path can truncate its own
