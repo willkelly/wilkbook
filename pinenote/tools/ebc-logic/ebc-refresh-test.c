@@ -327,6 +327,25 @@ static void run_refresh_synth(struct rockchip_ebc *ebc,
 	regmap_write(ebc->regmap, EBC_DSP_START,
 		     ebc->dsp_start | EBC_DSP_START_DSP_OUT_LOW);
 
+	/* the auto-refresh threshold epilogue, verbatim from
+	 * rockchip_ebc_refresh (including its local one_screen_area
+	 * constant).  auto_refresh defaults to false, so tests that do
+	 * not opt in are unaffected. */
+	{
+		int one_screen_area = 1314144;
+
+		if (auto_refresh) {
+			if (ctx->area_count >= refresh_threshold * one_screen_area) {
+				spin_lock(&ebc->refresh_once_lock);
+				ebc->do_one_full_refresh = true;
+				spin_unlock(&ebc->refresh_once_lock);
+				ctx->area_count = 0;
+			}
+		} else {
+			ctx->area_count = 0;
+		}
+	}
+
 	pm_runtime_mark_last_busy(dev);
 	pm_runtime_put_autosuspend(dev);
 }
@@ -855,6 +874,244 @@ static void test_quirk_begin_together_conflict(void)
 }
 
 /* ---------------------------------------------------------------------- */
+/* QUIRK F: the threshold-fired auto-global launches zero-gap and lets a  */
+/* straggling DSP_END satisfy its wait (doc/driver-findings-report.md,    */
+/* 2026-07-12 finding: threshold-path globals corrupt, ioctl-path globals */
+/* are clean)                                                             */
+
+/* Mirrors the thread loop's flag consumption (rockchip_ebc_refresh_thread,
+ * the read/clear under refresh_once_lock). */
+static bool consume_full_refresh_flag(struct rockchip_ebc *ebc)
+{
+	bool one_full_refresh;
+
+	spin_lock(&ebc->refresh_once_lock);
+	one_full_refresh = ebc->do_one_full_refresh;
+	spin_unlock(&ebc->refresh_once_lock);
+	if (one_full_refresh) {
+		spin_lock(&ebc->refresh_once_lock);
+		ebc->do_one_full_refresh = false;
+		spin_unlock(&ebc->refresh_once_lock);
+	}
+	return one_full_refresh;
+}
+
+/* Deliver a pending (deferred) DSP_END from inside the device's refresh —
+ * but only once the latched config is a LUT-mode (global) playback.  This
+ * is the zero-gap hazard window: rockchip_ebc_global_refresh has already
+ * run reinit_completion() (driver line ~651), so the straggler credits
+ * display_end and the global's wait_for_completion returns while, on
+ * hardware, the num_phases-frame playback would still be on the glass. */
+static void straggler_in_global_window(u32 hw_frame)
+{
+	(void)hw_frame;
+	if ((fake_ebc.latched[EBC_DSP_CTRL / 4] & EBC_DSP_CTRL_DSP_LUT_MODE) &&
+	    fake_ebc.pending_dsp_end)
+		fake_ebc_deliver_dsp_end();
+}
+
+/* Arm the IRQ-latency knob for the burst's FINAL frame.  The final
+ * frame is the one whose END can still be outstanding when the partial
+ * loop exits: any earlier late IRQ order-skews the per-frame handshake
+ * (wait k satisfied by END k-1 — each wait then returns while its own
+ * frame still plays) and the burst exits with the last END in flight
+ * either way.  One area = NPH DSP_FRM_STARTs (frames 0..NPH-1). */
+static void arm_defer_at_last_partial_frame(u32 hw_frame)
+{
+	if (hw_frame == NPH - 1)
+		fake_ebc.defer_dsp_end = 1;
+}
+
+/* One scripted session, identical in both scenarios:
+ *   partial(D1, final frame's DSP_END IRQ delayed past EBC_FRAME_TIMEOUT)
+ *   -> full refresh -> partial(D2) -> ioctl wash.
+ * The only difference is the launch context of the first full refresh:
+ *   threshold=1: the driver's own auto-refresh epilogue fires it
+ *     back-to-back with the partial (zero gap), and the straggler IRQ
+ *     lands inside the global's reinit->wait window;
+ *   threshold=0 ("ioctl-like"): the wash is requested through the real
+ *     GLOBAL_REFRESH ioctl while the thread is idle — the straggler
+ *     landed during the idle gap, where the global's reinit_completion
+ *     absorbs it.
+ * Returns the residual display_end credit after the session; *next_out
+ * (gray4_size bytes, caller-allocated) receives the final ctx->next. */
+static unsigned int quirk_zero_gap_session(bool threshold_fired, u8 *next_out,
+					   u32 *drive_count_out)
+{
+	struct harness h;
+	struct rockchip_ebc *ebc = harness_ebc(&h, GW, GH, NPH);
+	struct rockchip_ebc_ctx *ctx = harness_ctx(&h, GW, GH);
+	struct drm_rect rect = {8, 8, 24, 16};
+	bool saved_auto = auto_refresh;
+	int saved_threshold = refresh_threshold;
+	bool saved_diff = diff_mode;
+	unsigned int residual;
+	int x, y;
+
+	diff_mode = false;
+	memset(ctx->prev, 0x55, ctx->gray4_size);
+	memset(ctx->next, 0x55, ctx->gray4_size);
+	memcpy(ctx->final_atomic_update, ctx->prev, ctx->gray4_size);
+
+	/* D1: drive the toggle block dark */
+	for (y = rect.y1; y < rect.y2; y++)
+		for (x = rect.x1; x < rect.x2; x++)
+			set_px(ctx->final_atomic_update, ctx->gray4_pitch, x, y, 0x0);
+	commit_damage(ctx, &rect, 1);
+
+	/* auto_refresh=1 with refresh_threshold=0 makes the verbatim
+	 * epilogue fire on any nonzero (or zero) damage volume — the
+	 * deterministic stand-in for a burst crossing the threshold. */
+	auto_refresh = true;
+	refresh_threshold = 0;
+
+	/* The burst's final frame's DSP_END is delivered late (IRQ
+	 * latency past the 25 ms EBC_FRAME_TIMEOUT — two frame periods
+	 * at 85 Hz).  The driver logs "Frame %d timed out!" and carries
+	 * on with the last END still in flight; the shim counts the same
+	 * event in completion_timeouts. */
+	fake_ebc.on_frm_start = arm_defer_at_last_partial_frame;
+	run_refresh_synth(ebc, ctx, false);
+	fake_ebc.on_frm_start = NULL;
+
+	check(ebc->do_one_full_refresh,
+	      "quirk F(%s): threshold epilogue armed the full-refresh flag",
+	      threshold_fired ? "threshold" : "ioctl");
+	check(ebc_shim.completion_timeouts == 1 && fake_ebc.pending_dsp_end == 1,
+	      "quirk F(%s): one frame wait timed out, its DSP_END IRQ still pending",
+	      threshold_fired ? "threshold" : "ioctl");
+
+	/* stop the epilogue from re-arming during the rest of the script */
+	auto_refresh = false;
+
+	if (threshold_fired) {
+		/* Zero-gap launch: the thread loop re-checks the flag
+		 * right after rockchip_ebc_refresh returns (driver lines
+		 * ~1591/1567) and starts the global immediately.  The
+		 * straggler IRQ lands inside the global's own wait
+		 * window. */
+		consume_full_refresh_flag(ebc);
+		fake_ebc.on_frm_start = straggler_in_global_window;
+		run_refresh_synth(ebc, ctx, true);
+		fake_ebc.on_frm_start = NULL;
+	} else {
+		/* Idle-gap launch: the straggler lands while the thread
+		 * sleeps; the wash is then requested through the real
+		 * ioctl handler.  reinit_completion at the top of
+		 * rockchip_ebc_global_refresh absorbs the stale credit. */
+		struct drm_rockchip_ebc_trigger_global_refresh args = {
+			.trigger_global_refresh = true,
+		};
+
+		consume_full_refresh_flag(ebc);	/* drop the auto arm */
+		fake_ebc_deliver_dsp_end();	/* straggler, in the idle gap */
+		ioctl_trigger_global_refresh(&ebc->drm, &args, NULL);
+		check(consume_full_refresh_flag(ebc),
+		      "quirk F(ioctl): GLOBAL_REFRESH ioctl armed the flag");
+		run_refresh_synth(ebc, ctx, true);
+	}
+
+	/* D2: the stream continues — toggle the block back light */
+	for (y = rect.y1; y < rect.y2; y++)
+		for (x = rect.x1; x < rect.x2; x++)
+			set_px(ctx->final_atomic_update, ctx->gray4_pitch, x, y, 0xF);
+	commit_damage(ctx, &rect, 1);
+	run_refresh_synth(ebc, ctx, false);
+
+	/* the driver's own bookkeeping believes this session is clean */
+	check(!memcmp(ctx->prev, ctx->next, ctx->gray4_size) &&
+	      list_empty(&ctx->queue),
+	      "quirk F(%s): driver bookkeeping believes the session completed cleanly",
+	      threshold_fired ? "threshold" : "ioctl");
+
+	residual = ebc->display_end.done;
+
+	/* a final ioctl-path wash: reinit_completion re-arms the handshake
+	 * (this is why ioctl-heavy sessions self-heal on hardware) */
+	{
+		struct drm_rockchip_ebc_trigger_global_refresh args = {
+			.trigger_global_refresh = true,
+		};
+
+		ioctl_trigger_global_refresh(&ebc->drm, &args, NULL);
+		consume_full_refresh_flag(ebc);
+		run_refresh_synth(ebc, ctx, true);
+	}
+	check(ebc->display_end.done == 0,
+	      "quirk F(%s): a later global's reinit_completion re-arms the handshake",
+	      threshold_fired ? "threshold" : "ioctl");
+
+	memcpy(next_out, ctx->next, ctx->gray4_size);
+	memcpy(drive_count_out, fake_ebc.drive_count,
+	       (size_t)GW * GH * sizeof(u32));
+
+	auto_refresh = saved_auto;
+	refresh_threshold = saved_threshold;
+	diff_mode = saved_diff;
+	harness_free(&h, ctx);
+	return residual;
+}
+
+static void test_quirk_threshold_zero_gap_global(void)
+{
+	/* The 2026-07-12 hardware finding: full refreshes fired by the
+	 * damage-threshold path progressively corrupt recently-updated
+	 * pixels, while GLOBAL_REFRESH-ioctl washes of the same waveform
+	 * never do.  Static analysis shows both paths run the identical
+	 * code from the do_one_full_refresh flag onward; the divergence
+	 * is the launch context.  The threshold path is the only
+	 * zero-gap producer: the flag is set in the epilogue of the very
+	 * partial refresh that crossed the threshold (driver line ~1479)
+	 * and consumed immediately (~1591/1567), so the global's
+	 * reinit_completion->wait window opens microseconds after a
+	 * partial burst — exactly where a straggling DSP_END (e.g. from
+	 * a frame whose wait already expired at the 25 ms
+	 * EBC_FRAME_TIMEOUT, two frame periods) lands.  The completion
+	 * is COUNTING and the partial path never reinits it, so the
+	 * straggler credits the global's wait: on hardware the wait
+	 * returns while the num_phases-frame LUT playback is still
+	 * driving glass, and the driver then commits prev <- next,
+	 * writes DSP_OUT_LOW, uploads the next waveform's LUT and
+	 * starts three-window frames against a panel mid-wash — for
+	 * exactly the prev != next (recently-updated) pixels, whose LUT
+	 * row switches mid-waveform.  The ioctl path launches from
+	 * idle (the wash beats the deferred-io flush), so stragglers
+	 * land in the gap and reinit_completion absorbs them.
+	 *
+	 * The fake device plays refreshes synchronously inside the
+	 * DSP_START write, so the mid-playback pixel corruption itself
+	 * cannot manifest here (README, "Limits").  What this test pins,
+	 * deterministically, is the protocol divergence that causes it:
+	 * the identical session with the identical late-IRQ perturbation
+	 * ends with a residual display_end credit if and only if the
+	 * global was threshold-fired — i.e. one of its waits returned
+	 * without a matching completed playback. */
+	u8 *next_t = malloc((size_t)GW / 2 * GH);
+	u8 *next_i = malloc((size_t)GW / 2 * GH);
+	u32 *drives_t = malloc((size_t)GW * GH * sizeof(u32));
+	u32 *drives_i = malloc((size_t)GW * GH * sizeof(u32));
+	unsigned int residual_t, residual_i;
+
+	residual_t = quirk_zero_gap_session(true, next_t, drives_t);
+	residual_i = quirk_zero_gap_session(false, next_i, drives_i);
+
+	check(residual_i == 0,
+	      "quirk F: ioctl-fired global absorbs the straggler DSP_END (idle gap + reinit_completion)");
+	check(residual_t == 1,
+	      "quirk F: threshold-fired global leaves a residual display_end credit "
+	      "(a wait was satisfied by the straggler mid-playback) — the corrupting path, device-invisible here");
+	check(!memcmp(next_t, next_i, (size_t)GW / 2 * GH) &&
+	      !memcmp(drives_t, drives_i, (size_t)GW * GH * sizeof(u32)),
+	      "quirk F: the synchronous device model shows identical pixels/drives for both paths "
+	      "(the mid-playback race is hardware-only; see README limits)");
+
+	free(next_t);
+	free(next_i);
+	free(drives_t);
+	free(drives_i);
+}
+
+/* ---------------------------------------------------------------------- */
 /* teardown UAF reproducer (run as a subprocess by run-tests.sh)           */
 
 static int quirk_ctx_free_uaf(void)
@@ -1198,6 +1455,7 @@ int main(int argc, char **argv)
 	test_partial_diff_mode();
 	test_midrefresh_commit();
 	test_quirk_begin_together_conflict();
+	test_quirk_threshold_zero_gap_global();
 
 	if (fwdir) {
 		setenv("EBC_SHIM_FW_DIR", fwdir, 1);

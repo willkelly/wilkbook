@@ -105,6 +105,17 @@ struct fake_ebc {
 	 * want to account per-refresh work (ebc-replay). */
 	void (*on_event)(const struct fake_ebc_event *ev, const u8 *prev,
 			 const u8 *next, const u8 *phase_buf);
+
+	/* quirk knob: IRQ-delivery latency.  While defer_dsp_end > 0, a
+	 * raised DSP_END still sets its INT_STATUS bit (the hardware does
+	 * that regardless) but the interrupt line is NOT raised; instead
+	 * pending_dsp_end counts it and defer_dsp_end decrements.  A test
+	 * later delivers the straggler with fake_ebc_deliver_dsp_end() at
+	 * a chosen point — modeling an interrupt that arrives late (e.g.
+	 * after the driver's 25 ms EBC_FRAME_TIMEOUT already expired).
+	 * Both fields default to 0: no behavior change for other tests. */
+	u32 defer_dsp_end;
+	u32 pending_dsp_end;
 };
 
 static struct fake_ebc fake_ebc;
@@ -220,9 +231,31 @@ static void fake_ebc_raise_dsp_end(void)
 
 	ebc_shim.regs[EBC_INT_STATUS / 4] = status | EBC_INT_STATUS_DSP_END_INT_ST;
 	fake_ebc.dsp_end_irqs++;
+	if (fake_ebc.defer_dsp_end) {
+		/* IRQ-latency model: the status bit is set (done above),
+		 * but the line is raised later, by the test, through
+		 * fake_ebc_deliver_dsp_end(). */
+		fake_ebc.defer_dsp_end--;
+		fake_ebc.pending_dsp_end++;
+		return;
+	}
 	/* Masked interrupts do not reach the CPU: if the driver's resume
 	 * path failed to unmask DSP_END, its wait times out — visibly. */
 	if (!(status & EBC_INT_STATUS_DSP_END_INT_MSK) && ebc_shim.irq_handler)
+		ebc_shim.irq_handler(1, ebc_shim.irq_dev_id);
+}
+
+/* Deliver one deferred DSP_END interrupt: the line finally reaches the
+ * CPU and the driver's own handler runs against the live INT_STATUS.
+ * (If the driver already cleared the status bit — e.g. an intervening
+ * IRQ serviced both events — the handler correctly does nothing, same
+ * as coalesced interrupts on hardware.) */
+static void fake_ebc_deliver_dsp_end(void)
+{
+	if (!fake_ebc.pending_dsp_end)
+		return;
+	fake_ebc.pending_dsp_end--;
+	if (ebc_shim.irq_handler)
 		ebc_shim.irq_handler(1, ebc_shim.irq_dev_id);
 }
 
