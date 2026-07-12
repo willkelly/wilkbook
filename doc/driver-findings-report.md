@@ -135,3 +135,31 @@ would hit this on any mainline-ish kernel. Repro recipe: fbdev client renders
 90°-rotated full-screen content -> first full refresh -> panel frozen;
 `echo 1 > .../vtcon1/bind` unaffected. Needs a minimal fb-level reproducer
 (FBIOPUT_VSCREENINFO/rotated-blit sequence) before reporting upstream.
+
+## Finding (2026-07-12, live): threshold-triggered auto-globals corrupt panel state; ioctl-triggered globals are clean
+
+On the A.2.6 image (7.0.11, rockchip_ebc 0.3.0, GL16 global waveform), full
+refreshes fired by the driver's own damage-threshold path (`auto_refresh=1`,
+`area_count >= refresh_threshold * one_screen_area`) progressively corrupt
+displayed state: after such a firing, frequently-updated fine structure (1-bit
+barcode cells) reads 0.6-0.8 reflectance instead of ~0/~1, and the corruption
+snowballs. Reproduced across a 2x2 (page-diversity x auto_refresh): every
+corrupting run had `auto_refresh=1`; disabling it makes the same 48-turn
+diverse workload clean (45/48 marker decode vs 0-6/48), and a video-side
+detector (only globals redraw static screen regions) catches unexplained
+global events precisely in the auto=1 runs, including the corrupted ones.
+Lowering the threshold makes corruption FASTER (threshold=8 -> 6/48), i.e.
+each threshold-path firing does damage. GLOBAL_REFRESH ioctl firings
+(userspace-triggered, same waveform) never produced corruption across ~20
+multi-wash sessions, and the ioctl works with a live DRM master.
+
+Suspected mechanism: the threshold path fires from the middle of the update
+stream and races in-flight partials' prev/next bookkeeping (same family as
+quirk 3: "manual washes never reset the accumulator" — the accumulator also
+persists across sessions, making firings random-phase). One further anomaly
+retained honestly: two unexplained global-like events in one auto=0 soak
+(t≈100/105 s) — possibly the known spontaneous-global flakiness.
+
+Workaround shipped in wilkbook: `auto_refresh=0`; all full refreshes owned by
+userspace via the ioctl. Needs a driver-level look at the
+`do_one_full_refresh` threshold path vs the ioctl path before upstreaming.

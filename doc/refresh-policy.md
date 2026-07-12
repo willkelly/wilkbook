@@ -109,7 +109,8 @@ exactly for this; leave DU/A2 to the phase B workbench.
   community-owned driver work; runtime param flips are the sanctioned
   workaround and the rung-7a harness executes the verbatim driver, so
   flip races are testable offline.
-- `refresh_threshold` units are ~half-screens of *accumulated* damage
+- `refresh_threshold` units are whole SCREEN-AREAS of *accumulated* damage
+  (driver source: `area_count >= refresh_threshold * one_screen_area`)
   (threshold × 1,314,144 px), not percent — our cmdline 60 means the
   auto global refresh fires after roughly 30 page-turns' worth. hrdl's
   stack uses 20. Workbench input.
@@ -335,6 +336,25 @@ bundles + reports under `pinenote/tools/optics/build/bundles/sweep1.*`):
    real). Next experiments: the diverse-page soak (accumulation block) x
    auto_refresh on/off — a 2x2 that isolates the mechanism.
    Bundle: `.../soak1` (+ soak-events.json).
+10. **MECHANISM FOUND: the driver's threshold-triggered auto-globals CAUSE
+    the corruption (2x2 complete).** Arms: diverse+auto1 corrupts 3/4
+    (neverx3); diverse+auto0 CLEAN 45/48 (armB, replication pending);
+    same-pair+auto1 shows 4-5x dark-cell graying (armC); same-pair+auto0
+    clean (soak1). A patch-strip wash detector (only globals redraw the
+    static strip) caught unexplained globals exactly in the auto=1 runs:
+    armC t≈90s, corrupted never-a t≈109s — the culprit on camera — while
+    accounting for every manual/ioctl wash in soak1 (plus TWO unexplained
+    events there at t≈100/105 with autos off: flagged anomaly, possibly the
+    spontaneous-global flakiness family). ioctl-fired globals (deep_clean,
+    KOReader promotions) have never corrupted anything: the wash PATH is
+    the variable, not the wash. Stochasticity explained by quirk 3 ("manual
+    washes never reset the accumulator"): the damage counter accrues ACROSS
+    runs, so auto firings are random-phase — also the likely story behind
+    cadence.r01 (c12) quietly under-segmenting 19/48. **Policy consequence:
+    set `auto_refresh=0` and own all washes from userspace via the ioctl
+    (KOReader promotion at 12 today; the idle-washer later). Driver finding
+    written for upstream (doc/driver-findings-report.md).** Bundles:
+    `.../armB*`, `.../armC`.
 
 Instrument provenance: 30 fps / exposure 312 / gain 32 / frontlight 255-255;
 ghost-rms repeatability sigma 0.003-0.006 between identical transitions.
