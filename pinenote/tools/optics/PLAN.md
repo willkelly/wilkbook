@@ -89,6 +89,7 @@ Build-order additions (all non-blocking, after the first capture):
 | 24 | ~~Delayed-quality-redraw prototype~~ **DONE as the idle-washer** (`idlewasher.koplugin`: full-screen debt+idle washes, not region repaint — hardware-validated 2026-07-12, refresh-policy finding 11; thresholds sweepable via the `ko` namespace) | M |
 | 25 | Port `globre_convert_before` into the forward-port patch (rung 1–3 offline proof) + add to paramspace | S |
 | 26 | Blue-noise dither tables into the bw_mode/low-bit path (or KOReader render) + grayramp rig evaluation | M–L |
+| 27 | DEFERRED (decision 2026-07-12): card variant with marks-on-blank-pages, restoring optical GL16-global detection on diverse content (blanks break frame validity — findings report, evidence-audit section). Tradeoff: true blanks exercise the pure-white transition / no-marks render path, so keep it a per-experiment VARIANT, not the default. Deferred behind the straggler-detector debug kernel, which reports launches in the kernel log and mostly obsoletes optical global-counting. | S |
 
 ## 1c. First-capture session ledger (2026-07-11, night)
 
