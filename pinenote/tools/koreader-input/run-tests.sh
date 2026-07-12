@@ -8,7 +8,13 @@
 #   * test-optics-inject.lua -- the optics page-turn injector chain:
 #                               the REPO device.lua's 'wilkbook-optics'
 #                               whitelist + the 159/158 -> RPgFwd/RPgBack
-#                               key mapping (optics PLAN task 1).
+#                               key mapping (optics PLAN task 1);
+#   * test-idlewasher-logic.lua -- the idle-washer refresh manager: the
+#                               pure debt/idle decision core, plus the
+#                               REPO plugin main.lua wired to a recording
+#                               UIManager over the bundle's verbatim
+#                               hook container (doc/refresh-policy.md
+#                               finding 10's userspace-wash policy).
 #
 # Usage: run-tests.sh [/gnu/store/...-koreader-bin-...]
 #
@@ -29,6 +35,7 @@ koreader=$bundle/lib/koreader
 pinenote_dev=$repo_root/pinenote/packages/koreader-device/frontend/device/pinenote
 router=$pinenote_dev/mixedrouter.lua
 device_lua=$pinenote_dev/device.lua
+idlewasher=$repo_root/pinenote/packages/koreader-device/plugins/idlewasher.koplugin
 
 if [ ! -x "$luajit" ]; then
   echo "FAIL: no luajit at $luajit (is $bundle a koreader-bin bundle?)" >&2
@@ -40,6 +47,10 @@ if [ ! -f "$router" ]; then
 fi
 if [ ! -f "$device_lua" ]; then
   echo "FAIL: device.lua not found at $device_lua" >&2
+  exit 1
+fi
+if [ ! -f "$idlewasher/main.lua" ] || [ ! -f "$idlewasher/idlewasher_core.lua" ]; then
+  echo "FAIL: idlewasher.koplugin not found at $idlewasher" >&2
   exit 1
 fi
 
@@ -85,6 +96,8 @@ run_case test-mixedrouter.lua "$tool_dir/test-mixedrouter.lua" \
   "$koreader" "$router"
 run_case test-optics-inject.lua "$tool_dir/test-optics-inject.lua" \
   "$koreader" "$device_lua" "$router"
+run_case test-idlewasher-logic.lua "$tool_dir/test-idlewasher-logic.lua" \
+  "$koreader" "$idlewasher"
 
 # --- opportunistic: the injector daemon body against the HOST's real
 # /dev/uinput (needs write access; skipped cleanly where root-only).
