@@ -653,7 +653,9 @@ def cmd_package(args):
 def cmd_analyze(args):
     """REAL: analyze a bundle (delegates to analyze.analyze_bundle)."""
     import analyze                       # imports numpy/scipy only when needed
-    report = analyze.analyze_bundle(args.bundle, run_id=args.run_id)
+    report = analyze.analyze_bundle(args.bundle, run_id=args.run_id,
+                                    max_fps=args.max_fps,
+                                    analysis_scale=args.analysis_scale)
     if args.out:
         with open(args.out, "w") as f:
             json.dump(report, f, indent=2)
@@ -753,6 +755,14 @@ def build_parser():
     a.add_argument("-o", "--out", help="write the JSON report here")
     a.add_argument("--run-id", help="which run's events belong to this capture "
                    "(only needed for legacy multi-run bundles; per-run bundles are 1:1)")
+    a.add_argument("--max-fps", type=float, default=30.0,
+                   help="decimate decode to this fps (memory bound, same knob "
+                   "as analyze.py; a full-rate full-res decode of a real "
+                   "capture is ~50 GB of frames plus a ~60 GB warped array)")
+    a.add_argument("--analysis-scale", type=float, default=0.5,
+                   help="downscale decode + panel working resolution (memory "
+                   "bound; 0.5 is what every committed report used). Pass 1.0 "
+                   "only if you really mean a full-resolution analysis")
     a.add_argument("--quiet", action="store_true")
     a.set_defaults(func=cmd_analyze)
     return ap
