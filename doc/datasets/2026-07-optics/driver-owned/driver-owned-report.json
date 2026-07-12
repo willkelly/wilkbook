@@ -1,0 +1,324 @@
+{
+  "schema": "wilkbook-optics-report",
+  "version": 1,
+  "bundle_path": "/home/wkelly/src/forgejo/wkelly/wilkbook/pinenote/tools/optics/build/bundles/driver-owned",
+  "device": {
+    "model": "Pine64 PineNote v1.2",
+    "revision": null,
+    "os": "Guix System",
+    "kernel": "7.0.11",
+    "notes": "",
+    "wbf_sha256": null
+  },
+  "illuminant": {
+    "source": "frontlight",
+    "cool_level": 255.0,
+    "warm_level": 255.0,
+    "ambient": "dark-box"
+  },
+  "panel_temp_c": 24.0,
+  "ebc_params": {
+    "ebc": {
+      "refresh_waveform": 6,
+      "refresh_threshold": 8
+    },
+    "ko": {
+      "full_refresh_count": "never"
+    }
+  },
+  "waveform_decode": null,
+  "run": {
+    "run_id": "r0",
+    "label": "drv-thresh8",
+    "params": {
+      "ebc": {
+        "refresh_waveform": "6",
+        "refresh_threshold": "8"
+      },
+      "ko": {
+        "full_refresh_count": 0
+      }
+    },
+    "events_source": "measured",
+    "panel_temp_c_start": 24.0,
+    "panel_temp_c_end": 25.0,
+    "trace": "trace.r0.log",
+    "selection": "single"
+  },
+  "capture": {
+    "fps": 30.0,
+    "n_frames": 5777,
+    "sync_end_frame": 0
+  },
+  "transitions": [
+    {
+      "from_pid": 14,
+      "to_pid": 4,
+      "from_kind": "ux",
+      "to_kind": "blank",
+      "pair": "ux->blank",
+      "stress": [],
+      "n_frames": 731,
+      "flash": {
+        "depth": NaN,
+        "energy_refl_s": NaN,
+        "duration_s": 2.2,
+        "count": 4,
+        "severity": "mild"
+      },
+      "ghost": {
+        "rms": 0.1169,
+        "corr": -0.0063,
+        "severity": "none"
+      },
+      "settle": {
+        "settle_s": 2.5,
+        "settled": false,
+        "severity": "incomplete"
+      },
+      "defects": [
+        "flash:mild",
+        "double-flash:4",
+        "settle:incomplete",
+        "gray-corrupt:mild"
+      ],
+      "run_id": "r0",
+      "params": {
+        "ebc": {
+          "refresh_waveform": "6",
+          "refresh_threshold": "8"
+        },
+        "ko": {
+          "full_refresh_count": 0
+        }
+      }
+    },
+    {
+      "from_pid": 4,
+      "to_pid": 6,
+      "from_kind": "blank",
+      "to_kind": "novel",
+      "pair": "blank->novel",
+      "stress": [],
+      "n_frames": 224,
+      "flash": {
+        "depth": 0.0,
+        "energy_refl_s": 0.0,
+        "duration_s": 0.0,
+        "count": 0,
+        "severity": "none"
+      },
+      "ghost": {
+        "rms": 0.3366,
+        "corr": 0.0247,
+        "severity": "none"
+      },
+      "settle": {
+        "settle_s": 0.0,
+        "settled": true,
+        "severity": "none"
+      },
+      "defects": [
+        "gray-corrupt:mild"
+      ],
+      "run_id": "r0",
+      "params": {
+        "ebc": {
+          "refresh_waveform": "6",
+          "refresh_threshold": "8"
+        },
+        "ko": {
+          "full_refresh_count": 0
+        }
+      }
+    },
+    {
+      "from_pid": 18,
+      "to_pid": 22,
+      "from_kind": "blank",
+      "to_kind": "graphic",
+      "pair": "blank->graphic",
+      "stress": [],
+      "n_frames": 441,
+      "flash": {
+        "depth": 0.0,
+        "energy_refl_s": 0.0,
+        "duration_s": 0.0,
+        "count": 0,
+        "severity": "none"
+      },
+      "ghost": {
+        "rms": 0.3668,
+        "corr": 0.0,
+        "severity": "none"
+      },
+      "settle": {
+        "settle_s": 0.0667,
+        "settled": true,
+        "severity": "none"
+      },
+      "defects": [
+        "gray-corrupt:severe"
+      ],
+      "run_id": "r0",
+      "params": {
+        "ebc": {
+          "refresh_waveform": "6",
+          "refresh_threshold": "8"
+        },
+        "ko": {
+          "full_refresh_count": 0
+        }
+      }
+    },
+    {
+      "from_pid": 34,
+      "to_pid": 38,
+      "from_kind": "blank",
+      "to_kind": "graphic",
+      "pair": "blank->graphic",
+      "stress": [],
+      "n_frames": 440,
+      "flash": {
+        "depth": 0.0,
+        "energy_refl_s": 0.0,
+        "duration_s": 0.0,
+        "count": 0,
+        "severity": "none"
+      },
+      "ghost": {
+        "rms": 0.3756,
+        "corr": 0.0,
+        "severity": "none"
+      },
+      "settle": {
+        "settle_s": 0.0,
+        "settled": true,
+        "severity": "none"
+      },
+      "defects": [
+        "gray-corrupt:severe"
+      ],
+      "run_id": "r0",
+      "params": {
+        "ebc": {
+          "refresh_waveform": "6",
+          "refresh_threshold": "8"
+        },
+        "ko": {
+          "full_refresh_count": 0
+        }
+      }
+    },
+    {
+      "from_pid": 38,
+      "to_pid": 40,
+      "from_kind": "graphic",
+      "to_kind": "novel",
+      "pair": "graphic->novel",
+      "stress": [],
+      "n_frames": 437,
+      "flash": {
+        "depth": 0.112,
+        "energy_refl_s": 0.1547,
+        "duration_s": 2.5,
+        "count": 1,
+        "severity": "mild"
+      },
+      "ghost": {
+        "rms": 0.2469,
+        "corr": -0.116,
+        "severity": "none"
+      },
+      "settle": {
+        "settle_s": 0.0667,
+        "settled": true,
+        "severity": "none"
+      },
+      "defects": [
+        "flash:mild",
+        "gray-corrupt:severe"
+      ],
+      "run_id": "r0",
+      "params": {
+        "ebc": {
+          "refresh_waveform": "6",
+          "refresh_threshold": "8"
+        },
+        "ko": {
+          "full_refresh_count": 0
+        }
+      }
+    },
+    {
+      "from_pid": 42,
+      "to_pid": 46,
+      "from_kind": "index",
+      "to_kind": "graphic",
+      "pair": "index->graphic",
+      "stress": [],
+      "n_frames": 531,
+      "flash": {
+        "depth": 0.0,
+        "energy_refl_s": 0.0,
+        "duration_s": 0.0,
+        "count": 0,
+        "severity": "none"
+      },
+      "ghost": {
+        "rms": 0.2973,
+        "corr": 0.0159,
+        "severity": "none"
+      },
+      "settle": {
+        "settle_s": 0.0333,
+        "settled": true,
+        "severity": "none"
+      },
+      "defects": [
+        "gray-corrupt:mild"
+      ],
+      "run_id": "r0",
+      "params": {
+        "ebc": {
+          "refresh_waveform": "6",
+          "refresh_threshold": "8"
+        },
+        "ko": {
+          "full_refresh_count": 0
+        }
+      }
+    }
+  ],
+  "summary": {
+    "run_id": "r0",
+    "label": "drv-thresh8",
+    "params": {
+      "ebc": {
+        "refresh_waveform": "6",
+        "refresh_threshold": "8"
+      },
+      "ko": {
+        "full_refresh_count": 0
+      }
+    },
+    "n_transitions": 6,
+    "n_with_defects": 6,
+    "n_double_flash": 1,
+    "worst_flash_depth": 0.112,
+    "worst_ghost_rms": 0.3756,
+    "severity_counts": {
+      "flash": {
+        "mild": 2,
+        "none": 4
+      },
+      "ghost": {
+        "none": 6
+      },
+      "settle": {
+        "incomplete": 1,
+        "none": 5
+      }
+    }
+  }
+}

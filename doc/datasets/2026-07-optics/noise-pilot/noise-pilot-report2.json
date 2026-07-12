@@ -1,0 +1,887 @@
+{
+  "schema": "wilkbook-optics-report",
+  "version": 1,
+  "bundle_path": "/home/wkelly/src/forgejo/wkelly/wilkbook/pinenote/tools/optics/build/bundles/noise-pilot",
+  "device": {
+    "model": "Pine64 PineNote v1.2",
+    "revision": null,
+    "os": "Guix System",
+    "kernel": "7.0.11",
+    "notes": ""
+  },
+  "illuminant": {
+    "source": "frontlight",
+    "cool_level": 255,
+    "warm_level": 255,
+    "ambient": "dark-box"
+  },
+  "panel_temp_c": 23.0,
+  "ebc_params": {},
+  "waveform_decode": null,
+  "run": {
+    "run_id": "r0",
+    "label": "noise-pilot-10x",
+    "params": {},
+    "events_source": "measured",
+    "panel_temp_c_start": 23.0,
+    "panel_temp_c_end": null,
+    "trace": "trace.r0.log",
+    "selection": "single"
+  },
+  "capture": {
+    "fps": 30.0,
+    "n_frames": 3261,
+    "sync_end_frame": 784
+  },
+  "transitions": [
+    {
+      "from_pid": 4,
+      "to_pid": 5,
+      "from_kind": "blank",
+      "to_kind": "novel",
+      "pair": "blank->novel",
+      "stress": [
+        "settle"
+      ],
+      "n_frames": 24,
+      "flash": {
+        "depth": 0.0374,
+        "energy_refl_s": 0.0091,
+        "duration_s": 0.0667,
+        "count": 0,
+        "severity": "mild"
+      },
+      "ghost": {
+        "rms": 0.284,
+        "corr": -0.0208,
+        "severity": "none"
+      },
+      "settle": {
+        "settle_s": 0.5667,
+        "settled": true,
+        "severity": "none"
+      },
+      "defects": [
+        "flash:mild"
+      ],
+      "run_id": "r0",
+      "params": {}
+    },
+    {
+      "from_pid": 5,
+      "to_pid": 7,
+      "from_kind": "novel",
+      "to_kind": "graphic",
+      "pair": "novel->graphic",
+      "stress": [],
+      "n_frames": 1,
+      "flash": {
+        "depth": 0.0,
+        "energy_refl_s": 0.0,
+        "duration_s": 0.0,
+        "count": 0,
+        "severity": "none"
+      },
+      "ghost": {
+        "rms": 0.2608,
+        "corr": 0.1104,
+        "severity": "none"
+      },
+      "settle": {
+        "settle_s": 0.0,
+        "settled": true,
+        "severity": "none"
+      },
+      "defects": [],
+      "run_id": "r0",
+      "params": {}
+    },
+    {
+      "from_pid": 7,
+      "to_pid": 6,
+      "from_kind": "graphic",
+      "to_kind": "novel",
+      "pair": "graphic->novel",
+      "stress": [],
+      "n_frames": 23,
+      "flash": {
+        "depth": 0.0276,
+        "energy_refl_s": 0.0085,
+        "duration_s": 0.0,
+        "count": 0,
+        "severity": "none"
+      },
+      "ghost": {
+        "rms": 0.131,
+        "corr": -0.2562,
+        "severity": "none"
+      },
+      "settle": {
+        "settle_s": 0.7,
+        "settled": false,
+        "severity": "incomplete"
+      },
+      "defects": [
+        "settle:incomplete"
+      ],
+      "run_id": "r0",
+      "params": {}
+    },
+    {
+      "from_pid": 6,
+      "to_pid": 8,
+      "from_kind": "novel",
+      "to_kind": "graphic",
+      "pair": "novel->graphic",
+      "stress": [],
+      "n_frames": 20,
+      "flash": {
+        "depth": 0.0314,
+        "energy_refl_s": 0.0088,
+        "duration_s": 0.0333,
+        "count": 0,
+        "severity": "mild"
+      },
+      "ghost": {
+        "rms": 0.2798,
+        "corr": 0.2562,
+        "severity": "none"
+      },
+      "settle": {
+        "settle_s": 0.6,
+        "settled": false,
+        "severity": "incomplete"
+      },
+      "defects": [
+        "flash:mild",
+        "settle:incomplete",
+        "gray-corrupt:severe"
+      ],
+      "run_id": "r0",
+      "params": {}
+    },
+    {
+      "from_pid": 8,
+      "to_pid": 9,
+      "from_kind": "graphic",
+      "to_kind": "textbook",
+      "pair": "graphic->textbook",
+      "stress": [],
+      "n_frames": 28,
+      "flash": {
+        "depth": 0.0379,
+        "energy_refl_s": 0.0043,
+        "duration_s": 0.0667,
+        "count": 0,
+        "severity": "mild"
+      },
+      "ghost": {
+        "rms": 0.2846,
+        "corr": 0.227,
+        "severity": "none"
+      },
+      "settle": {
+        "settle_s": 0.8667,
+        "settled": false,
+        "severity": "incomplete"
+      },
+      "defects": [
+        "flash:mild",
+        "settle:incomplete",
+        "gray-corrupt:severe"
+      ],
+      "run_id": "r0",
+      "params": {}
+    },
+    {
+      "from_pid": 9,
+      "to_pid": 10,
+      "from_kind": "textbook",
+      "to_kind": "novel",
+      "pair": "textbook->novel",
+      "stress": [],
+      "n_frames": 109,
+      "flash": {
+        "depth": 0.0,
+        "energy_refl_s": 0.0,
+        "duration_s": 0.0,
+        "count": 0,
+        "severity": "none"
+      },
+      "ghost": {
+        "rms": 0.297,
+        "corr": 0.0362,
+        "severity": "none"
+      },
+      "settle": {
+        "settle_s": 0.9333,
+        "settled": true,
+        "severity": "slow"
+      },
+      "defects": [
+        "settle:slow"
+      ],
+      "run_id": "r0",
+      "params": {}
+    },
+    {
+      "from_pid": 10,
+      "to_pid": 11,
+      "from_kind": "novel",
+      "to_kind": "blank",
+      "pair": "novel->blank",
+      "stress": [
+        "ghost"
+      ],
+      "n_frames": 114,
+      "flash": {
+        "depth": 0.1534,
+        "energy_refl_s": 0.0085,
+        "duration_s": 0.0667,
+        "count": 1,
+        "severity": "severe"
+      },
+      "ghost": {
+        "rms": 0.1196,
+        "corr": 0.0374,
+        "severity": "none"
+      },
+      "settle": {
+        "settle_s": 0.1,
+        "settled": true,
+        "severity": "none"
+      },
+      "defects": [
+        "flash:severe"
+      ],
+      "run_id": "r0",
+      "params": {}
+    },
+    {
+      "from_pid": 11,
+      "to_pid": 10,
+      "from_kind": "blank",
+      "to_kind": "novel",
+      "pair": "blank->novel",
+      "stress": [],
+      "n_frames": 108,
+      "flash": {
+        "depth": 0.0,
+        "energy_refl_s": 0.0,
+        "duration_s": 0.0,
+        "count": 0,
+        "severity": "none"
+      },
+      "ghost": {
+        "rms": 0.2945,
+        "corr": -0.0466,
+        "severity": "none"
+      },
+      "settle": {
+        "settle_s": 0.1667,
+        "settled": true,
+        "severity": "none"
+      },
+      "defects": [],
+      "run_id": "r0",
+      "params": {}
+    },
+    {
+      "from_pid": 10,
+      "to_pid": 11,
+      "from_kind": "novel",
+      "to_kind": "blank",
+      "pair": "novel->blank",
+      "stress": [
+        "ghost"
+      ],
+      "n_frames": 112,
+      "flash": {
+        "depth": 0.1881,
+        "energy_refl_s": 0.0164,
+        "duration_s": 0.1,
+        "count": 1,
+        "severity": "severe"
+      },
+      "ghost": {
+        "rms": 0.1159,
+        "corr": -0.0228,
+        "severity": "none"
+      },
+      "settle": {
+        "settle_s": 0.1333,
+        "settled": true,
+        "severity": "none"
+      },
+      "defects": [
+        "flash:severe"
+      ],
+      "run_id": "r0",
+      "params": {}
+    },
+    {
+      "from_pid": 11,
+      "to_pid": 10,
+      "from_kind": "blank",
+      "to_kind": "novel",
+      "pair": "blank->novel",
+      "stress": [],
+      "n_frames": 15,
+      "flash": {
+        "depth": 0.0108,
+        "energy_refl_s": 0.002,
+        "duration_s": 0.0,
+        "count": 0,
+        "severity": "none"
+      },
+      "ghost": {
+        "rms": 0.29,
+        "corr": -0.0479,
+        "severity": "none"
+      },
+      "settle": {
+        "settle_s": 0.4333,
+        "settled": false,
+        "severity": "incomplete"
+      },
+      "defects": [
+        "settle:incomplete",
+        "gray-corrupt:mild"
+      ],
+      "run_id": "r0",
+      "params": {}
+    },
+    {
+      "from_pid": 10,
+      "to_pid": 11,
+      "from_kind": "novel",
+      "to_kind": "blank",
+      "pair": "novel->blank",
+      "stress": [
+        "ghost"
+      ],
+      "n_frames": 112,
+      "flash": {
+        "depth": 0.1701,
+        "energy_refl_s": 0.0101,
+        "duration_s": 0.1,
+        "count": 1,
+        "severity": "severe"
+      },
+      "ghost": {
+        "rms": 0.1173,
+        "corr": 0.02,
+        "severity": "none"
+      },
+      "settle": {
+        "settle_s": 0.1333,
+        "settled": true,
+        "severity": "none"
+      },
+      "defects": [
+        "flash:severe"
+      ],
+      "run_id": "r0",
+      "params": {}
+    },
+    {
+      "from_pid": 11,
+      "to_pid": 10,
+      "from_kind": "blank",
+      "to_kind": "novel",
+      "pair": "blank->novel",
+      "stress": [],
+      "n_frames": 110,
+      "flash": {
+        "depth": 0.0,
+        "energy_refl_s": 0.0,
+        "duration_s": 0.0,
+        "count": 0,
+        "severity": "none"
+      },
+      "ghost": {
+        "rms": 0.3034,
+        "corr": -0.0485,
+        "severity": "none"
+      },
+      "settle": {
+        "settle_s": 0.7,
+        "settled": true,
+        "severity": "slow"
+      },
+      "defects": [
+        "settle:slow"
+      ],
+      "run_id": "r0",
+      "params": {}
+    },
+    {
+      "from_pid": 10,
+      "to_pid": 11,
+      "from_kind": "novel",
+      "to_kind": "blank",
+      "pair": "novel->blank",
+      "stress": [
+        "ghost"
+      ],
+      "n_frames": 113,
+      "flash": {
+        "depth": 0.1364,
+        "energy_refl_s": 0.0066,
+        "duration_s": 0.0667,
+        "count": 1,
+        "severity": "mild"
+      },
+      "ghost": {
+        "rms": 0.124,
+        "corr": 0.0442,
+        "severity": "none"
+      },
+      "settle": {
+        "settle_s": 0.1,
+        "settled": true,
+        "severity": "none"
+      },
+      "defects": [
+        "flash:mild"
+      ],
+      "run_id": "r0",
+      "params": {}
+    },
+    {
+      "from_pid": 11,
+      "to_pid": 10,
+      "from_kind": "blank",
+      "to_kind": "novel",
+      "pair": "blank->novel",
+      "stress": [],
+      "n_frames": 107,
+      "flash": {
+        "depth": 0.0,
+        "energy_refl_s": 0.0,
+        "duration_s": 0.0,
+        "count": 0,
+        "severity": "none"
+      },
+      "ghost": {
+        "rms": 0.3032,
+        "corr": -0.048,
+        "severity": "none"
+      },
+      "settle": {
+        "settle_s": 0.1333,
+        "settled": true,
+        "severity": "none"
+      },
+      "defects": [],
+      "run_id": "r0",
+      "params": {}
+    },
+    {
+      "from_pid": 10,
+      "to_pid": 11,
+      "from_kind": "novel",
+      "to_kind": "blank",
+      "pair": "novel->blank",
+      "stress": [
+        "ghost"
+      ],
+      "n_frames": 113,
+      "flash": {
+        "depth": 0.1981,
+        "energy_refl_s": 0.0187,
+        "duration_s": 0.1,
+        "count": 1,
+        "severity": "severe"
+      },
+      "ghost": {
+        "rms": 0.1179,
+        "corr": -0.0191,
+        "severity": "none"
+      },
+      "settle": {
+        "settle_s": 0.1,
+        "settled": true,
+        "severity": "none"
+      },
+      "defects": [
+        "flash:severe"
+      ],
+      "run_id": "r0",
+      "params": {}
+    },
+    {
+      "from_pid": 11,
+      "to_pid": 10,
+      "from_kind": "blank",
+      "to_kind": "novel",
+      "pair": "blank->novel",
+      "stress": [],
+      "n_frames": 111,
+      "flash": {
+        "depth": 0.012,
+        "energy_refl_s": 0.0004,
+        "duration_s": 0.0,
+        "count": 0,
+        "severity": "none"
+      },
+      "ghost": {
+        "rms": 0.3001,
+        "corr": -0.0482,
+        "severity": "none"
+      },
+      "settle": {
+        "settle_s": 1.0333,
+        "settled": true,
+        "severity": "slow"
+      },
+      "defects": [
+        "settle:slow"
+      ],
+      "run_id": "r0",
+      "params": {}
+    },
+    {
+      "from_pid": 10,
+      "to_pid": 11,
+      "from_kind": "novel",
+      "to_kind": "blank",
+      "pair": "novel->blank",
+      "stress": [
+        "ghost"
+      ],
+      "n_frames": 109,
+      "flash": {
+        "depth": 0.1557,
+        "energy_refl_s": 0.0096,
+        "duration_s": 0.0667,
+        "count": 1,
+        "severity": "severe"
+      },
+      "ghost": {
+        "rms": 0.1168,
+        "corr": -0.0016,
+        "severity": "none"
+      },
+      "settle": {
+        "settle_s": 0.1,
+        "settled": true,
+        "severity": "none"
+      },
+      "defects": [
+        "flash:severe"
+      ],
+      "run_id": "r0",
+      "params": {}
+    },
+    {
+      "from_pid": 11,
+      "to_pid": 10,
+      "from_kind": "blank",
+      "to_kind": "novel",
+      "pair": "blank->novel",
+      "stress": [],
+      "n_frames": 110,
+      "flash": {
+        "depth": 0.0,
+        "energy_refl_s": 0.0,
+        "duration_s": 0.0,
+        "count": 0,
+        "severity": "none"
+      },
+      "ghost": {
+        "rms": 0.2965,
+        "corr": -0.048,
+        "severity": "none"
+      },
+      "settle": {
+        "settle_s": 0.3333,
+        "settled": true,
+        "severity": "none"
+      },
+      "defects": [],
+      "run_id": "r0",
+      "params": {}
+    },
+    {
+      "from_pid": 10,
+      "to_pid": 11,
+      "from_kind": "novel",
+      "to_kind": "blank",
+      "pair": "novel->blank",
+      "stress": [
+        "ghost"
+      ],
+      "n_frames": 113,
+      "flash": {
+        "depth": 0.1245,
+        "energy_refl_s": 0.0059,
+        "duration_s": 0.0667,
+        "count": 1,
+        "severity": "mild"
+      },
+      "ghost": {
+        "rms": 0.1191,
+        "corr": 0.0333,
+        "severity": "none"
+      },
+      "settle": {
+        "settle_s": 0.0667,
+        "settled": true,
+        "severity": "none"
+      },
+      "defects": [
+        "flash:mild"
+      ],
+      "run_id": "r0",
+      "params": {}
+    },
+    {
+      "from_pid": 11,
+      "to_pid": 10,
+      "from_kind": "blank",
+      "to_kind": "novel",
+      "pair": "blank->novel",
+      "stress": [],
+      "n_frames": 109,
+      "flash": {
+        "depth": 0.0,
+        "energy_refl_s": 0.0,
+        "duration_s": 0.0,
+        "count": 0,
+        "severity": "none"
+      },
+      "ghost": {
+        "rms": 0.2997,
+        "corr": -0.048,
+        "severity": "none"
+      },
+      "settle": {
+        "settle_s": 0.3333,
+        "settled": true,
+        "severity": "none"
+      },
+      "defects": [],
+      "run_id": "r0",
+      "params": {}
+    },
+    {
+      "from_pid": 10,
+      "to_pid": 11,
+      "from_kind": "novel",
+      "to_kind": "blank",
+      "pair": "novel->blank",
+      "stress": [
+        "ghost"
+      ],
+      "n_frames": 121,
+      "flash": {
+        "depth": 0.1388,
+        "energy_refl_s": 0.0071,
+        "duration_s": 0.0667,
+        "count": 1,
+        "severity": "mild"
+      },
+      "ghost": {
+        "rms": 0.1169,
+        "corr": 0.0266,
+        "severity": "none"
+      },
+      "settle": {
+        "settle_s": 0.1,
+        "settled": true,
+        "severity": "none"
+      },
+      "defects": [
+        "flash:mild"
+      ],
+      "run_id": "r0",
+      "params": {}
+    },
+    {
+      "from_pid": 11,
+      "to_pid": 10,
+      "from_kind": "blank",
+      "to_kind": "novel",
+      "pair": "blank->novel",
+      "stress": [],
+      "n_frames": 110,
+      "flash": {
+        "depth": 0.0303,
+        "energy_refl_s": 0.0152,
+        "duration_s": 0.0333,
+        "count": 0,
+        "severity": "mild"
+      },
+      "ghost": {
+        "rms": 0.3009,
+        "corr": -0.0481,
+        "severity": "none"
+      },
+      "settle": {
+        "settle_s": 1.1667,
+        "settled": true,
+        "severity": "slow"
+      },
+      "defects": [
+        "flash:mild",
+        "settle:slow"
+      ],
+      "run_id": "r0",
+      "params": {}
+    },
+    {
+      "from_pid": 10,
+      "to_pid": 11,
+      "from_kind": "novel",
+      "to_kind": "blank",
+      "pair": "novel->blank",
+      "stress": [
+        "ghost"
+      ],
+      "n_frames": 111,
+      "flash": {
+        "depth": 0.0924,
+        "energy_refl_s": 0.0037,
+        "duration_s": 0.0333,
+        "count": 1,
+        "severity": "mild"
+      },
+      "ghost": {
+        "rms": 0.1223,
+        "corr": 0.0381,
+        "severity": "none"
+      },
+      "settle": {
+        "settle_s": 0.0667,
+        "settled": true,
+        "severity": "none"
+      },
+      "defects": [
+        "flash:mild"
+      ],
+      "run_id": "r0",
+      "params": {}
+    },
+    {
+      "from_pid": 11,
+      "to_pid": 10,
+      "from_kind": "blank",
+      "to_kind": "novel",
+      "pair": "blank->novel",
+      "stress": [],
+      "n_frames": 109,
+      "flash": {
+        "depth": 0.0026,
+        "energy_refl_s": 0.0001,
+        "duration_s": 0.0,
+        "count": 0,
+        "severity": "none"
+      },
+      "ghost": {
+        "rms": 0.3006,
+        "corr": -0.0481,
+        "severity": "none"
+      },
+      "settle": {
+        "settle_s": 0.7,
+        "settled": true,
+        "severity": "slow"
+      },
+      "defects": [
+        "settle:slow"
+      ],
+      "run_id": "r0",
+      "params": {}
+    },
+    {
+      "from_pid": 10,
+      "to_pid": 11,
+      "from_kind": "novel",
+      "to_kind": "blank",
+      "pair": "novel->blank",
+      "stress": [
+        "ghost"
+      ],
+      "n_frames": 112,
+      "flash": {
+        "depth": 0.1277,
+        "energy_refl_s": 0.0061,
+        "duration_s": 0.0667,
+        "count": 1,
+        "severity": "mild"
+      },
+      "ghost": {
+        "rms": 0.1179,
+        "corr": 0.0299,
+        "severity": "none"
+      },
+      "settle": {
+        "settle_s": 0.0667,
+        "settled": true,
+        "severity": "none"
+      },
+      "defects": [
+        "flash:mild"
+      ],
+      "run_id": "r0",
+      "params": {}
+    },
+    {
+      "from_pid": 11,
+      "to_pid": 10,
+      "from_kind": "blank",
+      "to_kind": "novel",
+      "pair": "blank->novel",
+      "stress": [],
+      "n_frames": 134,
+      "flash": {
+        "depth": 0.0148,
+        "energy_refl_s": 0.0098,
+        "duration_s": 0.0,
+        "count": 0,
+        "severity": "none"
+      },
+      "ghost": {
+        "rms": 0.3029,
+        "corr": -0.0479,
+        "severity": "none"
+      },
+      "settle": {
+        "settle_s": 0.7,
+        "settled": true,
+        "severity": "slow"
+      },
+      "defects": [
+        "settle:slow"
+      ],
+      "run_id": "r0",
+      "params": {}
+    }
+  ],
+  "summary": {
+    "run_id": "r0",
+    "label": "noise-pilot-10x",
+    "params": {},
+    "n_transitions": 26,
+    "n_with_defects": 21,
+    "n_double_flash": 0,
+    "worst_flash_depth": 0.1981,
+    "worst_ghost_rms": 0.3034,
+    "severity_counts": {
+      "flash": {
+        "mild": 9,
+        "none": 12,
+        "severe": 5
+      },
+      "ghost": {
+        "none": 26
+      },
+      "settle": {
+        "none": 16,
+        "incomplete": 4,
+        "slow": 6
+      }
+    }
+  }
+}

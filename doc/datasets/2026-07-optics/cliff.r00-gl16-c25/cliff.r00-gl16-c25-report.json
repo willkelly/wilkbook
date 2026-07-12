@@ -1,0 +1,1935 @@
+{
+  "schema": "wilkbook-optics-report",
+  "version": 1,
+  "bundle_path": "/home/wkelly/src/forgejo/wkelly/wilkbook/pinenote/tools/optics/build/bundles/cliff.r00-gl16-c25",
+  "device": {
+    "model": "Pine64 PineNote v1.2",
+    "revision": null,
+    "os": "Guix System",
+    "kernel": "7.0.11",
+    "notes": "",
+    "wbf_sha256": null
+  },
+  "illuminant": {
+    "source": "frontlight",
+    "cool_level": 255.0,
+    "warm_level": 255.0,
+    "ambient": "dark-box"
+  },
+  "panel_temp_c": 24.0,
+  "ebc_params": {
+    "ebc": {
+      "refresh_waveform": 6
+    },
+    "ko": {
+      "full_refresh_count": 25
+    }
+  },
+  "waveform_decode": null,
+  "run": {
+    "run_id": "r0",
+    "label": "gl16-c25",
+    "params": {
+      "ebc": {
+        "refresh_waveform": "6"
+      },
+      "ko": {
+        "full_refresh_count": 25
+      }
+    },
+    "events_source": "measured",
+    "panel_temp_c_start": 24.0,
+    "panel_temp_c_end": 24.0,
+    "trace": "trace.r0.log",
+    "selection": "single"
+  },
+  "capture": {
+    "fps": 30.0,
+    "n_frames": 5716,
+    "sync_end_frame": 0
+  },
+  "transitions": [
+    {
+      "from_pid": 4,
+      "to_pid": 5,
+      "from_kind": "blank",
+      "to_kind": "novel",
+      "pair": "blank->novel",
+      "stress": [
+        "settle"
+      ],
+      "n_frames": 111,
+      "flash": {
+        "depth": 0.0076,
+        "energy_refl_s": 0.0061,
+        "duration_s": 0.0,
+        "count": 0,
+        "severity": "none"
+      },
+      "ghost": {
+        "rms": 0.309,
+        "corr": -0.0068,
+        "severity": "none"
+      },
+      "settle": {
+        "settle_s": 0.3667,
+        "settled": true,
+        "severity": "none"
+      },
+      "defects": [
+        "gray-corrupt:mild"
+      ],
+      "run_id": "r0",
+      "params": {
+        "ebc": {
+          "refresh_waveform": "6"
+        },
+        "ko": {
+          "full_refresh_count": 25
+        }
+      }
+    },
+    {
+      "from_pid": 5,
+      "to_pid": 6,
+      "from_kind": "novel",
+      "to_kind": "novel",
+      "pair": "novel->novel",
+      "stress": [],
+      "n_frames": 109,
+      "flash": {
+        "depth": 0.223,
+        "energy_refl_s": 0.5358,
+        "duration_s": 2.5,
+        "count": 1,
+        "severity": "severe"
+      },
+      "ghost": {
+        "rms": 0.1564,
+        "corr": -0.0374,
+        "severity": "none"
+      },
+      "settle": {
+        "settle_s": 2.5,
+        "settled": false,
+        "severity": "incomplete"
+      },
+      "defects": [
+        "flash:severe",
+        "settle:incomplete",
+        "gray-corrupt:mild"
+      ],
+      "run_id": "r0",
+      "params": {
+        "ebc": {
+          "refresh_waveform": "6"
+        },
+        "ko": {
+          "full_refresh_count": 25
+        }
+      }
+    },
+    {
+      "from_pid": 6,
+      "to_pid": 7,
+      "from_kind": "novel",
+      "to_kind": "graphic",
+      "pair": "novel->graphic",
+      "stress": [
+        "flash",
+        "settle"
+      ],
+      "n_frames": 111,
+      "flash": {
+        "depth": NaN,
+        "energy_refl_s": NaN,
+        "duration_s": 2.2667,
+        "count": 0,
+        "severity": "mild"
+      },
+      "ghost": {
+        "rms": 0.2733,
+        "corr": 0.0898,
+        "severity": "none"
+      },
+      "settle": {
+        "settle_s": 0.5,
+        "settled": true,
+        "severity": "none"
+      },
+      "defects": [
+        "flash:mild"
+      ],
+      "run_id": "r0",
+      "params": {
+        "ebc": {
+          "refresh_waveform": "6"
+        },
+        "ko": {
+          "full_refresh_count": 25
+        }
+      }
+    },
+    {
+      "from_pid": 7,
+      "to_pid": 8,
+      "from_kind": "graphic",
+      "to_kind": "graphic",
+      "pair": "graphic->graphic",
+      "stress": [
+        "ghost"
+      ],
+      "n_frames": 120,
+      "flash": {
+        "depth": NaN,
+        "energy_refl_s": NaN,
+        "duration_s": 0.2,
+        "count": 0,
+        "severity": "mild"
+      },
+      "ghost": {
+        "rms": 0.2886,
+        "corr": -0.0732,
+        "severity": "none"
+      },
+      "settle": {
+        "settle_s": 0.4333,
+        "settled": true,
+        "severity": "none"
+      },
+      "defects": [
+        "flash:mild",
+        "gray-corrupt:severe"
+      ],
+      "run_id": "r0",
+      "params": {
+        "ebc": {
+          "refresh_waveform": "6"
+        },
+        "ko": {
+          "full_refresh_count": 25
+        }
+      }
+    },
+    {
+      "from_pid": 8,
+      "to_pid": 9,
+      "from_kind": "graphic",
+      "to_kind": "textbook",
+      "pair": "graphic->textbook",
+      "stress": [],
+      "n_frames": 111,
+      "flash": {
+        "depth": 0.0156,
+        "energy_refl_s": 0.0027,
+        "duration_s": 0.0,
+        "count": 0,
+        "severity": "none"
+      },
+      "ghost": {
+        "rms": 0.3135,
+        "corr": 0.1829,
+        "severity": "none"
+      },
+      "settle": {
+        "settle_s": 0.4667,
+        "settled": true,
+        "severity": "none"
+      },
+      "defects": [
+        "gray-corrupt:severe"
+      ],
+      "run_id": "r0",
+      "params": {
+        "ebc": {
+          "refresh_waveform": "6"
+        },
+        "ko": {
+          "full_refresh_count": 25
+        }
+      }
+    },
+    {
+      "from_pid": 9,
+      "to_pid": 10,
+      "from_kind": "textbook",
+      "to_kind": "novel",
+      "pair": "textbook->novel",
+      "stress": [],
+      "n_frames": 111,
+      "flash": {
+        "depth": 0.0132,
+        "energy_refl_s": 0.0016,
+        "duration_s": 0.0,
+        "count": 0,
+        "severity": "none"
+      },
+      "ghost": {
+        "rms": 0.3251,
+        "corr": 0.0865,
+        "severity": "none"
+      },
+      "settle": {
+        "settle_s": 0.9667,
+        "settled": true,
+        "severity": "slow"
+      },
+      "defects": [
+        "settle:slow",
+        "gray-corrupt:mild"
+      ],
+      "run_id": "r0",
+      "params": {
+        "ebc": {
+          "refresh_waveform": "6"
+        },
+        "ko": {
+          "full_refresh_count": 25
+        }
+      }
+    },
+    {
+      "from_pid": 10,
+      "to_pid": 11,
+      "from_kind": "novel",
+      "to_kind": "blank",
+      "pair": "novel->blank",
+      "stress": [
+        "ghost"
+      ],
+      "n_frames": 121,
+      "flash": {
+        "depth": 0.1487,
+        "energy_refl_s": 0.0071,
+        "duration_s": 0.0667,
+        "count": 1,
+        "severity": "mild"
+      },
+      "ghost": {
+        "rms": 0.1427,
+        "corr": 0.006,
+        "severity": "none"
+      },
+      "settle": {
+        "settle_s": 0.3,
+        "settled": true,
+        "severity": "none"
+      },
+      "defects": [
+        "flash:mild",
+        "gray-corrupt:mild"
+      ],
+      "run_id": "r0",
+      "params": {
+        "ebc": {
+          "refresh_waveform": "6"
+        },
+        "ko": {
+          "full_refresh_count": 25
+        }
+      }
+    },
+    {
+      "from_pid": 11,
+      "to_pid": 15,
+      "from_kind": "blank",
+      "to_kind": "novel",
+      "pair": "blank->novel",
+      "stress": [],
+      "n_frames": 1,
+      "flash": {
+        "depth": 0.0,
+        "energy_refl_s": 0.0,
+        "duration_s": 0.0,
+        "count": 0,
+        "severity": "none"
+      },
+      "ghost": {
+        "rms": 0.1775,
+        "corr": 0.0141,
+        "severity": "none"
+      },
+      "settle": {
+        "settle_s": 0.0,
+        "settled": true,
+        "severity": "none"
+      },
+      "defects": [
+        "gray-corrupt:mild"
+      ],
+      "run_id": "r0",
+      "params": {
+        "ebc": {
+          "refresh_waveform": "6"
+        },
+        "ko": {
+          "full_refresh_count": 25
+        }
+      }
+    },
+    {
+      "from_pid": 15,
+      "to_pid": 12,
+      "from_kind": "novel",
+      "to_kind": "index",
+      "pair": "novel->index",
+      "stress": [],
+      "n_frames": 117,
+      "flash": {
+        "depth": 0.0022,
+        "energy_refl_s": 0.0003,
+        "duration_s": 0.0,
+        "count": 0,
+        "severity": "none"
+      },
+      "ghost": {
+        "rms": 0.1586,
+        "corr": 0.0152,
+        "severity": "none"
+      },
+      "settle": {
+        "settle_s": 0.4,
+        "settled": true,
+        "severity": "none"
+      },
+      "defects": [
+        "gray-corrupt:mild"
+      ],
+      "run_id": "r0",
+      "params": {
+        "ebc": {
+          "refresh_waveform": "6"
+        },
+        "ko": {
+          "full_refresh_count": 25
+        }
+      }
+    },
+    {
+      "from_pid": 12,
+      "to_pid": 13,
+      "from_kind": "index",
+      "to_kind": "index",
+      "pair": "index->index",
+      "stress": [],
+      "n_frames": 109,
+      "flash": {
+        "depth": 0.0533,
+        "energy_refl_s": 0.1146,
+        "duration_s": 2.5,
+        "count": 0,
+        "severity": "mild"
+      },
+      "ghost": {
+        "rms": 0.1487,
+        "corr": -0.0251,
+        "severity": "none"
+      },
+      "settle": {
+        "settle_s": 0.6333,
+        "settled": true,
+        "severity": "slow"
+      },
+      "defects": [
+        "flash:mild",
+        "settle:slow",
+        "gray-corrupt:mild"
+      ],
+      "run_id": "r0",
+      "params": {
+        "ebc": {
+          "refresh_waveform": "6"
+        },
+        "ko": {
+          "full_refresh_count": 25
+        }
+      }
+    },
+    {
+      "from_pid": 13,
+      "to_pid": 14,
+      "from_kind": "index",
+      "to_kind": "ux",
+      "pair": "index->ux",
+      "stress": [
+        "flash"
+      ],
+      "n_frames": 111,
+      "flash": {
+        "depth": NaN,
+        "energy_refl_s": NaN,
+        "duration_s": 0.0,
+        "count": 0,
+        "severity": "mild"
+      },
+      "ghost": {
+        "rms": 0.2809,
+        "corr": 0.0872,
+        "severity": "none"
+      },
+      "settle": {
+        "settle_s": 0.7333,
+        "settled": true,
+        "severity": "slow"
+      },
+      "defects": [
+        "flash:mild",
+        "settle:slow",
+        "gray-corrupt:mild"
+      ],
+      "run_id": "r0",
+      "params": {
+        "ebc": {
+          "refresh_waveform": "6"
+        },
+        "ko": {
+          "full_refresh_count": 25
+        }
+      }
+    },
+    {
+      "from_pid": 14,
+      "to_pid": 15,
+      "from_kind": "ux",
+      "to_kind": "novel",
+      "pair": "ux->novel",
+      "stress": [
+        "settle"
+      ],
+      "n_frames": 111,
+      "flash": {
+        "depth": NaN,
+        "energy_refl_s": NaN,
+        "duration_s": 2.4333,
+        "count": 2,
+        "severity": "mild"
+      },
+      "ghost": {
+        "rms": 0.1671,
+        "corr": -0.1343,
+        "severity": "none"
+      },
+      "settle": {
+        "settle_s": 0.9333,
+        "settled": true,
+        "severity": "slow"
+      },
+      "defects": [
+        "flash:mild",
+        "double-flash:2",
+        "settle:slow",
+        "gray-corrupt:mild"
+      ],
+      "run_id": "r0",
+      "params": {
+        "ebc": {
+          "refresh_waveform": "6"
+        },
+        "ko": {
+          "full_refresh_count": 25
+        }
+      }
+    },
+    {
+      "from_pid": 15,
+      "to_pid": 16,
+      "from_kind": "novel",
+      "to_kind": "graphic",
+      "pair": "novel->graphic",
+      "stress": [
+        "flash",
+        "settle"
+      ],
+      "n_frames": 114,
+      "flash": {
+        "depth": NaN,
+        "energy_refl_s": NaN,
+        "duration_s": 0.0,
+        "count": 0,
+        "severity": "mild"
+      },
+      "ghost": {
+        "rms": 0.2874,
+        "corr": 0.1381,
+        "severity": "none"
+      },
+      "settle": {
+        "settle_s": 0.4667,
+        "settled": true,
+        "severity": "none"
+      },
+      "defects": [
+        "flash:mild",
+        "gray-corrupt:severe"
+      ],
+      "run_id": "r0",
+      "params": {
+        "ebc": {
+          "refresh_waveform": "6"
+        },
+        "ko": {
+          "full_refresh_count": 25
+        }
+      }
+    },
+    {
+      "from_pid": 16,
+      "to_pid": 17,
+      "from_kind": "graphic",
+      "to_kind": "novel",
+      "pair": "graphic->novel",
+      "stress": [
+        "ghost"
+      ],
+      "n_frames": 110,
+      "flash": {
+        "depth": 0.0414,
+        "energy_refl_s": 0.0028,
+        "duration_s": 0.0333,
+        "count": 0,
+        "severity": "mild"
+      },
+      "ghost": {
+        "rms": 0.3213,
+        "corr": 0.0631,
+        "severity": "none"
+      },
+      "settle": {
+        "settle_s": 1.3333,
+        "settled": true,
+        "severity": "slow"
+      },
+      "defects": [
+        "flash:mild",
+        "settle:slow",
+        "gray-corrupt:mild"
+      ],
+      "run_id": "r0",
+      "params": {
+        "ebc": {
+          "refresh_waveform": "6"
+        },
+        "ko": {
+          "full_refresh_count": 25
+        }
+      }
+    },
+    {
+      "from_pid": 17,
+      "to_pid": 18,
+      "from_kind": "novel",
+      "to_kind": "blank",
+      "pair": "novel->blank",
+      "stress": [
+        "ghost"
+      ],
+      "n_frames": 119,
+      "flash": {
+        "depth": 0.1797,
+        "energy_refl_s": 0.0107,
+        "duration_s": 0.1,
+        "count": 1,
+        "severity": "severe"
+      },
+      "ghost": {
+        "rms": 0.1322,
+        "corr": -0.0307,
+        "severity": "none"
+      },
+      "settle": {
+        "settle_s": 0.3333,
+        "settled": true,
+        "severity": "none"
+      },
+      "defects": [
+        "flash:severe",
+        "gray-corrupt:mild"
+      ],
+      "run_id": "r0",
+      "params": {
+        "ebc": {
+          "refresh_waveform": "6"
+        },
+        "ko": {
+          "full_refresh_count": 25
+        }
+      }
+    },
+    {
+      "from_pid": 18,
+      "to_pid": 19,
+      "from_kind": "blank",
+      "to_kind": "blank",
+      "pair": "blank->blank",
+      "stress": [],
+      "n_frames": 110,
+      "flash": {
+        "depth": 0.0128,
+        "energy_refl_s": 0.0119,
+        "duration_s": 0.0,
+        "count": 0,
+        "severity": "none"
+      },
+      "ghost": {
+        "rms": 0.1354,
+        "corr": 0.0,
+        "severity": "none"
+      },
+      "settle": {
+        "settle_s": 0.1,
+        "settled": true,
+        "severity": "none"
+      },
+      "defects": [
+        "gray-corrupt:mild"
+      ],
+      "run_id": "r0",
+      "params": {
+        "ebc": {
+          "refresh_waveform": "6"
+        },
+        "ko": {
+          "full_refresh_count": 25
+        }
+      }
+    },
+    {
+      "from_pid": 19,
+      "to_pid": 20,
+      "from_kind": "blank",
+      "to_kind": "novel",
+      "pair": "blank->novel",
+      "stress": [
+        "settle"
+      ],
+      "n_frames": 13,
+      "flash": {
+        "depth": 0.007,
+        "energy_refl_s": 0.0008,
+        "duration_s": 0.0,
+        "count": 0,
+        "severity": "none"
+      },
+      "ghost": {
+        "rms": 0.3168,
+        "corr": -0.0574,
+        "severity": "none"
+      },
+      "settle": {
+        "settle_s": 0.3667,
+        "settled": false,
+        "severity": "incomplete"
+      },
+      "defects": [
+        "settle:incomplete",
+        "gray-corrupt:mild"
+      ],
+      "run_id": "r0",
+      "params": {
+        "ebc": {
+          "refresh_waveform": "6"
+        },
+        "ko": {
+          "full_refresh_count": 25
+        }
+      }
+    },
+    {
+      "from_pid": 20,
+      "to_pid": 21,
+      "from_kind": "novel",
+      "to_kind": "novel",
+      "pair": "novel->novel",
+      "stress": [],
+      "n_frames": 109,
+      "flash": {
+        "depth": 0.1847,
+        "energy_refl_s": 0.4455,
+        "duration_s": 2.5,
+        "count": 1,
+        "severity": "severe"
+      },
+      "ghost": {
+        "rms": 0.1429,
+        "corr": -0.0316,
+        "severity": "none"
+      },
+      "settle": {
+        "settle_s": 1.0,
+        "settled": true,
+        "severity": "slow"
+      },
+      "defects": [
+        "flash:severe",
+        "settle:slow",
+        "gray-corrupt:mild"
+      ],
+      "run_id": "r0",
+      "params": {
+        "ebc": {
+          "refresh_waveform": "6"
+        },
+        "ko": {
+          "full_refresh_count": 25
+        }
+      }
+    },
+    {
+      "from_pid": 21,
+      "to_pid": 22,
+      "from_kind": "novel",
+      "to_kind": "graphic",
+      "pair": "novel->graphic",
+      "stress": [
+        "flash",
+        "settle"
+      ],
+      "n_frames": 111,
+      "flash": {
+        "depth": NaN,
+        "energy_refl_s": NaN,
+        "duration_s": 0.2,
+        "count": 0,
+        "severity": "mild"
+      },
+      "ghost": {
+        "rms": 0.2882,
+        "corr": 0.2041,
+        "severity": "none"
+      },
+      "settle": {
+        "settle_s": 0.4333,
+        "settled": true,
+        "severity": "none"
+      },
+      "defects": [
+        "flash:mild",
+        "gray-corrupt:mild"
+      ],
+      "run_id": "r0",
+      "params": {
+        "ebc": {
+          "refresh_waveform": "6"
+        },
+        "ko": {
+          "full_refresh_count": 25
+        }
+      }
+    },
+    {
+      "from_pid": 22,
+      "to_pid": 23,
+      "from_kind": "graphic",
+      "to_kind": "graphic",
+      "pair": "graphic->graphic",
+      "stress": [
+        "ghost"
+      ],
+      "n_frames": 122,
+      "flash": {
+        "depth": 0.0375,
+        "energy_refl_s": 0.0487,
+        "duration_s": 0.1,
+        "count": 0,
+        "severity": "mild"
+      },
+      "ghost": {
+        "rms": 0.2911,
+        "corr": -0.0207,
+        "severity": "none"
+      },
+      "settle": {
+        "settle_s": 0.1,
+        "settled": true,
+        "severity": "none"
+      },
+      "defects": [
+        "flash:mild",
+        "gray-corrupt:severe"
+      ],
+      "run_id": "r0",
+      "params": {
+        "ebc": {
+          "refresh_waveform": "6"
+        },
+        "ko": {
+          "full_refresh_count": 25
+        }
+      }
+    },
+    {
+      "from_pid": 23,
+      "to_pid": 24,
+      "from_kind": "graphic",
+      "to_kind": "textbook",
+      "pair": "graphic->textbook",
+      "stress": [],
+      "n_frames": 101,
+      "flash": {
+        "depth": 0.0441,
+        "energy_refl_s": 0.0214,
+        "duration_s": 0.0667,
+        "count": 0,
+        "severity": "mild"
+      },
+      "ghost": {
+        "rms": 0.3242,
+        "corr": 0.1609,
+        "severity": "none"
+      },
+      "settle": {
+        "settle_s": 0.7333,
+        "settled": true,
+        "severity": "slow"
+      },
+      "defects": [
+        "flash:mild",
+        "settle:slow",
+        "gray-corrupt:severe"
+      ],
+      "run_id": "r0",
+      "params": {
+        "ebc": {
+          "refresh_waveform": "6"
+        },
+        "ko": {
+          "full_refresh_count": 25
+        }
+      }
+    },
+    {
+      "from_pid": 24,
+      "to_pid": 25,
+      "from_kind": "textbook",
+      "to_kind": "novel",
+      "pair": "textbook->novel",
+      "stress": [],
+      "n_frames": 109,
+      "flash": {
+        "depth": 0.0,
+        "energy_refl_s": 0.0,
+        "duration_s": 0.0,
+        "count": 0,
+        "severity": "none"
+      },
+      "ghost": {
+        "rms": 0.295,
+        "corr": 0.0675,
+        "severity": "none"
+      },
+      "settle": {
+        "settle_s": 0.6333,
+        "settled": true,
+        "severity": "slow"
+      },
+      "defects": [
+        "settle:slow",
+        "gray-corrupt:mild"
+      ],
+      "run_id": "r0",
+      "params": {
+        "ebc": {
+          "refresh_waveform": "6"
+        },
+        "ko": {
+          "full_refresh_count": 25
+        }
+      }
+    },
+    {
+      "from_pid": 25,
+      "to_pid": 26,
+      "from_kind": "novel",
+      "to_kind": "blank",
+      "pair": "novel->blank",
+      "stress": [
+        "ghost"
+      ],
+      "n_frames": 112,
+      "flash": {
+        "depth": 0.152,
+        "energy_refl_s": 0.0077,
+        "duration_s": 0.0667,
+        "count": 1,
+        "severity": "severe"
+      },
+      "ghost": {
+        "rms": 0.1416,
+        "corr": 0.0443,
+        "severity": "none"
+      },
+      "settle": {
+        "settle_s": 0.4,
+        "settled": true,
+        "severity": "none"
+      },
+      "defects": [
+        "flash:severe",
+        "gray-corrupt:mild"
+      ],
+      "run_id": "r0",
+      "params": {
+        "ebc": {
+          "refresh_waveform": "6"
+        },
+        "ko": {
+          "full_refresh_count": 25
+        }
+      }
+    },
+    {
+      "from_pid": 26,
+      "to_pid": 27,
+      "from_kind": "blank",
+      "to_kind": "index",
+      "pair": "blank->index",
+      "stress": [],
+      "n_frames": 111,
+      "flash": {
+        "depth": 0.0001,
+        "energy_refl_s": 0.0,
+        "duration_s": 0.0,
+        "count": 0,
+        "severity": "none"
+      },
+      "ghost": {
+        "rms": 0.1531,
+        "corr": -0.0652,
+        "severity": "none"
+      },
+      "settle": {
+        "settle_s": 0.1,
+        "settled": true,
+        "severity": "none"
+      },
+      "defects": [
+        "gray-corrupt:mild"
+      ],
+      "run_id": "r0",
+      "params": {
+        "ebc": {
+          "refresh_waveform": "6"
+        },
+        "ko": {
+          "full_refresh_count": 25
+        }
+      }
+    },
+    {
+      "from_pid": 27,
+      "to_pid": 31,
+      "from_kind": "index",
+      "to_kind": "graphic",
+      "pair": "index->graphic",
+      "stress": [],
+      "n_frames": 1,
+      "flash": {
+        "depth": 0.0,
+        "energy_refl_s": 0.0,
+        "duration_s": 0.0,
+        "count": 0,
+        "severity": "none"
+      },
+      "ghost": {
+        "rms": 0.2621,
+        "corr": 0.0647,
+        "severity": "none"
+      },
+      "settle": {
+        "settle_s": 0.0,
+        "settled": true,
+        "severity": "none"
+      },
+      "defects": [],
+      "run_id": "r0",
+      "params": {
+        "ebc": {
+          "refresh_waveform": "6"
+        },
+        "ko": {
+          "full_refresh_count": 25
+        }
+      }
+    },
+    {
+      "from_pid": 31,
+      "to_pid": 28,
+      "from_kind": "graphic",
+      "to_kind": "index",
+      "pair": "graphic->index",
+      "stress": [],
+      "n_frames": 107,
+      "flash": {
+        "depth": 0.0036,
+        "energy_refl_s": 0.0017,
+        "duration_s": 0.0,
+        "count": 0,
+        "severity": "none"
+      },
+      "ghost": {
+        "rms": 0.1431,
+        "corr": -0.2527,
+        "severity": "none"
+      },
+      "settle": {
+        "settle_s": 0.4333,
+        "settled": true,
+        "severity": "none"
+      },
+      "defects": [
+        "gray-corrupt:mild"
+      ],
+      "run_id": "r0",
+      "params": {
+        "ebc": {
+          "refresh_waveform": "6"
+        },
+        "ko": {
+          "full_refresh_count": 25
+        }
+      }
+    },
+    {
+      "from_pid": 28,
+      "to_pid": 29,
+      "from_kind": "index",
+      "to_kind": "ux",
+      "pair": "index->ux",
+      "stress": [
+        "flash"
+      ],
+      "n_frames": 110,
+      "flash": {
+        "depth": NaN,
+        "energy_refl_s": NaN,
+        "duration_s": 0.0333,
+        "count": 0,
+        "severity": "mild"
+      },
+      "ghost": {
+        "rms": 0.2735,
+        "corr": 0.0786,
+        "severity": "none"
+      },
+      "settle": {
+        "settle_s": 1.0,
+        "settled": true,
+        "severity": "slow"
+      },
+      "defects": [
+        "flash:mild",
+        "settle:slow",
+        "gray-corrupt:mild"
+      ],
+      "run_id": "r0",
+      "params": {
+        "ebc": {
+          "refresh_waveform": "6"
+        },
+        "ko": {
+          "full_refresh_count": 25
+        }
+      }
+    },
+    {
+      "from_pid": 29,
+      "to_pid": 30,
+      "from_kind": "ux",
+      "to_kind": "novel",
+      "pair": "ux->novel",
+      "stress": [
+        "settle"
+      ],
+      "n_frames": 111,
+      "flash": {
+        "depth": NaN,
+        "energy_refl_s": NaN,
+        "duration_s": 2.4667,
+        "count": 2,
+        "severity": "mild"
+      },
+      "ghost": {
+        "rms": 0.1574,
+        "corr": 0.0159,
+        "severity": "none"
+      },
+      "settle": {
+        "settle_s": 1.1,
+        "settled": true,
+        "severity": "slow"
+      },
+      "defects": [
+        "flash:mild",
+        "double-flash:2",
+        "settle:slow",
+        "gray-corrupt:mild"
+      ],
+      "run_id": "r0",
+      "params": {
+        "ebc": {
+          "refresh_waveform": "6"
+        },
+        "ko": {
+          "full_refresh_count": 25
+        }
+      }
+    },
+    {
+      "from_pid": 30,
+      "to_pid": 31,
+      "from_kind": "novel",
+      "to_kind": "graphic",
+      "pair": "novel->graphic",
+      "stress": [
+        "flash",
+        "settle"
+      ],
+      "n_frames": 111,
+      "flash": {
+        "depth": NaN,
+        "energy_refl_s": NaN,
+        "duration_s": 0.1,
+        "count": 0,
+        "severity": "mild"
+      },
+      "ghost": {
+        "rms": 0.2928,
+        "corr": 0.273,
+        "severity": "none"
+      },
+      "settle": {
+        "settle_s": 0.5,
+        "settled": true,
+        "severity": "none"
+      },
+      "defects": [
+        "flash:mild",
+        "gray-corrupt:mild"
+      ],
+      "run_id": "r0",
+      "params": {
+        "ebc": {
+          "refresh_waveform": "6"
+        },
+        "ko": {
+          "full_refresh_count": 25
+        }
+      }
+    },
+    {
+      "from_pid": 31,
+      "to_pid": 32,
+      "from_kind": "graphic",
+      "to_kind": "novel",
+      "pair": "graphic->novel",
+      "stress": [
+        "ghost"
+      ],
+      "n_frames": 111,
+      "flash": {
+        "depth": 0.0455,
+        "energy_refl_s": 0.0029,
+        "duration_s": 0.0667,
+        "count": 0,
+        "severity": "mild"
+      },
+      "ghost": {
+        "rms": 0.3021,
+        "corr": 0.0245,
+        "severity": "none"
+      },
+      "settle": {
+        "settle_s": 0.8667,
+        "settled": true,
+        "severity": "slow"
+      },
+      "defects": [
+        "flash:mild",
+        "settle:slow",
+        "gray-corrupt:mild"
+      ],
+      "run_id": "r0",
+      "params": {
+        "ebc": {
+          "refresh_waveform": "6"
+        },
+        "ko": {
+          "full_refresh_count": 25
+        }
+      }
+    },
+    {
+      "from_pid": 32,
+      "to_pid": 33,
+      "from_kind": "novel",
+      "to_kind": "blank",
+      "pair": "novel->blank",
+      "stress": [
+        "ghost"
+      ],
+      "n_frames": 111,
+      "flash": {
+        "depth": 0.173,
+        "energy_refl_s": 0.0099,
+        "duration_s": 0.0667,
+        "count": 1,
+        "severity": "severe"
+      },
+      "ghost": {
+        "rms": 0.1276,
+        "corr": -0.0363,
+        "severity": "none"
+      },
+      "settle": {
+        "settle_s": 0.1667,
+        "settled": true,
+        "severity": "none"
+      },
+      "defects": [
+        "flash:severe",
+        "gray-corrupt:mild"
+      ],
+      "run_id": "r0",
+      "params": {
+        "ebc": {
+          "refresh_waveform": "6"
+        },
+        "ko": {
+          "full_refresh_count": 25
+        }
+      }
+    },
+    {
+      "from_pid": 33,
+      "to_pid": 35,
+      "from_kind": "blank",
+      "to_kind": "novel",
+      "pair": "blank->novel",
+      "stress": [],
+      "n_frames": 1,
+      "flash": {
+        "depth": 0.0,
+        "energy_refl_s": 0.0,
+        "duration_s": 0.0,
+        "count": 0,
+        "severity": "none"
+      },
+      "ghost": {
+        "rms": 0.1385,
+        "corr": 0.0625,
+        "severity": "none"
+      },
+      "settle": {
+        "settle_s": 0.0,
+        "settled": true,
+        "severity": "none"
+      },
+      "defects": [
+        "gray-corrupt:mild"
+      ],
+      "run_id": "r0",
+      "params": {
+        "ebc": {
+          "refresh_waveform": "6"
+        },
+        "ko": {
+          "full_refresh_count": 25
+        }
+      }
+    },
+    {
+      "from_pid": 35,
+      "to_pid": 34,
+      "from_kind": "novel",
+      "to_kind": "blank",
+      "pair": "novel->blank",
+      "stress": [],
+      "n_frames": 111,
+      "flash": {
+        "depth": 0.0136,
+        "energy_refl_s": 0.0155,
+        "duration_s": 0.0,
+        "count": 0,
+        "severity": "none"
+      },
+      "ghost": {
+        "rms": 0.1291,
+        "corr": -0.0461,
+        "severity": "none"
+      },
+      "settle": {
+        "settle_s": 0.1667,
+        "settled": true,
+        "severity": "none"
+      },
+      "defects": [
+        "gray-corrupt:mild"
+      ],
+      "run_id": "r0",
+      "params": {
+        "ebc": {
+          "refresh_waveform": "6"
+        },
+        "ko": {
+          "full_refresh_count": 25
+        }
+      }
+    },
+    {
+      "from_pid": 34,
+      "to_pid": 35,
+      "from_kind": "blank",
+      "to_kind": "novel",
+      "pair": "blank->novel",
+      "stress": [
+        "settle"
+      ],
+      "n_frames": 110,
+      "flash": {
+        "depth": 0.0196,
+        "energy_refl_s": 0.021,
+        "duration_s": 0.0,
+        "count": 0,
+        "severity": "none"
+      },
+      "ghost": {
+        "rms": 0.3037,
+        "corr": -0.0076,
+        "severity": "none"
+      },
+      "settle": {
+        "settle_s": 0.2,
+        "settled": true,
+        "severity": "none"
+      },
+      "defects": [
+        "gray-corrupt:mild"
+      ],
+      "run_id": "r0",
+      "params": {
+        "ebc": {
+          "refresh_waveform": "6"
+        },
+        "ko": {
+          "full_refresh_count": 25
+        }
+      }
+    },
+    {
+      "from_pid": 35,
+      "to_pid": 36,
+      "from_kind": "novel",
+      "to_kind": "novel",
+      "pair": "novel->novel",
+      "stress": [],
+      "n_frames": 109,
+      "flash": {
+        "depth": 0.1997,
+        "energy_refl_s": 0.4862,
+        "duration_s": 2.5,
+        "count": 1,
+        "severity": "severe"
+      },
+      "ghost": {
+        "rms": 0.1539,
+        "corr": -0.0699,
+        "severity": "none"
+      },
+      "settle": {
+        "settle_s": 0.1,
+        "settled": true,
+        "severity": "none"
+      },
+      "defects": [
+        "flash:severe",
+        "gray-corrupt:mild"
+      ],
+      "run_id": "r0",
+      "params": {
+        "ebc": {
+          "refresh_waveform": "6"
+        },
+        "ko": {
+          "full_refresh_count": 25
+        }
+      }
+    },
+    {
+      "from_pid": 36,
+      "to_pid": 37,
+      "from_kind": "novel",
+      "to_kind": "graphic",
+      "pair": "novel->graphic",
+      "stress": [
+        "flash",
+        "settle"
+      ],
+      "n_frames": 110,
+      "flash": {
+        "depth": NaN,
+        "energy_refl_s": NaN,
+        "duration_s": 0.7667,
+        "count": 0,
+        "severity": "mild"
+      },
+      "ghost": {
+        "rms": 0.2693,
+        "corr": 0.24,
+        "severity": "none"
+      },
+      "settle": {
+        "settle_s": 0.4333,
+        "settled": true,
+        "severity": "none"
+      },
+      "defects": [
+        "flash:mild",
+        "gray-corrupt:mild"
+      ],
+      "run_id": "r0",
+      "params": {
+        "ebc": {
+          "refresh_waveform": "6"
+        },
+        "ko": {
+          "full_refresh_count": 25
+        }
+      }
+    },
+    {
+      "from_pid": 37,
+      "to_pid": 38,
+      "from_kind": "graphic",
+      "to_kind": "graphic",
+      "pair": "graphic->graphic",
+      "stress": [
+        "ghost"
+      ],
+      "n_frames": 110,
+      "flash": {
+        "depth": 0.0684,
+        "energy_refl_s": 0.1366,
+        "duration_s": 2.4667,
+        "count": 0,
+        "severity": "mild"
+      },
+      "ghost": {
+        "rms": 0.2797,
+        "corr": 0.0505,
+        "severity": "none"
+      },
+      "settle": {
+        "settle_s": 0.1,
+        "settled": true,
+        "severity": "none"
+      },
+      "defects": [
+        "flash:mild",
+        "gray-corrupt:severe"
+      ],
+      "run_id": "r0",
+      "params": {
+        "ebc": {
+          "refresh_waveform": "6"
+        },
+        "ko": {
+          "full_refresh_count": 25
+        }
+      }
+    },
+    {
+      "from_pid": 38,
+      "to_pid": 39,
+      "from_kind": "graphic",
+      "to_kind": "textbook",
+      "pair": "graphic->textbook",
+      "stress": [],
+      "n_frames": 112,
+      "flash": {
+        "depth": 0.041,
+        "energy_refl_s": 0.0143,
+        "duration_s": 0.0667,
+        "count": 0,
+        "severity": "mild"
+      },
+      "ghost": {
+        "rms": 0.3003,
+        "corr": 0.1363,
+        "severity": "none"
+      },
+      "settle": {
+        "settle_s": 0.5,
+        "settled": true,
+        "severity": "none"
+      },
+      "defects": [
+        "flash:mild",
+        "gray-corrupt:severe"
+      ],
+      "run_id": "r0",
+      "params": {
+        "ebc": {
+          "refresh_waveform": "6"
+        },
+        "ko": {
+          "full_refresh_count": 25
+        }
+      }
+    },
+    {
+      "from_pid": 39,
+      "to_pid": 40,
+      "from_kind": "textbook",
+      "to_kind": "novel",
+      "pair": "textbook->novel",
+      "stress": [],
+      "n_frames": 111,
+      "flash": {
+        "depth": 0.029,
+        "energy_refl_s": 0.0155,
+        "duration_s": 0.0,
+        "count": 0,
+        "severity": "none"
+      },
+      "ghost": {
+        "rms": 0.3112,
+        "corr": 0.0928,
+        "severity": "none"
+      },
+      "settle": {
+        "settle_s": 0.4,
+        "settled": true,
+        "severity": "none"
+      },
+      "defects": [
+        "gray-corrupt:mild"
+      ],
+      "run_id": "r0",
+      "params": {
+        "ebc": {
+          "refresh_waveform": "6"
+        },
+        "ko": {
+          "full_refresh_count": 25
+        }
+      }
+    },
+    {
+      "from_pid": 40,
+      "to_pid": 41,
+      "from_kind": "novel",
+      "to_kind": "blank",
+      "pair": "novel->blank",
+      "stress": [
+        "ghost"
+      ],
+      "n_frames": 115,
+      "flash": {
+        "depth": 0.1085,
+        "energy_refl_s": 0.0047,
+        "duration_s": 0.0667,
+        "count": 1,
+        "severity": "mild"
+      },
+      "ghost": {
+        "rms": 0.1416,
+        "corr": 0.0171,
+        "severity": "none"
+      },
+      "settle": {
+        "settle_s": 0.2,
+        "settled": true,
+        "severity": "none"
+      },
+      "defects": [
+        "flash:mild",
+        "gray-corrupt:mild"
+      ],
+      "run_id": "r0",
+      "params": {
+        "ebc": {
+          "refresh_waveform": "6"
+        },
+        "ko": {
+          "full_refresh_count": 25
+        }
+      }
+    },
+    {
+      "from_pid": 41,
+      "to_pid": 42,
+      "from_kind": "blank",
+      "to_kind": "index",
+      "pair": "blank->index",
+      "stress": [],
+      "n_frames": 118,
+      "flash": {
+        "depth": 0.0069,
+        "energy_refl_s": 0.002,
+        "duration_s": 0.0,
+        "count": 0,
+        "severity": "none"
+      },
+      "ghost": {
+        "rms": 0.1597,
+        "corr": -0.0283,
+        "severity": "none"
+      },
+      "settle": {
+        "settle_s": 0.5,
+        "settled": true,
+        "severity": "none"
+      },
+      "defects": [
+        "gray-corrupt:mild"
+      ],
+      "run_id": "r0",
+      "params": {
+        "ebc": {
+          "refresh_waveform": "6"
+        },
+        "ko": {
+          "full_refresh_count": 25
+        }
+      }
+    },
+    {
+      "from_pid": 42,
+      "to_pid": 43,
+      "from_kind": "index",
+      "to_kind": "index",
+      "pair": "index->index",
+      "stress": [],
+      "n_frames": 108,
+      "flash": {
+        "depth": 0.028,
+        "energy_refl_s": 0.0443,
+        "duration_s": 0.0,
+        "count": 0,
+        "severity": "none"
+      },
+      "ghost": {
+        "rms": 0.1572,
+        "corr": 0.1077,
+        "severity": "none"
+      },
+      "settle": {
+        "settle_s": 0.3,
+        "settled": true,
+        "severity": "none"
+      },
+      "defects": [
+        "gray-corrupt:mild"
+      ],
+      "run_id": "r0",
+      "params": {
+        "ebc": {
+          "refresh_waveform": "6"
+        },
+        "ko": {
+          "full_refresh_count": 25
+        }
+      }
+    },
+    {
+      "from_pid": 43,
+      "to_pid": 44,
+      "from_kind": "index",
+      "to_kind": "ux",
+      "pair": "index->ux",
+      "stress": [
+        "flash"
+      ],
+      "n_frames": 110,
+      "flash": {
+        "depth": NaN,
+        "energy_refl_s": NaN,
+        "duration_s": 0.0333,
+        "count": 0,
+        "severity": "mild"
+      },
+      "ghost": {
+        "rms": 0.2655,
+        "corr": -0.0093,
+        "severity": "none"
+      },
+      "settle": {
+        "settle_s": 0.7333,
+        "settled": true,
+        "severity": "slow"
+      },
+      "defects": [
+        "flash:mild",
+        "settle:slow",
+        "gray-corrupt:mild"
+      ],
+      "run_id": "r0",
+      "params": {
+        "ebc": {
+          "refresh_waveform": "6"
+        },
+        "ko": {
+          "full_refresh_count": 25
+        }
+      }
+    },
+    {
+      "from_pid": 44,
+      "to_pid": 45,
+      "from_kind": "ux",
+      "to_kind": "novel",
+      "pair": "ux->novel",
+      "stress": [
+        "settle"
+      ],
+      "n_frames": 110,
+      "flash": {
+        "depth": NaN,
+        "energy_refl_s": NaN,
+        "duration_s": 2.4667,
+        "count": 2,
+        "severity": "mild"
+      },
+      "ghost": {
+        "rms": 0.1573,
+        "corr": -0.0666,
+        "severity": "none"
+      },
+      "settle": {
+        "settle_s": 0.9667,
+        "settled": true,
+        "severity": "slow"
+      },
+      "defects": [
+        "flash:mild",
+        "double-flash:2",
+        "settle:slow",
+        "gray-corrupt:mild"
+      ],
+      "run_id": "r0",
+      "params": {
+        "ebc": {
+          "refresh_waveform": "6"
+        },
+        "ko": {
+          "full_refresh_count": 25
+        }
+      }
+    },
+    {
+      "from_pid": 45,
+      "to_pid": 46,
+      "from_kind": "novel",
+      "to_kind": "graphic",
+      "pair": "novel->graphic",
+      "stress": [
+        "flash",
+        "settle"
+      ],
+      "n_frames": 120,
+      "flash": {
+        "depth": NaN,
+        "energy_refl_s": NaN,
+        "duration_s": 0.1,
+        "count": 0,
+        "severity": "mild"
+      },
+      "ghost": {
+        "rms": 0.2939,
+        "corr": 0.2333,
+        "severity": "none"
+      },
+      "settle": {
+        "settle_s": 0.4333,
+        "settled": true,
+        "severity": "none"
+      },
+      "defects": [
+        "flash:mild",
+        "gray-corrupt:mild"
+      ],
+      "run_id": "r0",
+      "params": {
+        "ebc": {
+          "refresh_waveform": "6"
+        },
+        "ko": {
+          "full_refresh_count": 25
+        }
+      }
+    },
+    {
+      "from_pid": 46,
+      "to_pid": 47,
+      "from_kind": "graphic",
+      "to_kind": "novel",
+      "pair": "graphic->novel",
+      "stress": [
+        "ghost"
+      ],
+      "n_frames": 127,
+      "flash": {
+        "depth": 0.0264,
+        "energy_refl_s": 0.0014,
+        "duration_s": 0.0,
+        "count": 0,
+        "severity": "none"
+      },
+      "ghost": {
+        "rms": 0.2961,
+        "corr": 0.1253,
+        "severity": "none"
+      },
+      "settle": {
+        "settle_s": 0.6667,
+        "settled": true,
+        "severity": "slow"
+      },
+      "defects": [
+        "settle:slow",
+        "gray-corrupt:mild"
+      ],
+      "run_id": "r0",
+      "params": {
+        "ebc": {
+          "refresh_waveform": "6"
+        },
+        "ko": {
+          "full_refresh_count": 25
+        }
+      }
+    }
+  ],
+  "summary": {
+    "run_id": "r0",
+    "label": "gl16-c25",
+    "params": {
+      "ebc": {
+        "refresh_waveform": "6"
+      },
+      "ko": {
+        "full_refresh_count": 25
+      }
+    },
+    "n_transitions": 46,
+    "n_with_defects": 45,
+    "n_double_flash": 3,
+    "worst_flash_depth": 0.223,
+    "worst_ghost_rms": 0.3251,
+    "severity_counts": {
+      "flash": {
+        "none": 18,
+        "severe": 6,
+        "mild": 22
+      },
+      "ghost": {
+        "none": 46
+      },
+      "settle": {
+        "none": 30,
+        "incomplete": 2,
+        "slow": 14
+      }
+    }
+  }
+}

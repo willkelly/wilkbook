@@ -1,0 +1,945 @@
+{
+  "resolution": [
+    1872,
+    1404
+  ],
+  "markers": {
+    "fiducials": [
+      {
+        "corner": "TL",
+        "cx": 0.03688,
+        "cy": 0.0425,
+        "pips": 1
+      },
+      {
+        "corner": "TR",
+        "cx": 0.96313,
+        "cy": 0.0425,
+        "pips": 2
+      },
+      {
+        "corner": "BL",
+        "cx": 0.03688,
+        "cy": 0.9575,
+        "pips": 3
+      },
+      {
+        "corner": "BR",
+        "cx": 0.96313,
+        "cy": 0.9575,
+        "pips": 4
+      }
+    ],
+    "patches": [
+      {
+        "name": "p0",
+        "x": 0.0812,
+        "y": 0.012,
+        "w": 0.1396,
+        "h": 0.047,
+        "reflectance": 0.0
+      },
+      {
+        "name": "p1",
+        "x": 0.2557,
+        "y": 0.012,
+        "w": 0.1396,
+        "h": 0.047,
+        "reflectance": 0.25
+      },
+      {
+        "name": "p2",
+        "x": 0.4302,
+        "y": 0.012,
+        "w": 0.1396,
+        "h": 0.047,
+        "reflectance": 0.5
+      },
+      {
+        "name": "p3",
+        "x": 0.6047,
+        "y": 0.012,
+        "w": 0.1396,
+        "h": 0.047,
+        "reflectance": 0.75
+      },
+      {
+        "name": "p4",
+        "x": 0.7792,
+        "y": 0.012,
+        "w": 0.1396,
+        "h": 0.047,
+        "reflectance": 1.0
+      }
+    ],
+    "pageid": {
+      "x": 0.06375,
+      "y": 0.953,
+      "w": 0.8725,
+      "h": 0.035,
+      "cells": 10,
+      "bits": 8
+    },
+    "reserved": [
+      {
+        "x": 0.78019,
+        "y": 0.796,
+        "w": 0.16781,
+        "h": 0.122,
+        "what": "pagenum"
+      },
+      {
+        "x": 0.052,
+        "y": 0.092,
+        "w": 0.0315,
+        "h": 0.042,
+        "what": "parity_a"
+      },
+      {
+        "x": 0.9165,
+        "y": 0.092,
+        "w": 0.0315,
+        "h": 0.042,
+        "what": "parity_b"
+      }
+    ]
+  },
+  "pages": [
+    {
+      "index": 0,
+      "kind": "sync_black",
+      "pid": 0,
+      "rep": null
+    },
+    {
+      "index": 1,
+      "kind": "sync_white",
+      "pid": 1,
+      "rep": null
+    },
+    {
+      "index": 2,
+      "kind": "sync_black",
+      "pid": 2,
+      "rep": null
+    },
+    {
+      "index": 3,
+      "kind": "sync_white",
+      "pid": 3,
+      "rep": null
+    },
+    {
+      "index": 4,
+      "kind": "blank",
+      "pid": 4,
+      "rep": 0
+    },
+    {
+      "index": 5,
+      "kind": "novel",
+      "pid": 5,
+      "rep": 0
+    },
+    {
+      "index": 6,
+      "kind": "novel",
+      "pid": 6,
+      "rep": 0
+    },
+    {
+      "index": 7,
+      "kind": "graphic",
+      "pid": 7,
+      "rep": 0
+    },
+    {
+      "index": 8,
+      "kind": "graphic",
+      "pid": 8,
+      "rep": 0
+    },
+    {
+      "index": 9,
+      "kind": "textbook",
+      "pid": 9,
+      "rep": 0
+    },
+    {
+      "index": 10,
+      "kind": "novel",
+      "pid": 10,
+      "rep": 0
+    },
+    {
+      "index": 11,
+      "kind": "blank",
+      "pid": 11,
+      "rep": 0
+    },
+    {
+      "index": 12,
+      "kind": "index",
+      "pid": 12,
+      "rep": 0
+    },
+    {
+      "index": 13,
+      "kind": "index",
+      "pid": 13,
+      "rep": 0
+    },
+    {
+      "index": 14,
+      "kind": "ux",
+      "pid": 14,
+      "rep": 0
+    },
+    {
+      "index": 15,
+      "kind": "novel",
+      "pid": 15,
+      "rep": 0
+    },
+    {
+      "index": 16,
+      "kind": "graphic",
+      "pid": 16,
+      "rep": 0
+    },
+    {
+      "index": 17,
+      "kind": "novel",
+      "pid": 17,
+      "rep": 0
+    },
+    {
+      "index": 18,
+      "kind": "blank",
+      "pid": 18,
+      "rep": 0
+    },
+    {
+      "index": 19,
+      "kind": "blank",
+      "pid": 19,
+      "rep": 1
+    },
+    {
+      "index": 20,
+      "kind": "novel",
+      "pid": 20,
+      "rep": 1
+    },
+    {
+      "index": 21,
+      "kind": "novel",
+      "pid": 21,
+      "rep": 1
+    },
+    {
+      "index": 22,
+      "kind": "graphic",
+      "pid": 22,
+      "rep": 1
+    },
+    {
+      "index": 23,
+      "kind": "graphic",
+      "pid": 23,
+      "rep": 1
+    },
+    {
+      "index": 24,
+      "kind": "textbook",
+      "pid": 24,
+      "rep": 1
+    },
+    {
+      "index": 25,
+      "kind": "novel",
+      "pid": 25,
+      "rep": 1
+    },
+    {
+      "index": 26,
+      "kind": "blank",
+      "pid": 26,
+      "rep": 1
+    },
+    {
+      "index": 27,
+      "kind": "index",
+      "pid": 27,
+      "rep": 1
+    },
+    {
+      "index": 28,
+      "kind": "index",
+      "pid": 28,
+      "rep": 1
+    },
+    {
+      "index": 29,
+      "kind": "ux",
+      "pid": 29,
+      "rep": 1
+    },
+    {
+      "index": 30,
+      "kind": "novel",
+      "pid": 30,
+      "rep": 1
+    },
+    {
+      "index": 31,
+      "kind": "graphic",
+      "pid": 31,
+      "rep": 1
+    },
+    {
+      "index": 32,
+      "kind": "novel",
+      "pid": 32,
+      "rep": 1
+    },
+    {
+      "index": 33,
+      "kind": "blank",
+      "pid": 33,
+      "rep": 1
+    },
+    {
+      "index": 34,
+      "kind": "blank",
+      "pid": 34,
+      "rep": 2
+    },
+    {
+      "index": 35,
+      "kind": "novel",
+      "pid": 35,
+      "rep": 2
+    },
+    {
+      "index": 36,
+      "kind": "novel",
+      "pid": 36,
+      "rep": 2
+    },
+    {
+      "index": 37,
+      "kind": "graphic",
+      "pid": 37,
+      "rep": 2
+    },
+    {
+      "index": 38,
+      "kind": "graphic",
+      "pid": 38,
+      "rep": 2
+    },
+    {
+      "index": 39,
+      "kind": "textbook",
+      "pid": 39,
+      "rep": 2
+    },
+    {
+      "index": 40,
+      "kind": "novel",
+      "pid": 40,
+      "rep": 2
+    },
+    {
+      "index": 41,
+      "kind": "blank",
+      "pid": 41,
+      "rep": 2
+    },
+    {
+      "index": 42,
+      "kind": "index",
+      "pid": 42,
+      "rep": 2
+    },
+    {
+      "index": 43,
+      "kind": "index",
+      "pid": 43,
+      "rep": 2
+    },
+    {
+      "index": 44,
+      "kind": "ux",
+      "pid": 44,
+      "rep": 2
+    },
+    {
+      "index": 45,
+      "kind": "novel",
+      "pid": 45,
+      "rep": 2
+    },
+    {
+      "index": 46,
+      "kind": "graphic",
+      "pid": 46,
+      "rep": 2
+    },
+    {
+      "index": 47,
+      "kind": "novel",
+      "pid": 47,
+      "rep": 2
+    },
+    {
+      "index": 48,
+      "kind": "blank",
+      "pid": 48,
+      "rep": 2
+    }
+  ],
+  "transitions": [
+    {
+      "from": 0,
+      "to": 1,
+      "from_kind": "sync_black",
+      "to_kind": "sync_white",
+      "pair": "sync_black->sync_white",
+      "stress": [],
+      "is_sync": true,
+      "rep": null
+    },
+    {
+      "from": 1,
+      "to": 2,
+      "from_kind": "sync_white",
+      "to_kind": "sync_black",
+      "pair": "sync_white->sync_black",
+      "stress": [],
+      "is_sync": true,
+      "rep": null
+    },
+    {
+      "from": 2,
+      "to": 3,
+      "from_kind": "sync_black",
+      "to_kind": "sync_white",
+      "pair": "sync_black->sync_white",
+      "stress": [],
+      "is_sync": true,
+      "rep": null
+    },
+    {
+      "from": 3,
+      "to": 4,
+      "from_kind": "sync_white",
+      "to_kind": "blank",
+      "pair": "sync_white->blank",
+      "stress": [],
+      "is_sync": true,
+      "rep": null
+    },
+    {
+      "from": 4,
+      "to": 5,
+      "from_kind": "blank",
+      "to_kind": "novel",
+      "pair": "blank->novel",
+      "stress": [
+        "settle"
+      ],
+      "is_sync": false,
+      "rep": 0
+    },
+    {
+      "from": 5,
+      "to": 6,
+      "from_kind": "novel",
+      "to_kind": "novel",
+      "pair": "novel->novel",
+      "stress": [],
+      "is_sync": false,
+      "rep": 0
+    },
+    {
+      "from": 6,
+      "to": 7,
+      "from_kind": "novel",
+      "to_kind": "graphic",
+      "pair": "novel->graphic",
+      "stress": [
+        "flash",
+        "settle"
+      ],
+      "is_sync": false,
+      "rep": 0
+    },
+    {
+      "from": 7,
+      "to": 8,
+      "from_kind": "graphic",
+      "to_kind": "graphic",
+      "pair": "graphic->graphic",
+      "stress": [
+        "ghost"
+      ],
+      "is_sync": false,
+      "rep": 0
+    },
+    {
+      "from": 8,
+      "to": 9,
+      "from_kind": "graphic",
+      "to_kind": "textbook",
+      "pair": "graphic->textbook",
+      "stress": [],
+      "is_sync": false,
+      "rep": 0
+    },
+    {
+      "from": 9,
+      "to": 10,
+      "from_kind": "textbook",
+      "to_kind": "novel",
+      "pair": "textbook->novel",
+      "stress": [],
+      "is_sync": false,
+      "rep": 0
+    },
+    {
+      "from": 10,
+      "to": 11,
+      "from_kind": "novel",
+      "to_kind": "blank",
+      "pair": "novel->blank",
+      "stress": [
+        "ghost"
+      ],
+      "is_sync": false,
+      "rep": 0
+    },
+    {
+      "from": 11,
+      "to": 12,
+      "from_kind": "blank",
+      "to_kind": "index",
+      "pair": "blank->index",
+      "stress": [],
+      "is_sync": false,
+      "rep": 0
+    },
+    {
+      "from": 12,
+      "to": 13,
+      "from_kind": "index",
+      "to_kind": "index",
+      "pair": "index->index",
+      "stress": [],
+      "is_sync": false,
+      "rep": 0
+    },
+    {
+      "from": 13,
+      "to": 14,
+      "from_kind": "index",
+      "to_kind": "ux",
+      "pair": "index->ux",
+      "stress": [
+        "flash"
+      ],
+      "is_sync": false,
+      "rep": 0
+    },
+    {
+      "from": 14,
+      "to": 15,
+      "from_kind": "ux",
+      "to_kind": "novel",
+      "pair": "ux->novel",
+      "stress": [
+        "settle"
+      ],
+      "is_sync": false,
+      "rep": 0
+    },
+    {
+      "from": 15,
+      "to": 16,
+      "from_kind": "novel",
+      "to_kind": "graphic",
+      "pair": "novel->graphic",
+      "stress": [
+        "flash",
+        "settle"
+      ],
+      "is_sync": false,
+      "rep": 0
+    },
+    {
+      "from": 16,
+      "to": 17,
+      "from_kind": "graphic",
+      "to_kind": "novel",
+      "pair": "graphic->novel",
+      "stress": [
+        "ghost"
+      ],
+      "is_sync": false,
+      "rep": 0
+    },
+    {
+      "from": 17,
+      "to": 18,
+      "from_kind": "novel",
+      "to_kind": "blank",
+      "pair": "novel->blank",
+      "stress": [
+        "ghost"
+      ],
+      "is_sync": false,
+      "rep": 0
+    },
+    {
+      "from": 18,
+      "to": 19,
+      "from_kind": "blank",
+      "to_kind": "blank",
+      "pair": "blank->blank",
+      "stress": [],
+      "is_sync": false,
+      "rep": 1
+    },
+    {
+      "from": 19,
+      "to": 20,
+      "from_kind": "blank",
+      "to_kind": "novel",
+      "pair": "blank->novel",
+      "stress": [
+        "settle"
+      ],
+      "is_sync": false,
+      "rep": 1
+    },
+    {
+      "from": 20,
+      "to": 21,
+      "from_kind": "novel",
+      "to_kind": "novel",
+      "pair": "novel->novel",
+      "stress": [],
+      "is_sync": false,
+      "rep": 1
+    },
+    {
+      "from": 21,
+      "to": 22,
+      "from_kind": "novel",
+      "to_kind": "graphic",
+      "pair": "novel->graphic",
+      "stress": [
+        "flash",
+        "settle"
+      ],
+      "is_sync": false,
+      "rep": 1
+    },
+    {
+      "from": 22,
+      "to": 23,
+      "from_kind": "graphic",
+      "to_kind": "graphic",
+      "pair": "graphic->graphic",
+      "stress": [
+        "ghost"
+      ],
+      "is_sync": false,
+      "rep": 1
+    },
+    {
+      "from": 23,
+      "to": 24,
+      "from_kind": "graphic",
+      "to_kind": "textbook",
+      "pair": "graphic->textbook",
+      "stress": [],
+      "is_sync": false,
+      "rep": 1
+    },
+    {
+      "from": 24,
+      "to": 25,
+      "from_kind": "textbook",
+      "to_kind": "novel",
+      "pair": "textbook->novel",
+      "stress": [],
+      "is_sync": false,
+      "rep": 1
+    },
+    {
+      "from": 25,
+      "to": 26,
+      "from_kind": "novel",
+      "to_kind": "blank",
+      "pair": "novel->blank",
+      "stress": [
+        "ghost"
+      ],
+      "is_sync": false,
+      "rep": 1
+    },
+    {
+      "from": 26,
+      "to": 27,
+      "from_kind": "blank",
+      "to_kind": "index",
+      "pair": "blank->index",
+      "stress": [],
+      "is_sync": false,
+      "rep": 1
+    },
+    {
+      "from": 27,
+      "to": 28,
+      "from_kind": "index",
+      "to_kind": "index",
+      "pair": "index->index",
+      "stress": [],
+      "is_sync": false,
+      "rep": 1
+    },
+    {
+      "from": 28,
+      "to": 29,
+      "from_kind": "index",
+      "to_kind": "ux",
+      "pair": "index->ux",
+      "stress": [
+        "flash"
+      ],
+      "is_sync": false,
+      "rep": 1
+    },
+    {
+      "from": 29,
+      "to": 30,
+      "from_kind": "ux",
+      "to_kind": "novel",
+      "pair": "ux->novel",
+      "stress": [
+        "settle"
+      ],
+      "is_sync": false,
+      "rep": 1
+    },
+    {
+      "from": 30,
+      "to": 31,
+      "from_kind": "novel",
+      "to_kind": "graphic",
+      "pair": "novel->graphic",
+      "stress": [
+        "flash",
+        "settle"
+      ],
+      "is_sync": false,
+      "rep": 1
+    },
+    {
+      "from": 31,
+      "to": 32,
+      "from_kind": "graphic",
+      "to_kind": "novel",
+      "pair": "graphic->novel",
+      "stress": [
+        "ghost"
+      ],
+      "is_sync": false,
+      "rep": 1
+    },
+    {
+      "from": 32,
+      "to": 33,
+      "from_kind": "novel",
+      "to_kind": "blank",
+      "pair": "novel->blank",
+      "stress": [
+        "ghost"
+      ],
+      "is_sync": false,
+      "rep": 1
+    },
+    {
+      "from": 33,
+      "to": 34,
+      "from_kind": "blank",
+      "to_kind": "blank",
+      "pair": "blank->blank",
+      "stress": [],
+      "is_sync": false,
+      "rep": 2
+    },
+    {
+      "from": 34,
+      "to": 35,
+      "from_kind": "blank",
+      "to_kind": "novel",
+      "pair": "blank->novel",
+      "stress": [
+        "settle"
+      ],
+      "is_sync": false,
+      "rep": 2
+    },
+    {
+      "from": 35,
+      "to": 36,
+      "from_kind": "novel",
+      "to_kind": "novel",
+      "pair": "novel->novel",
+      "stress": [],
+      "is_sync": false,
+      "rep": 2
+    },
+    {
+      "from": 36,
+      "to": 37,
+      "from_kind": "novel",
+      "to_kind": "graphic",
+      "pair": "novel->graphic",
+      "stress": [
+        "flash",
+        "settle"
+      ],
+      "is_sync": false,
+      "rep": 2
+    },
+    {
+      "from": 37,
+      "to": 38,
+      "from_kind": "graphic",
+      "to_kind": "graphic",
+      "pair": "graphic->graphic",
+      "stress": [
+        "ghost"
+      ],
+      "is_sync": false,
+      "rep": 2
+    },
+    {
+      "from": 38,
+      "to": 39,
+      "from_kind": "graphic",
+      "to_kind": "textbook",
+      "pair": "graphic->textbook",
+      "stress": [],
+      "is_sync": false,
+      "rep": 2
+    },
+    {
+      "from": 39,
+      "to": 40,
+      "from_kind": "textbook",
+      "to_kind": "novel",
+      "pair": "textbook->novel",
+      "stress": [],
+      "is_sync": false,
+      "rep": 2
+    },
+    {
+      "from": 40,
+      "to": 41,
+      "from_kind": "novel",
+      "to_kind": "blank",
+      "pair": "novel->blank",
+      "stress": [
+        "ghost"
+      ],
+      "is_sync": false,
+      "rep": 2
+    },
+    {
+      "from": 41,
+      "to": 42,
+      "from_kind": "blank",
+      "to_kind": "index",
+      "pair": "blank->index",
+      "stress": [],
+      "is_sync": false,
+      "rep": 2
+    },
+    {
+      "from": 42,
+      "to": 43,
+      "from_kind": "index",
+      "to_kind": "index",
+      "pair": "index->index",
+      "stress": [],
+      "is_sync": false,
+      "rep": 2
+    },
+    {
+      "from": 43,
+      "to": 44,
+      "from_kind": "index",
+      "to_kind": "ux",
+      "pair": "index->ux",
+      "stress": [
+        "flash"
+      ],
+      "is_sync": false,
+      "rep": 2
+    },
+    {
+      "from": 44,
+      "to": 45,
+      "from_kind": "ux",
+      "to_kind": "novel",
+      "pair": "ux->novel",
+      "stress": [
+        "settle"
+      ],
+      "is_sync": false,
+      "rep": 2
+    },
+    {
+      "from": 45,
+      "to": 46,
+      "from_kind": "novel",
+      "to_kind": "graphic",
+      "pair": "novel->graphic",
+      "stress": [
+        "flash",
+        "settle"
+      ],
+      "is_sync": false,
+      "rep": 2
+    },
+    {
+      "from": 46,
+      "to": 47,
+      "from_kind": "graphic",
+      "to_kind": "novel",
+      "pair": "graphic->novel",
+      "stress": [
+        "ghost"
+      ],
+      "is_sync": false,
+      "rep": 2
+    },
+    {
+      "from": 47,
+      "to": 48,
+      "from_kind": "novel",
+      "to_kind": "blank",
+      "pair": "novel->blank",
+      "stress": [
+        "ghost"
+      ],
+      "is_sync": false,
+      "rep": 2
+    }
+  ]
+}

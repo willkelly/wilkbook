@@ -1,0 +1,34 @@
+# Integrity ledger for the 2026-07 optics dataset raw captures.
+#
+# The capture.mkv videos are NOT committed (12.28 GB across the 19 finalized
+# captures). They live, gitignored, on the capture workstation at
+# pinenote/tools/optics/build/bundles/<bundle>/capture.mkv. This file records
+# the sha256 and byte size of each so a third party handed the videos can
+# verify them against the committed metadata. Every session.json also embeds
+# its own capture sha256; all 18 finalized session-carrying bundles were
+# verified recorded == recomputed on 2026-07-12 (armB after its capture
+# finalized; an earlier read mid-write mismatched, as expected).
+#
+# armC was still being captured when this ledger was written (no session.json
+# yet); it is intentionally absent. Add it when its session.json lands.
+#
+# Format: <sha256>  <bytes>  <path>
+1e221d08e7506ab7e959509f028d36e110a483cbe34768e367e57c538f686707  639672735  cadence.r00-gl16-c6/capture.mkv
+2fb5d810b743db04ccb9ecbb5f815b9063ad072079144a3c29460eac38fa65d6  625943530  cadence.r01-gl16-c12/capture.mkv
+6f200541547f491b3aab51df0a445bc869a2cbfa1a424eb4038b8af01d2ebbb2  629237981  cadence.r02-gl16-c20/capture.mkv
+fc67772f9d3085d3e57d33d6d7537d45e5293d39a5f15c112ae7cfa795fdc13f  663163470  cal-baseline/capture.mkv
+eddd62636506ffd83af6f2eb8161e0d8ddde5e18262896653fd8727906178180  633133081  cliff.r00-gl16-c25/capture.mkv
+80c13022b069e7a865e5ce8d83d591603e07f5f065295469b325f90389b5d6c0  648427540  cliff.r01-gl16-c35/capture.mkv
+8b04e09667c60c8996c0476de379468d49c2d67897beff850b0f99288b4568eb  630908929  cliff.r02-gl16-c40/capture.mkv
+a2dc7e671e9396195617e6336e7be225fee8c42b4c7ff8570ec0d0c10577fde7  654749843  driver-owned/capture.mkv
+7401465419b4ced5cbc5c68658b9f40d48e076b106092805f6daa81fba9c51f9  663887279  first-real/capture.mkv
+394b7d55f686c18673d2ab5bd57c9bbdd677f24cef5ad61d818d7cf0f27b3b8d  633294311  neverx3.r00-gl16-never-a/capture.mkv
+02373e4670cfc1f1cf89b709049c8b3d7f4afc8a00c2a051873a296f7e99e32a  648723233  neverx3.r01-gl16-never-b/capture.mkv
+670b5a38291a30fc0a39497b877a6ecde7ee7502e649474983d098ae49b7b3f0  670060529  neverx3.r02-gl16-never-c/capture.mkv
+e405538d452defa73a749ce8fdfd351da736e56a8e4fe732c3d1387e6a9a9190  354511242  noise-pilot/capture.mkv
+c88eed54ae814f7cee17c9114a95b7ade9d35bef8cef88c0ed89cbc194470e7e  754807995  soak1/capture.mkv
+bf2561dc88f5144b0c3aa310c9fb8706fd72b93582dd9835c0b5df0133b4c2b2  659348703  sweep1.r00-gl16-full6/capture.mkv
+630fef7f344e29459f4731864e1a178f3e703cfc6c5c80092579dc16f19954a2  741339614  sweep1.r01-gc16-full6/capture.mkv
+ed8223b669844903c97670858428f13ab5e58acbcd3af0ef55be159243157dfb  689156131  sweep1.r02-gl16-never/capture.mkv
+074ce0f082178bea06224ef96bc592448a29e9defd3ae5f543f0a272860f5fe5  661138088  sweep1.r03-gc16-full1/capture.mkv
+fd85c4948afa29b45663979b4c17cfe108b91c01c29059641a97f6e87c41a6bb  677840330  armB/capture.mkv

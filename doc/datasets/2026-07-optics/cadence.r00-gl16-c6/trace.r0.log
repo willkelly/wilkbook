@@ -1,0 +1,161 @@
+---------------------------------------------
+                launching...
+  _  _____  ____                _
+ | |/ / _ \|  _ \ ___  __ _  __| | ___ _ __
+ | ' / | | | |_) / _ \/ _` |/ _` |/ _ \ '__|
+ | . \ |_| |  _ <  __/ (_| | (_| |  __/ |
+ |_|\_\___/|_| \_\___|\__,_|\__,_|\___|_|
+
+ It's a scroll... It's a codex... It's KOReader!
+
+ [*] Current time: 07/11/26-23:15:32
+has monolibtic? no (libs/libkoreader-monolibtic.so: cannot open shared object file: No such file or directory)
+lib_search_path: libs/?
+lib_basic_format: lib%s.so
+lib_version_format: lib%s.so.%s
+ [*] Version: v2026.03
+
+ffi.load: rt.so.1 (RTLD_GLOBAL)
+ffi.findlib: utf8proc [3]
+ffi.load: libs/libutf8proc.so.3
+ffi.findlib: blitbuffer
+ffi.load: libs/libblitbuffer.so
+ffi.findlib: archive [13]
+ffi.load: libs/libarchive.so.13
+07/11/26-23:15:32 INFO  PineNote: flash_area_fraction=0.60 
+07/11/26-23:15:32 INFO  PineNote: pen axes 20966x15725 -> screen 1872x1404 (scale 0.0893/0.0893) 
+07/11/26-23:15:32 INFO  initializing for device PineNote 
+07/11/26-23:15:32 INFO  framebuffer resolution: {
+  h = 1404,
+  w = 1872
+} --[[table: 0x353827606d70]] 
+ffi.findlib: wrap-mupdf
+ffi.load: libs/libwrap-mupdf.so
+ffi.findlib: sqlite3 [0]
+ffi.load: libs/libsqlite3.so.0
+07/11/26-23:15:32 INFO  Performing one-time migration for 20200421 
+07/11/26-23:15:32 WARN  os.remove: /root/.config/koreader-optics/cache/fontlist/fontinfo.dat: No such file or directory 
+ffi.findlib: freetype [6]
+ffi.load: libs/libfreetype.so.6
+ffi.findlib: harfbuzz [0]
+ffi.load: libs/libharfbuzz.so.0
+ffi.findlib: zstd [1]
+ffi.load: libs/libzstd.so.1
+07/11/26-23:15:32 INFO  /root/.config/koreader-optics/cache/fontlist/fontinfo.dat fopen: No such file or directory -> initializing it 
+07/11/26-23:15:32 INFO  Performing one-time migration for 20210306 (1/2) 
+07/11/26-23:15:32 INFO  Performing one-time migration for 20210306 (2/2) 
+07/11/26-23:15:32 INFO  Performing one-time migration for 20210330 
+ffi.findlib: leptonica [6]
+ffi.load: libs/libleptonica.so.6
+ffi.findlib: k2pdfopt [2]
+ffi.load: libs/libk2pdfopt.so.2
+07/11/26-23:15:33 INFO  Performing one-time migration for 20210404 
+07/11/26-23:15:33 INFO  Performing one-time migration for 20210409 
+07/11/26-23:15:33 WARN  os.rename: /root/.config/koreader-optics/cache/fontinfo.dat: No such file or directory 
+07/11/26-23:15:33 INFO  Performing one-time migration for 20210412 
+07/11/26-23:15:33 WARN  os.rename: /root/.config/koreader-optics/cache/calibre-libraries.lua: No such file or directory 
+07/11/26-23:15:33 WARN  os.rename: /root/.config/koreader-optics/cache/calibre-books.dat: No such file or directory 
+07/11/26-23:15:33 INFO  Performing one-time migration for 20210414 
+07/11/26-23:15:33 WARN  os.remove: /root/.config/koreader-optics/cache/calibre/books.dat: No such file or directory 
+07/11/26-23:15:33 INFO  Performing one-time migration for 20210503 & 20210508 
+07/11/26-23:15:33 INFO  Performing one-time migration for 20210518 
+07/11/26-23:15:33 INFO  Performing one-time migration for 20210521 
+07/11/26-23:15:33 INFO  Performing one-time migration for 20210531 
+07/11/26-23:15:33 INFO  Performing one-time migration for 20210622 
+07/11/26-23:15:33 WARN  os.remove: /root/.config/koreader-optics/cache/fontlist/fontinfo.dat: No such file or directory 
+07/11/26-23:15:33 INFO  Performing one-time migration for 20210629 
+07/11/26-23:15:33 INFO  Performing one-time migration for 20210715 
+07/11/26-23:15:33 INFO  Performing one-time migration for 20210720 
+07/11/26-23:15:33 INFO  Performing one-time migration for 20210831 
+07/11/26-23:15:33 INFO  Performing one-time migration for 20210925 
+07/11/26-23:15:33 INFO  Performing one-time migration for 20220116 
+07/11/26-23:15:33 INFO  Performing one-time migration for 20220205 
+07/11/26-23:15:33 INFO  Performing one-time migration for 20220819 
+07/11/26-23:15:33 INFO  Performing one-time migration for 20220914 
+07/11/26-23:15:33 WARN  os.remove: /root/.config/koreader-optics/cache/fontlist/fontinfo.dat: No such file or directory 
+07/11/26-23:15:33 INFO  Performing one-time migration for 20220930 
+07/11/26-23:15:33 WARN  loadfile: cannot open /root/.config/koreader-optics/defaults.persistent.lua: No such file or directory 
+07/11/26-23:15:33 WARN  os.rename: /root/.config/koreader-optics/defaults.persistent.lua: No such file or directory 
+07/11/26-23:15:33 INFO  Performing one-time migration for 20221027 
+07/11/26-23:15:33 INFO  Performing one-time migration for 20230531 
+07/11/26-23:15:33 INFO  Performing one-time migration for 20230703 
+07/11/26-23:15:33 INFO  Performing one-time migration for 20230707 
+07/11/26-23:15:33 INFO  Performing one-time migration for 20230710 
+07/11/26-23:15:33 INFO  Performing one-time migration for 20230731 
+07/11/26-23:15:33 INFO  Performing one-time migration for 20230802 
+07/11/26-23:15:33 INFO  Performing one-time migration for 20230901 
+07/11/26-23:15:33 INFO  Performing one-time migration for 20231217 
+07/11/26-23:15:33 INFO  Performing one-time migration for 20240408 
+07/11/26-23:15:33 INFO  Performing one-time migration for 20240616 
+07/11/26-23:15:33 WARN  os.remove: /root/.config/koreader-optics/cache/fontlist/fontinfo.dat: No such file or directory 
+07/11/26-23:15:33 INFO  Performing one-time migration for 20240731 
+07/11/26-23:15:33 INFO  Performing one-time migration for 20240911 
+07/11/26-23:15:33 INFO  Performing one-time migration for 20240914 
+07/11/26-23:15:33 INFO  Performing one-time migration for 20240915 
+07/11/26-23:15:33 INFO  Performing one-time migration for 20240928 
+07/11/26-23:15:33 INFO  Performing one-time migration for 20241123 
+07/11/26-23:15:33 INFO  Performing one-time migration for 20241207 
+07/11/26-23:15:33 INFO  Performing one-time migration for 20241208 
+07/11/26-23:15:33 INFO  Performing one-time migration for 20241228 
+07/11/26-23:15:33 INFO  Performing one-time migration for 20250207 
+07/11/26-23:15:33 INFO  Performing one-time migration for 20250302 
+07/11/26-23:15:33 INFO  Performing one-time migration for 20250318 
+07/11/26-23:15:33 INFO  Performing one-time migration for 20250405 
+07/11/26-23:15:33 INFO  Performing one-time migration for 20250601 
+07/11/26-23:15:33 INFO  Performing one-time migration for 20250914 
+07/11/26-23:15:33 INFO  Performing one-time migration for 20250929 
+07/11/26-23:15:33 INFO  Performing one-time migration for 20260306 
+07/11/26-23:15:33 INFO  [pn-refresh] ui partial rect=237,639,1398,126 dither=nil t=1783811733.255520 
+07/11/26-23:15:33 INFO  opening file /root/optics-testcard.epub 
+07/11/26-23:15:33 INFO  Inhibiting user input 
+07/11/26-23:15:33 INFO  Looking for plugins in directory: plugins 
+07/11/26-23:15:33 INFO  Looking for plugins in directory: /root/.config/koreader-optics/plugins/ 
+CRE: failed reading index from cache file
+07/11/26-23:15:33 INFO  [pn-refresh] full global rect=0,0,1872,1404 dither=nil t=1783811733.812379 
+07/11/26-23:15:33 INFO  Restoring user input handling 
+07/11/26-23:15:34 INFO  [pn-refresh] partial partial rect=0,0,1872,1404 dither=nil t=1783811734.406577 
+07/11/26-23:15:38 INFO  [pn-refresh] partial partial rect=0,0,1872,1404 dither=nil t=1783811738.202250 
+07/11/26-23:15:41 INFO  [pn-refresh] partial partial rect=0,0,1872,1404 dither=nil t=1783811741.951101 
+07/11/26-23:15:45 INFO  [pn-refresh] partial partial rect=0,0,1872,1404 dither=nil t=1783811745.587724 
+07/11/26-23:15:49 INFO  [pn-refresh] full global rect=0,0,1872,1404 dither=nil t=1783811749.259541 
+07/11/26-23:15:52 INFO  [pn-refresh] partial partial rect=0,0,1872,1404 dither=nil t=1783811752.942570 
+07/11/26-23:15:56 INFO  [pn-refresh] partial partial rect=0,0,1872,1404 dither=nil t=1783811756.637484 
+07/11/26-23:16:00 INFO  [pn-refresh] partial partial rect=0,0,1872,1404 dither=nil t=1783811760.349062 
+07/11/26-23:16:04 INFO  [pn-refresh] partial partial rect=0,0,1872,1404 dither=nil t=1783811764.005383 
+07/11/26-23:16:07 INFO  [pn-refresh] partial partial rect=0,0,1872,1404 dither=nil t=1783811767.687630 
+07/11/26-23:16:11 INFO  [pn-refresh] full global rect=0,0,1872,1404 dither=nil t=1783811771.328404 
+07/11/26-23:16:15 INFO  [pn-refresh] partial partial rect=0,0,1872,1404 dither=nil t=1783811775.080296 
+07/11/26-23:16:18 INFO  [pn-refresh] partial partial rect=0,0,1872,1404 dither=nil t=1783811778.773734 
+07/11/26-23:16:22 INFO  [pn-refresh] partial partial rect=0,0,1872,1404 dither=nil t=1783811782.411309 
+07/11/26-23:16:26 INFO  [pn-refresh] partial partial rect=0,0,1872,1404 dither=nil t=1783811786.222918 
+07/11/26-23:16:30 INFO  [pn-refresh] partial partial rect=0,0,1872,1404 dither=nil t=1783811790.099260 
+07/11/26-23:16:33 INFO  [pn-refresh] full global rect=0,0,1872,1404 dither=nil t=1783811793.730731 
+07/11/26-23:16:37 INFO  [pn-refresh] partial partial rect=0,0,1872,1404 dither=nil t=1783811797.506758 
+07/11/26-23:16:41 INFO  [pn-refresh] partial partial rect=0,0,1872,1404 dither=nil t=1783811801.145741 
+07/11/26-23:16:44 INFO  [pn-refresh] partial partial rect=0,0,1872,1404 dither=nil t=1783811804.809566 
+07/11/26-23:16:48 INFO  [pn-refresh] partial partial rect=0,0,1872,1404 dither=nil t=1783811808.553372 
+07/11/26-23:16:52 INFO  [pn-refresh] partial partial rect=0,0,1872,1404 dither=nil t=1783811812.187599 
+07/11/26-23:16:55 INFO  [pn-refresh] full global rect=0,0,1872,1404 dither=nil t=1783811815.879523 
+07/11/26-23:16:59 INFO  [pn-refresh] partial partial rect=0,0,1872,1404 dither=nil t=1783811819.605851 
+07/11/26-23:17:03 INFO  [pn-refresh] partial partial rect=0,0,1872,1404 dither=nil t=1783811823.295162 
+07/11/26-23:17:07 INFO  [pn-refresh] partial partial rect=0,0,1872,1404 dither=nil t=1783811827.003752 
+07/11/26-23:17:10 INFO  [pn-refresh] partial partial rect=0,0,1872,1404 dither=nil t=1783811830.690695 
+07/11/26-23:17:14 INFO  [pn-refresh] partial partial rect=0,0,1872,1404 dither=nil t=1783811834.388007 
+07/11/26-23:17:18 INFO  [pn-refresh] full global rect=0,0,1872,1404 dither=nil t=1783811838.057311 
+07/11/26-23:17:21 INFO  [pn-refresh] partial partial rect=0,0,1872,1404 dither=nil t=1783811841.727004 
+07/11/26-23:17:25 INFO  [pn-refresh] partial partial rect=0,0,1872,1404 dither=nil t=1783811845.378206 
+07/11/26-23:17:29 INFO  [pn-refresh] partial partial rect=0,0,1872,1404 dither=nil t=1783811849.137599 
+07/11/26-23:17:32 INFO  [pn-refresh] partial partial rect=0,0,1872,1404 dither=nil t=1783811852.780637 
+07/11/26-23:17:36 INFO  [pn-refresh] partial partial rect=0,0,1872,1404 dither=nil t=1783811856.467485 
+07/11/26-23:17:40 INFO  [pn-refresh] full global rect=0,0,1872,1404 dither=nil t=1783811860.144964 
+07/11/26-23:17:43 INFO  [pn-refresh] partial partial rect=0,0,1872,1404 dither=nil t=1783811863.826411 
+07/11/26-23:17:47 INFO  [pn-refresh] partial partial rect=0,0,1872,1404 dither=nil t=1783811867.546236 
+07/11/26-23:17:51 INFO  [pn-refresh] partial partial rect=0,0,1872,1404 dither=nil t=1783811871.299332 
+07/11/26-23:17:55 INFO  [pn-refresh] partial partial rect=0,0,1872,1404 dither=nil t=1783811875.218484 
+07/11/26-23:17:58 INFO  [pn-refresh] partial partial rect=0,0,1872,1404 dither=nil t=1783811878.886508 
+07/11/26-23:18:02 INFO  [pn-refresh] full global rect=0,0,1872,1404 dither=nil t=1783811882.580548 
+07/11/26-23:18:06 INFO  [pn-refresh] partial partial rect=0,0,1872,1404 dither=nil t=1783811886.296169 
+07/11/26-23:18:09 INFO  [pn-refresh] partial partial rect=0,0,1872,1404 dither=nil t=1783811889.965302 
+07/11/26-23:18:13 INFO  [pn-refresh] partial partial rect=0,0,1872,1404 dither=nil t=1783811893.622604 
+07/11/26-23:18:17 INFO  [pn-refresh] partial partial rect=0,0,1872,1404 dither=nil t=1783811897.340822 
+07/11/26-23:18:21 INFO  [pn-refresh] partial partial rect=0,0,1872,1404 dither=nil t=1783811901.041744 

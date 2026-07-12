@@ -1,0 +1,74 @@
+{
+  "schema": "wilkbook-optics-report",
+  "version": 1,
+  "bundle_path": "/home/wkelly/src/forgejo/wkelly/wilkbook/pinenote/tools/optics/build/bundles/neverx3.r00-gl16-never-a",
+  "device": {
+    "model": "Pine64 PineNote v1.2",
+    "revision": null,
+    "os": "Guix System",
+    "kernel": "7.0.11",
+    "notes": "",
+    "wbf_sha256": null
+  },
+  "illuminant": {
+    "source": "frontlight",
+    "cool_level": 255.0,
+    "warm_level": 255.0,
+    "ambient": "dark-box"
+  },
+  "panel_temp_c": 24.0,
+  "ebc_params": {
+    "ebc": {
+      "refresh_waveform": 6
+    },
+    "ko": {
+      "full_refresh_count": "never"
+    }
+  },
+  "waveform_decode": null,
+  "run": {
+    "run_id": "r0",
+    "label": "gl16-never-a",
+    "params": {
+      "ebc": {
+        "refresh_waveform": "6"
+      },
+      "ko": {
+        "full_refresh_count": 0
+      }
+    },
+    "events_source": "measured",
+    "panel_temp_c_start": 24.0,
+    "panel_temp_c_end": 24.0,
+    "trace": "trace.r0.log",
+    "selection": "single"
+  },
+  "capture": {
+    "fps": 30.0,
+    "n_frames": 5717,
+    "sync_end_frame": 0
+  },
+  "transitions": [],
+  "summary": {
+    "run_id": "r0",
+    "label": "gl16-never-a",
+    "params": {
+      "ebc": {
+        "refresh_waveform": "6"
+      },
+      "ko": {
+        "full_refresh_count": 0
+      }
+    },
+    "n_transitions": 0,
+    "n_with_defects": 0,
+    "n_double_flash": 0,
+    "worst_flash_depth": 0.0,
+    "worst_ghost_rms": 0.0,
+    "severity_counts": {
+      "flash": {},
+      "ghost": {},
+      "settle": {}
+    }
+  }
+}

@@ -1,0 +1,428 @@
+{
+  "schema": "wilkbook-optics-bundle",
+  "version": 2,
+  "created_utc": "2026-07-12T00:15:26Z",
+  "device": {
+    "model": "Pine64 PineNote v1.2",
+    "revision": null,
+    "os": "Guix System",
+    "kernel": "7.0.11",
+    "notes": "",
+    "wbf_sha256": null
+  },
+  "capture": {
+    "file": "capture.mkv",
+    "container": "mkv",
+    "fps": 30.0,
+    "sha256": "394b7d55f686c18673d2ab5bd57c9bbdd677f24cef5ad61d818d7cf0f27b3b8d"
+  },
+  "camera": {
+    "model": null,
+    "fps_mode": null,
+    "controls": {
+      "brightness": 128,
+      "contrast": 128,
+      "saturation": 128,
+      "white_balance_automatic": 0,
+      "gain": 32,
+      "power_line_frequency": 2,
+      "white_balance_temperature": 4150,
+      "sharpness": 128,
+      "backlight_compensation": 1,
+      "auto_exposure": 1,
+      "exposure_time_absolute": 312,
+      "exposure_dynamic_framerate": 0,
+      "pan_absolute": 0,
+      "tilt_absolute": 0,
+      "focus_absolute": 10,
+      "focus_automatic_continuous": 0,
+      "zoom_absolute": 100
+    },
+    "exposure_locked": true
+  },
+  "reader": {
+    "full_refresh_count": 0,
+    "flash_area_fraction": 0.6
+  },
+  "testcard": {
+    "card_id": "wilkbook-optics-testcard",
+    "card_version": 1,
+    "manifest_file": "manifest.json",
+    "manifest_sha256": "fe18625465e61e9f24e3d953dfde683b2424a2823e5fc2e26d352dd417f1cd43"
+  },
+  "illuminant": {
+    "source": "frontlight",
+    "cool_level": 255.0,
+    "warm_level": 255.0,
+    "ambient": "dark-box"
+  },
+  "panel_temp_c": 24.0,
+  "ebc_params": {
+    "ebc": {
+      "refresh_waveform": 6
+    },
+    "ko": {
+      "full_refresh_count": "never"
+    }
+  },
+  "runs": [
+    {
+      "run_id": "r0",
+      "label": "gl16-never-a",
+      "params": {
+        "ebc": {
+          "refresh_waveform": "6"
+        },
+        "ko": {
+          "full_refresh_count": 0
+        }
+      },
+      "frontlight_level": 255,
+      "panel_temp_c": 24.0,
+      "panel_temp_c_start": 24.0,
+      "panel_temp_c_end": 24.0,
+      "events_source": "measured",
+      "trace": "trace.r0.log",
+      "events": [
+        {
+          "t": 0.0,
+          "event": "clean",
+          "n": 3
+        },
+        {
+          "t": 0.0,
+          "event": "sync",
+          "detail": "opening black/white flashes (clock-zero)"
+        },
+        {
+          "t": 0.0,
+          "event": "param",
+          "params": {
+            "ebc": {
+              "refresh_waveform": 6
+            },
+            "ko": {
+              "full_refresh_count": "never"
+            }
+          }
+        },
+        {
+          "t": 4.09,
+          "event": "page",
+          "page_index": 4,
+          "pid": 4,
+          "kind": "blank"
+        },
+        {
+          "t": 8.0583,
+          "event": "page",
+          "page_index": 5,
+          "pid": 5,
+          "kind": "novel"
+        },
+        {
+          "t": 11.7454,
+          "event": "page",
+          "page_index": 6,
+          "pid": 6,
+          "kind": "novel"
+        },
+        {
+          "t": 15.4278,
+          "event": "page",
+          "page_index": 7,
+          "pid": 7,
+          "kind": "graphic"
+        },
+        {
+          "t": 19.1407,
+          "event": "page",
+          "page_index": 8,
+          "pid": 8,
+          "kind": "graphic"
+        },
+        {
+          "t": 22.8264,
+          "event": "page",
+          "page_index": 9,
+          "pid": 9,
+          "kind": "textbook"
+        },
+        {
+          "t": 26.5081,
+          "event": "page",
+          "page_index": 10,
+          "pid": 10,
+          "kind": "novel"
+        },
+        {
+          "t": 30.2061,
+          "event": "page",
+          "page_index": 11,
+          "pid": 11,
+          "kind": "blank"
+        },
+        {
+          "t": 33.8587,
+          "event": "page",
+          "page_index": 12,
+          "pid": 12,
+          "kind": "index"
+        },
+        {
+          "t": 38.1604,
+          "event": "page",
+          "page_index": 13,
+          "pid": 13,
+          "kind": "index"
+        },
+        {
+          "t": 41.8771,
+          "event": "page",
+          "page_index": 14,
+          "pid": 14,
+          "kind": "ux"
+        },
+        {
+          "t": 45.5218,
+          "event": "page",
+          "page_index": 15,
+          "pid": 15,
+          "kind": "novel"
+        },
+        {
+          "t": 49.2364,
+          "event": "page",
+          "page_index": 16,
+          "pid": 16,
+          "kind": "graphic"
+        },
+        {
+          "t": 52.9287,
+          "event": "page",
+          "page_index": 17,
+          "pid": 17,
+          "kind": "novel"
+        },
+        {
+          "t": 56.6122,
+          "event": "page",
+          "page_index": 18,
+          "pid": 18,
+          "kind": "blank"
+        },
+        {
+          "t": 60.2369,
+          "event": "page",
+          "page_index": 19,
+          "pid": 19,
+          "kind": "blank"
+        },
+        {
+          "t": 64.0015,
+          "event": "page",
+          "page_index": 20,
+          "pid": 20,
+          "kind": "novel"
+        },
+        {
+          "t": 67.6827,
+          "event": "page",
+          "page_index": 21,
+          "pid": 21,
+          "kind": "novel"
+        },
+        {
+          "t": 71.3087,
+          "event": "page",
+          "page_index": 22,
+          "pid": 22,
+          "kind": "graphic"
+        },
+        {
+          "t": 75.0443,
+          "event": "page",
+          "page_index": 23,
+          "pid": 23,
+          "kind": "graphic"
+        },
+        {
+          "t": 78.8564,
+          "event": "page",
+          "page_index": 24,
+          "pid": 24,
+          "kind": "textbook"
+        },
+        {
+          "t": 82.7294,
+          "event": "page",
+          "page_index": 25,
+          "pid": 25,
+          "kind": "novel"
+        },
+        {
+          "t": 86.3856,
+          "event": "page",
+          "page_index": 26,
+          "pid": 26,
+          "kind": "blank"
+        },
+        {
+          "t": 90.1056,
+          "event": "page",
+          "page_index": 27,
+          "pid": 27,
+          "kind": "index"
+        },
+        {
+          "t": 93.8154,
+          "event": "page",
+          "page_index": 28,
+          "pid": 28,
+          "kind": "index"
+        },
+        {
+          "t": 97.4206,
+          "event": "page",
+          "page_index": 29,
+          "pid": 29,
+          "kind": "ux"
+        },
+        {
+          "t": 101.1587,
+          "event": "page",
+          "page_index": 30,
+          "pid": 30,
+          "kind": "novel"
+        },
+        {
+          "t": 104.8123,
+          "event": "page",
+          "page_index": 31,
+          "pid": 31,
+          "kind": "graphic"
+        },
+        {
+          "t": 108.5405,
+          "event": "page",
+          "page_index": 32,
+          "pid": 32,
+          "kind": "novel"
+        },
+        {
+          "t": 112.2331,
+          "event": "page",
+          "page_index": 33,
+          "pid": 33,
+          "kind": "blank"
+        },
+        {
+          "t": 115.9018,
+          "event": "page",
+          "page_index": 34,
+          "pid": 34,
+          "kind": "blank"
+        },
+        {
+          "t": 119.5175,
+          "event": "page",
+          "page_index": 35,
+          "pid": 35,
+          "kind": "novel"
+        },
+        {
+          "t": 123.2243,
+          "event": "page",
+          "page_index": 36,
+          "pid": 36,
+          "kind": "novel"
+        },
+        {
+          "t": 127.0705,
+          "event": "page",
+          "page_index": 37,
+          "pid": 37,
+          "kind": "graphic"
+        },
+        {
+          "t": 130.9694,
+          "event": "page",
+          "page_index": 38,
+          "pid": 38,
+          "kind": "graphic"
+        },
+        {
+          "t": 134.6363,
+          "event": "page",
+          "page_index": 39,
+          "pid": 39,
+          "kind": "textbook"
+        },
+        {
+          "t": 138.2797,
+          "event": "page",
+          "page_index": 40,
+          "pid": 40,
+          "kind": "novel"
+        },
+        {
+          "t": 142.0316,
+          "event": "page",
+          "page_index": 41,
+          "pid": 41,
+          "kind": "blank"
+        },
+        {
+          "t": 145.7148,
+          "event": "page",
+          "page_index": 42,
+          "pid": 42,
+          "kind": "index"
+        },
+        {
+          "t": 149.3593,
+          "event": "page",
+          "page_index": 43,
+          "pid": 43,
+          "kind": "index"
+        },
+        {
+          "t": 153.0586,
+          "event": "page",
+          "page_index": 44,
+          "pid": 44,
+          "kind": "ux"
+        },
+        {
+          "t": 156.8189,
+          "event": "page",
+          "page_index": 45,
+          "pid": 45,
+          "kind": "novel"
+        },
+        {
+          "t": 160.7401,
+          "event": "page",
+          "page_index": 46,
+          "pid": 46,
+          "kind": "graphic"
+        },
+        {
+          "t": 164.456,
+          "event": "page",
+          "page_index": 47,
+          "pid": 47,
+          "kind": "novel"
+        },
+        {
+          "t": 168.1237,
+          "event": "page",
+          "page_index": 48,
+          "pid": 48,
+          "kind": "blank"
+        }
+      ]
+    }
+  ],
+  "waveform_decode": null
+}

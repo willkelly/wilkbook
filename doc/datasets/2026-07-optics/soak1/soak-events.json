@@ -1,0 +1,26 @@
+[
+ {
+  "t": 0.0,
+  "event": "phaseA-start (30 flips, no washes)"
+ },
+ {
+  "t": 101.04,
+  "event": "intervention-GL16-global"
+ },
+ {
+  "t": 107.0,
+  "event": "phaseB-start (10 flips)"
+ },
+ {
+  "t": 140.68,
+  "event": "intervention-GC16-global"
+ },
+ {
+  "t": 148.02,
+  "event": "phaseC-start (10 flips)"
+ },
+ {
+  "t": 181.48,
+  "event": "end"
+ }
+]
