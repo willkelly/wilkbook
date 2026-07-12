@@ -326,6 +326,26 @@ The corrupting regime needs RARE firings with long washless exposure
 (exactly armC's shape); repro v2 targets it (graphic pair, threshold=20,
 60 toggles, 30 s washless inspect window).
 
+**Confirmation run 2 result (2026-07-12, repro v2,
+`build/bundles/corrupter-repro`):** 60 graphic-pair toggles @2.5 s under
+`threshold=20` produced exactly the rare-firing regime (6 auto-globals,
+one per ~10 toggles, camera-confirmed; the 30 s inspect window stayed
+washless) — kernel log SILENT again, and STILL no corruption (dark px
+0.237 -> 0.240, whites 0.827 -> 0.830). Interpretation: truncation is
+not deterministic per threshold firing. With a 2.5 s dwell the damage
+burst has fully drained (all DSP_ENDs received) before the flag is
+consumed, so the zero-gap window is empty; the straggler needs the
+global to launch while frames are STILL IN FLIGHT — continuous damage
+(rapid successive turns / pen strokes), or an interrupt-timing accident,
+at the moment the threshold trips. That matches the campaign's
+stochasticity (3/4 diverse runs corrupted; single unexplained globals at
+random phase). Consequence for confirmation: an optical A/B needs a
+reliable repro we don't yet have; the DECISIVE experiment is now point
+(3) — the one-printk instrumented kernel (`completion_done()` check at
+the global's reinit) which detects the straggler credit directly,
+corruption visible or not. Faster-dwell repro (0.5-0.8 s toggles into
+the firing) is the remaining cheap lever before that.
+
 ### Upstream notification draft (m-weigand / PNDeb / hrdl / ayakael)
 
 > Subject: rockchip_ebc: auto_refresh threshold path can truncate its own
