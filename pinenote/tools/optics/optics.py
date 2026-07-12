@@ -82,6 +82,8 @@ def _severity_low(value: float, none_above: float, severe_below: float) -> str:
 class Transition:
     """One page-change event to score within a clip."""
     t0: int                       # frame index at which the refresh was triggered
+                                  # (segment-relative; ingest slices segments at
+                                  # the onset, so it passes t0=0)
     before: np.ndarray            # intended page BEFORE, reflectance [H, W]
     after: np.ndarray             # intended page AFTER, reflectance [H, W]
     white_mask: np.ndarray = None       # pixels that should be white in `after`
@@ -98,6 +100,12 @@ class Transition:
     window_s: float = 1.5               # how long after t0 to analyze; ingest sets
                                         # min(2.5 s, segment gap - 2 frames) so the
                                         # window never reaches the next page's wash
+    onset_frame: int = None             # this transition's wash-onset frame in the
+                                        # FULL decoded capture (clip-global index;
+                                        # ingest sets it). Lets reports place the
+                                        # transition on the capture clock, e.g. for
+                                        # the [pn-refresh] trace join. None when the
+                                        # caller scores a bare clip.
 
     def __post_init__(self):
         if self.white_mask is None:
@@ -214,14 +222,32 @@ def settled_state(seg: np.ndarray, roi_mask: np.ndarray,
     return seg[a:b].mean(axis=0)
 
 
+def _finite_window_means(clip, t0, fps, white_mask, window_s):
+    """Per-frame mean reflectance of `white_mask` over the analysis window,
+    restricted to photometrically VALID frames. Real segments carry whole-NaN
+    frames -- ingest leaves a frame NaN when the camera caught it mid-wash with
+    no readable fiducials -- and a single NaN frame inside the window used to
+    poison the flash depth into NaN (reported as 'mild(nan)': NaN fails both
+    severity comparisons). Invalid frames carry no photometric information, so
+    they are excluded from the flash metrics; durations/energies are therefore
+    lower bounds when the camera lost frames mid-dip."""
+    a, b = _window_frames(clip, t0, fps, window_s)
+    means = _region_means(clip[a:b], white_mask)
+    return means[np.isfinite(means)]
+
+
 def detect_flash(clip, t0, fps, white_mask, settled_white, window_s):
     """Black flash: should-be-white pixels driven dark during the wash.
 
     Returns depth (settled_white - min mean reflectance of white region), the
-    time-integrated energy of the dip, its duration, and severity.
+    time-integrated energy of the dip, its duration, and severity. Depth,
+    detection (severity), and the flash count all read the SAME mask and the
+    same valid frames -- they cannot disagree. Every value returned is finite.
     """
-    a, b = _window_frames(clip, t0, fps, window_s)
-    means = _region_means(clip[a:b], white_mask)          # [win]
+    means = _finite_window_means(clip, t0, fps, white_mask, window_s)
+    if means.size == 0 or not np.isfinite(settled_white):
+        return {"depth": 0.0, "energy": 0.0, "duration_s": 0.0,
+                "severity": "none"}
     dip = np.maximum(0.0, settled_white - means)          # how far below white
     depth = float(dip.max()) if dip.size else 0.0
     energy = float(dip.sum() / fps)                        # reflectance-seconds
@@ -236,9 +262,14 @@ def detect_flash(clip, t0, fps, white_mask, settled_white, window_s):
 
 def count_flashes(clip, t0, fps, white_mask, settled_white, window_s):
     """Count distinct dip events (a page turn should wash once; the
-    ioctl-races-deferred-io two-pass shows up as two)."""
-    a, b = _window_frames(clip, t0, fps, window_s)
-    means = _region_means(clip[a:b], white_mask)
+    ioctl-races-deferred-io two-pass shows up as two). Same mask + same
+    valid-frame filtering as detect_flash. Dropping the invalid frames also
+    stops a single dip interrupted by unreadable mid-wash frames from being
+    counted once per fragment (NaN comparisons read as 'above', so the old
+    signal had a false rising edge after every NaN gap)."""
+    means = _finite_window_means(clip, t0, fps, white_mask, window_s)
+    if means.size == 0 or not np.isfinite(settled_white):
+        return 0
     below = (settled_white - means) > FLASH_DEPTH_SEVERE * 0.5
     # count rising edges of the "below" signal
     count = int(np.count_nonzero(below[1:] & ~below[:-1]))
@@ -259,9 +290,13 @@ def detect_ghost(settled_frame, after, before, clean_mask):
     if m.sum() < 4:
         return {"rms": 0.0, "corr": 0.0, "severity": "none"}
     residual = (settled_frame - after)[m]
+    prior = before[m]
+    ok = np.isfinite(residual)                            # judge only measured pixels
+    if ok.sum() < 4:
+        return {"rms": 0.0, "corr": 0.0, "severity": "none"}
+    residual, prior = residual[ok], prior[ok]
     residual = residual - residual.mean()                 # ignore uniform offset
     rms = float(np.sqrt(np.mean(residual ** 2)))
-    prior = before[m]
     prior = prior - prior.mean()
     denom = np.sqrt(np.sum(residual ** 2) * np.sum(prior ** 2))
     corr = float(np.sum(residual * prior) / denom) if denom > 1e-9 else 0.0
@@ -312,6 +347,9 @@ def detect_gray_corruption(settled_frame, after, gray_mask):
     if m is None or int(m.sum()) < 4:
         return {"crush_frac": 0.0, "severity": "none"}
     vals = settled_frame[m]
+    vals = vals[np.isfinite(vals)]                        # measured pixels only
+    if vals.size < 4:
+        return {"crush_frac": 0.0, "severity": "none"}
     crushed = (vals < GRAY_EXTREME_LO) | (vals > GRAY_EXTREME_HI)
     frac = float(np.count_nonzero(crushed) / crushed.size)
     return {"crush_frac": frac,
@@ -327,8 +365,10 @@ def detect_contrast(settled_frame, white_patch_mask, black_patch_mask):
         return {"contrast": 1.0, "white": 1.0, "black": 0.0, "severity": "none"}
     if white_patch_mask.sum() < 1 or black_patch_mask.sum() < 1:
         return {"contrast": 1.0, "white": 1.0, "black": 0.0, "severity": "none"}
-    white_r = float(settled_frame[white_patch_mask].mean())
-    black_r = float(settled_frame[black_patch_mask].mean())
+    white_r = float(np.nanmean(settled_frame[white_patch_mask]))
+    black_r = float(np.nanmean(settled_frame[black_patch_mask]))
+    if not (np.isfinite(white_r) and np.isfinite(black_r)):
+        return {"contrast": 1.0, "white": 1.0, "black": 0.0, "severity": "none"}
     contrast = white_r - black_r
     return {"contrast": contrast, "white": white_r, "black": black_r,
             "severity": _severity_low(contrast, CONTRAST_NONE_ABOVE,
@@ -341,7 +381,11 @@ def detect_blotch(settled_frame, bg_mask):
     mottled / uneven clearing raises it. HIGHER is worse."""
     if bg_mask is None or int(bg_mask.sum()) < 4:
         return {"std": 0.0, "severity": "none"}
-    std = float(settled_frame[bg_mask].std())
+    vals = settled_frame[bg_mask]
+    vals = vals[np.isfinite(vals)]                        # measured pixels only
+    if vals.size < 4:
+        return {"std": 0.0, "severity": "none"}
+    std = float(vals.std())
     return {"std": std, "severity": _severity(std, BLOTCH_STD_NONE, BLOTCH_STD_SEVERE)}
 
 
@@ -361,10 +405,23 @@ def classify_transition(clip: np.ndarray, fps: float, tr: Transition) -> DefectR
         content = np.ones_like(tr.after, dtype=bool)
 
     seg = clip[tr.t0:]
+    # Whole-frame validity: ingest leaves a frame NaN when the camera caught
+    # it mid-wash with no readable fiducials, so segments legitimately carry
+    # all-NaN frames. Every settled-state consumer must read only valid ones.
+    finite = np.isfinite(seg.reshape(seg.shape[0], -1)).all(axis=1)
     if seg.shape[0] >= 2:
         change = segment_change(seg, content)             # computed ONCE
         qa, qb = trailing_quiet_run(change < SETTLE_EPS)
-        settled_frame = seg[qa:qb].mean(axis=0)
+        run_finite = finite[qa:qb]
+        if run_finite.all():
+            settled_frame = seg[qa:qb].mean(axis=0)
+        elif run_finite.any():                            # skip the NaN frames
+            settled_frame = seg[qa:qb][run_finite].mean(axis=0)
+        elif finite.any():                                # last valid frame at all
+            settled_frame = seg[np.nonzero(finite)[0][-1]]
+        else:
+            settled_frame = seg[-1]
+            rep.notes.append("segment has no photometrically valid frames")
     else:
         change = None
         settled_frame = seg[-1]
@@ -374,15 +431,27 @@ def classify_transition(clip: np.ndarray, fps: float, tr: Transition) -> DefectR
     # region fabricates flash depth (~0.10 on clean partials, measured on
     # the 2026-07-11 rig noise pilot). Ghost/clean semantics keep the
     # after-white mask -- residue is judged where the AFTER page is white.
+    #
+    # A transition with NO stays-white area (the before page has no white
+    # where the after page is white -- e.g. arriving from a full-black page)
+    # has no reference region for the flash metric AT ALL: every after-white
+    # pixel is legitimately transiting dark states while clearing, so any
+    # dip read there is fabricated. Such a transition is NOT classifiable as
+    # flash -- detection and depth stay consistent by both not running (the
+    # old fallback to the after-white mask made exactly the fabrication the
+    # stays-white change was introduced to kill).
     stays_white = tr.white_mask & (tr.before >= 0.85)
-    if not stays_white.any():
-        stays_white = tr.white_mask
-    settled_white = float(settled_frame[stays_white].mean()) if stays_white.sum() else 1.0
-
-    f = detect_flash(clip, tr.t0, fps, stays_white, settled_white, tr.window_s)
-    rep.flash_depth, rep.flash_energy = f["depth"], f["energy"]
-    rep.flash_duration_s, rep.flash_severity = f["duration_s"], f["severity"]
-    rep.flash_count = count_flashes(clip, tr.t0, fps, stays_white, settled_white, tr.window_s)
+    if stays_white.any():
+        sw_vals = settled_frame[stays_white]
+        sw_vals = sw_vals[np.isfinite(sw_vals)]
+        settled_white = float(sw_vals.mean()) if sw_vals.size else float("nan")
+        f = detect_flash(clip, tr.t0, fps, stays_white, settled_white, tr.window_s)
+        rep.flash_depth, rep.flash_energy = f["depth"], f["energy"]
+        rep.flash_duration_s, rep.flash_severity = f["duration_s"], f["severity"]
+        rep.flash_count = count_flashes(clip, tr.t0, fps, stays_white,
+                                        settled_white, tr.window_s)
+    else:
+        rep.notes.append("flash: no stays-white area; not classifiable")
 
     g = detect_ghost(settled_frame, tr.after, tr.before, tr.clean_mask)
     rep.ghost_rms, rep.ghost_corr, rep.ghost_severity = g["rms"], g["corr"], g["severity"]

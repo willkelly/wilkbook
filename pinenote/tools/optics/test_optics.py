@@ -117,6 +117,76 @@ def main():
           f"std={rep.blotch_std:.4f}")
     check("clean background has no defects", rep.defects == [], f"defects={rep.defects}")
 
+    print("case: flash metric semantics -- table-driven mask + NaN guard (defect 2)")
+    # Reports had shown `flash mild(nan)`: a NaN depth graded 'mild' because
+    # NaN fails BOTH severity comparisons. Detection, depth, and count must
+    # read the same stays-white pixels over the same valid frames, and a
+    # transition with no stays-white area is not classifiable as flash at all.
+    import math
+    dark = np.full((synth.H, synth.W), 0.05, np.float32)   # a full-dark page
+    flash_table = [
+        # (name, before, after, sim kwargs, want severity, want unclassifiable)
+        ("clean GL16 partial", text, blank, dict(wash="gl16"), "none", False),
+        ("true GC16 flash w/ stayed-white", text, blank,
+         dict(wash="gc16", flash_depth=0.6), "severe", False),
+        ("flash activity, EMPTY stays-white", dark, blank,
+         dict(wash="gc16", flash_depth=0.6), "none", True),
+    ]
+    for name, bef, aft, kw, want_sev, want_note in flash_table:
+        clip, t0 = synth.simulate_transition(bef, aft, fps=FPS, **kw)
+        rep = optics.classify_transition(
+            clip, FPS, optics.Transition(t0=t0, before=bef, after=aft))
+        check(f"{name}: severity '{want_sev}'", rep.flash_severity == want_sev,
+              f"sev={rep.flash_severity} depth={rep.flash_depth}")
+        check(f"{name}: all flash numbers finite (never NaN)",
+              all(math.isfinite(v) for v in (rep.flash_depth, rep.flash_energy,
+                                             rep.flash_duration_s)),
+              f"depth={rep.flash_depth} energy={rep.flash_energy}")
+        noted = any("not classifiable" in n for n in rep.notes)
+        check(f"{name}: {'flagged not-classifiable' if want_note else 'classifiable'}",
+              noted == want_note, f"notes={rep.notes}")
+        if want_note:
+            check(f"{name}: unclassifiable -> zero depth, zero count, no defect",
+                  rep.flash_depth == 0.0 and rep.flash_count == 0
+                  and not any(d.startswith("flash") for d in rep.defects),
+                  f"depth={rep.flash_depth} count={rep.flash_count}")
+
+    print("case: whole-NaN frames inside the wash (unreadable mid-wash) -- the former NaN path")
+    # ingest leaves a frame NaN when the camera caught it mid-wash with no
+    # readable fiducials; one such frame inside the window used to poison the
+    # depth into NaN AND fabricate extra flash counts (NaN gaps read as false
+    # rising edges). Valid-frame filtering must keep depth ~= the pristine
+    # clip's and count the dip ONCE.
+    clip, t0 = synth.simulate_transition(text, blank, fps=FPS, wash="gc16",
+                                         flash_depth=0.6)
+    tr_ref = optics.Transition(t0=t0, before=text, after=blank)
+    ref = optics.classify_transition(clip, FPS, tr_ref)
+    nan_clip = clip.copy()
+    nan_clip[t0 + 1] = np.nan                       # two lost frames in the dip
+    nan_clip[t0 + 3] = np.nan
+    rep = optics.classify_transition(
+        nan_clip, FPS, optics.Transition(t0=t0, before=text, after=blank))
+    check("NaN-straddled flash still detected severe",
+          rep.flash_severity == "severe", f"sev={rep.flash_severity}")
+    check("depth finite and close to the pristine clip's",
+          math.isfinite(rep.flash_depth)
+          and abs(rep.flash_depth - ref.flash_depth) < 0.1,
+          f"depth={rep.flash_depth:.3f} vs ref {ref.flash_depth:.3f}")
+    check("one dip counted ONCE across the NaN gaps (no fabricated x3)",
+          rep.flash_count == 1, f"count={rep.flash_count}")
+    # NaN frame at the segment end: the settled state must come from the last
+    # VALID frames, so every downstream metric stays finite
+    tail_clip = clip.copy()
+    tail_clip[-1] = np.nan
+    rep = optics.classify_transition(
+        tail_clip, FPS, optics.Transition(t0=t0, before=text, after=blank))
+    check("NaN segment tail: every reported number finite",
+          all(math.isfinite(float(v)) for v in (
+              rep.flash_depth, rep.flash_energy, rep.flash_duration_s,
+              rep.ghost_rms, rep.ghost_corr, rep.settle_s,
+              rep.gray_crush_frac, rep.contrast, rep.blotch_std)),
+          f"depth={rep.flash_depth} ghost={rep.ghost_rms}")
+
     print("case: settled state is a temporal AVERAGE of the trailing quiet frames")
     # Camera-like per-pixel noise: a single settled frame would carry the full
     # noise sigma into blotch_std; averaging the trailing quiet run divides it
