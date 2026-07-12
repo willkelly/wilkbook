@@ -24,6 +24,31 @@ so the armC-era dmesg is gone — quirk F's timeout-correlation check is
 UNAVAILABLE, not negative; the instrumented auto=1 repro remains the
 confirmation path.
 
+**2026-07-12 (night): os2 PID-1 wedge — root-caused post-mortem from os1;
+NOT the eMMC, NOT the display stack.** After ~9 h of uptime the running
+A.2.6 os2 became unreachable: ping fine, SSH accepted TCP but no banner;
+one patient connection authenticated ("Accepted publickey" in the os2 log)
+then hung at shell spawn; finally even TCP timed out; the on-screen reader
+wedged. Post-mortem via the os1 oracle (p6 mounted ro): the disk was HEALTHY
+the whole time (syslog MARK lines flushed to eMMC until the power-cycle;
+e2fsck: p6 clean). Root cause chain: **`term-ttyS2` (the flavor's UART
+auto-login getty) exits 1 ten seconds after every spawn — 3,201 respawn
+cycles since boot** — and this image's sshd is inetd-style THROUGH shepherd
+(PID 1 accepts every connection and spawns a transient sshd service), so a
+degrading PID 1 starves SSH accepts until the backlog fills. The 10 s cycle
+is slow enough that shepherd's rapid-respawn breaker never trips. ttyS2
+exists and works on os1's 6.12 (console + getty), so the exit-1 is specific
+to the 7.0.11 reader image — offline-diagnosable. FIX QUEUED for A.2.7:
+repair or remove the ttyS2 getty (and consider a respawn backoff). Also
+noted in the log: `setfont` popen of the store's own gzip failed with "Exec
+format error" (once, early) — unexplained, filed. Host-side amplifiers the
+same night, now in memory notes: a wedged gpg-agent (pinentry) made every
+host ssh hang/fail during diagnosis. The interrupted /data write left p7's
+fs dirty; its journal replayed clean on the next mount (full offline fsck
+deferred — p7 is os1's live /home). Books: `/data/books/` created,
+`mastering-emacs-v5.epub` copied via os1, SHA-verified; the reader-flavor
+commit `4a3761e` mounts /data and seeds KOReader's home_dir from A.2.7 on.
+
 **2026-07-12 (late): five instrumented corrupter repros — timeout variant
 dead, corruption not reproducible on demand, optics limits mapped.** Five
 `auto_refresh=1` runs with a live kernel-log watch (same-pair x3 across
