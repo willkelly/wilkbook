@@ -247,6 +247,11 @@ with linear reading).
 
 ## First measured results (2026-07-11, the calibrated boxed rig)
 
+The full dataset behind this section — bundle catalog, per-claim evidence
+audit, and the committed session/trace/report files — is documented for
+third-party review in `doc/optics-dataset-2026-07.md`
+(+ `doc/datasets/2026-07-optics/`).
+
 The first four-config sweep (GL16/GC16 fulls x full_refresh_count 6/never/1;
 bundles + reports under `pinenote/tools/optics/build/bundles/sweep1.*`):
 

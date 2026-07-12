@@ -52,6 +52,11 @@ Grounded in the waveform decode in `doc/refresh-policy.md`:
 
 ## Status — what is built now
 
+The first real dataset (2026-07-11, 20 captures off the calibrated boxed
+rig) is cataloged for third-party review in `doc/optics-dataset-2026-07.md`,
+with the derived session/trace/report files committed under
+`doc/datasets/2026-07-optics/`.
+
 The **entire offline pipeline round-trips**, all green (`make optics-check`):
 test card → synthetic camera → ingest → panel reflectance → defect report,
 with no hardware and no camera.
