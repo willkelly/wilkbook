@@ -5,6 +5,7 @@
   #:use-module (gnu services ssh)
   #:use-module ((gnu packages admin) #:select (wpa-supplicant))
   #:use-module (gnu system)
+  #:use-module (gnu system file-systems)
   #:use-module (guix gexp)
   #:use-module (pinenote packages fonts)
   #:use-module (pinenote packages koreader)
@@ -52,6 +53,20 @@ reader ALL=(ALL) NOPASSWD: ALL
                                 #~(when (file-exists? "/var/empty")
                                     (chown "/var/empty" 0 0)
                                     (chmod "/var/empty" #o555)))
+                ;; The user's library lives at /data/books on the persistent
+                ;; data partition (mounted below), so books survive os2
+                ;; reflashes.  /root does NOT survive a reflash, so seed the
+                ;; dogfooding KOReader profile's home_dir on first boot --
+                ;; only when the settings file is absent, never overriding a
+                ;; profile the user has since customized.
+                (simple-service 'pinenote-koreader-home-dir
+                                activation-service-type
+                                #~(let ((f "/root/.config/koreader/settings.reader.lua"))
+                                    (unless (file-exists? f)
+                                      (mkdir-p "/root/.config/koreader")
+                                      (call-with-output-file f
+                                        (lambda (port)
+                                          (display "-- seeded by the reader flavor (pinenote-koreader-home-dir)\nreturn {\n    [\"home_dir\"] = \"/data/books\",\n}\n" port))))))
                 (service openssh-service-type
                          (openssh-configuration
                           (password-authentication? #f)
@@ -71,24 +86,42 @@ reader ALL=(ALL) NOPASSWD: ALL
                           (no-clear? #t))))
           %base-services-without-guix))
 
+(define pinenote-reader-base-os
+  (make-pinenote-operating-system
+   #:host-name "pinenote-reader"
+   #:packages (append (list koreader-bin
+                            ;; wpa_supplicant + wpa_cli in the
+                            ;; profile: pinenote-wifi execs them,
+                            ;; and Phase 2's KOReader Wi-Fi UI will
+                            ;; drive wpa_cli against the same conf.
+                            wpa-supplicant)
+                      ;; licensed fonts staged locally; #f on
+                      ;; a fresh clone (pinenote/fonts/README.md)
+                      (if pinenote-local-fonts
+                          (list pinenote-local-fonts)
+                          '())
+                      %pinenote-local-packages
+                      %base-packages)
+   #:services pinenote-reader-services))
+
 (define pinenote-reader-operating-system
   (operating-system
-    (inherit (make-pinenote-operating-system
-              #:host-name "pinenote-reader"
-              #:packages (append (list koreader-bin
-                                       ;; wpa_supplicant + wpa_cli in the
-                                       ;; profile: pinenote-wifi execs them,
-                                       ;; and Phase 2's KOReader Wi-Fi UI will
-                                       ;; drive wpa_cli against the same conf.
-                                       wpa-supplicant)
-                                 ;; licensed fonts staged locally; #f on
-                                 ;; a fresh clone (pinenote/fonts/README.md)
-                                 (if pinenote-local-fonts
-                                     (list pinenote-local-fonts)
-                                     '())
-                                 %pinenote-local-packages
-                                 %base-packages)
-              #:services pinenote-reader-services))
+    (inherit pinenote-reader-base-os)
+    ;; The persistent data partition at /data: the library lives in
+    ;; /data/books and survives os2 reflashes.  Addressed by GPT partlabel
+    ;; (the PineNote community convention; same key pinenote-wifi uses) --
+    ;; no per-device identifiers in the image.  mount-may-fail? so a
+    ;; system without the partition (QEMU virt) still boots.  The wifi
+    ;; one-shot's own ro mount of the same fs coexists fine -- this rw
+    ;; mount happens first (file-systems mount before shepherd one-shots).
+    (file-systems
+     (cons (file-system
+             (mount-point "/data")
+             (device "/dev/disk/by-partlabel/data")
+             (type "ext4")
+             (create-mount-point? #t)
+             (mount-may-fail? #t))
+           (operating-system-file-systems pinenote-reader-base-os)))
     (sudoers-file pinenote-reader-sudoers)))
 
 pinenote-reader-operating-system
