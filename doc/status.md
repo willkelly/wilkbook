@@ -301,6 +301,18 @@ Also staged 2026-07-03:
 
 ## Current os2 contents
 
+**A.2.8-dbg is built and pending the next os2 write** (local rootfs
+`/tmp/opencode/pinenote-rootfs-artifacts/pinenote-reader-debug-PNGuixRoot-20260712-a28.ext4`,
+SHA `34bde60c77c407336afe344f6829beaf70d540c29430352709e1315368165312`).
+A.2.8-dbg = A.2.7-dbg + **hrdl's fixes for findings 1/2/7 in the primary
+kernel** (the finding-2 scheduler fix doubles as the quirk-2 corruption
+A/B — if overlap is the mechanism, corruption dies on this kernel) +
+**EXTRACT_FBS** in the debug kernel (belief-vs-glass instrument;
+`pinenote-ebc-dump` grabber in the image; one-smoke ride queued) + the
+ttyS2-getty removal and the wifi-one-shot /data-mount fix (both
+live-mitigated on the current A.2.7-dbg boot, baked in here). All 385
+offline checks green at build.
+
 os2 currently holds the **A.2.7-dbg build (`reader-debug` flavor)**, SHA
 `7620b453f7dec9ad49c2693b20fae2edb4df2659cb6928aa0bc6e1861251becb` —
 **written 2026-07-12** with the full protocol (os1 root confirmed at
