@@ -39,6 +39,16 @@ export PATH=\"/run/current-system/profile/bin:/run/current-system/profile/sbin${
 
 mnt=/run/pinenote-wifi
 conf=\"$mnt/wifi/wlan0.conf\"
+own_mount=yes
+
+# The reader flavor mounts the data partition rw at /data (since
+# A.2.7); a second `mount -o ro` of the same device then fails.  Prefer
+# the existing mount and skip the mount/umount dance entirely.
+if mountpoint -q /data; then
+  mnt=/data
+  conf=\"$mnt/wifi/wlan0.conf\"
+  own_mount=no
+fi
 
 # Locate the persistent data partition (udev symlink first; sysfs scan as
 # the udev-independent fallback, mirroring the waveform installer).
@@ -56,14 +66,16 @@ find_data_partition() {
   return 1
 }
 
-dev=$(find_data_partition) || { echo 'pinenote-wifi: no data partition; skipping'; exit 0; }
-mkdir -p \"$mnt\"
-mountpoint -q \"$mnt\" || mount -o ro \"$dev\" \"$mnt\" 2>/dev/null || {
-  echo \"pinenote-wifi: could not mount $dev; skipping\"; exit 0; }
+if [ \"$own_mount\" = yes ]; then
+  dev=$(find_data_partition) || { echo 'pinenote-wifi: no data partition; skipping'; exit 0; }
+  mkdir -p \"$mnt\"
+  mountpoint -q \"$mnt\" || mount -o ro \"$dev\" \"$mnt\" 2>/dev/null || {
+    echo \"pinenote-wifi: could not mount $dev; skipping\"; exit 0; }
+fi
 
 if [ ! -f \"$conf\" ]; then
   echo \"pinenote-wifi: no $conf; skipping (reader boots without Wi-Fi)\"
-  umount \"$mnt\" 2>/dev/null || true
+  [ \"$own_mount\" = yes ] && umount \"$mnt\" 2>/dev/null || true
   exit 0
 fi
 

@@ -76,22 +76,18 @@ reader ALL=(ALL) NOPASSWD: ALL
                                                   "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICMbOSX755vG0PSWm1z9WrGP+x8YRsPqJ0YtUnGjufGP wkelly@pop-os\n"))))))
                 (service pinenote-usb-acm-gadget-service-type)
                 (service pinenote-usb-acm-console-service-type)
-                ;; wait-cr?: without it, --autologin on an UNATTACHED UART
-                ;; spawns a shell against a floating RX line that EOFs ~10 s
-                ;; in -> agetty exits 1 -> shepherd respawns, forever.  3,201
-                ;; such cycles over ~9 h degraded PID 1 until it stopped
-                ;; servicing the (inetd-style) sshd listener -- the 2026-07-12
-                ;; os2 wedge (doc/status.md).  With wait-cr the getty sits
-                ;; quietly until a human on the cable presses Enter.
-                (service agetty-service-type
-                         (agetty-configuration
-                          (tty "ttyS2")
-                          (baud-rate "1500000")
-                          (term "vt100")
-                          (auto-login "reader")
-                          (local-line 'always)
-                          (wait-cr? #t)
-                          (no-clear? #t))))
+                ;; NO custom UART getty: %base-services already runs agetty
+                ;; on the kernel console (tty #f resolves console=ttyS2 from
+                ;; the cmdline), and a second agetty on the same tty can
+                ;; never win it -- it exits ~10 s in and shepherd respawns
+                ;; it forever.  3,201 such cycles over ~9 h degraded PID 1
+                ;; until it stopped servicing the (inetd-style) sshd
+                ;; listener: the 2026-07-12 os2 wedge (doc/status.md).
+                ;; (wait-cr? was tried first and did not help -- the exit is
+                ;; the tty conflict, not the floating RX line.)  UART login
+                ;; is the base getty's prompt; the ACM gadget console keeps
+                ;; its own auto-login.
+                )
           %base-services-without-guix))
 
 (define pinenote-reader-base-os
