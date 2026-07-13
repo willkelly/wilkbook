@@ -109,11 +109,13 @@ exactly for this; leave DU/A2 to the phase B workbench.
   community-owned driver work; runtime param flips are the sanctioned
   workaround and the rung-7a harness executes the verbatim driver, so
   flip races are testable offline.
-- `refresh_threshold` units are whole SCREEN-AREAS of *accumulated* damage
-  (driver source: `area_count >= refresh_threshold * one_screen_area`)
-  (threshold × 1,314,144 px), not percent — our cmdline 60 means the
-  auto global refresh fires after roughly 30 page-turns' worth. hrdl's
-  stack uses 20. Workbench input.
+- `refresh_threshold` units (RESOLVED 2026-07-12, pageturn-program
+  source audit): the accumulator counts PIXELS of damage and
+  `one_screen_area` = 1,314,144 px = HALF the 1872x1404 panel — so
+  threshold 60 fires after ~30 full-page turns' worth. (Finding 7's
+  earlier "whole screen-areas, ~every 60 turns" correction
+  over-corrected; the original ~30-turn figure was right. History
+  preserved in finding 7.) hrdl's stack uses 20. Workbench input.
 - No community KOReader PineNote target exists — hrdl/PNDeb run stock
   SDL builds under sway with e-ink policy outside KOReader. Our native
   target is novel; upstream issues #14017 (full-refresh) and #14694
