@@ -561,6 +561,27 @@ HOW a wash damages state when it does; the instrumented kernel remains
 the decisive instrument. The upstream draft below has been revised to
 match the audited evidence.
 
+**Instrumented run 1 (2026-07-12, A.2.7-dbg first session): the
+straggler-truncation mechanism is REFUTED on this silicon for
+corrupting-class workloads.** The debug kernel ran the campaign's
+corrupting regime (89-turn diverse walk, threshold=8) plus rapid
+same-pair toggles (60 @0.7 s) in one session: **37 threshold-fired
+globals, 33 ioctl globals — zero straggler-credit warnings, zero early
+wait returns, zero frame timeouts.** Threshold- and ioctl-launched
+globals are metronomically identical at the handshake (596 ms actual vs
+447 ms nominal, full completion, both paths). The zero-gap launch race
+exists in source (quirk F stands as a latent-robustness finding) but
+does NOT manifest as wash truncation here. The surviving corruption
+evidence (never-a/b ghost-paints and graying, armC per-event graying,
+soak1's autos-off events) therefore needs a different mechanism — the
+investigation reopens at the content-bookkeeping evidence, and the
+upstream report should present quirk F as a hardening opportunity, not
+the demonstrated cause. (Caveat: corruption was always
+session-selective; this session's optical state was not
+camera-verified. A future corrupting session under the debug kernel —
+camera + instrumentation combined — is the remaining falsification
+path.) Bundle: `pinenote/tools/optics/build/bundles/corrupter-repro-dbg/`.
+
 **Instrumented kernel (built offline, staged for the next device
 session):** point (3)'s decisive experiment exists as
 `linux-pinenote-debug` — the primary kernel (byte-identical, untouched)
