@@ -104,6 +104,18 @@ suite.
 
 ## Suggested disposition
 
+**Update 2026-07-12 (see `doc/hrdl-evaluation.md`):** hrdl independently
+hit and fixed findings 1, 2 and 7 in January 2025 on his custom rework
+branch (`v6.19_ebc_custom`, commits `11c358d`, `59b2113`) — never
+backported to the legacy branch this report targets (which is the
+driver PNDeb/Debian users and wilkbook run; his legacy branch is a
+159-line diff from ours). The upstream ask is therefore concrete:
+backport his own fixes. His fix commit for finding 2 describes observed
+"scheduling issues" in the field — finding 2 (overlapping refresh
+windows) is now also the prime suspect for the session-selective panel
+corruption documented below, which the 2026-07-12 instrumented run
+cleared the threshold-handshake path of.
+
 1 and 3 are ordinary memory-safety fixes (small, obviously correct).
 2 needs a design decision from whoever owns the scheduler (respect
 `do_not_start_before_frame` in both paths, or document why concurrent
