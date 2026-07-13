@@ -5,7 +5,7 @@ LUT dependency `drm_epd_helper.c`) out of
 `pinenote/patches/linux-pinenote-7.0-forward-port.patch` — extracted at build
 time with rung 1's `extract-from-patch.py`, so the tests always exercise
 exactly the code the kernel ships — against a kernel-API shim
-(`shim/kernel-shim.h`).  Three binaries:
+(`shim/kernel-shim.h`).  The binaries:
 
 - **`ebc-logic-test`** (rung 2): unit tests for the driver's pure
   arithmetic — blitters, damage scheduling, threshold/dither paths.
@@ -17,6 +17,28 @@ exactly the code the kernel ships — against a kernel-API shim
   `doc/refresh-policy.md`): replays KOReader `[pn-refresh]` intent traces
   through the same machine under candidate refresh policies and reports
   washes, the black-flash census, settle latency and scrub staleness.
+- **`ebc-refresh-test-dbg`** (2026-07-12): the same rung-7a TU compiled
+  against the **debug driver** — the extraction with the
+  `pinenote/patches/linux-pinenote-debug-*.patch` stack applied, exactly
+  what the `linux-pinenote-debug` kernel carries.  `run-tests-dbg.sh`
+  (the second half of `make check`) proves the debug patches change no
+  refresh behavior (identical goldens) and executes the EXTRACT_FBS
+  ioctl: pre-modeset `-ENODEV`, a fake-device roundtrip, exact plane
+  sizes under ASan (the reference's 1313144 size-typo class), NULL-able
+  planes, `-EFAULT` fault injection, and the mid-copy kref lifetime
+  guarantee (a hook destroys the owning CRTC state during the first
+  plane copy; without the ioctl's own kref the remaining copies are a
+  heap-use-after-free and ASan aborts the suite).  No debug hunk ships
+  un-executed.
+- **`ebc-dump` / `ebc-dump-grab`** (2026-07-12): the EXTRACT_FBS dump
+  pair over the shared `ebc-dump-format.h` container.  `ebc-dump-grab`
+  runs on the device against the debug kernel (cross-built by the
+  `pinenote-ebc-dump` package into the reader-debug image; `--verify`
+  double-dumps for the quiescence flag); `ebc-dump` decodes containers
+  to PGMs + diff maps + `--json` for `optics/analyze.py`.  The dbg
+  suite's decode differential pins the decoder's Y4 nibble conventions
+  to the driver's (byte-identical `final.pgm` against the harness's own
+  `rs_y4_to_gray8` rendering).
 
 This is the code most likely to break silently on every forward-port; these
 tests make that a red `make check` instead of a wasted panel session.

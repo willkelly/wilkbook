@@ -586,6 +586,12 @@ visible) before writing the port. Then the native device target
   wishlist: `EXTRACT_FBS` ioctl is stubbed `-EOPNOTSUPP` in the 7.0
   port (the buffer-dump oracle is unavailable on-device) and
   `CONFIG_DYNAMIC_DEBUG` is off (`drm.debug` sufficed).
+  *(Update 2026-07-12: EXTRACT_FBS is now implemented in the
+  `linux-pinenote-debug` kernel — `linux-pinenote-debug-extract-fbs.patch`,
+  offline-proven by the ebc-logic dbg suite; grabber `ebc-dump-grab`
+  ships in the reader-debug image, host decoder `ebc-dump` in
+  pinenote/tools/ebc-logic. On-device smoke still pending; the primary
+  kernel keeps the stub.)*
 - The pen pressure warning `w9013 … Ignoring pressure offset greater
   than 50%` appears whenever libinput handles the pen (cage runs);
   KOReader's evdev path doesn't involve libinput. Park for the pen

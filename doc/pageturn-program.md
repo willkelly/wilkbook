@@ -458,22 +458,35 @@ redundant-damage storm can drain at frame 0, beating the
 num_phases+1-frame floor); never printk inside the 85 Hz frame loop;
 keep output ring-buffer-only under PREEMPT_RT (loglevel or
 `printk_deferred`) so console TX can't jitter frame timing.
-**Precondition:** the ebc-logic Makefile currently extracts the driver
-from the forward-port patch only — v1 hooks were never
-harness-executed. Add a debug-patched build variant so v2's counters
-get offline assertions *before* the patch ships (small, unbuilt).
+**Precondition — BUILT (2026-07-12, with the EXTRACT_FBS port):** the
+ebc-logic Makefile now has the debug-patched build variant
+(`ebc-refresh-test-dbg`: the extraction with the full
+`linux-pinenote-debug-*.patch` stack applied, run by `make
+ebc-logic-check`'s dbg half).  It executes the v1 hooks and asserts the
+debug stack changes no refresh behavior (identical goldens); v2's
+counters get their offline assertions the same way before that patch
+ships.
 
-### 5.2 EXTRACT_FBS port (unblocks PLAN task 23)
+### 5.2 EXTRACT_FBS port (unblocks PLAN task 23) — LANDED 2026-07-12
 
-Our copy stubs it (:398–402). Port m-weigand's implementation into the
-debug variant — acknowledging this **exceeds v2's printk-only
-discipline** (it adds an ioctl behavior) and therefore needs its own
-offline proof plus the task-23 dump/decode harness before first use.
-Until it lands, believed-state divergence stays camera-inferred and
-protocol step 5 stays deferred. Doc corrections to fold back when
-touched: PLAN §1a/§1b's "SUPERSEDED / already ships" bullets and
-eink-research §8's "free driver-side ground truth" describe the 6.x
-lineage, not our port.
+Ported into `linux-pinenote-debug` as
+`pinenote/patches/linux-pinenote-debug-extract-fbs.patch` (the primary
+kernel keeps the stub), from hrdl's `v6.19_ebc` reference with four
+reference defects corrected (size typo, unpinned ctx lifetime,
+pre-modeset NULL deref, return convention — reported upstream, see
+`doc/driver-findings-report.md`).  Because it exceeds v2's printk-only
+discipline it carries its own offline proof: the ebc-logic dbg suite
+executes the ioctl end to end (pre-modeset -ENODEV, fake-device
+roundtrip, exact sizes under ASan, NULL planes, -EFAULT injection, the
+mid-copy kref lifetime guarantee) and the dump/decode pair
+(`ebc-dump-grab` on-device via the `pinenote-ebc-dump` package;
+`ebc-dump` host decoder, pinned to the driver's Y4 conventions by a
+decode differential).  Still device-untested: real `copy_to_user`
+fault/pagefault behavior, `drm_modeset_lock` vs a live commit stream,
+DRM_AUTH plumbing through /dev/dri, RT timing — one smoke (idle
+`--verify` dump + one mid-scribble dump) rides the next scheduled
+session.  Protocol step 5 (belief probes) is unblocked once that smoke
+passes.
 
 ### 5.3 Tasks 25/26 placement
 

@@ -1446,6 +1446,251 @@ static void test_wbf_lut_differential(const char *rsl_path)
 
 /* ---------------------------------------------------------------------- */
 
+/* ---------------------------------------------------------------------- */
+/* EXTRACT_FBS: the belief-dump ioctl                                      */
+/*                                                                          */
+/* The dbg build (make check's dbg half: the extracted driver with the      */
+/* linux-pinenote-debug-*.patch stack applied, -DEBC_HARNESS_DBG) executes  */
+/* the real implementation from the extract-fbs debug patch and pins the    */
+/* four corrected reference defects (doc/driver-findings-report.md,         */
+/* EXTRACT_FBS reference-defects note).  The normal build pins the primary  */
+/* kernel's -EOPNOTSUPP stub, which is itself ABI: userspace probes it to   */
+/* detect a debug kernel.                                                   */
+
+#ifdef EBC_HARNESS_DBG
+
+#include "ebc-dump-format.h"
+
+static struct rockchip_ebc_ctx *extract_lifetime_ctx;
+static unsigned int extract_lifetime_hook_refcount;
+static int extract_lifetime_hook_calls;
+
+/* Simulates a concurrent atomic commit: the CRTC state that owns ctx is
+ * destroyed during the FIRST plane copy, dropping what would be the last
+ * reference if the ioctl had not taken its own kref (the hrdl-reference
+ * UAF, defect 2).  Without the ioctl's pin, the remaining plane copies
+ * read freed memory and ASan aborts the suite. */
+static void extract_lifetime_hook(void)
+{
+	if (extract_lifetime_hook_calls++ == 0) {
+		extract_lifetime_hook_refcount =
+			(unsigned int)extract_lifetime_ctx->kref.refcount;
+		kref_put(&extract_lifetime_ctx->kref,
+			 rockchip_ebc_ctx_release);
+	}
+}
+
+static void test_extract_fbs(const char *outdir)
+{
+	struct harness h;
+	struct rockchip_ebc *ebc = harness_ebc(&h, GW, GH, NPH);
+	struct rockchip_ebc_ctx *ctx;
+	struct drm_rockchip_ebc_extract_fbs args;
+	struct drm_rect rect = {8, 4, 40, 20};
+	struct drm_crtc_state *saved_state;
+	bool saved_diff = diff_mode;
+	u8 *bp, *bn, *bf, *ph0, *ph1;	/* exact-size dump buffers */
+	u8 *lp, *ln, *lf, *lph0, *lph1;	/* second set for the lifetime run */
+	u32 g4, psz;	/* cached: ctx is gone after the lifetime dump */
+	bool ok;
+	size_t i;
+	int x, y, ret;
+
+	/* extract:pre-modeset — no ctx exists yet (harness_ctx not
+	 * called): must be -ENODEV, not a NULL dereference (defect 3;
+	 * the hrdl-verbatim body would oops here) */
+	memset(&args, 0, sizeof(args));
+	ret = ioctl_extract_fbs(&ebc->drm, &args, NULL);
+	check(ret == -ENODEV,
+	      "extract: pre-modeset dump returns -ENODEV (no NULL deref)");
+	saved_state = ebc->crtc.state;
+	ebc->crtc.state = NULL;
+	ret = ioctl_extract_fbs(&ebc->drm, &args, NULL);
+	ebc->crtc.state = saved_state;
+	check(ret == -ENODEV, "extract: NULL crtc state returns -ENODEV");
+
+	/* run a real partial refresh to completion on the fake device so
+	 * prev/next/final hold known content and phase[0] is back to
+	 * neutral */
+	ctx = harness_ctx(&h, GW, GH);
+	g4 = ctx->gray4_size;
+	psz = ctx->phase_size;
+	diff_mode = false;
+	memset(ctx->prev, 0x55, ctx->gray4_size);
+	memset(ctx->next, 0x55, ctx->gray4_size);
+	memcpy(ctx->final_atomic_update, ctx->prev, ctx->gray4_size);
+	for (y = rect.y1; y < rect.y2; y++)
+		for (x = rect.x1; x < rect.x2; x++)
+			set_px(ctx->final_atomic_update, ctx->gray4_pitch,
+			       x, y, (u8)((x + y) & 0xf));
+	commit_damage(ctx, &rect, 1);
+	run_refresh_synth(ebc, ctx, false);
+
+	/* extract:roundtrip + extract:sizes — full five-plane dump into
+	 * EXACT-size sentinel-filled buffers.  Sizes must come from ctx
+	 * (defect 1: the reference hard-codes 1313144, 1,000 bytes short
+	 * per gray4 plane): a short copy leaves sentinel tail bytes that
+	 * fail the memcmp below; an over-copy trips ASan on the
+	 * exact-size allocations. */
+	bp = malloc(ctx->gray4_size);
+	bn = malloc(ctx->gray4_size);
+	bf = malloc(ctx->gray4_size);
+	ph0 = malloc(ctx->phase_size);
+	ph1 = malloc(ctx->phase_size);
+	memset(bp, 0xA5, ctx->gray4_size);
+	memset(bn, 0xA5, ctx->gray4_size);
+	memset(bf, 0xA5, ctx->gray4_size);
+	memset(ph0, 0xA5, ctx->phase_size);
+	memset(ph1, 0xA5, ctx->phase_size);
+	args.ptr_prev = (char *)bp;
+	args.ptr_next = (char *)bn;
+	args.ptr_final = (char *)bf;
+	args.ptr_phase1 = (char *)ph0;
+	args.ptr_phase2 = (char *)ph1;
+	ret = ioctl_extract_fbs(&ebc->drm, &args, NULL);
+	check(ret == 0, "extract: five-plane dump returns 0");
+	check(!memcmp(bp, ctx->prev, ctx->gray4_size) &&
+	      !memcmp(bn, ctx->next, ctx->gray4_size) &&
+	      !memcmp(bf, ctx->final, ctx->gray4_size),
+	      "extract: prev/next/final roundtrip byte-exact at ctx sizes (no 1313144-typo class)");
+	check(!memcmp(bp, bn, ctx->gray4_size),
+	      "extract: dumped prev == next after a completed refresh (the in-dump quiescence invariant)");
+	ok = true;
+	for (i = 0; i < ctx->phase_size; i++)
+		ok &= ph0[i] == 0xff && ph1[i] == 0xff;
+	check(ok, "extract: both phase planes dumped, all neutral post-refresh (0xff)");
+	check(ctx->kref.refcount == 1,
+	      "extract: ctx kref returns to baseline (get/put balanced)");
+
+	/* decoder-differential artifacts: the container (written through
+	 * ebc-dump-format.h, exactly like the device grabber) plus the
+	 * harness's own rs_y4_to_gray8 rendering of final.  The dbg test
+	 * runner decodes the container with the ebc-dump tool and
+	 * byte-compares its final.pgm against this rendering — tying the
+	 * decoder's nibble conventions to the pinned driver conventions. */
+	if (outdir) {
+		unsigned char hdrbuf[EBC_DUMP_HEADER_SIZE];
+		struct ebc_dump_header dh;
+		char path[512];
+		FILE *f2;
+		u8 *img = malloc((size_t)GW * GH);
+
+		dh.width = GW;
+		dh.height = GH;
+		dh.gray4_size = ctx->gray4_size;
+		dh.phase_size = ctx->phase_size;
+		dh.t_mono_ns = 0;
+		/* buffers were written directly (no xrgb blit), so the
+		 * content is not panel-mirrored: flags bit1 stays 0 and
+		 * the decoder must not un-mirror */
+		dh.flags = EBC_DUMP_F_VERIFIED_STABLE;
+		snprintf(path, sizeof(path), "%s/extract-dump.bin", outdir);
+		f2 = fopen(path, "wb");
+		if (f2) {
+			ebc_dump_header_write(hdrbuf, &dh);
+			fwrite(hdrbuf, 1, sizeof(hdrbuf), f2);
+			fwrite(bp, 1, ctx->gray4_size, f2);
+			fwrite(bn, 1, ctx->gray4_size, f2);
+			fwrite(bf, 1, ctx->gray4_size, f2);
+			fwrite(ph0, 1, ctx->phase_size, f2);
+			fwrite(ph1, 1, ctx->phase_size, f2);
+			fclose(f2);
+		}
+		rs_y4_to_gray8(img, GW, bf, ctx->gray4_pitch, GW, GH);
+		snprintf(path, sizeof(path),
+			 "%s/extract-final-expected.pgm", outdir);
+		write_pgm(path, img, GW, GH);
+		free(img);
+		check(f2 != NULL,
+		      "extract: dump container + expected rendering written for the decoder differential");
+	}
+
+	/* extract:null-planes — unrequested planes are skipped, the
+	 * requested ones still land */
+	memset(bp, 0xA5, ctx->gray4_size);
+	memset(bn, 0xA5, ctx->gray4_size);
+	memset(&args, 0, sizeof(args));
+	args.ptr_prev = (char *)bp;
+	args.ptr_next = (char *)bn;
+	ret = ioctl_extract_fbs(&ebc->drm, &args, NULL);
+	check(ret == 0 &&
+	      !memcmp(bp, ctx->prev, ctx->gray4_size) &&
+	      !memcmp(bn, ctx->next, ctx->gray4_size),
+	      "extract: NULL planes are skipped; requested planes still land");
+
+	/* extract:efault — fault injection: exactly -EFAULT, never a
+	 * positive uncopied-byte count (defect 4) */
+	ebc_shim.uaccess_fail_next = 1;
+	args.ptr_prev = (char *)bp;
+	args.ptr_next = (char *)bn;
+	args.ptr_final = (char *)bf;
+	args.ptr_phase1 = (char *)ph0;
+	args.ptr_phase2 = (char *)ph1;
+	ret = ioctl_extract_fbs(&ebc->drm, &args, NULL);
+	check(ret == -EFAULT && ebc_shim.uaccess_fail_next == 0,
+	      "extract: uaccess fault yields exactly -EFAULT, never a positive byte count");
+	check(ctx->kref.refcount == 1,
+	      "extract: kref balanced on the -EFAULT path too");
+
+	/* extract:lifetime — the owning CRTC state dies mid-copy; the
+	 * ioctl's own kref must keep ctx alive until its final put.
+	 * MUST run last: the ioctl's kref_put releases ctx here. */
+	lp = malloc(g4);
+	ln = malloc(g4);
+	lf = malloc(g4);
+	lph0 = malloc(psz);
+	lph1 = malloc(psz);
+	memset(lp, 0xA5, g4);
+	memset(ln, 0xA5, g4);
+	memset(lf, 0xA5, g4);
+	memset(lph0, 0xA5, psz);
+	memset(lph1, 0xA5, psz);
+	args.ptr_prev = (char *)lp;
+	args.ptr_next = (char *)ln;
+	args.ptr_final = (char *)lf;
+	args.ptr_phase1 = (char *)lph0;
+	args.ptr_phase2 = (char *)lph1;
+	extract_lifetime_ctx = ctx;
+	extract_lifetime_hook_calls = 0;
+	extract_lifetime_hook_refcount = 0;
+	ebc_shim.uaccess_hook = extract_lifetime_hook;
+	ret = ioctl_extract_fbs(&ebc->drm, &args, NULL);
+	ebc_shim.uaccess_hook = NULL;
+	check(ret == 0,
+	      "extract: dump succeeds while the owning CRTC state dies mid-copy");
+	check(extract_lifetime_hook_refcount == 2,
+	      "extract: the ioctl holds its own ctx reference during the copy (refcount 2 at the mid-copy state destruction)");
+	check(!memcmp(lp, bp, g4) &&
+	      !memcmp(ln, bn, g4) &&
+	      !memcmp(lf, bf, g4),
+	      "extract: all planes copied intact from the kref-pinned ctx (ASan guards the UAF regression)");
+	check(harness_clean("extract"), "extract: no harness violations");
+
+	/* ctx was released by the ioctl's final kref_put */
+	h.crtc_state.ctx = NULL;
+	free(bp); free(bn); free(bf); free(ph0); free(ph1);
+	free(lp); free(ln); free(lf); free(lph0); free(lph1);
+	diff_mode = saved_diff;
+	harness_free(&h, NULL);
+}
+
+#else /* !EBC_HARNESS_DBG */
+
+static void test_extract_fbs_stub(void)
+{
+	struct harness h;
+	struct rockchip_ebc *ebc = harness_ebc(&h, GW, GH, NPH);
+	struct rockchip_ebc_ctx *ctx = harness_ctx(&h, GW, GH);
+	struct drm_rockchip_ebc_extract_fbs args = { 0 };
+	int ret = ioctl_extract_fbs(&ebc->drm, &args, NULL);
+
+	check(ret == -EOPNOTSUPP,
+	      "extract: primary kernel keeps the -EOPNOTSUPP stub (userspace probes it to detect the debug kernel)");
+	harness_free(&h, ctx);
+}
+
+#endif /* EBC_HARNESS_DBG */
+
 int main(int argc, char **argv)
 {
 	const char *fwdir = argc > 1 && argv[1][0] ? argv[1] : NULL;
@@ -1463,6 +1708,11 @@ int main(int argc, char **argv)
 	test_midrefresh_commit();
 	test_quirk_begin_together_conflict();
 	test_quirk_threshold_zero_gap_global();
+#ifdef EBC_HARNESS_DBG
+	test_extract_fbs(outdir);
+#else
+	test_extract_fbs_stub();
+#endif
 
 	if (fwdir) {
 		setenv("EBC_SHIM_FW_DIR", fwdir, 1);

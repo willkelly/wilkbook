@@ -274,10 +274,14 @@ Record anything that took a hardware session to discover:
   redraw→commit→log feedback loop; expect ~8 Hz of full-frame blits
   while it's on.
 - Driver-observability wishlist for a future debug kernel config: the
-  7.0 port stubs the `EXTRACT_FBS` ioctl (`-EOPNOTSUPP`), so the
-  on-device buffer-dump oracle is unavailable; `CONFIG_DYNAMIC_DEBUG`,
-  `CONFIG_MAGIC_SYSRQ_SERIAL`, and `CONFIG_DETECT_HUNG_TASK` are all
-  off (the last two also block the qemu-virt udev-hang diagnosis).
+  7.0 port stubs the `EXTRACT_FBS` ioctl (`-EOPNOTSUPP`) — **closed
+  2026-07-12 for the debug kernel**: `linux-pinenote-debug` implements
+  it via `linux-pinenote-debug-extract-fbs.patch` (offline-proven by
+  the ebc-logic dbg suite; grabber/decoder in
+  `pinenote/tools/ebc-logic`; the primary kernel keeps the stub).
+  Still open: `CONFIG_DYNAMIC_DEBUG`, `CONFIG_MAGIC_SYSRQ_SERIAL`, and
+  `CONFIG_DETECT_HUNG_TASK` are all off (the last two also block the
+  qemu-virt udev-hang diagnosis).
 
 ## Known driver quirks pinned by the host test tools (2026-07-04)
 

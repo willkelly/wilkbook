@@ -719,3 +719,46 @@ investigation reopens at the content-bookkeeping evidence.
 > cancellation of in-flight updates) most likely does not share the
 > defect. Happy to share the reproducer, the optics data, and to test
 > patches on hardware.
+
+## Note (2026-07-12): four defects in the `v6.19_ebc` EXTRACT_FBS reference implementation
+
+Found while porting the EXTRACT_FBS buffer-dump ioctl into our debug
+kernel (`linux-pinenote-debug-extract-fbs.patch`; the port is the
+belief-vs-glass instrument for the corruption hunt).  The reference is
+hrdl's legacy branch — `v6.19_ebc @7cb827d17`,
+`drivers/gpu/drm/rockchip/rockchip_ebc.c:395-415` (`ioctl_extract_fbs`)
+— the implementation PNDeb/Debian users run today.  All four are
+corrected in our port and pinned by the offline harness
+(`pinenote/tools/ebc-logic`, dbg suite); they should be fixed in the
+lineage:
+
+1. **Size typo `1313144`.** The true `gray4_size` at 1872×1404 is
+   1872·1404/2 = **1,314,144** bytes; the hard-coded `1313144` copies
+   1,000 bytes short on every Y4 plane (the last ~1.07 rows of
+   prev/next/final stay stale in the dump) and the phase copies
+   (`2 * 1313144`) are 2,000 short of the true 2,628,288.  Fatal for a
+   belief-vs-glass instrument: bottom-of-screen divergence would be an
+   artifact of the dump, not the driver.  Sizes should come from
+   `ctx->gray4_size`/`ctx->phase_size`.
+2. **No ctx lifetime pin.** `to_ebc_crtc_state(READ_ONCE(ebc->crtc.state))->ctx`
+   is read unpinned and then used for several multi-megabyte
+   `copy_to_user` calls.  The ctx is kref-owned by CRTC states; an
+   atomic commit landing during the multi-ms copy can swap the state
+   and drop the last reference — a use-after-free.  At a reader's ~20 Hz
+   commit rate during pen strokes this is a real window, not a
+   theoretical one.  Fix: take the CRTC modeset lock around the pointer
+   read, `kref_get` the ctx, copy, `kref_put`.
+3. **NULL dereference pre-modeset.** Before the first CRTC enable the
+   state's `ctx` is NULL (allocated in atomic_check); calling the ioctl
+   then oopses.  Should return `-ENODEV`.
+4. **Return convention.** The OR of `copy_to_user` remainders (positive
+   uncopied-byte counts) is returned straight to userspace, and the
+   `access_ok` result is discarded (the code's own `todo` comment).
+   Should be `-EFAULT`/0.
+
+Our port's translation notes (locking held only around the pointer
+read/snapshot; the big copies deliberately lock-free with coherence as
+a dump-protocol property) are in the debug patch header.  These four
+items extend the standing upstream ask — they are bugs in *his* branch's
+implementation, reported here rather than silently diverged from: our
+in-tree function is a fresh implementation of the same ABI.

@@ -1,18 +1,34 @@
 # Host-side tests for the EBC driver (offline testing ladder).
 #
-# Three binaries over the same verbatim driver sources (extracted from
-# the forward-port patch at build time):
+# Binaries over the same verbatim driver sources (extracted from the
+# forward-port patch at build time):
 #   ebc-logic-test    rung 2: unit tests for the pure logic (blitters,
 #                     damage scheduling, threshold/dither paths)
 #   ebc-refresh-test  rung 7a: executes the refresh state machine against
 #                     a behavioral device model (shim/fake-ebc.h), built
 #                     with ASan; see doc/ebc-harness-spike.md
+#   ebc-refresh-test-dbg  the same TU compiled against the DEBUG driver:
+#                     the extraction with pinenote/patches/
+#                     linux-pinenote-debug-*.patch applied (the exact
+#                     stack the linux-pinenote-debug kernel carries) and
+#                     -DEBC_HARNESS_DBG.  Runs the whole rung-7a suite
+#                     (proving the debug patches change no refresh
+#                     behavior: same goldens) plus the EXTRACT_FBS ioctl
+#                     tests.  No debug hunk ships un-executed.
 #   ebc-replay        the rung-7a phase-B workbench: replays KOReader
 #                     [pn-refresh] traces through the same machine under
 #                     candidate refresh policies (doc/refresh-policy.md).
 #                     Built without ASan — it is a measurement tool that
 #                     scans full-panel buffers per frame; the same driver
 #                     paths run under ASan in ebc-refresh-test.
+#   ebc-dump          host decoder for EXTRACT_FBS dump containers
+#                     (ebc-dump-format.h): PGMs, diffs, --json for
+#                     optics/analyze.py.  Pinned to the driver's Y4
+#                     conventions by the dbg suite's decode differential.
+#   ebc-dump-grab     the on-device grabber (PineNote/debug kernel);
+#                     compiled here only as a build-proof — the real
+#                     cross-build is the pinenote-ebc-dump package
+#                     (pinenote/packages/firmware.scm).
 #
 #   guix shell gcc-toolchain python -- make check [WBF=/path/to/ebc.wbf]
 #
@@ -40,7 +56,16 @@ EXTRACTED := $(BUILD)/drivers/gpu/drm/rockchip/rockchip_ebc.c \
              $(BUILD)/include/drm/drm_epd_helper.h \
              $(BUILD)/include/uapi/drm/rockchip_ebc_drm.h
 
-all: $(BUILD)/ebc-logic-test $(BUILD)/ebc-refresh-test $(BUILD)/ebc-replay
+# The debug-driver variant: the same extraction with the stacked debug
+# patches applied, in the same order the linux-pinenote-debug package
+# applies them (sorted name order == the kernel.scm list order).
+DBGDIR := $(BUILD)/dbg
+DBG_PATCHES := $(sort $(wildcard ../../patches/linux-pinenote-debug-*.patch))
+DBG_DRIVER := $(DBGDIR)/drivers/gpu/drm/rockchip/rockchip_ebc.c
+
+all: $(BUILD)/ebc-logic-test $(BUILD)/ebc-refresh-test \
+     $(BUILD)/ebc-refresh-test-dbg $(BUILD)/ebc-replay \
+     $(BUILD)/ebc-dump $(BUILD)/ebc-dump-grab
 
 $(EXTRACTED) &: $(PATCH) $(EXTRACT)
 	python3 $(EXTRACT) $(PATCH) $(BUILD) \
@@ -49,6 +74,13 @@ $(EXTRACTED) &: $(PATCH) $(EXTRACT)
 	  include/drm/drm_epd_helper.h \
 	  include/uapi/drm/rockchip_ebc_drm.h
 	cp $(BUILD)/include/uapi/drm/rockchip_ebc_drm.h $(BUILD)/include/drm/
+
+$(DBG_DRIVER): $(PATCH) $(EXTRACT) $(DBG_PATCHES)
+	rm -rf $(DBGDIR)
+	python3 $(EXTRACT) $(PATCH) $(DBGDIR) \
+	  drivers/gpu/drm/rockchip/rockchip_ebc.c
+	set -e; for p in $(DBG_PATCHES); do \
+	  echo "applying $$p"; patch -p1 -d $(DBGDIR) < $$p; done
 
 $(BUILD)/ebc-logic-test: ebc-logic-test.c $(EXTRACTED) shim/kernel-shim.h
 	$(CC) $(CFLAGS) $(CPPFLAGS) -o $@ ebc-logic-test.c
@@ -61,12 +93,33 @@ $(BUILD)/ebc-refresh-test: ebc-refresh-test.c $(EXTRACTED) shim/kernel-shim.h \
 	$(CC) $(CFLAGS) $(ASAN) $(CPPFLAGS) -o $@ ebc-refresh-test.c \
 	  $(BUILD)/rastersim-asan.o
 
+# -I$(DBGDIR)/... first so `#include "rockchip_ebc.c"` resolves to the
+# debug-patched driver.  The extra -Wno-unused-*: the dspend-straggler
+# patch's printk-only instrumentation compiles its consumers away under
+# the quiet shim (pr_info/pr_warn are no-ops), leaving set-but-unused
+# locals and an unused name table — expected, not a defect.
+$(BUILD)/ebc-refresh-test-dbg: ebc-refresh-test.c $(EXTRACTED) \
+                               shim/kernel-shim.h shim/fake-ebc.h \
+                               ebc-dump-format.h $(DBG_DRIVER) \
+                               $(BUILD)/rastersim-asan.o
+	$(CC) $(CFLAGS) $(ASAN) -DEBC_HARNESS_DBG=1 \
+	  -Wno-unused-but-set-variable -Wno-unused-const-variable \
+	  -I$(DBGDIR)/drivers/gpu/drm/rockchip $(CPPFLAGS) \
+	  -o $@ ebc-refresh-test.c $(BUILD)/rastersim-asan.o
+
 $(BUILD)/ebc-replay: ebc-replay.c $(EXTRACTED) shim/kernel-shim.h \
                      shim/fake-ebc.h
 	$(CC) $(CFLAGS) $(CPPFLAGS) -o $@ ebc-replay.c -lm
 
+$(BUILD)/ebc-dump: ebc-dump.c ebc-dump-format.h
+	$(CC) $(CFLAGS) -o $@ ebc-dump.c
+
+$(BUILD)/ebc-dump-grab: ebc-dump-grab.c ebc-dump-format.h
+	$(CC) $(CFLAGS) -o $@ ebc-dump-grab.c
+
 check: all
 	./run-tests.sh $(BUILD) "$(WBF)"
+	./run-tests-dbg.sh $(BUILD) "$(WBF)"
 
 # Regenerate the committed refresh-harness golden hashes (only when a
 # scenario or the synthetic LUT changes intentionally).

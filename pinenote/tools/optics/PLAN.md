@@ -45,7 +45,10 @@ investment. Priority adjustments over the tables below:
   diagnostic in our own forward-port patch) would be a stronger ground-truth
   join than KOReader's [pn-refresh] intents. Diagnostic-only, so consistent
   with the "report driver bugs, don't fork behavior" policy. SUPERSEDED by §1b:
-  the driver already ships `EXTRACT_FBS` — use that instead of adding anything.
+  `EXTRACT_FBS` — use that instead of adding anything. (Correction
+  2026-07-12: "already ships" described the 6.x lineage; our 7.0 port
+  stubbed the ioctl. Now implemented in the `linux-pinenote-debug`
+  kernel and offline-proven — see task 23.)
 
 ## 1b. Community steals (2026-07-11 sweep — full record in doc/eink-research.md §8)
 
@@ -53,12 +56,15 @@ Nobody in the PineNote/reMarkable/Kobo communities has built an optical
 measurement rig — this program is novel. But the sweep changed four things:
 
 - **`EXTRACT_FBS` supersedes the "investigate a driver-side trace" idea (§1a)**:
-  our driver lineage ALREADY ships an ioctl that dumps the live prev/next
-  buffers. That is exact, per-pixel driver-side ground truth (what the EBC
-  believes it displayed) to correlate against the camera — no driver patch, no
-  policy question. Harness it in the two-tier loop as the third data source:
-  camera (optical truth) ↔ EXTRACT_FBS (driver belief) ↔ [pn-refresh] (reader
-  intent). Divergence between the three IS the diagnosis.
+  the driver *lineage* ships an ioctl that dumps the live prev/next
+  buffers — exact, per-pixel driver-side ground truth (what the EBC
+  believes it displayed) to correlate against the camera. (Correction
+  2026-07-12: our 7.0 port stubbed it; it now lives in the
+  `linux-pinenote-debug` kernel as a debug patch — one policy-clean
+  ioctl behavior, not a driver fork.) Harness it in the two-tier loop
+  as the third data source: camera (optical truth) ↔ EXTRACT_FBS
+  (driver belief) ↔ [pn-refresh] (reader intent). Divergence between
+  the three IS the diagnosis.
 - **New policy candidate, likely the highest-value one**: hrdl's
   *delayed-quality-redraw* ("fast now, clean later" — his kernel does a GC16
   repaint ~2.4 s after a fast update settles). Implementable in OUR stack as a
@@ -85,7 +91,7 @@ Build-order additions (all non-blocking, after the first capture):
 
 | # | Task | Size |
 |---|---|---|
-| 23 | EXTRACT_FBS harness: on-device dump helper + host decode + a camera↔driver-belief correlation check in analyze | M |
+| 23 | EXTRACT_FBS harness: ~~on-device dump helper + host decode~~ **landed 2026-07-12** (kernel side: `linux-pinenote-debug-extract-fbs.patch`; grabber `ebc-dump-grab` in the reader-debug image; decoder `ebc-dump` with `--json`, offline-proven by the ebc-logic dbg suite incl. a decode differential; needs its one-smoke device ride). REMAINING: the camera↔driver-belief correlation check in analyze (join `ebc-dump --json` patch means vs normalized camera patch means over the card regions) | M→S |
 | 24 | ~~Delayed-quality-redraw prototype~~ **DONE as the idle-washer** (`idlewasher.koplugin`: full-screen debt+idle washes, not region repaint — hardware-validated 2026-07-12, refresh-policy finding 11; thresholds sweepable via the `ko` namespace) | M |
 | 25 | Port `globre_convert_before` into the forward-port patch (rung 1–3 offline proof) + add to paramspace | S |
 | 26 | Blue-noise dither tables into the bw_mode/low-bit path (or KOReader render) + grayramp rig evaluation | M–L |

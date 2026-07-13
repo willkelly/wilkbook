@@ -163,6 +163,14 @@ struct ebc_shim_state {
 	 * is 25000, the value every pre-existing test was written against. */
 	bool iio_temp_override;
 	int iio_temp_mC;
+
+	/* uaccess (EXTRACT_FBS debug-ioctl tests): fail the next N
+	 * copy_to_user calls (returning "all bytes uncopied", the kernel
+	 * -EFAULT signal), and an optional hook called before every
+	 * copy_to_user so a test can inject a "concurrent commit" in the
+	 * middle of a multi-plane dump. */
+	unsigned int uaccess_fail_next;
+	void (*uaccess_hook)(void);
 };
 
 static struct ebc_shim_state ebc_shim = { .dma_next = EBC_SHIM_DMA_BASE };
@@ -214,6 +222,7 @@ static inline const void *ebc_shim_dma_cpu(u32 handle)
 #define printk(...) do { } while (0)
 #define pr_info(...) do { } while (0)
 #define pr_warn(...) do { } while (0)
+#define pr_warn_ratelimited(...) do { } while (0)
 #define pr_debug(...) do { } while (0)
 #define drm_err(dev, fmt, ...) fprintf(stderr, "drm_err: " fmt, ##__VA_ARGS__)
 #define drm_warn(dev, ...) do { } while (0)
@@ -379,6 +388,9 @@ struct completion {
 static inline void init_completion(struct completion *c) { c->done = 0; }
 static inline void reinit_completion(struct completion *c) { c->done = 0; }
 static inline void complete(struct completion *c) { c->done++; }
+/* non-consuming probe (kernel semantics); used by the dspend-straggler
+ * debug patch's instrumentation */
+static inline bool completion_done(struct completion *c) { return c->done > 0; }
 static inline unsigned long wait_for_completion_timeout(struct completion *c,
 							unsigned long timeout)
 {
@@ -901,6 +913,21 @@ static inline unsigned long copy_from_user(void *to, const void *from,
 	return 0;
 }
 
+/* Symmetric to copy_from_user, plus fault injection (see ebc_shim_state):
+ * returns the number of bytes NOT copied, like the kernel. */
+static inline unsigned long copy_to_user(void *to, const void *from,
+					 unsigned long n)
+{
+	if (ebc_shim.uaccess_hook)
+		ebc_shim.uaccess_hook();
+	if (ebc_shim.uaccess_fail_next) {
+		ebc_shim.uaccess_fail_next--;
+		return n;
+	}
+	memcpy(to, from, n);
+	return 0;
+}
+
 /* --- firmware loader: file_name is a filesystem path on the host ---------
  * If EBC_SHIM_FW_DIR is set, $EBC_SHIM_FW_DIR/<name> is tried first, so
  * the driver's own "rockchip/ebc.wbf" request resolves the way
@@ -1068,9 +1095,26 @@ struct drm_crtc_state;
 struct drm_crtc_funcs;
 struct drm_crtc_helper_funcs;
 
+/* drm_modeset_lock (INERT: the harness DRM core is single-threaded; the
+ * EXTRACT_FBS debug ioctl takes crtc.mutex around its ctx kref_get) */
+struct drm_modeset_lock { int dummy; };
+struct drm_modeset_acquire_ctx;
+
+static inline int drm_modeset_lock(struct drm_modeset_lock *lock,
+				   struct drm_modeset_acquire_ctx *ctx)
+{
+	(void)lock; (void)ctx;
+	return 0;
+}
+static inline void drm_modeset_unlock(struct drm_modeset_lock *lock)
+{
+	(void)lock;
+}
+
 struct drm_crtc {
 	struct drm_device *dev;
 	struct drm_crtc_state *state;
+	struct drm_modeset_lock mutex;
 };
 
 struct drm_crtc_state {

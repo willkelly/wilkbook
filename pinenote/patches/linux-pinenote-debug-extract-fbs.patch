@@ -1,0 +1,135 @@
+rockchip_ebc: implement the EXTRACT_FBS ioctl (debug kernel only)
+
+Debug patch for the wilkbook belief-vs-glass instrument
+(doc/pageturn-program.md 5.2; optics PLAN task 23): make the
+already-shipped DRM_IOCTL_ROCKCHIP_EBC_EXTRACT_FBS dump the driver's
+belief buffers (prev/next/final + both phase planes) instead of
+returning -EOPNOTSUPP.  The UAPI struct and ioctl number were always
+present in our include/uapi/drm/rockchip_ebc_drm.h, so a userspace
+built today works on both the stub (primary) and this (debug) kernel.
+
+Applied AFTER linux-pinenote-7.0-forward-port.patch (and alongside
+linux-pinenote-debug-dspend-straggler.patch), ONLY by the
+linux-pinenote-debug package variant (pinenote/packages/kernel.scm);
+the primary linux-pinenote kernel keeps the stub.  The same hunks are
+applied to the extracted driver source by the ebc-logic harness's
+debug variant (make -C pinenote/tools/ebc-logic check, dbg half),
+which executes the ioctl offline: pre-modeset -ENODEV, full-plane
+roundtrip against the fake EBC, exact plane sizes under ASan,
+NULL-able planes, -EFAULT via fault injection, the mid-copy kref
+lifetime guarantee, and a decode differential through the ebc-dump
+host tool.
+
+Ported from hrdl v6.19_ebc @7cb827d17 (rockchip_ebc.c:395-415) with
+four reference defects corrected (reported upstream; see
+doc/driver-findings-report.md):
+  1. plane sizes come from ctx->gray4_size/phase_size, not the
+     hard-coded 1313144 (a typo: gray4 is 1,314,144 bytes at
+     1872x1404, so the reference under-copies every plane by 1,000
+     bytes and both phase planes by 2,000);
+  2. the ctx is kref-pinned across the copies (the reference reads
+     crtc.state unpinned; a commit during the multi-ms copy can drop
+     the last reference - use-after-free);
+  3. NULL ctx (pre-modeset / CRTC disabled) returns -ENODEV instead
+     of dereferencing NULL;
+  4. the return value is -EFAULT/0, not OR'd uncopied-byte counts
+     (and the reference's dead access_ok call is dropped).
+
+No refresh-machine logic changes: the two hunks add a forward
+declaration and replace the stub ioctl body.  Locks held: crtc.mutex
+around the ctx pointer read + kref_get (microseconds); ctx->queue_lock
+around the ctx->final pointer snapshot (nanoseconds).  The ~9 MB of
+copy_to_user runs with no locks held - coherence is a protocol
+property (quiesce + double-dump verify), not a locking one.
+
+---
+--- a/drivers/gpu/drm/rockchip/rockchip_ebc.c
++++ b/drivers/gpu/drm/rockchip/rockchip_ebc.c
+@@ -395,10 +395,86 @@
+ {
+ 	return container_of(crtc_state, struct ebc_crtc_state, base);
+ }
++
++/* ebc-dbg: defined after the ioctl; needed for the kref_put below. */
++static void rockchip_ebc_ctx_release(struct kref *kref);
++
++/*
++ * ebc-dbg: EXTRACT_FBS implementation (wilkbook debug patch
++ * linux-pinenote-debug-extract-fbs.patch; debug kernel only — the
++ * primary kernel keeps the -EOPNOTSUPP stub).  Dumps the driver's
++ * belief buffers (prev/next/final + both phase planes) to userspace
++ * for the belief-vs-glass instrument (doc/pageturn-program.md §5.2,
++ * optics PLAN task 23).
++ *
++ * Ported from hrdl v6.19_ebc @7cb827d17 drivers/gpu/drm/rockchip/
++ * rockchip_ebc.c:395-415 with four reference defects corrected (see
++ * doc/driver-findings-report.md, EXTRACT_FBS reference-defects note):
++ *   1. sizes come from ctx (the reference hard-codes 1313144 — a
++ *      1,000-byte-short typo for gray4, 2,000 short for phase);
++ *   2. ctx is pinned by kref for the duration of the copies (the
++ *      reference reads crtc.state unpinned: a commit landing during
++ *      the multi-ms copy can drop the last ref — UAF);
++ *   3. NULL ctx (no modeset yet / CRTC disabled) returns -ENODEV
++ *      instead of dereferencing NULL;
++ *   4. returns -EFAULT/0 instead of OR'd uncopied-byte counts.
++ *
++ * Locking: crtc.mutex is held only around the ctx pointer read +
++ * kref_get (O(us)); queue_lock only around the ctx->final pointer
++ * snapshot (the pointer flips between final_buffer[0/1] under that
++ * lock).  Buffer *contents* are deliberately copied with no lock
++ * held: prev/next/phase are written lock-free by the refresh thread,
++ * so no lock can make them coherent anyway — a mid-refresh dump is a
++ * torn sample by design, and the dump protocol quiesces and
++ * double-dumps to verify stability (bit0 of the container flags).
++ */
+ static int ioctl_extract_fbs(struct drm_device *dev, void *data,
+ 		struct drm_file *file_priv)
+ {
+-	return -EOPNOTSUPP;
++	struct drm_rockchip_ebc_extract_fbs *args = data;
++	struct rockchip_ebc *ebc = dev_get_drvdata(dev->dev);
++	struct rockchip_ebc_ctx *ctx;
++	u8 *final_snap;
++	unsigned long not_copied = 0;
++	int ret;
++
++	ret = drm_modeset_lock(&ebc->crtc.mutex, NULL);
++	if (ret)
++		return ret;
++	ctx = ebc->crtc.state ?
++		to_ebc_crtc_state(ebc->crtc.state)->ctx : NULL;
++	if (!ctx) {
++		drm_modeset_unlock(&ebc->crtc.mutex);
++		return -ENODEV;	/* no modeset yet / CRTC disabled */
++	}
++	kref_get(&ctx->kref);
++	drm_modeset_unlock(&ebc->crtc.mutex);
++
++	spin_lock(&ctx->queue_lock);
++	final_snap = ctx->final;
++	spin_unlock(&ctx->queue_lock);
++
++	/* NULL-able planes per the custom-UAPI pattern: dump only what
++	 * was asked for. */
++	if (args->ptr_prev)
++		not_copied |= copy_to_user(args->ptr_prev, ctx->prev,
++					   ctx->gray4_size);
++	if (args->ptr_next)
++		not_copied |= copy_to_user(args->ptr_next, ctx->next,
++					   ctx->gray4_size);
++	if (args->ptr_final)
++		not_copied |= copy_to_user(args->ptr_final, final_snap,
++					   ctx->gray4_size);
++	if (args->ptr_phase1)
++		not_copied |= copy_to_user(args->ptr_phase1, ctx->phase[0],
++					   ctx->phase_size);
++	if (args->ptr_phase2)
++		not_copied |= copy_to_user(args->ptr_phase2, ctx->phase[1],
++					   ctx->phase_size);
++
++	kref_put(&ctx->kref, rockchip_ebc_ctx_release);
++
++	return not_copied ? -EFAULT : 0;
+ }
+ 
+ static const struct drm_ioctl_desc ioctls[DRM_COMMAND_END - DRM_COMMAND_BASE] = {

@@ -275,14 +275,23 @@ Separable and worth taking (in ladder order, harness-first):
    report + proposed patch citing hrdl's SHA, and lands in our tree as a
    pinned carried fix once acked (or sooner if §5's workbench work
    implicates it in the corruption).
+   **LANDED 2026-07-12** as the minimal (Option B) translation — dead
+   zone honored, monotone waits, end-exclusive windows; the commit's
+   containment-drop removal rejected — pins flipped; see
+   `doc/kernel-forward-port.md`'s cherry-pick record.
 2. **Finding-1/7 fix** (11c358d1ca7a) — same shape, same gates (the
-   `quirk:` blit tests).
+   `quirk:` blit tests).  **LANDED 2026-07-12**, applied verbatim.
 3. **EXTRACT_FBS restoration** in the debug kernel only: his *legacy*
    branch implementation (prev/next/final + both phase buffers,
    NULL-able pointers per the custom UAPI's pattern) is a direct
    reference for un-stubbing ours — the
    `doc/kernel-forward-port.md` observability wishlist item, and the
    decisive instrument for the reopened corruption hunt (§5).
+   **LANDED 2026-07-12**: `linux-pinenote-debug-extract-fbs.patch` plus
+   the ebc-dump grab/decode pair, offline-proven by the ebc-logic dbg
+   suite; four defects found in his reference implementation, corrected
+   in our port and reported (findings report, EXTRACT_FBS note).
+   Awaiting its one-smoke device ride.
 4. **Blue-noise dither tables** (4e6f4f4fffea) — verbatim constants,
    relevant only if we ever enable `bw_mode` dithering; zero risk to
    carry in the toolbox.

@@ -203,7 +203,10 @@ session scratchpad (`ebc/`); adoptability verdicts recorded in
   bw_threshold=7, fourtone=4/7/12`. Our lineage already carries the three
   debug ioctls; **`EXTRACT_FBS` dumps the live prev/next buffers — free
   driver-side ground truth for the optics rig** (userspace example in
-  m-weigand/mw_pinenote_misc).
+  m-weigand/mw_pinenote_misc). (Correction 2026-07-12: "free" described
+  the 6.x lineage — our 7.0 port stubbed the ioctl. Implemented
+  2026-07-12 in `linux-pinenote-debug` with the hrdl reference's four
+  defects corrected; tools in `pinenote/tools/ebc-logic`.)
 - **PNDeb ships field-tested defaults** on m-weigand 6.12: `auto_refresh=1
   refresh_threshold=60 split_area_limit=0 panel_reflection=1 dclk_select=0`
   (dev branch bumps **`dclk_select=1`**, 250 MHz — evidence the higher pixel

@@ -1,10 +1,12 @@
 (define-module (pinenote packages firmware)
   #:use-module (guix build-system copy)
+  #:use-module (guix build-system gnu)
   #:use-module (guix build-system trivial)
   #:use-module (guix download)
   #:use-module (guix gexp)
   #:use-module (guix licenses)
-  #:use-module (guix packages))
+  #:use-module (guix packages)
+  #:use-module (guix utils))
 
 (define-public pinenote-broadcom-wifi-firmware
   (package
@@ -106,6 +108,52 @@ name requested by the downstream PineNote Rockchip EBC driver.  This matches the
 driver's built-in fallback when the file is absent and avoids bundling the stock
 Debian screen image from device backups.")
     (license public-domain)))
+
+;; On-device EXTRACT_FBS grabber for the debug kernel (the belief half of
+;; the camera<->driver-belief instrument; doc/pageturn-program.md §5.2,
+;; optics PLAN task 23).  The sources are the ebc-logic host tool's own
+;; files, so the container format can never drift between the device
+;; grabber and the host decoder; the offline dbg suite
+;; (make ebc-logic-check) executes the ioctl + decode path end to end.
+;; Precedent for shipping a driver-buffer dump tool in a debug image:
+;; hrdl's rockchip_ebc_dump_buffers.py, packaged by ayakael
+;; (doc/hrdl-evaluation.md).
+(define-public pinenote-ebc-dump
+  (package
+    (name "pinenote-ebc-dump")
+    (version "0.1.0")
+    (source
+     (file-union "pinenote-ebc-dump-source"
+                 `(("ebc-dump-grab.c"
+                    ,(local-file "../tools/ebc-logic/ebc-dump-grab.c"))
+                   ("ebc-dump-format.h"
+                    ,(local-file "../tools/ebc-logic/ebc-dump-format.h")))))
+    (build-system gnu-build-system)
+    (arguments
+     (list
+      #:tests? #f
+      #:phases
+      #~(modify-phases %standard-phases
+          (delete 'configure)
+          (replace 'build
+            (lambda _
+              (invoke #$(cc-for-target) "-O2" "-Wall" "-Wextra"
+                      "-o" "ebc-dump-grab" "ebc-dump-grab.c")))
+          (replace 'install
+            (lambda _
+              (install-file "ebc-dump-grab"
+                            (string-append #$output "/bin")))))))
+    (home-page "https://codeberg.org/wilkbook")
+    (synopsis "PineNote EXTRACT_FBS grabber (debug kernel)")
+    (description
+     "Dump the rockchip_ebc driver's belief buffers (prev/next/final and
+both phase planes) through the EXTRACT_FBS ioctl into an EBCDUMP1
+container for host-side decoding (pinenote/tools/ebc-logic/ebc-dump) and
+camera-vs-belief analysis.  Only functional on the linux-pinenote-debug
+kernel; on the primary kernel the ioctl is stubbed and the tool exits
+with a clear message.  Supports quiescence verification by double-dump
+comparison (--verify) and partial dumps (--planes).")
+    (license gpl2)))
 
 (define-public pinenote-firmware-support
   (package
