@@ -154,10 +154,12 @@ What it executes and asserts (`quirk:`-policy applies as in rung 2):
   final-buffer switch delivering the new frame to the later area,
   in-flight collision deferral to the window end — with a per-pixel
   phase-regression detector proving no conflicting waveform data.
-- **Scheduler QUIRK E made device-visible**: with the shipped
-  `split_area_limit=0`, the rung-2 chained-begin-together scenario makes
-  overlap pixels' phase indices regress mid-sequence (conflicting drive
-  data on real hardware).
+- **Ex-scheduler-QUIRK-E made device-visible (now a fix guard)**: with
+  the shipped `split_area_limit=0`, the rung-2 chained-begin-together
+  scenario used to make overlap pixels' phase indices regress
+  mid-sequence (conflicting drive data on real hardware); since the
+  2026-07-12 `59b2113e8b9c` translation the same scenario must produce
+  zero per-pixel phase conflicts, and the test asserts exactly that.
 - **QUIRK F (the 2026-07-12 threshold-global finding), executed**: the
   fake device gained an IRQ-latency knob (`defer_dsp_end` +
   `fake_ebc_deliver_dsp_end()`), and one scripted session — partial
@@ -274,6 +276,12 @@ behavior diverges from the apparent intent.  Patch line numbers refer to
 `pinenote/patches/linux-pinenote-7.0-forward-port.patch`.  **Do not fix
 these silently in the patch** — they are candidates for upstream discussion
 (ayakael/hrdl trees carry the same code) and for cherry-pick review.
+Findings 3, 4 and 5 were fixed in-tree 2026-07-12 by porting hrdl's own
+fixes with provenance (`11c358d1ca7a` verbatim, `59b2113e8b9c` as a
+minimal translation — see `doc/kernel-forward-port.md`'s cherry-pick
+record); their `quirk:` pins flipped to `fix:` regression guards, so a
+rebase that silently reverts a fix still turns a test red.  Their patch
+line numbers below describe the *pre-fix* text and are kept for history.
 
 1. **`blit_fb_xrgb8888` odd-x edge preservation is cross-wired** (patch
    ~4815–4869).  The blit preserves the old destination value of exactly one
@@ -294,31 +302,40 @@ these silently in the patch** — they are candidates for upstream discussion
    nothing at all (`delta_y` is computed and never used).  Irrelevant for
    the shipped `panel_reflection=1`, but anyone flipping that param gets a
    subtly shifted, one-row-stale image.
-3. **`blit_pixels` odd-x1 "preserve" reads the wrong buffer** (patch 3808).
-   `first_odd` is read from `*src_line` instead of the destination, making
-   the restore a no-op: the out-of-clip even pixel is copied from source
-   too.  Benign for content (source is the composed final buffer) but the
-   pixel changes without being phase-tracked.
+3. **`blit_pixels` odd-x1 "preserve" reads the wrong buffer** (was patch
+   3808; **fixed in-tree 2026-07-12, hrdl `11c358d1ca7a` verbatim**).
+   `first_odd` was read from `*src_line` instead of the destination,
+   making the restore a no-op: the out-of-clip even pixel was copied from
+   source too.  Benign for content (source is the composed final buffer)
+   but the pixel changed without being phase-tracked — a prev/next
+   desync primitive.  Now pinned fixed by the `fix:` odd-x1 guard and
+   the blit soak's true-preservation reference.
 4. **`blit_pixels` odd-x2 "preserve" targets byte `pitch-1`, not
-   `width-1`** (patch 3810, 3824), plus an **out-of-bounds access**: for any
-   clip narrower than the full row the save/restore is a value-preserving
-   no-op on an unrelated byte one row down, and the odd-end pixel is copied
-   instead of preserved.  When the clip touches the last row and
-   `x1 >= 2`, the no-op read *and write* land one byte **past the end** of
-   the kmalloc'd prev/next buffer — a real (if value-preserving) kernel
-   heap overrun reachable from userspace damage rects.  This is the
-   strongest candidate for an upstream fix (`width - 1` was clearly
-   intended).
-5. **`schedule_area`'s begin-together path ignores the dead zone** (patch
-   3677–3682).  `do_not_start_before_frame` is only honored in the
-   in-flight branch; the pending-vs-pending "begin together" assignment
-   (and the wait branch) can therefore schedule an area to start *inside*
-   an overlapping area's refresh window when splitting is unavailable —
+   `width-1`** (was patch 3810, 3824; **fixed in-tree 2026-07-12, same
+   commit `11c358d1ca7a`**), plus an **out-of-bounds access**: for any
+   clip narrower than the full row the save/restore was a value-preserving
+   no-op on an unrelated byte one row down, and the odd-end pixel was
+   copied instead of preserved.  When the clip touched the last row and
+   `x1 >= 2`, the no-op read *and write* landed one byte **past the end**
+   of the kmalloc'd prev/next buffer — a real (if value-preserving) kernel
+   heap overrun reachable from userspace damage rects (`width - 1` was
+   clearly intended, and that is exactly hrdl's fix).  The blit soak now
+   includes the formerly forbidden odd-`x2`/last-row/`x1>=2` corner as
+   the regression gate.
+5. **`schedule_area`'s begin-together path ignores the dead zone** (was
+   patch 3677–3682; **fixed in-tree 2026-07-12, minimal translation of
+   hrdl `59b2113e8b9c`** — dead zone honored, monotone waits,
+   end-exclusive windows; the commit's containment-drop removal was NOT
+   adopted, see `doc/kernel-forward-port.md`).
+   `do_not_start_before_frame` was only honored in the in-flight branch;
+   the pending-vs-pending "begin together" assignment (and the wait
+   branch) could therefore schedule an area to start *inside* an
+   overlapping area's refresh window when splitting is unavailable —
    and the shipped configuration (`split_area_limit=0` in ebc.scm) never
-   splits.  Deterministic reproducer in
-   `test_schedule_quirk_begin_together_conflict`; on hardware the overlap
-   pixels get conflicting phase data (transient artifacts, no memory
-   unsafety).
+   splits.  The deterministic reproducer
+   (`test_schedule_quirk_begin_together_conflict`) and the rung-7a
+   device-visible test now pin the fix (zero per-pixel phase conflicts),
+   and the rung-2 soak asserts pairwise no-conflict outright.
 
 6. **`rockchip_ebc_ctx_free` iterates while freeing** (patch 3206):
    `list_for_each_entry(area, &ctx->queue, list) kfree(area);` reads

@@ -2789,10 +2789,10 @@ index 948b0f906..aad0a3f77 100644
 +obj-$(CONFIG_DRM_ROCKCHIP_EBC) += rockchip_ebc.o
 diff --git a/drivers/gpu/drm/rockchip/rockchip_ebc.c b/drivers/gpu/drm/rockchip/rockchip_ebc.c
 new file mode 100755
-index 000000000..d126a045e
+index 000000000..8db4c36cc
 --- /dev/null
 +++ b/drivers/gpu/drm/rockchip/rockchip_ebc.c
-@@ -0,0 +1,2842 @@
+@@ -0,0 +1,2865 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/*
 + * Copyright (C) 2021-2022 Samuel Holland <samuel@sholland.org>
@@ -3665,13 +3665,26 @@ index 000000000..d126a045e
 +			continue;
 +		}
 +
++		/*
++		 * Overlap scheduling fixed 2026-07-12: minimal translation of
++		 * hrdl v6.19_ebc_custom commit 59b2113e8b9c ("fix scheduling
++		 * issues due to overlapping areas"): refresh windows are
++		 * end-exclusive (other_end is the first free frame, matching
++		 * the skip check above), forward moves of frame_begin are
++		 * monotone, and the pending-vs-pending path below honors the
++		 * do_not_start_before_frame dead zone.  Finding 2 in
++		 * doc/driver-findings-report.md.  The containment-drop
++		 * removal that commit also carries was NOT adopted (it stems
++		 * from a misreading of drm_rect_intersect's return value and
++		 * disables the redundant-area drops).
++		 */
 +		/* If the other area already started, wait until it finishes. */
 +		if (other->frame_begin < current_frame) {
-+			frame_begin = max(frame_begin, other_end + 1);
++			frame_begin = max(frame_begin, other_end);
 +			/* printk(KERN_INFO "        other already started, setting to %i (%i, %i)\n", frame_begin, num_phases, other_end); */
 +			if (frame_begin < do_not_start_before_frame){
-+				/* pr_info("      NOTE: dead zone, resetting to: %i", do_not_start_before_frame + 1); */
-+				frame_begin = do_not_start_before_frame + 1;
++				/* pr_info("      NOTE: dead zone, resetting to: %i", do_not_start_before_frame); */
++				frame_begin = do_not_start_before_frame;
 +
 +			}
 +
@@ -3713,13 +3726,18 @@ index 000000000..d126a045e
 +		if (frame_begin > other->frame_begin){
 +			// for some reason we need to begin later than the other region,
 +			// which forces us to wait for the region
-+			frame_begin = other_end + 1;
++			frame_begin = max(frame_begin, other_end);
++			frame_begin = max(frame_begin, do_not_start_before_frame);
 +			/* pr_info(     "we need to wait"); */
-+		} else {
++		} else if (other->frame_begin >= do_not_start_before_frame) {
 +			// they can begin together
 +			frame_begin = other->frame_begin;
-+			do_not_start_before_frame = max(other_end, do_not_start_before_frame);
++			do_not_start_before_frame = other_end;
 +			/* pr_info(     "begin together"); */
++		} else {
++			// dead zone: must wait for both windows
++			frame_begin = max(other_end, do_not_start_before_frame);
++			/* pr_info(     "we need to wait 2"); */
 +		}
 +
 +		/* printk(KERN_INFO "    setting to: %i\n", frame_begin); */
@@ -3841,15 +3859,22 @@ index 000000000..d126a045e
 +	dst_line = dst + clip->y1 * pitch + x1_bytes;
 +	src_line = src + clip->y1 * pitch + x1_bytes;
 +
++	/*
++	 * Odd-edge preservation fixed 2026-07-12: hrdl v6.19_ebc_custom
++	 * commit 11c358d1ca7a ("fix adjustment for odd clips") applied
++	 * verbatim.  Odd-x1 must save the *dst* nibble (reading src made
++	 * the restore a no-op that leaked the out-of-clip column), and
++	 * odd-x2 must target byte width-1, not pitch-1 (wrong byte for
++	 * partial-width clips; 1-byte overrun on last-row clips with
++	 * x1 >= 2).  Findings 1 and 7 in doc/driver-findings-report.md.
++	 */
 +	for (y = clip->y1; y < clip->y2; y++) {
 +		if (start_x_is_odd)
-+			// keep only lower bit to restore it after the blitting
-+			first_odd = *src_line & 0b00001111;
++			// keep only lower bits to restore it after the blitting
++			first_odd = *dst_line & 0b00001111;
 +		if (end_x_is_odd){
-+			dst_line += pitch - 1;
-+			// keep only the upper bit for restoring later
-+			last_odd = *dst_line & 0b11110000;
-+			dst_line -= pitch - 1;
++			// keep only the upper bits for restoring later
++			last_odd = *(dst_line + width - 1) & 0b11110000;
 +		}
 +
 +		memcpy(dst_line, src_line, width);
@@ -3860,9 +3885,7 @@ index 000000000..d126a045e
 +		}
 +		if (end_x_is_odd){
 +			// write back the last 4 saved bits
-+			dst_line += pitch -1;
-+			*dst_line = (*dst_line & 0b00001111) | last_odd;
-+			dst_line -= pitch -1;
++			*(dst_line + width - 1) = (*(dst_line + width - 1) & 0b00001111) | last_odd;
 +		}
 +
 +		dst_line += pitch;

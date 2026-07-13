@@ -96,19 +96,18 @@ three independent ways:
 packed LUT as `word[next] >> (2*prev)` — the transpose of the file
 semantics above. If direct mode is ever enabled it would apply reversed
 transitions; worth a look upstream but harmless in our configuration.
-A second quirk: `rockchip_ebc_blit_pixels` gets *neither* edge right —
-at an odd `x1` edge it restores the *source's* low nibble (a no-op after
-the memcpy, leaking one out-of-clip column of `final` into `next`), and
-its odd-`x2` "preserve" targets byte `pitch-1` instead of the clip edge,
-which is a no-op for partial-width clips and a 1-byte heap overrun when
-the clip touches the last row with `x1 >= 2` (see
-`pinenote/tools/ebc-logic/README.md` Findings (c)/(d) for the full
-analysis with patch line numbers). `rs_y4_blit` implements correct edge
-preservation on both edges (the damage-composition test depends on it),
-so the library intentionally diverges from the driver there — note for
-the future `EXTRACT_FBS` hardware oracle: odd-edge clips will show
-systematic one-column differences against the device unless the quirk is
-emulated for comparison runs.
+A second quirk — **fixed in-tree 2026-07-12**: `rockchip_ebc_blit_pixels`
+used to get *neither* edge right — at an odd `x1` edge it restored the
+*source's* low nibble (a no-op after the memcpy, leaking one out-of-clip
+column of `final` into `next`), and its odd-`x2` "preserve" targeted
+byte `pitch-1` instead of the clip edge, a no-op for partial-width clips
+and a 1-byte heap overrun when the clip touched the last row with
+`x1 >= 2` (see `pinenote/tools/ebc-logic/README.md` Findings (c)/(d)
+for the full analysis). The forward-port patch now carries hrdl's own
+fix (`v6.19_ebc_custom` commit `11c358d1ca7a`, applied verbatim), so
+the driver matches `rs_y4_blit`'s correct both-edge preservation — the
+old caveat that an `EXTRACT_FBS` hardware oracle would need to emulate
+the quirk on odd-edge clips is obsolete.
 
 ## Library overview (`rastersim.h`)
 

@@ -158,6 +158,44 @@ evidence, not vibes.
   256-transition waveform differential, the goldens, and the
   in-bounds sync checks all stay green — an under-synced row would
   fail visibly, not silently.
+- `11c358d1ca7a` *rockchip_ebc_blit_pixels: fix adjustment for odd
+  clips* (ported 2026-07-12, **applied verbatim**) — fixes findings 1
+  and 7 of `doc/driver-findings-report.md` in one commit: odd-`x1`
+  edge preservation now saves the *dst* nibble (was a src-read no-op
+  that leaked one out-of-clip column), and odd-`x2` preservation
+  targets byte `width-1` instead of `pitch-1` (wrong byte for
+  partial-width clips; 1-byte heap overrun on last-row clips with
+  `x1 >= 2`). At the commit's parent our `blit_pixels` was
+  byte-identical to his, so the diff applies cleanly — no
+  translation needed. The rung-2 quirk pins (QUIRK C/D) flipped to
+  fix-regression guards, the blit soak's reference is now true
+  both-edge preservation, and the formerly OOB-forbidden corner is
+  exercised deliberately. rastersim's `rs_y4_blit` already
+  implemented the fixed behavior, so its "driver diverges" caveat is
+  gone.
+- `59b2113e8b9c` *fix scheduling issues due to overlapping areas*
+  (ported 2026-07-12, **minimal translation**) — fixes finding 2:
+  the pending-vs-pending begin-together path now honors
+  `do_not_start_before_frame` (an area chained through staggered
+  begin-togethers defers past *every* overlapping window instead of
+  starting mid-window), forward moves of `frame_begin` are monotone,
+  and the window arithmetic is end-exclusive (deferred areas start
+  at `other_end`, one frame earlier; the rung-7a `conflicts == 0`
+  checks prove the earlier handoff is phase-clean — an area's last
+  two phase writes are neutral 0xff and successors splice later in
+  the list). Deliberately NOT adopted from the commit: its
+  replacement of the two containment drops with
+  `!drm_rect_intersect(...)` (dead once overlap is established —
+  the commit message misreads `drm_rect_intersect`'s return value —
+  and it silently disables redundant-area dropping, changing drive
+  counts). Keeping our containment drops also keeps the overlap
+  serialization the *single* changed variable for the corruption
+  A/B (`doc/hrdl-evaluation.md` §5). QUIRK E's pins (rung 2
+  deterministic + rung 7a device-visible) flipped to fix guards; the
+  rung-2 soak now asserts pairwise no-conflict. Expected replay
+  shifts on the A.2 trace: `hw-frames 1569 -> 1558`, `active
+  2542 -> 2531`, `settle max 154 -> 152`; px-phases/decisions/washes
+  byte-identical.
 
 **Rejected, with evidence:**
 
@@ -248,16 +286,21 @@ compiles the verbatim driver sources out of the patch and surfaced seven
 latent issues, all documented with patch line numbers in the tool READMEs
 and pinned as `quirk:` tests so a future refresh that changes the behavior
 turns a test red. None affect the shipped configuration paths in a
-user-visible way today. Highlights, in upstream-fix priority order:
+user-visible way today. Items 1, 2 and the odd-`x1` leak in 5 were
+**fixed in-tree 2026-07-12** by porting hrdl's own fixes (cherry-pick
+record above); their pins now assert the *fixed* behavior, so they still
+guard rebases. Highlights, in upstream-fix priority order:
 
-1. `rockchip_ebc_blit_pixels` odd-`x2` "preserve" writes byte `pitch-1`
-   instead of the clip edge — a 1-byte kernel heap overrun
-   (read-modify-write past the buffer) when a clip touches the last row
-   with `x1 >= 2`; otherwise a silent no-op.
-2. `rockchip_ebc_schedule_area`'s begin-together/wait paths ignore
-   `do_not_start_before_frame`, so an area can start inside an overlapping
-   area's refresh window (more likely with the shipped
-   `split_area_limit=0`); deterministic reproducer in the tests.
+1. **(fixed in-tree, `11c358d1ca7a`)** `rockchip_ebc_blit_pixels`
+   odd-`x2` "preserve" wrote byte `pitch-1` instead of the clip edge — a
+   1-byte kernel heap overrun (read-modify-write past the buffer) when a
+   clip touched the last row with `x1 >= 2`; otherwise a silent no-op.
+2. **(fixed in-tree, `59b2113e8b9c` translation)**
+   `rockchip_ebc_schedule_area`'s begin-together/wait paths ignored
+   `do_not_start_before_frame`, so an area could start inside an
+   overlapping area's refresh window (more likely with the shipped
+   `split_area_limit=0`); the deterministic reproducer in the tests now
+   pins the fix.
 3. `rockchip_ebc_ctx_free` kfrees queue nodes inside `list_for_each_entry`
    (UAF on teardown with queued damage).
 4. `rockchip_ebc_blit_direct` reads the packed LUT transposed relative to
@@ -265,8 +308,8 @@ user-visible way today. Highlights, in upstream-fix priority order:
    enabled; we ship 0 — hardware LUT mode indexes correctly in silicon).
 5. Assorted blit edge-case quirks: odd-x damage-edge preservation
    cross-wired under `panel_reflection`, `panel_reflection=0` drops the
-   last damage row, odd-`x1` "preserve" is a no-op that leaks one
-   out-of-clip column.
+   last damage row, and — **fixed in-tree by `11c358d1ca7a`** —
+   odd-`x1` "preserve" was a no-op that leaked one out-of-clip column.
 6. (2026-07-12, hardware-first) The `auto_refresh=1` threshold path
    launches its global refresh zero-gap after the partial burst that
    crossed the threshold, and the counting `display_end` handshake —

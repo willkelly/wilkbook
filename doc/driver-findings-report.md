@@ -42,10 +42,19 @@ the clip edge (`x2/2`). Two consequences:
 
 Reproducer: `pinenote/tools/ebc-logic` `quirk:` test; the exact
 triggering condition (odd `x2` && last row && `x1 >= 2`) is asserted by
-code analysis and excluded from the randomized soak so the test binary
-itself stays in-bounds. Suggested fix: target `x2 >> 1` within the clip
-row, or drop the "preserve" entirely and blit inclusive nibble-aligned
-spans.
+code analysis and was excluded from the randomized soak so the test
+binary itself stayed in-bounds. Suggested fix: target `x2 >> 1` within
+the clip row, or drop the "preserve" entirely and blit inclusive
+nibble-aligned spans.
+
+**Fixed in-tree 2026-07-12.** The forward-port patch now carries hrdl's
+own fix — `11c358d1ca7a` ("rockchip_ebc: rockchip_ebc_blit_pixels: fix
+adjustment for odd clips", v6.19_ebc_custom, 2025-01-09) — applied
+verbatim; it fixes this finding and finding 7 in one commit. The host
+pins flipped to fix-regression guards, and the formerly forbidden
+odd-`x2`/last-row/`x1>=2` corner is now exercised on purpose by the
+blit soak. The upstream ask is unchanged: backport the fix to the
+legacy branch.
 
 ## 2. Overlapping refresh windows: `rockchip_ebc_schedule_area` ignores `do_not_start_before_frame` in its begin-together/wait paths
 
@@ -62,6 +71,24 @@ Reproducer: `test_schedule_quirk_begin_together_conflict` in
 `pinenote/tools/ebc-logic/ebc-logic-test.c` (deterministic). The suite's
 coverage soak confirms no pixels are ever *lost* — the hole is purely
 temporal.
+
+**Fixed in-tree 2026-07-12** via a minimal translation of hrdl's
+`59b2113e8b9c` ("rockchip_ebc: fix scheduling issues due to overlapping
+areas", v6.19_ebc_custom, 2025-01-09): the pending-vs-pending
+begin-together path now honors `do_not_start_before_frame`, forward
+moves of `frame_begin` are monotone (`max()`, never an unconditional
+assignment that can move a start backward into a waited-for window),
+and window arithmetic is end-exclusive throughout. The deterministic
+reproducer and the rung-7a device-visible test flipped to fix pins
+(zero per-pixel phase conflicts), and the rung-2 soak now asserts the
+pairwise no-conflict property outright. One part of hrdl's commit was
+deliberately **not** adopted: it also replaces the two redundant-area
+containment drops with `!drm_rect_intersect(...)` tests that can never
+fire once overlap is established — his commit message misstates
+`drm_rect_intersect`'s return value (mainline returns "intersection
+non-empty", not "first rect not fully covered"), so the change silently
+disables contained/duplicate-area dropping. Upstream should review that
+piece separately when backporting. The upstream ask is unchanged.
 
 ## 3. Use-after-free in `rockchip_ebc_ctx_free`
 
@@ -96,7 +123,10 @@ test.
   PineNote ships `panel_reflection=1`, hiding this.)
 - `blit_pixels` odd-`x1` "preserve" restores the *source's* low nibble —
   a no-op that leaks one out-of-clip column of `final` into `next`
-  without scheduling it for refresh.
+  without scheduling it for refresh. (**Fixed in-tree 2026-07-12**
+  together with finding 1 by hrdl's `11c358d1ca7a`, applied verbatim —
+  see finding 1's note. This removed a prev/next desync primitive from
+  the corruption-hunt suspect list.)
 
 All pinned with references in `pinenote/tools/ebc-logic/README.md`
 (Findings a–c) and cross-checked by the rastersim damage-composition
@@ -115,6 +145,17 @@ backport his own fixes. His fix commit for finding 2 describes observed
 windows) is now also the prime suspect for the session-selective panel
 corruption documented below, which the 2026-07-12 instrumented run
 cleared the threshold-handshake path of.
+
+**Update 2026-07-12 (landed in wilkbook):** both fixes are now carried
+in the forward-port patch as fixes with upstream provenance, not silent
+patches — `11c358d1ca7a` verbatim (findings 1+7), `59b2113e8b9c` as a
+minimal translation (finding 2's scheduling holes; the commit's
+unrelated containment-drop removal was not adopted, see finding 2's
+note). All host-suite quirk pins for these findings flipped to pin the
+fixed behavior (`pinenote/tools/ebc-logic`, cherry-pick record in
+`doc/kernel-forward-port.md`). Keeping the fixed scheduler as the single
+changed variable also sets up the corruption A/B on the rung-7a optical
+model (`doc/hrdl-evaluation.md` §5).
 
 1 and 3 are ordinary memory-safety fixes (small, obviously correct).
 2 needs a design decision from whoever owns the scheduler (respect

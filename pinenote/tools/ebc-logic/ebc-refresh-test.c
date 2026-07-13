@@ -739,11 +739,15 @@ static void test_midrefresh_commit(void)
 
 	/* B committed during frame 2 splices after that frame's start and
 	 * schedules on frame 3; its piece overlapping in-flight A defers
-	 * to A's window end (frame num_phases+1), so the whole run is
-	 * (num_phases+1) + num_phases frames. */
-	check(fake_ebc.hw_frames == 2 * NPH + 1,
+	 * to A's window end.  End-exclusive since the 59b2113e8b9c
+	 * translation (2026-07-12): the deferred piece starts on frame
+	 * num_phases (was num_phases+1), so the whole run is
+	 * num_phases + num_phases frames.  The conflicts==0 check below
+	 * staying green is the empirical proof that the one-frame-earlier
+	 * handoff is phase-clean. */
+	check(fake_ebc.hw_frames == 2 * NPH,
 	      "mid-refresh commit: overlap defers to the in-flight window end (%u frames total)",
-	      2 * NPH + 1);
+	      2 * NPH);
 	check(fake_ebc.conflicts == 0,
 	      "mid-refresh commit: no per-pixel phase conflicts");
 
@@ -765,7 +769,7 @@ static void test_midrefresh_commit(void)
 
 	/* first drive of the B-only region must be at frame >= 3 (the
 	 * splice happened during frame 2), of the B/A overlap at the
-	 * deferred window (frame num_phases+1) */
+	 * deferred window (frame num_phases) */
 	ok = true;
 	for (y = 8; y < 24 && ok; y++)
 		for (x = 8; x < 32 && ok; x++) {
@@ -797,7 +801,7 @@ static void test_midrefresh_commit(void)
 }
 
 /* ---------------------------------------------------------------------- */
-/* QUIRK E observed at the device: chained begin-together conflict         */
+/* ex-QUIRK E at the device: chained begin-together (fixed 59b2113e8b9c)   */
 
 static int quirk_step;
 
@@ -830,12 +834,15 @@ static void quirk_inject(u32 hw_frame)
 
 static void test_quirk_begin_together_conflict(void)
 {
-	/* Rung 2 pinned QUIRK E in the scheduler (an area chained through
-	 * two begin-togethers lands inside an overlapping area's refresh
-	 * window).  With the shipped split_area_limit=0 this test makes
-	 * the consequence device-visible: the overlap pixels' phase
-	 * indices regress mid-sequence — conflicting waveform data on
-	 * hardware. */
+	/* Regression guard for ex-QUIRK E (finding 2), device-visible
+	 * form.  Rung 2 used to pin the scheduler bug (an area chained
+	 * through two begin-togethers landed inside an overlapping area's
+	 * refresh window), and this test used to assert its consequence
+	 * at the panel: fake_ebc.conflicts > 0 (overlap pixels' phase
+	 * indices regressing mid-sequence — conflicting waveform data on
+	 * hardware).  Fixed 2026-07-12 via the 59b2113e8b9c translation:
+	 * with the shipped split_area_limit=0 the same staggered-commit
+	 * scenario must now produce ZERO per-pixel phase conflicts. */
 	struct harness h;
 	struct rockchip_ebc *ebc = harness_ebc(&h, GW, GH, NPH);
 	struct rockchip_ebc_ctx *ctx = harness_ctx(&h, GW, GH);
@@ -862,8 +869,8 @@ static void test_quirk_begin_together_conflict(void)
 	fake_ebc.on_frm_start = NULL;
 
 	check(quirk_step == 2, "quirk scenario: both staggered commits injected");
-	check(fake_ebc.conflicts > 0,
-	      "quirk: chained begin-together makes overlap pixels' phase indices regress (%u conflicts) — scheduler QUIRK E, device-visible",
+	check(fake_ebc.conflicts == 0,
+	      "fix: chained begin-together no longer feeds the panel conflicting phase data (%u conflicts; was QUIRK E, hrdl 59b2113e8b9c)",
 	      fake_ebc.conflicts);
 	check(ebc_shim.completion_timeouts == 0 && list_empty(&ctx->queue),
 	      "quirk scenario: the refresh still completes and drains");

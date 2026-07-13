@@ -766,23 +766,20 @@ static void test_blit_r4(void)
 static void test_blit_pixels(void)
 {
 	/* Reference written from the code's spec: copy the byte range
-	 * covering [x1,x2) per row.
+	 * covering [x1,x2) per row, preserving the out-of-clip nibbles at
+	 * both odd edges (same semantics as rastersim's rs_y4_blit).
 	 *
-	 * QUIRK C (odd-x1 "preserve" reads src): the driver re-reads the
-	 * *source* byte's low nibble and writes it back, which is a no-op:
-	 * dst pixel x1-1 (outside the clip) is overwritten with source
-	 * content too.
-	 *
-	 * QUIRK D (odd-x2 preserve targets the wrong byte): the driver
-	 * saves/restores the high nibble of dst_line[pitch-1] instead of
-	 * dst_line[width-1].  For any clip narrower than the full pitch
-	 * that is a value-preserving no-op on an unrelated byte, and the
-	 * odd-end pixel x2 is *copied* from src instead of preserved.
-	 * Only a full-width clip (x1 < 2, x2 == width-1) hits the intended
-	 * byte.  When the clip touches the last row and x1 >= 2, the no-op
-	 * read+write lands one byte PAST the end of the buffer (see
-	 * README Findings; the randomized clips below avoid that case so
-	 * the test itself stays within allocations). */
+	 * History: this soak used to *emulate* QUIRK C (odd-x1 "preserve"
+	 * re-read the source nibble — a no-op that leaked the out-of-clip
+	 * column) and QUIRK D (odd-x2 preserve targeted byte pitch-1
+	 * instead of width-1 — wrong byte for partial-width clips, and a
+	 * 1-byte heap overrun on last-row clips with x1 >= 2, which the
+	 * randomized clips had to avoid).  Both were fixed 2026-07-12 via
+	 * hrdl v6.19_ebc_custom 11c358d1ca7a applied verbatim (findings
+	 * 1/7 in doc/driver-findings-report.md); the reference now checks
+	 * true both-edge preservation and the formerly-forbidden
+	 * odd-x2/last-row/x1>=2 corner is exercised on purpose as the
+	 * overrun regression gate. */
 	static const struct drm_rect corners[] = {
 		{0, 0, XRGB_W, XRGB_H},
 		{1, 0, 3, 2},		/* odd x1, odd x2 */
@@ -790,8 +787,10 @@ static void test_blit_pixels(void)
 		{2, 5, 5, 7},		/* even x1, odd x2 */
 		{3, 3, 4, 4},		/* 1x1, odd x1 */
 		{0, 15, 32, 16},	/* last row */
-		{0, 0, XRGB_W - 1, 2},	/* full-width odd x2: real preserve */
-		{2, 0, 5, 1},		/* partial-width odd x2: no preserve */
+		{0, 0, XRGB_W - 1, 2},	/* full-width odd x2 */
+		{2, 0, 5, 1},		/* partial-width odd x2 */
+		{2, 15, 5, 16},		/* odd x2 + last row + x1>=2: the
+					 * ex-QUIRK-D out-of-bounds corner */
 	};
 	struct rockchip_ebc_ctx *ctx = rockchip_ebc_ctx_alloc(NULL, XRGB_W, XRGB_H);
 	u8 *shadow = malloc(ctx->gray4_size);
@@ -803,17 +802,12 @@ static void test_blit_pixels(void)
 	for (iter = 0; iter < 200 + ARRAY_SIZE(corners) && ok; iter++) {
 		struct drm_rect r;
 		unsigned int i, x1b, x2b;
-		bool full_width;
 		int y;
 
-		if (iter < ARRAY_SIZE(corners)) {
+		if (iter < ARRAY_SIZE(corners))
 			r = corners[iter];
-		} else {
-			do {
-				xrgb_random_rect(&r);
-				/* avoid the QUIRK D out-of-bounds case */
-			} while ((r.x2 & 1) && r.x1 >= 2 && r.y2 == XRGB_H);
-		}
+		else
+			xrgb_random_rect(&r);
 		for (i = 0; i < ctx->gray4_size; i++) {
 			src[i] = (u8)prng();
 			ctx->next[i] = (u8)prng();
@@ -824,18 +818,19 @@ static void test_blit_pixels(void)
 
 		x1b = r.x1 / 2;
 		x2b = r.x2 / 2 + ((r.x2 & 1) ? 1 : 0);
-		full_width = x1b == 0 && x2b == ctx->gray4_pitch;
 		for (y = r.y1; y < r.y2; y++) {
 			u8 *drow = shadow + (size_t)y * ctx->gray4_pitch;
 			const u8 *srow = src + (size_t)y * ctx->gray4_pitch;
-			u8 saved_high = (u8)(drow[ctx->gray4_pitch - 1] & 0xf0);
+			u8 saved_low = (u8)(drow[x1b] & 0x0f);
+			u8 saved_high = (u8)(drow[x2b - 1] & 0xf0);
 
 			memcpy(drow + x1b, srow + x1b, x2b - x1b);
-			/* QUIRK D: preservation only lands inside the copied
-			 * range for full-width clips */
-			if ((r.x2 & 1) && full_width)
-				drow[ctx->gray4_pitch - 1] =
-					(drow[ctx->gray4_pitch - 1] & 0x0f) | saved_high;
+			/* true both-edge preservation (fixed behavior) */
+			if (r.x1 & 1)
+				drow[x1b] = (drow[x1b] & 0xf0) | saved_low;
+			if (r.x2 & 1)
+				drow[x2b - 1] =
+					(drow[x2b - 1] & 0x0f) | saved_high;
 		}
 		if (memcmp(ctx->next, shadow, ctx->gray4_size)) {
 			printf("FAIL: blit_pixels mismatch (clip %d,%d-%d,%d)\n",
@@ -844,9 +839,12 @@ static void test_blit_pixels(void)
 			ok = false;
 		}
 	}
-	check(ok, "blit_pixels matches reference (208 cases incl. odd-x bounds)");
+	check(ok, "blit_pixels matches reference (209 cases incl. odd-x bounds + ex-OOB corner)");
 
-	/* pin QUIRK C explicitly */
+	/* Regression guard for ex-QUIRK C (was: odd-x1 "preserve" re-read
+	 * the src nibble, so pixel x1-1 leaked src content; the pin
+	 * asserted px(0,0)==0xE).  Fixed 2026-07-12 via hrdl 11c358d1ca7a:
+	 * the out-of-clip even pixel is now truly preserved. */
 	memset(ctx->next, 0x11, ctx->gray4_size);
 	memset(src, 0xEE, ctx->gray4_size);
 	{
@@ -854,13 +852,17 @@ static void test_blit_pixels(void)
 
 		rockchip_ebc_blit_pixels(ctx, ctx->next, src, &r);
 	}
-	check(get_px(ctx->next, ctx->gray4_pitch, 0, 0) == 0xE &&
+	check(get_px(ctx->next, ctx->gray4_pitch, 0, 0) == 0x1 &&
 	      get_px(ctx->next, ctx->gray4_pitch, 1, 0) == 0xE &&
 	      get_px(ctx->next, ctx->gray4_pitch, 2, 0) == 0x1,
-	      "quirk: blit_pixels odd-x1 copies the out-of-clip even pixel from src too");
+	      "fix: blit_pixels odd-x1 preserves the out-of-clip even pixel (was QUIRK C; hrdl 11c358d1ca7a)");
 
-	/* pin QUIRK D explicitly: partial-width odd-x2 copies the
-	 * out-of-clip pixel x2; only a full-width clip preserves it */
+	/* Regression guard for ex-QUIRK D (was: odd-x2 preserve targeted
+	 * byte pitch-1 instead of width-1, so partial-width clips copied
+	 * the out-of-clip pixel x2 — the pin asserted px(3,0)==0xE — and
+	 * only full-width clips hit the intended byte).  Fixed 2026-07-12
+	 * via hrdl 11c358d1ca7a: preservation lands on the clip edge for
+	 * every width. */
 	memset(ctx->next, 0x11, ctx->gray4_size);
 	memset(src, 0xEE, ctx->gray4_size);
 	{
@@ -868,8 +870,8 @@ static void test_blit_pixels(void)
 
 		rockchip_ebc_blit_pixels(ctx, ctx->next, src, &r);
 	}
-	check(get_px(ctx->next, ctx->gray4_pitch, 3, 0) == 0xE,
-	      "quirk: blit_pixels partial-width odd-x2 overwrites the out-of-clip pixel x2");
+	check(get_px(ctx->next, ctx->gray4_pitch, 3, 0) == 0x1,
+	      "fix: blit_pixels partial-width odd-x2 preserves the out-of-clip pixel x2 (was QUIRK D; hrdl 11c358d1ca7a)");
 	memset(ctx->next, 0x11, ctx->gray4_size);
 	{
 		struct drm_rect r = {0, 0, XRGB_W - 1, 1};	/* full width */
@@ -877,7 +879,7 @@ static void test_blit_pixels(void)
 		rockchip_ebc_blit_pixels(ctx, ctx->next, src, &r);
 	}
 	check(get_px(ctx->next, ctx->gray4_pitch, XRGB_W - 1, 0) == 0x1,
-	      "quirk: blit_pixels full-width odd-x2 does preserve pixel x2");
+	      "fix: blit_pixels full-width odd-x2 still preserves pixel x2 (green before and after 11c358d1ca7a)");
 	free(shadow);
 	free(src);
 	rockchip_ebc_ctx_free(ctx);
@@ -1206,10 +1208,13 @@ static void test_schedule_inflight_contained(void)
 	list_add_tail(&area_new(4, 4, 8, 8, EBC_FRAME_PENDING)->list, &areas);
 	schedule_all(&areas, 5, NUM_PHASES);
 	b = area_at(&areas, 1);
+	/* end-exclusive since 59b2113e8b9c (2026-07-12): the deferred area
+	 * starts on the first frame after the in-flight window [0, NPH),
+	 * i.e. NUM_PHASES, not NUM_PHASES+1 */
 	check(list_len_checked(&areas) == 2 && b &&
-	      b->frame_begin == NUM_PHASES + 1,
-	      "schedule: area inside an in-flight area defers to other_end+1 (frame %u)",
-	      NUM_PHASES + 1);
+	      b->frame_begin == NUM_PHASES,
+	      "schedule: area inside an in-flight area defers to the window end (frame %u)",
+	      NUM_PHASES);
 	free_areas(&areas);
 }
 
@@ -1239,8 +1244,9 @@ static void test_schedule_inflight_split(void)
 		if (a->frame_begin == 0)
 			continue;	/* the in-flight seed */
 		if (drm_rect_intersect(&inter, &(struct drm_rect){0, 0, 8, 8})) {
-			/* still collides with A: must wait for it */
-			ok &= a->frame_begin == NUM_PHASES + 1;
+			/* still collides with A: must wait for it
+			 * (end-exclusive since 59b2113e8b9c) */
+			ok &= a->frame_begin == NUM_PHASES;
 			with_wait++;
 		} else {
 			ok &= a->frame_begin == 5;
@@ -1261,14 +1267,15 @@ static void test_schedule_split_area_limit_zero(void)
 
 	split_area_limit = 0;
 
-	/* in-flight collision: whole area waits */
+	/* in-flight collision: whole area waits (end-exclusive since
+	 * 59b2113e8b9c) */
 	list_add_tail(&area_new(0, 0, 8, 8, 0)->list, &areas);
 	list_add_tail(&area_new(4, 4, 12, 12, EBC_FRAME_PENDING)->list, &areas);
 	schedule_all(&areas, 5, NUM_PHASES);
 	b = area_at(&areas, 1);
 	check(list_len_checked(&areas) == 2 && b &&
 	      drm_rect_equals(&b->clip, &(struct drm_rect){4, 4, 12, 12}) &&
-	      b->frame_begin == NUM_PHASES + 1,
+	      b->frame_begin == NUM_PHASES,
 	      "schedule: split_area_limit=0 (shipped): in-flight collision defers whole area");
 	free_areas(&areas);
 
@@ -1329,28 +1336,34 @@ static void test_schedule_min_size_no_split(void)
 	list_add_tail(&area_new(4, 0, 12, 1, EBC_FRAME_PENDING)->list, &areas);
 	schedule_all(&areas, 5, NUM_PHASES);
 	b = area_at(&areas, 1);
+	/* end-exclusive since 59b2113e8b9c */
 	check(list_len_checked(&areas) == 2 && b &&
 	      drm_rect_equals(&b->clip, &(struct drm_rect){4, 0, 12, 1}) &&
-	      b->frame_begin == NUM_PHASES + 1,
+	      b->frame_begin == NUM_PHASES,
 	      "schedule: sub-2px areas never split; whole area defers");
 	free_areas(&areas);
 }
 
 static void test_schedule_quirk_begin_together_conflict(void)
 {
-	/* QUIRK E pinned: the pending-vs-pending "begin together" path
-	 * ignores do_not_start_before_frame, so when splitting is
-	 * unavailable (split_area_limit=0 is what ebc.scm ships) an area
-	 * that chains begin-togethers with two staggered pending areas is
-	 * scheduled *inside* the first one's refresh window:
+	/* Regression guard for ex-QUIRK E (finding 2).  Was pinned buggy:
+	 * the pending-vs-pending "begin together" path ignored
+	 * do_not_start_before_frame, so with splitting unavailable
+	 * (split_area_limit=0 is what ebc.scm ships) an area that chained
+	 * begin-togethers with two staggered pending areas was scheduled
+	 * *inside* the first one's refresh window (b=39, c=41, a=41 —
+	 * mid-window of b [39,77); conflicting phase data on hardware).
+	 *
+	 * Fixed 2026-07-12 via the minimal translation of hrdl
+	 * v6.19_ebc_custom 59b2113e8b9c: begin-together is only allowed
+	 * when the other area starts outside the dead zone; otherwise the
+	 * area defers past *both* windows.  With end-exclusive window
+	 * arithmetic the same scenario now schedules:
 	 *
 	 *   in-flight s1@0, s2@2 (disjoint); pending b waits for s1
-	 *   (fb=39), pending c waits for s2 (fb=41); pending a overlaps
-	 *   b and c only -> begin-together with b (fb=39), then with c
-	 *   (fb=41): a ends up beginning at 41, mid-window of b [39,77).
-	 *
-	 * On hardware the overlap pixels then get conflicting phase data.
-	 * See README Findings. */
+	 *   (fb=38), pending c waits for s2 (fb=40); pending a overlaps
+	 *   b and c only -> must clear b's window [38,76) AND c's window
+	 *   [40,78): fb=78, outside both. */
 	LIST_HEAD(areas);
 	struct rockchip_ebc_area *b, *c, *a;
 
@@ -1365,12 +1378,12 @@ static void test_schedule_quirk_begin_together_conflict(void)
 	c = area_at(&areas, 3);
 	a = area_at(&areas, 4);
 	check(list_len_checked(&areas) == 5 && b && c && a &&
-	      b->frame_begin == NUM_PHASES + 1 &&
-	      c->frame_begin == 2 + NUM_PHASES + 1 &&
-	      a->frame_begin == c->frame_begin &&
-	      a->frame_begin > b->frame_begin &&
-	      a->frame_begin < b->frame_begin + NUM_PHASES,
-	      "quirk: chained begin-together schedules an area inside an overlapping area's window");
+	      b->frame_begin == NUM_PHASES &&
+	      c->frame_begin == 2 + NUM_PHASES &&
+	      a->frame_begin == 2 + 2 * NUM_PHASES &&
+	      a->frame_begin >= b->frame_begin + NUM_PHASES &&
+	      a->frame_begin >= c->frame_begin + NUM_PHASES,
+	      "fix: chained begin-together defers past every overlapping window (was QUIRK E; hrdl 59b2113e8b9c)");
 	free_areas(&areas);
 	split_area_limit = 12;
 }
@@ -1378,12 +1391,16 @@ static void test_schedule_quirk_begin_together_conflict(void)
 static void test_schedule_soak_persistent(void)
 {
 	/* multi-round randomized soak with a persistent queue: coverage-
-	 * bitmap equality, list integrity, everything scheduled.  (The
-	 * pairwise no-conflict property is deliberately NOT asserted here:
-	 * QUIRK E above shows the scheduler does not provide it.) */
+	 * bitmap equality, list integrity, everything scheduled, and —
+	 * since the 59b2113e8b9c translation landed (2026-07-12) —
+	 * pairwise no-conflict: two spatially overlapping areas either
+	 * begin together (identical windows) or occupy disjoint refresh
+	 * windows.  (Historically this last property was deliberately NOT
+	 * asserted: QUIRK E showed the pre-fix scheduler did not provide
+	 * it.) */
 	LIST_HEAD(areas);
 	u8 cov_in[COV_W * COV_H], cov_out[COV_W * COV_H];
-	bool cov_ok = true, int_ok = true, sched_ok = true;
+	bool cov_ok = true, int_ok = true, sched_ok = true, pair_ok = true;
 	u32 frame = 0;
 	int round;
 
@@ -1418,13 +1435,33 @@ static void test_schedule_soak_persistent(void)
 		int_ok &= list_len_checked(&areas) >= 0;
 		cov_list(cov_out, &areas);
 		cov_ok &= !memcmp(cov_in, cov_out, sizeof(cov_in));
-		list_for_each_entry(a, &areas, list)
+		list_for_each_entry(a, &areas, list) {
+			struct rockchip_ebc_area *e;
+
 			sched_ok &= a->frame_begin != EBC_FRAME_PENDING;
+			/* pairwise no-conflict (holds since 59b2113e8b9c) */
+			list_for_each_entry(e, &areas, list) {
+				struct drm_rect inter = a->clip;
+
+				if (e == a)
+					break;
+				if (!drm_rect_intersect(&inter, &e->clip))
+					continue;
+				if (a->frame_begin != e->frame_begin &&
+				    a->frame_begin < e->frame_begin + NUM_PHASES &&
+				    e->frame_begin < a->frame_begin + NUM_PHASES) {
+					printf("FAIL: window conflict: areas @%u and @%u overlap\n",
+					       a->frame_begin, e->frame_begin);
+					pair_ok = false;
+				}
+			}
+		}
 		frame += 1 + prng_below(2 * NUM_PHASES);
 	}
 	check(int_ok, "schedule soak: list stays a valid doubly-linked list (50 rounds)");
 	check(cov_ok, "schedule soak: union of scheduled rects == union of requested rects");
 	check(sched_ok, "schedule soak: every surviving area gets a frame_begin");
+	check(pair_ok, "schedule soak: overlapping areas begin together or in disjoint windows (fix 59b2113e8b9c)");
 	free_areas(&areas);
 }
 
