@@ -475,6 +475,13 @@ bundles + reports under `pinenote/tools/optics/build/bundles/sweep1.*`):
     idle-washer's periodic washes are load-bearing against pure physics,
     not just against driver misbehavior — and dark-heavy content wants
     them on a clock, not only on debt. Bundle: `.../veritas`.
+    (CORRECTION, same day: the eroded-interior discriminator shows the
+    full-mask +0.019 was edge-inflated ~2x by sub-pixel registration
+    creep; the registration-immune interior drift is +0.009/300 s
+    (~0.002/min), 4.5x the white control (+0.002). The relaxation is
+    real; the rate above is halved. Also: the displayed page during V3
+    was a near-blank card page, not the graphic page as written — the
+    injector's page tracking drifted; dark area was marks/patches only.)
 
 Instrument provenance: 30 fps / exposure 312 / gain 32 / frontlight 255-255;
 ghost-rms repeatability sigma 0.003-0.006 between identical transitions.

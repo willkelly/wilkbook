@@ -59,6 +59,15 @@ reader ALL=(ALL) NOPASSWD: ALL
                 ;; dogfooding KOReader profile's home_dir on first boot --
                 ;; only when the settings file is absent, never overriding a
                 ;; profile the user has since customized.
+                ;; Comfort defaults beyond home_dir (2026-07-13, first
+                ;; dogfooding session on a bare profile): KOReader's stock
+                ;; refresh_on_pages_with_images=true promotes every
+                ;; image-bearing page to a full flash — the quickstart
+                ;; guide flashed on nearly every turn.  full_refresh_count
+                ;; 12 is the evidence-based suggestion (refresh-policy
+                ;; finding 6; Decision 4 note: seeding a DEFAULT — the
+                ;; user's menu changes persist, the seed never overwrites
+                ;; an existing profile).
                 (simple-service 'pinenote-koreader-home-dir
                                 activation-service-type
                                 #~(let ((f "/root/.config/koreader/settings.reader.lua"))
@@ -66,7 +75,7 @@ reader ALL=(ALL) NOPASSWD: ALL
                                       (mkdir-p "/root/.config/koreader")
                                       (call-with-output-file f
                                         (lambda (port)
-                                          (display "-- seeded by the reader flavor (pinenote-koreader-home-dir)\nreturn {\n    [\"home_dir\"] = \"/data/books\",\n}\n" port))))))
+                                          (display "-- seeded by the reader flavor (pinenote-koreader-home-dir)\nreturn {\n    [\"full_refresh_count\"] = 12,\n    [\"home_dir\"] = \"/data/books\",\n    [\"refresh_on_pages_with_images\"] = false,\n}\n" port))))))
                 (service openssh-service-type
                          (openssh-configuration
                           (password-authentication? #f)
