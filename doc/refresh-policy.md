@@ -451,6 +451,31 @@ bundles + reports under `pinenote/tools/optics/build/bundles/sweep1.*`):
     measured comfort win. Reports: `sweep1.r0{0,1}-report-v3.json`
     (first generation with per-transition wash attribution).
 
+13. **Relaxation drift measured directly — the physics channel is real
+    on this panel (veritas session, 2026-07-13, A.2.8-dbg fixed
+    kernel).** A freshly deep-cleaned, freshly painted graphic page left
+    with ZERO drives for 300 s under camera: dark structure lightened
+    monotonically 0.204 -> 0.223 (+0.019, ~0.004/min) while whites held
+    (0.886 -> 0.889). No scheduler, no bookkeeping, no updates — this is
+    remnant-voltage/relaxation physics (doc/eink-sota.md's dwell/remnant
+    hypothesis), measured. Extrapolated over a 30+ min washless span it
+    reaches armC-scale graying with no driver bug required. Same
+    session: (a) the corrupting-class diverse walk on the OVERLAP-FIXED
+    scheduler ran clean (dark drift +0.004; 22 threshold globals, zero
+    stragglers/earlies) — the fixed-kernel B-arm baseline is set, though
+    single-run cleanliness never discriminated (pre-fix single runs were
+    also clean); (b) a dwell probe (3 s vs 60 s holds, same pair) read
+    ghost-spread 0.075 vs 0.098 — direction matches dwell-time physics,
+    underpowered at n=6/3 (sd ~0.06); a powered version is queued;
+    (c) EXTRACT_FBS belief dumps joined to camera frames end to end for
+    the first time — the naive pixelwise join reads correlation 0.386,
+    i.e. the instrument works but the join needs proper registration
+    (framebuffer space vs camera panel space differ by reflection +
+    alignment; PLAN task 23's remaining half). POLICY IMPLICATION: the
+    idle-washer's periodic washes are load-bearing against pure physics,
+    not just against driver misbehavior — and dark-heavy content wants
+    them on a clock, not only on debt. Bundle: `.../veritas`.
+
 Instrument provenance: 30 fps / exposure 312 / gain 32 / frontlight 255-255;
 ghost-rms repeatability sigma 0.003-0.006 between identical transitions.
 
