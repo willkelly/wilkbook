@@ -87,6 +87,13 @@ exactly for this; leave DU/A2 to the phase B workbench.
 4. **full_refresh_count is the user's knob** (KOReader menu, default 6
    — promotes every 6th page turn to `full`). With no ghosting observed
    and GL16 fulls, raising it is cheap; not seeded, user preference.
+   (UPDATED 2026-07-13, Will's call: the dogfood seed now sets it to 0
+   = never — the idle-washer owns cadence outright, finding 11's
+   validated configuration. Promotion at 12 was briefly seeded the same
+   day and retired within the hour: it adds flashes the washer makes
+   redundant, and it does nothing for the relaxation channel (finding
+   13), which accrues on static pages. Still the user's knob — the seed
+   never overwrites an existing profile.)
 5. **Input architecture (2026-07-05 evening):** the touch/stylus
    "feels wrong" verdict root-caused to two frontend wiring bugs, fixed
    on the reMarkable-on-mainline pattern: `handleMixedTouchEv` (the
