@@ -307,9 +307,18 @@ os2 currently holds the **A.2.8-dbg build**, SHA
 `/dev/mmcblk0p5`, p6 unmounted, `dd conv=fsync`, readback of the exact
 1 945 407 488-byte range SHA-matched from eMMC). Staged copy on os1 at
 `/home/user/wilkbook-artifacts/pinenote-reader-debug-PNGuixRoot-20260712-a28.ext4`.
-**First boot pending.** (Note: os1 now leases 192-net .145 — the
-MAC-pinned reservation — so the two OSes share the address across
-reboots; host keys differ.)
+**First boot confirmed 2026-07-13, all green:** the wifi one-shot came
+up UNASSISTED via the mounted /data (the A.2.7 mount-conflict fix
+works); the ttyS2 getty service is gone (exactly one base agetty);
+boot ebc-dbg globals clean on the FIXED kernel; the reading-position
+sidecar (.sdr) survived the reflash beside the book on /data.
+**EXTRACT_FBS smoke ride PASSED**: `ebc-dump-grab --verify` produced a
+9,199,048-byte double-read-stable dump under the live DRM master, and
+the host `ebc-dump` decoder rendered the driver's belief planes — the
+decoded `final` buffer is a pixel-faithful image of what KOReader had
+on screen. The belief-vs-glass instrument is live end to end. (Note:
+os1 now leases the same MAC-pinned address as os2; host keys differ
+between the OSes.)
 A.2.8-dbg = A.2.7-dbg + **hrdl's fixes for findings 1/2/7 in the primary
 kernel** (the finding-2 scheduler fix doubles as the quirk-2 corruption
 A/B — if overlap is the mechanism, corruption dies on this kernel) +
