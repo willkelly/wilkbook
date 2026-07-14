@@ -89,6 +89,13 @@ if deep then set_wf(prior) end
                        (>= tries 50))
              (usleep 200000)
              (loop (+ tries 1))))
+         ;; the panel has ONE owner: kill any stray KOReader before
+         ;; starting ours.  An optics-session viewer left running fought
+         ;; the reading instance for the framebuffer on 2026-07-13 --
+         ;; two shadow buffers flushing to one fb rendered as overstruck
+         ;; text and stale bands (doc/status.md).
+         (system* "/run/current-system/profile/bin/pkill" "-f" "reader\\.lua")
+         (sleep 1)
          ;; keep fbcon off the panel while the reader owns it
          (when (file-exists? #$%fbcon-bind)
            (call-with-output-file #$%fbcon-bind

@@ -644,6 +644,19 @@ class ShellDeviceDriver(recorder.DeviceDriver):
         return self
 
     def close(self):
+        # The panel has ONE owner: never leave the session's KOReader (or
+        # the injector daemon) running after a capture.  A leftover optics
+        # viewer fought the dogfooding reader for the framebuffer on
+        # 2026-07-13 -- two shadow buffers flushing to one fb rendered as
+        # overstruck text and stale bands.  The next reader-session start
+        # also defends itself (reader-session.scm), but sessions clean up
+        # after themselves regardless.
+        try:
+            self.t.run("pkill -f 'reader\\.lua' 2>/dev/null; "
+                       "pkill -f optics-inject 2>/dev/null; "
+                       "herd start reader-session >/dev/null 2>&1; true")
+        except Exception:
+            pass
         self.t.close()
 
     # -- identity / environment --

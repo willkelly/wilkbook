@@ -1,6 +1,29 @@
 # Hardware status
 
-Last updated: 2026-07-12. This is the single place to record what has actually
+Last updated: 2026-07-13.
+
+**2026-07-13 (night): the "portrait artifacting" was a two-instance
+framebuffer fight — and portrait WORKS on A.2.8.** First real reading
+session (Prydain, portrait) showed overstruck text and stale bands; the
+belief-vs-glass instrument proved fb0 == driver-final byte-exact (kernel
+exonerated in one measurement), and the trail led through rotation
+state, crengine caches, and damage rects before the actual cause
+surfaced: the veritas optics session's KOReader (testcard viewer) was
+STILL RUNNING, and the dogfooding reader fought it for the fb all
+evening — two shadow buffers flushing to one panel, plus fbcon churn
+from diagnostic restarts. With one instance owning the fb, portrait
+renders clean edge to edge (first functional portrait ever on this
+device — the historical A.2.6 portrait WEDGE did not reproduce on the
+hrdl-fixed kernel; the findings-report entry needs a follow-up note).
+Fixes landed: optics driver.close() kills its reader+injector and
+restores reader-session; reader-session start pkills stray readers
+(one-owner rule at both ends). Wrong theories chased and discarded en
+route, preserved here for honesty: margin-triggered odd-x blit
+regression, un-rotated damage rects (trace-only), crengine cache
+staleness, KOReader default-rotation mismatch. Dogfood comfort work the
+same night: image-page flash promotion off, promotion retired
+(washer owns cadence), Equity A typography seeded + live, Prydain
+loaded with position preserved on /data. This is the single place to record what has actually
 been proven on the device. Update it after every hardware session; the
 detailed evidence lives in session logs, not in git.
 
