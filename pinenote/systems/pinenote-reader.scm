@@ -71,6 +71,21 @@ reader ALL=(ALL) NOPASSWD: ALL
                 ;; redundant). Seeding a DEFAULT — the user's menu
                 ;; changes persist, the seed never overwrites an
                 ;; existing profile.
+                ;; lock_rotation (2026-07-15, the phantom-calibration
+                ;; night): the PineNote is a symmetric slab with no
+                ;; accelerometer, so it is routinely picked up 180°
+                ;; from last time and the user corrects via the
+                ;; rotation menu.  Unlocked, everything then fights
+                ;; them: the file manager snaps to rotation 0 —
+                ;; LANDSCAPE on this native-landscape panel — and each
+                ;; book re-imposes its sidecar rotation, flipping the
+                ;; UI relative to their hands on every FM trip or book
+                ;; switch (touch stays self-consistent, so it reads as
+                ;; insane miscalibration; doc/status.md).  Locked,
+                ;; rotation is a single sticky user-owned value,
+                ;; restored across restarts via closed_rotation_mode —
+                ;; seeded to 1 (portrait) so the first boot isn't
+                ;; landscape.
                 (simple-service 'pinenote-koreader-home-dir
                                 activation-service-type
                                 #~(let ((f "/root/.config/koreader/settings.reader.lua"))
@@ -78,7 +93,7 @@ reader ALL=(ALL) NOPASSWD: ALL
                                       (mkdir-p "/root/.config/koreader")
                                       (call-with-output-file f
                                         (lambda (port)
-                                          (display "-- seeded by the reader flavor (pinenote-koreader-home-dir)\nreturn {\n    [\"copt_b_page_margin\"] = 25,\n    [\"copt_font_size\"] = 30,\n    [\"copt_h_page_margins\"] = { [1] = 30, [2] = 30 },\n    [\"copt_t_page_margin\"] = 15,\n    [\"cre_font\"] = \"Equity A\",\n    [\"full_refresh_count\"] = 0,\n    [\"home_dir\"] = \"/data/books\",\n    [\"refresh_on_pages_with_images\"] = false,\n    [\"screensaver_type\"] = \"cover\",\n}\n" port))))))
+                                          (display "-- seeded by the reader flavor (pinenote-koreader-home-dir)\nreturn {\n    [\"closed_rotation_mode\"] = 1,\n    [\"copt_b_page_margin\"] = 25,\n    [\"copt_font_size\"] = 30,\n    [\"copt_h_page_margins\"] = { [1] = 30, [2] = 30 },\n    [\"copt_t_page_margin\"] = 15,\n    [\"cre_font\"] = \"Equity A\",\n    [\"full_refresh_count\"] = 0,\n    [\"home_dir\"] = \"/data/books\",\n    [\"lock_rotation\"] = true,\n    [\"refresh_on_pages_with_images\"] = false,\n    [\"screensaver_type\"] = \"cover\",\n}\n" port))))))
                 (service openssh-service-type
                          (openssh-configuration
                           (password-authentication? #f)

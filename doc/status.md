@@ -1,6 +1,43 @@
 # Hardware status
 
-Last updated: 2026-07-13.
+Last updated: 2026-07-15.
+
+**2026-07-15 (night): the "insane finger calibration" was nobody owning
+rotation — the touch chain itself is verified correct on glass.** After
+the first clean-reboot reading session, Will reported swipes "backwards",
+taps registering "on a completely different part of the page", and page
+turns drawing in two chunks (top ~2/3, then the bottom, independently).
+New instrument, built in-session: a passive raw-evdev observer (luajit
+dumper on the device's touchscreen node — evdev allows a second reader,
+so it watches real use without disturbing KOReader) correlated against
+the `[pn-refresh]` trace. Verdicts from Will's own natural touches:
+raw touch frame == fb native frame; the mode-3 translation chain
+(`translateCoordinates` → `ges_coordinate_translation_270`) is
+self-consistent; footer taps hit the footer, the top-center tap opened
+the menu, and four right-edge taps each produced a page-turn repaint
+within 150 ms. Stock gestures are already Kindle-style (west = next;
+`inverse_reading_order` false). The real bug: **rotation has no owner.**
+The file manager snaps to rotation 0 — LANDSCAPE on this panel
+(`filemanager.lua:66` fallback) — and each book re-imposes its sidecar
+rotation, so entering the FM (first hit 16 s after boot: the input-
+inhibit pair at 22:45:26, ~48 s of sideways UI before reopening the
+book) or switching books flips the UI relative to the user's hands.
+Touch stays internally consistent, which is exactly why it reads as
+miscalibration rather than rotation. Compounding it: the PineNote is a
+symmetric slab with NO accelerometer, so picking it up 180° from last
+time is routine (the sidecars ended the night disagreeing: Prydain 1,
+Mastering Emacs 3 — Will rotated via menu at 00:16:53 mid-diagnosis).
+FIX: `lock_rotation=true` (+ `closed_rotation_mode=1` for first start)
+— upstream's own mechanism: docs and the FM stop imposing, rotation is
+one sticky user-owned value restored across restarts. Deployed live as
+a KOReader userpatch (`patches/2-lock-rotation.lua`, applies at the
+next KOReader start) and seeded for fresh profiles in the reader
+flavor. The two-chunk page draw is NOT new breakage: it is the
+pageturn-program's defio-band mechanism made visible by portrait — the
+software-rotated blit scatters writes so the paint spans multiple
+deferred-io flushes and outlives `delay_b`'s 100 ms coalescing window;
+landscape paints fit in one window, which is why it was never seen
+before (field note added to `doc/pageturn-program.md` §0).
 
 **2026-07-13 (night): the "portrait artifacting" was a two-instance
 framebuffer fight — and portrait WORKS on A.2.8.** First real reading

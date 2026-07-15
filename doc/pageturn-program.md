@@ -23,6 +23,23 @@ median turn is *fine* — the felt cost concentrates in specific
 transition families, in the latency tail, and in the two-pass structure
 of promoted fulls. §1 quantifies where; §3 ranks what to do about it.
 
+**Field confirmation of the defio-band stagger (2026-07-15, portrait
+dogfooding):** in portrait the page turn visibly lands as two chunks —
+top ~60–75 % in one drive, the bottom band arriving later as an
+independent second drive. Mechanism: portrait is software-rotated, so
+KOReader's full-page paint is a scattered (column-order) write into the
+fb mmap instead of a linear memcpy; the paint spans multiple defio
+flush cycles and outlives `delay_b`'s 100 ms coalescing window, so the
+late bands miss the first wakeup. Landscape paints complete inside one
+flush window, which is why this was invisible until portrait worked.
+Two consequences: (1) d1 (`delay_b` → 2 ms) makes the stagger *worse*
+in portrait until painting is single-flush — the go/no-go's
+staggered-band check is not hypothetical; (2) a new candidate fix
+upstream of the driver: **single-flush paint** — render the page into
+an offscreen portrait buffer and blit it into the fb in native linear
+order (~10.5 MB memcpy, one defio window, one damage rect). Userspace
+only; belongs in the d-series when the program resumes.
+
 ## 1. Where the cost and ugliness concentrate (the attributed corpus)
 
 **Sources and their honesty caveats.** ~30 capture bundles under
