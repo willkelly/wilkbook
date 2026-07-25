@@ -1,7 +1,33 @@
 diff --git a/arch/arm64/boot/dts/rockchip/rk3566-pinenote.dtsi b/arch/arm64/boot/dts/rockchip/rk3566-pinenote.dtsi
-index 791719acb..76fc7fce0 100644
+index 791719acb..fafdedb2c 100644
 --- a/arch/arm64/boot/dts/rockchip/rk3566-pinenote.dtsi
 +++ b/arch/arm64/boot/dts/rockchip/rk3566-pinenote.dtsi
+@@ -40,6 +40,25 @@
+ 		sound-name-prefix = "Speaker Amp";
+ 	};
+ 
++	battery: battery {
++		compatible = "simple-battery";
++		charge-full-design-microamp-hours = <4000000>;
++		charge-term-current-microamp = <300000>;
++		constant-charge-current-max-microamp = <2000000>;
++		constant-charge-voltage-max-microvolt = <4200000>;
++		factory-internal-resistance-micro-ohms = <96000>;
++		voltage-max-design-microvolt = <4200000>;
++		voltage-min-design-microvolt = <3500000>;
++
++		ocv-capacity-celsius = <20>;
++		ocv-capacity-table-0 = <4168000 100>, <4109000 95>, <4066000 90>, <4023000 85>,
++					<3985000 80>, <3954000 75>, <3924000 70>, <3897000 65>,
++					<3866000 60>, <3826000 55>, <3804000 50>, <3789000 45>,
++					<3777000 40>, <3770000 35>, <3763000 30>, <3750000 25>,
++					<3732000 20>, <3710000 15>, <3680000 10>, <3670000  5>,
++					<3500000  0>;
++	};
++
+ 	dmic_codec: dmic-codec {
+ 		compatible = "dmic-codec";
+ 		num-channels = <6>;
 @@ -74,6 +74,16 @@
  		};
  	};
@@ -78,6 +104,20 @@ index 791719acb..76fc7fce0 100644
  &i2c0 {
  	status = "okay";
  
+@@ -260,6 +279,13 @@
+ 		vcc8-supply = <&vcc_sys>;
+ 		vcc9-supply = <&dcdc_boost>;
+ 
++		charger {
++			monitored-battery = <&battery>;
++			rockchip,resistor-sense-micro-ohms = <10000>;
++			rockchip,sleep-enter-current-microamp = <150000>;
++			rockchip,sleep-filter-current-microamp = <100000>;
++		};
++
+ 		regulators {
+ 			vdd_logic: DCDC_REG1 {
+ 				regulator-name = "vdd_logic";
 @@ -503,6 +558,7 @@
  	ebc_pmic: pmic@68 {
  		compatible = "ti,tps65185";
@@ -209,7 +249,7 @@ new file mode 100755
 index 000000000..c65b19441
 --- /dev/null
 +++ b/arch/arm64/configs/pinenote_defconfig
-@@ -0,0 +1,1577 @@
+@@ -0,0 +1,1576 @@
 +CONFIG_DEFAULT_HOSTNAME="pinenote"
 +# CONFIG_SWAP is not set
 +CONFIG_SYSVIPC=y
@@ -630,7 +670,7 @@ index 000000000..c65b19441
 +##
 +CONFIG_CPU_FREQ=y
 +CONFIG_CPU_FREQ_STAT=y
-+CONFIG_CPU_FREQ_DEFAULT_GOV_SCHEDUTIL=y
++CONFIG_CPU_FREQ_DEFAULT_GOV_CONSERVATIVE=y
 +CONFIG_CPU_FREQ_GOV_PERFORMANCE=y
 +CONFIG_CPU_FREQ_GOV_POWERSAVE=y
 +CONFIG_CPU_FREQ_GOV_USERSPACE=y
@@ -1344,7 +1384,6 @@ index 000000000..c65b19441
 +##
 +CONFIG_ROCKCHIP_GRF=y
 +CONFIG_ROCKCHIP_IODOMAIN=y
-+CONFIG_ROCKCHIP_SUSPEND_MODE=y
 +
 +##
 +## file: drivers/spi/Kconfig
