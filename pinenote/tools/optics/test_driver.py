@@ -116,8 +116,9 @@ def main():
           f"{applied}")
     wf = drv.waveform_summary()
     check("waveform_summary returns identity only, never a raw LUT",
-          set(wf) <= {"wbf_sha256", "active_refresh_waveform"}
-          and wf["active_refresh_waveform"] == "6" and wf["wbf_sha256"] == "deadbeefcafe",
+          set(wf) <= {"wbf_sha256", "wbf_path", "active_refresh_waveform"}
+          and wf["active_refresh_waveform"] == "6" and wf["wbf_sha256"] == "deadbeefcafe"
+          and wf["wbf_path"] == driver.WAVEFORM_CANDIDATES[0],
           f"{wf}")
 
     K = driver.KOReaderBackend
@@ -151,6 +152,15 @@ def main():
     check("backwards turns write 'KEY 158' FIFO lines",
           ftk.count(BACK_WRITE) == 1
           and all("> " + K.INJECT_FIFO in c for c in ftk.ran(BACK_WRITE)))
+    ft_inject_fail = FakeTransport(responses={FWD_WRITE: (1, "fifo closed")})
+    be_inject_fail = driver.KOReaderBackend(ft_inject_fail, manifest)
+    be_inject_fail._page = 0
+    try:
+        be_inject_fail.goto_page(1)
+        check("failed FIFO injection raises immediately", False)
+    except RuntimeError as error:
+        check("failed FIFO injection raises immediately without advancing page",
+              "fifo closed" in str(error) and be_inject_fail._page == 0)
 
     print("case: prepare sequence = daemon (fifo first) -> ensure -> stop -> seed -> launch")
     with open(os.path.join(os.path.dirname(os.path.abspath(driver.__file__)),
@@ -181,7 +191,7 @@ def main():
     i_start = idx("setsid")
     i_ensure = idx("sleep 0.2; n=$((n+1))")
     i_stop = idx("herd stop reader-session")
-    i_pkill = idx("pkill -f 'reader.lua")
+    i_pkill = idx(K.PID_FILE)
     i_fbcon = idx("echo 0 > /sys/class/vtconsole/vtcon1/bind")
     i_seed = idx(lambda c: isinstance(c, tuple)
                  and c[1] == K.KO_HOME + "/settings.reader.lua")
@@ -189,7 +199,7 @@ def main():
     i_launch = idx("./luajit reader.lua")
     order = [i_daemon_push, i_fifo, i_start, i_ensure, i_stop, i_pkill,
              i_fbcon, i_mkdir, i_seed, i_launch]
-    check("prepare orders daemon-push < fifo < start < ensure < stop < pkill"
+    check("prepare orders daemon-push < fifo < start < ensure < stop < pid-verified-stop"
           " < fbcon-unbind < mkdir < seed < launch",
           all(i >= 0 for i in order) and order == sorted(order) and
           len(set(order)) == len(order), f"{order}")
@@ -206,6 +216,33 @@ def main():
     check("both long-lived launches run detached (fire-and-forget)",
           launch_cmd in ftp.detached and ftp.cmds[i_start] in ftp.detached,
           f"{len(ftp.detached)} detached")
+    stop_cmd = ftp.cmds[i_pkill]
+    check("previous optics reader stop is bounded with an identity-checked KILL fallback",
+          "kill -KILL" in stop_cmd and "/proc/$pid/cmdline" in stop_cmd
+          and 'test "$n" -lt 100' in stop_cmd)
+    blocked = FakeTransport(responses={K.PID_FILE: (4, "reader stuck")})
+    blocked_backend = driver.KOReaderBackend(blocked, manifest)
+    try:
+        blocked_backend.prepare()
+        blocked_error = ""
+    except RuntimeError as error:
+        blocked_error = str(error)
+    check("prepare refuses to launch over a reader that failed to stop",
+          "reader stuck" in blocked_error
+          and not any(isinstance(cmd, str) and "./luajit reader.lua" in cmd
+                      for cmd in blocked.cmds))
+    blocked_session = FakeTransport(responses={
+        "herd stop reader-session": (1, "reader-session stuck")})
+    blocked_session_backend = driver.KOReaderBackend(blocked_session, manifest)
+    try:
+        blocked_session_backend.prepare()
+        blocked_session_error = ""
+    except RuntimeError as error:
+        blocked_session_error = str(error)
+    check("prepare refuses to launch when reader-session fails to stop",
+          "reader-session stuck" in blocked_session_error
+          and not any(isinstance(cmd, str) and "./luajit reader.lua" in cmd
+                      for cmd in blocked_session.cmds))
     check("rotation pinned to fb-native landscape (portrait wedges the EBC "
           "driver -- live-reproduced 2026-07-11; card is landscape instead)",
           '["copt_rotation_mode"] = 0' in
@@ -383,6 +420,38 @@ def main():
     check("the ko run seeded its full_refresh_count into the optics KO_HOME",
           '["full_refresh_count"] = 1' in
           ft2.files[K.KO_HOME + "/settings.reader.lua"].decode())
+
+    print("case: ShellDeviceDriver close restores the normal reader observably")
+    ft_close = FakeTransport()
+    drv_close = driver.ShellDeviceDriver(ft_close, driver.KOReaderBackend(ft_close, manifest))
+    drv_close.close()
+    check("close targets only the optics card/injector then verifies reader-session",
+          any(K.PID_FILE in c and "/proc/$pid/cmdline" in c for c in ft_close.cmds)
+          and any(K.INJECT_PID in c and "/proc/$pid/cmdline" in c for c in ft_close.cmds)
+          and any("herd start reader-session" in c for c in ft_close.cmds)
+          and any("herd status reader-session" in c for c in ft_close.cmds)
+          and any(K.PID_FILE in c and "kill -0" in c for c in ft_close.cmds)
+          and any(K.INJECT_PID in c and "kill -0" in c for c in ft_close.cmds))
+    ft_close_fail = FakeTransport(responses={
+        K.PID_FILE: (2, "reader identity mismatch"),
+        K.INJECT_PID: (4, "injector stuck"),
+        "herd start reader-session": (1, "reader start failed"),
+        "herd status reader-session": (1, "reader stopped"),
+    })
+    drv_close_fail = driver.ShellDeviceDriver(
+        ft_close_fail, driver.KOReaderBackend(ft_close_fail, manifest))
+    try:
+        drv_close_fail.close()
+        close_error = ""
+    except RuntimeError as error:
+        close_error = str(error)
+    check("close attempts every recovery step and aggregates failures",
+          "reader identity mismatch" in close_error
+          and "injector stuck" in close_error
+          and "reader start failed" in close_error
+          and "reader stopped" in close_error
+          and any("herd status reader-session" in c for c in ft_close_fail.cmds)
+          and "__close__" in ft_close_fail.cmds)
 
     print()
     if _fails:

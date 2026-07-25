@@ -61,7 +61,8 @@ EBC_PARAM_DIR = "/sys/module/rockchip_ebc/parameters"
 REFRESH_WAVEFORM = EBC_PARAM_DIR + "/refresh_waveform"   # 4=GC16, 6=GL16
 FB_DEV = "/dev/fb0"                                       # deferred-io framebuffer
 EBC_REFRESH = "pinenote-ebc-refresh"                     # GLOBAL_REFRESH ioctl tool
-WAVEFORM_CANDIDATES = ("/run/pinenote/ebc.wbf", "/state/firmware/ebc.wbf")
+WAVEFORM_CANDIDATES = ("/run/pinenote/ebc.wbf", "/state/firmware/ebc.wbf",
+                       "/lib/firmware/rockchip/ebc.wbf")
 
 # --- device values, PINNED on hardware 2026-07-11 (was the HARDWARE_CHECKLIST) -
 # Frontlight is TWO nodes (warm + cool natural-light LEDs); the standardized
@@ -233,11 +234,14 @@ class SSHTransport(Transport):
     reachable host, i.e. the networking story in doc/networking.md. Uses the
     same trusted channel the os1 oracle already speaks."""
 
+    DEFAULT_TIMEOUT = 30.0
+
     def __init__(self, host, port=22, identity=None, ssh_opts=("-o", "BatchMode=yes")):
         self.host = host
         self.port = port
         self.identity = identity
         self.ssh_opts = list(ssh_opts)
+        self._detached = []
 
     def _base(self, tool):
         cmd = [tool]
@@ -248,7 +252,7 @@ class SSHTransport(Transport):
         return cmd
 
     def connect(self):
-        rc, _ = self.run("true")
+        rc, _ = self.run("true", timeout=self.DEFAULT_TIMEOUT)
         if rc != 0:
             raise IOError("ssh connect failed to %s" % self.host)
         return self
@@ -262,13 +266,33 @@ class SSHTransport(Transport):
             # lingers for its lifetime even with setsid + fds fully
             # redirected; the lingering client dies when the remote process
             # does (next prepare's pkill), so nothing accumulates.
-            subprocess.Popen(argv, stdin=subprocess.DEVNULL,
-                             stdout=subprocess.DEVNULL,
-                             stderr=subprocess.DEVNULL,
-                             start_new_session=True)
+            self._detached.append(subprocess.Popen(argv, stdin=subprocess.DEVNULL,
+                                                   stdout=subprocess.DEVNULL,
+                                                   stderr=subprocess.DEVNULL,
+                                                   start_new_session=True))
             return 0, ""
-        p = subprocess.run(argv, capture_output=True, text=True, timeout=timeout)
+        p = subprocess.run(argv, capture_output=True, text=True,
+                           timeout=self.DEFAULT_TIMEOUT if timeout is None else timeout)
         return p.returncode, p.stdout.strip()
+
+    def close(self):
+        import subprocess
+        remaining = []
+        for proc in self._detached:
+            if proc.poll() is not None:
+                continue
+            try:
+                proc.wait(timeout=self.DEFAULT_TIMEOUT)
+            except subprocess.TimeoutExpired:
+                proc.terminate()
+                try:
+                    proc.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+                    proc.wait(timeout=5)
+            if proc.poll() is None:
+                remaining.append(proc)
+        self._detached = remaining
 
     def push(self, data: bytes, remote_path):
         import subprocess
@@ -276,14 +300,14 @@ class SSHTransport(Transport):
         with tempfile.NamedTemporaryFile() as f:
             f.write(data); f.flush()
             argv = self._base("scp") + [f.name, "%s:%s" % (self.host, remote_path)]
-            subprocess.run(argv, check=True)
+            subprocess.run(argv, check=True, timeout=self.DEFAULT_TIMEOUT)
 
     def pull(self, remote_path) -> bytes:
         import subprocess
         import tempfile
         with tempfile.NamedTemporaryFile() as f:
             argv = self._base("scp") + ["%s:%s" % (self.host, remote_path), f.name]
-            subprocess.run(argv, check=True)
+            subprocess.run(argv, check=True, timeout=self.DEFAULT_TIMEOUT)
             f.seek(0)
             return f.read()
 
@@ -339,8 +363,8 @@ class KOReaderBackend(RenderBackend):
     lines into the daemon's FIFO.  The whole chain short of hardware --
     daemon protocol, device-name whitelist, 159/158 -> RPgFwd/RPgBack through
     KOReader's verbatim input stack -- is proven offline (test_driver.py +
-    pinenote/tools/koreader-input); the live end-to-end is step 1 of the
-    next SSH session.
+    pinenote/tools/koreader-input) and by the 2026-07-25 SSH reader-energy
+    hardware run (four complete 45-turn legs).
 
     Reader-side knobs ('ko' param namespace, stashed here by
     ShellDeviceDriver.set_ebc_params) are seeded into a DEDICATED
@@ -356,6 +380,7 @@ class KOReaderBackend(RenderBackend):
     EPUB_REMOTE = "/root/optics-testcard.epub"
     KO_HOME = "/root/.config/koreader-optics"    # dedicated per-capture profile
     LOG = "/var/log/optics-koreader.log"         # harvested per run (task 6)
+    PID_FILE = "/run/optics-koreader.pid"
 
     # Grafted KOReader plugins (the idle washer) live in the repo next to the
     # rest of the pinenote device tree; prepare() pushes them into KO_HOME's
@@ -450,8 +475,16 @@ class KOReaderBackend(RenderBackend):
         # 2. stop the dogfooding reader AND any previous optics run's
         #    KOReader -- an exiting instance flushes G_reader_settings on
         #    the way out and would overwrite the seed below.
-        self.t.run("herd stop reader-session 2>/dev/null; true")
-        self.t.run("pkill -f 'reader.lua %s' 2>/dev/null; true" % self.EPUB_REMOTE)
+        rc, out = self.t.run(
+            "if herd status reader-session | grep -q running; then "
+            "herd stop reader-session; else herd status reader-session; fi")
+        if rc != 0:
+            raise RuntimeError("stop reader-session failed: %s" %
+                               (out or "").strip())
+        rc, out = self.t.run(self._stop_pid_command(self.PID_FILE, self.EPUB_REMOTE))
+        if rc not in (0, 3):
+            raise RuntimeError("stop previous optics reader failed: %s" %
+                               (out or "").strip())
         # 2b. reader-session's STOP handler re-binds fbcon as its rescue path
         #     (reader-session.scm) -- un-bind it again, or kernel console
         #     chatter draws over the panel mid-capture (seen live on the
@@ -478,12 +511,29 @@ class KOReaderBackend(RenderBackend):
         #    never returns (found live on the 2026-07-11 A.2.6 smoke -- the
         #    scenario hung at this exact step for 11 minutes).
         launch = ("( cd %s && HOME=/root KO_HOME=%s "
-                  "PATH=/run/current-system/profile/bin LC_ALL=en_US.UTF-8 "
-                  "setsid ./luajit reader.lua %s </dev/null >%s 2>&1 & )"
-                  % (shlex.quote(self._kodir), shlex.quote(self.KO_HOME),
-                     shlex.quote(self.EPUB_REMOTE), self.LOG))
+                   "PATH=/run/current-system/profile/bin LC_ALL=en_US.UTF-8 "
+                   "setsid ./luajit reader.lua %s </dev/null >%s 2>&1 & "
+                   "pid=$!; case \"$pid\" in ''|*[!0-9]*) exit 1;; esac; "
+                   "printf %%s \"$pid\" >%s )"
+                   % (shlex.quote(self._kodir), shlex.quote(self.KO_HOME),
+                      shlex.quote(self.EPUB_REMOTE), self.LOG, self.PID_FILE))
         self.t.run(launch, detach=True)
         self._page = 0
+
+    @staticmethod
+    def _stop_pid_command(pid_file, required_cmdline):
+        return ("if ! test -r {pid}; then exit 3; fi; pid=$(cat {pid}); "
+                "case \"$pid\" in ''|*[!0-9]*) exit 2;; esac; test \"$pid\" -gt 0 || exit 2; "
+                "if ! test -r /proc/$pid/cmdline; then rm -f {pid}; exit 3; fi; "
+                "tr '\\0' ' ' </proc/$pid/cmdline | grep -F -- {needle} >/dev/null || exit 2; "
+                "kill \"$pid\" || exit 4; n=0; while kill -0 \"$pid\" 2>/dev/null; do "
+                "state=$(cut -d ' ' -f3 /proc/$pid/stat 2>/dev/null); "
+                "test \"$state\" = Z && break; n=$((n+1)); "
+                "if test \"$n\" -eq 50; then "
+                "tr '\\0' ' ' </proc/$pid/cmdline | grep -F -- {needle} >/dev/null || exit 4; "
+                "kill -KILL \"$pid\" || exit 4; fi; "
+                "test \"$n\" -lt 100 || exit 4; sleep 0.1; done; rm -f {pid}").format(
+                    pid=shlex.quote(pid_file), needle=shlex.quote(required_cmdline))
 
     def _start_injector(self):
         """Stage optics-inject.lua and start it (idempotent): FIFO first, then
@@ -553,7 +603,10 @@ class KOReaderBackend(RenderBackend):
     def _turn(self, delta):
         code = NEXT_PAGE_CODE if delta > 0 else PREV_PAGE_CODE
         for _ in range(abs(delta)):
-            self.t.run("printf 'KEY %d\\n' > %s" % (code, self.INJECT_FIFO))
+            rc, out = self.t.run("printf 'KEY %d\\n' > %s" % (code, self.INJECT_FIFO))
+            if rc != 0:
+                raise RuntimeError("optics injector rejected KEY %d (rc=%s): %s" %
+                                   (code, rc, (out or "").strip()))
         self._page = (self._page or 0) + delta
 
     def emit_sync(self):
@@ -651,20 +704,44 @@ class ShellDeviceDriver(recorder.DeviceDriver):
         # overstruck text and stale bands.  The next reader-session start
         # also defends itself (reader-session.scm), but sessions clean up
         # after themselves regardless.
+        failures = []
+        card = getattr(self.backend, "EPUB_REMOTE", None)
+        reader_pid = getattr(self.backend, "PID_FILE", None)
+        injector = getattr(self.backend, "INJECT_DAEMON", None)
+        injector_pid = getattr(self.backend, "INJECT_PID", None)
+        for label, pid_file, needle in (("optics reader", reader_pid, card),
+                                        ("optics injector", injector_pid, injector)):
+            if not pid_file or not needle:
+                continue
+            try:
+                rc, out = self.t.run(KOReaderBackend._stop_pid_command(pid_file, needle))
+                if rc not in (0, 3):
+                    raise RuntimeError("stop %s failed: %s" % (label, (out or "").strip()))
+            except Exception as error:
+                failures.append(error)
+        for label, command in (("start reader-session", "herd start reader-session"),
+                               ("verify optics reader absent", "test ! -r %s || ! kill -0 \"$(cat %s)\" 2>/dev/null" % (reader_pid, reader_pid)),
+                               ("verify optics injector absent", "test ! -r %s || ! kill -0 \"$(cat %s)\" 2>/dev/null" % (injector_pid, injector_pid)),
+                               ("verify reader-session", "herd status reader-session | grep -q running")):
+            try:
+                rc, out = self.t.run(command)
+                if rc != 0:
+                    raise RuntimeError("%s failed: %s" % (label, (out or "").strip()))
+            except Exception as error:
+                failures.append(error)
         try:
-            self.t.run("pkill -f 'reader\\.lua' 2>/dev/null; "
-                       "pkill -f optics-inject 2>/dev/null; "
-                       "herd start reader-session >/dev/null 2>&1; true")
-        except Exception:
-            pass
-        self.t.close()
+            self.t.close()
+        except Exception as error:
+            failures.append(error)
+        if failures:
+            raise RuntimeError("; ".join(str(error) for error in failures))
 
     # -- identity / environment --
     def device_info(self):
         _, kernel = self.t.run("uname -r")
         _, model = self.t.run("tr -d '\\0' < /proc/device-tree/model 2>/dev/null")
         _, os_id = self.t.run(". /etc/os-release 2>/dev/null; printf %s \"$PRETTY_NAME\"")
-        return {"model": (model or "PineNote").strip(),
+        return {"model": model.strip(),
                 "kernel": kernel.strip(), "os": os_id.strip()}
 
     def read_panel_temp(self):
@@ -701,12 +778,15 @@ class ShellDeviceDriver(recorder.DeviceDriver):
         (recorder package --wbf-info); this just says *which* waveform ran."""
         rc, wf = self.t.run("cat %s 2>/dev/null" % REFRESH_WAVEFORM)
         sha = None
+        selected_path = None
         for cand in WAVEFORM_CANDIDATES:
             rc, out = self.t.run("sha256sum %s 2>/dev/null | cut -d' ' -f1" % shlex.quote(cand))
             if rc == 0 and out.strip():
                 sha = out.strip()
+                selected_path = cand
                 break
-        return {"wbf_sha256": sha, "active_refresh_waveform": wf.strip() or None}
+        return {"wbf_sha256": sha, "wbf_path": selected_path,
+                "active_refresh_waveform": wf.strip() or None}
 
     # -- driver params --
     def set_ebc_params(self, params):
@@ -784,14 +864,14 @@ class ShellDeviceDriver(recorder.DeviceDriver):
 def make_driver(transport="serial", backend="koreader", manifest=None,
                 epub_local=None, frames=None, waveform=None, **kw):
     """Build a ShellDeviceDriver from CLI-friendly strings.
-    transport: 'serial' (default, tethered/no-Wi-Fi) | 'ssh' (needs networking).
+    transport: 'serial' (default, tethered/no-Wi-Fi) | 'ssh' (hardware-proven).
     backend:   'koreader' (default) | 'fb' (raw framebuffer control)."""
     if transport == "serial":
         tr = SerialTransport(device=kw.get("device", "/dev/ttyACM0"),
                              baud=kw.get("baud", 115200))
     elif transport == "ssh":
         if not kw.get("host"):
-            raise ValueError("ssh transport needs host=... (blocked on networking)")
+            raise ValueError("ssh transport needs host=...")
         tr = SSHTransport(host=kw["host"], port=kw.get("port", 22),
                           identity=kw.get("identity"))
     else:
