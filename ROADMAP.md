@@ -122,8 +122,9 @@ independently useful, and 1–3 start roadmap track 4 without hardware:
        of panic / RT-splat / root-not-found / PNGuixRoot-not-visible, then
        **logs in as root over the console socket and asserts the post-udev
        service stack from inside the guest** (udev completion, the
-       pinenote-waveform and pinenote-ebc-params one-shots, reader-session
-       start, clean poweroff) — the Shepherd service-ordering regression
+       pinenote-waveform and pinenote-ebc-params one-shots, the orientation
+       service plus its named evdev node, reader-session start, clean poweroff)
+       — the Shepherd service-ordering regression
        class that cost the first two hardware sessions.
    - [x] **Diagnose the qemu-virt udev "deadlock".** Root-caused
          2026-07-05: there was no deadlock. Shepherd's messages divert
@@ -230,17 +231,49 @@ the start of this track — no panel required. Policy background in
       Phase C: one hardware session validates the winning policy's
       optics. The `org.pinenote.ebc` dbus/UAPI compatibility story
       stays in scope for phase B design.
-- [ ] Reader polish, in order: refresh-policy tuning (KOReader's
+- [x] Hardware-validate SC7A20 autorotation, disable/re-enable state replay,
+      touch/pen-contact deferral, and cyttsp5 coordinate normalization (final4
+      deployed and accepted 2026-07-19; exact evidence in `doc/status.md`).
+- [ ] **Awake power-policy program.** RK817 telemetry, two cable-free static
+      ABBAs, and the realistic reader-energy ABBA are complete (2026-07-24/25).
+      Static draw tied at about 180--181 mA for `powersave`/`conservative`; on
+      the exact 45-turn reader workload, conservative averaged 13.072 mAh and
+      176.5 s versus powersave's 15.910 mAh and 209.0 s, with 45 fresh traces
+      per leg at 26 C. The forward-port defconfig now selects conservative as
+      the awake default; verify readback on the next ordinary reader-image boot.
+      Measure Wi-Fi-down savings separately, then decide whether an awake-only
+      activity policy on `idlewasher`'s timer seam adds value beyond the adaptive
+      governor. Do not couple this to suspend qualification; see
+      `doc/power-management.md`.
+- [ ] **E-reader suspend program.** Keep KOReader's exact disabled policy
+       bound to `canSuspend` while firmware inventory and the supervised PM-test
+       -> one real `s2idle` -> `deep` ladder are completed (`freeze` is Linux's
+       suspend-to-idle, not a separate mode). The fail-closed offline gate and
+       RK817 telemetry boot are complete (2026-07-24). Firmware comparison on
+       2026-07-25 proved the backup already byte-matches Pine64/PNDeb's stable
+       1056-MHz idblock/FIT and identified its 2022 downstream BSP ATF; reflashing
+       it would change nothing. First retain that recovery-known firmware and
+       forward-port the complete Rockchip SIP/config/DT compatibility contract
+       into the os2 kernel, with mocked ABI/DT gates and a non-suspending UART
+       bind/probe boot before PM-test. Upstream TF-A is a separate later
+       recovery-qualified migration, never a hybrid. A future userspace contract needs
+       checkpointing, refresh-timer and
+       frontlight/Wi-Fi handling, explicit wake attribution, and display repair;
+       it cannot currently retain a static sleep cover because `rockchip_ebc`
+       overwrites the panel with `off_screen` during disable and supplies no
+       userspace completion contract. No cover-triggered or idle autosuspend
+       until an EBC contract and repeated deep cycles with unplugged energy
+       measurements pass. See `doc/power-management.md`.
+- [ ] Reader polish, next: refresh-policy tuning (KOReader's
       partial/UI/full hints → EBC behavior; the `org.pinenote.ebc`
       dbus/UAPI compatibility story remains relevant for community
       tooling); pen buttons + #14694 stylus tags; unprivileged-user
       hardening; a books-directory convention; upstreaming the device
       target to KOReader.
-- [ ] Wi-Fi credentials/networking story for the device (the networked
-      flavor has no credential handling yet). Design in
-      `doc/networking.md`: minimal wpa_supplicant + dhcpcd on the reader
-      flavor, an out-of-band `/state` credential file (never in the
-      image), SSH as the optics-recorder control channel.
+- [x] Phase-1 Wi-Fi credentials/networking: the reader's out-of-band `data`
+      partition config, wpa_supplicant + dhcpcd, and key-only root SSH/scp are
+      hardware-proven (2026-07-24). On-device network selection and persistent
+      SSH identity across reflashes remain follow-ups in `doc/networking.md`.
 - [ ] Later: wlroots session (sway or cage/KOReader-kiosk, following
       hrdl's `pinenote-dist` architecture; `pinenote-nixos` is the
       structural checklist for a Guix port); per-`app_id` refresh-mode

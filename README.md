@@ -49,16 +49,17 @@ with stock Debian on `os1` as the rescue path. See `doc/hardware-deploy.md`.
 - `pinenote/patches/` — the kernel forward-port patch (EBC driver, WS8100
   pen, PineNote DTS, `pinenote_defconfig`).
 - `pinenote/services/` — Shepherd services: waveform install, EBC modprobe
-  options and parameters, diagnostics, USB CDC-ACM gadget console.
+  options and parameters, diagnostics, SC7A20 orientation bridge, USB
+  CDC-ACM gadget console.
 - `pinenote/images/` — initrd wrappers (pre-root waveform extraction and
   display module loading), extlinux bootloader config, kernel arguments,
   partition labels.
 - `pinenote/systems/` — flavor entrypoints (see `doc/pinenote-flavors.md`).
 - `pinenote/scripts/preflight/` — non-destructive inspection and extraction
   helpers.
-- `pinenote/tools/` — host-side test tools that compile the verbatim EBC
-  driver/waveform sources and test them off-device (`wbf`, `ebc-logic`,
-  `rastersim`; see `doc/testing.md`).
+- `pinenote/tools/` — host-side test tools for the EBC/waveform stack and
+  KOReader input/orientation (`wbf`, `ebc-logic`, `rastersim`, `orientation`,
+  `koreader-input`; see `doc/testing.md`).
 - `doc/` — start with `testing.md` and `kernel-forward-port.md`; also
   `building.md`, `hardware-deploy.md`, `status.md`, `device-runbook.md`
   (device inventory and backup ledger), `eink-research.md` (domain

@@ -60,7 +60,10 @@ tests skip with a clear message rather than fail.
 | `pinenote/tools/wbf` | 1 | PVI `.wbf` parsing/decode (header, modes, temperature bins, LUT decode) exactly as `rockchip_ebc` loads it; `--dump-lut` exports a decoded LUT for the simulator | `make wbf-check WBF=…` |
 | `pinenote/tools/ebc-logic` | 2 + 7a | Rung 2 (`ebc-logic-test`): the driver's pure logic — XRGB8888/R4→Y4 blitters, damage split/collision scheduling, threshold/dither paths — vs independent references.  Rung 7a (`ebc-refresh-test`): *executes* the refresh state machine (probe, global/partial orchestration, LUT upload, DMA windowing, IRQ/completion, buffer switching) against a behavioral device model under ASan — with non-coherent DMA (the device reads only synced shadows, so a missing `dma_sync` fails a test) — incl. a drive-sequence differential vs rastersim's independent waveform decode.  Phase B (`ebc-replay`): replays KOReader `[pn-refresh]` traces through the same machine under candidate refresh policies — the display-quality workbench, results in `doc/refresh-policy.md` | `make ebc-logic-check WBF=…` |
 | `pinenote/tools/rastersim` | 3 | A standalone Gray8→Y4 raster library + waveform *simulator* (state model + LUT playback), with golden-image and convergence tests | `make rastersim-check WBF=…` |
-| `pinenote/tools/koreader-input` | 2 | KOReader's *verbatim* `device/input.lua` + `gesturedetector.lua` (from the native `koreader-bin` bundle, under its own luajit) fed synthetic pen+touch evdev streams: reproduces the pen-hover tap-capture `quirk:` (finger tap → swipe) and validates the `mixedrouter.lua` fix, with pen-contact/pinch/baseline-tap regression guards | `make koreader-input-check` |
+| `pinenote/tools/koreader-input` | 2 | KOReader's *verbatim* `device/input.lua` + `gesturedetector.lua` (from the native `koreader-bin` bundle, under its own luajit) fed synthetic pen+touch evdev streams: reproduces the pen-hover tap-capture `quirk:` (finger tap → swipe), validates the `mixedrouter.lua` fix, checks exact `wilkbook-orientation` discovery plus source-gated MSC_RAW→MSC_GYRO translation, and pins cyttsp5 MT-axis normalization to five measured hardware targets | `make koreader-input-check` |
+| `pinenote/tools/orientation` | 2 | Pure SC7A20 orientation classification: calibrated four-edge mapping, flat/diagonal/magnitude rejection, hysteresis, stable-sample dwell debounce, and duplicate suppression | `make orientation-check` |
+| `pinenote/tools/power` | 1 | Read-only Guile snapshot/delta recorder against deterministic fake `/proc`/`/sys` roots: schema, unavailable values, malformed counter rows, ordering, resets, and mutation guard | `make power-check` |
+| suspend preflight | 1 | Fail-closed config/DT/KOReader qualification fixtures: exact PM config lines, effectively enabled cover+RK817 wake identities, exact disabled policy bytes, and restricted two-value KOReader policy evaluation | `make suspend-check` |
 
 Each tool's `README.md` documents what it does and does **not** cover.
 The recurring caveat: **none of this models electrophoretic optics.**
@@ -87,7 +90,14 @@ device model, 7b, remains future work.)
 2. **Static Guix builds** — `make kernel-drv` (cheap derivation gate),
    then `make kernel` / `make <flavor>` / `make rootfs-<flavor>`.
 3. **Source + config inspection** —
-   `pinenote/scripts/preflight/inspect-kernel-source.sh`.
+   `pinenote/scripts/preflight/inspect-kernel-source.sh SOURCE RESOLVED_CONFIG`,
+   followed by `inspect-pinenote-battery-dtb.sh` on the generated PineNote DTB.
+   Run `make suspend-check`, then run
+   `inspect-pinenote-suspend-gates.sh RESOLVED_CONFIG DTB SUSPEND_POLICY_LUA
+   KOREADER_DEVICE_LUA` against the built artifacts. This verifies the exact
+   disabled policy module and uses restricted false/true injection to prove the
+   returned device class follows it; it deliberately proves that suspend is
+   still disabled, while firmware and physical sleep remain hardware-only.
 4. **QEMU smoke** (`make qemu-smoke`) for generic ARM64 userspace, and
    **QEMU virt** — interactive (`make qemu-virt ROOTFS=…`) or the
    mechanized rung-4 gate (`make qemu-virt-check ROOTFS=…`) — which boots
@@ -96,7 +106,8 @@ device model, 7b, remains future work.)
    VIRTIO_MENU olddefconfig drop was caught): kernel + PREEMPT_RT boot,
    initrd waveform discovery + EBC module load, PNGuixRoot pre-root
    visibility, root mount, **udev completion, the post-udev one-shots**
-   (waveform install, EBC params), **reader-session start, and a clean
+   (waveform install, EBC params), **orientation bridge readiness before
+   reader-session start, and a clean
    poweroff** — the Shepherd service-ordering class that cost the first
    two hardware sessions. Because shepherd's messages divert from the
    console (/dev/kmsg) to /var/log/messages once its system-log service
@@ -118,6 +129,16 @@ device model, 7b, remains future work.)
    `[pn-refresh]` intent traces iterate without hardware — what the
    e-ink *optics* do with those updates stays on hardware and rung 7's
    simulators.
+
+The orientation bridge is both offline- and hardware-validated (2026-07-19):
+the PineNote production self-test delivered MSC_RAW through its real evdev node,
+and all four physical edges drove distinct, correct KOReader orientations. It
+samples coherent buffered XYZ scans, never independently polled axis files.
+The same session measured cyttsp5's inverted MT axes at five visible targets;
+the source-gated min/max mirror passed a live A/B and is pinned in the host
+input suite. The final baked image passed os2 write/readback, first boot, all
+four poses, toggle/replay, contact deferral, and bridge-restart recovery in the
+same session; the exact hardware record is in `doc/status.md`.
 5. **Mock helper + boot-bundle inspection** — the preflight scripts.
 6. **Hardware deployment** — `doc/hardware-deploy.md`, backups per
    `doc/device-runbook.md` verified first. Write os2 only; os1 is the
@@ -132,5 +153,7 @@ waveform optics (ghosting, uniformity, mode tradeoffs); real panel
 temperature behavior and LUT-bin switching; VCOM/power sequencing; pen
 latency and PREEMPT_RT's actual effect; the dwc3 `ep0out` behavior
 (`dummy_hcd` bypasses the broken layer); EBC frame timing under load; and
-end-to-end reading feel. Everything else should be squeezed onto an
-offline rung first.
+end-to-end reading feel. Deep suspend adds TF-A/U-Boot compatibility, DDR
+retention, wake routing, PMIC/EBC rail state, post-resume display repair, and
+actual suspend current to this hardware-only set. Everything else should be
+squeezed onto an offline rung first.
