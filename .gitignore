@@ -4,3 +4,13 @@
 # licensed fonts staged locally for image builds; never committed
 /pinenote/fonts/local/
 .claude/worktrees/
+
+# generated Python bytecode
+__pycache__/
+*.py[cod]
+
+# power evidence may contain MAC addresses, command lines, and mount details
+/pinenote-power-*.scm
+/power-*-before.scm
+/power-*-after.scm
+/power-*-delta.scm
