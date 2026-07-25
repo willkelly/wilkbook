@@ -21,6 +21,33 @@ the single ext4 partition from Guix's raw image intermediate, label it
 that still look like partitioned disks, and stage a rootfs-matched boot bundle
 from the same image.
 
+`inspect-kernel-source.sh KERNEL_SOURCE RESOLVED_CONFIG` statically checks the
+patched PineNote kernel source plus a separately build-produced `.config`,
+including the RK817 battery prerequisites and exact upstream profile. It never
+executes the inspected source tree's Makefile.
+`inspect-pinenote-battery-dtb.sh RK3566_PINENOTE_V1_2_DTB` read-only
+decompiles a generated DTB with `fdtdump` from the `dtc` package, verifies the
+PineNote v1.2 compatible and exact profile, and proves the charger's
+`monitored-battery` phandle references the battery node. Phandle
+numbers are compiler-assigned, so the check asserts their relationship rather
+than a fixed number. Run its deterministic positive and negative fixtures with
+`guix shell dtc python -- sh pinenote/scripts/preflight/test-inspect-pinenote-battery-dtb.sh`.
+
+`inspect-pinenote-suspend-gates.sh RESOLVED_CONFIG DTB SUSPEND_POLICY_LUA
+KOREADER_DEVICE_LUA` is the fail-closed **offline** suspend gate. It requires
+exact kernel suspend/debug config lines, proves the compiled DT's effectively
+enabled wake declarations are exactly the verified cover-switch and RK817 PMIC
+identities, and requires `suspend_policy.lua` to contain only `return false`
+then runs `validate-pinenote-suspend-policy.lua` under a timeout. The harness
+loads `device.lua` twice in a restricted environment with injected false/true
+policy values and requires the returned class's `canSuspend` function to follow
+both. `make suspend-check` runs positive and adversarial fixtures. Passing does
+not prove boot firmware, DDR retention, runtime wake policy, physical wake
+routing, EBC power rails, resume, or suspend current.
+
+`validate-pinenote-suspend-policy.lua KOREADER_DEVICE_LUA` is the restricted
+LuaJIT harness used by that gate; it is not a general-purpose Lua runner.
+
 For USB-C-only PineNote bring-up, use the `pinenote-usb-console` system flavor;
 it adds a CDC-ACM gadget plus a `ttyGS0` getty and passwordless `sudo` for
 `reader` so the host can operate a boot that reaches Shepherd without Wi-Fi or a

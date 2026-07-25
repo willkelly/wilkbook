@@ -12,7 +12,7 @@ ARTIFACTS ?= /tmp/opencode/pinenote-rootfs-artifacts
 FLAVORS = minimal slim networked dev usb-console usb-console-linux-6-6 reader reader-debug
 
 .PHONY: help packages kernel kernel-drv qemu-smoke qemu-virt qemu-virt-check \
-        wbf-check ebc-logic-check rastersim-check koreader-input-check optics-check \
+        wbf-check ebc-logic-check rastersim-check koreader-input-check orientation-check optics-check power-check suspend-check \
         $(FLAVORS) $(addprefix image-,$(FLAVORS)) $(addprefix rootfs-,$(FLAVORS))
 
 help:
@@ -25,6 +25,8 @@ help:
 	@echo "  packages          build the helper/firmware packages"
 	@echo "  qemu-smoke        build the generic ARM64 QEMU smoke VM launcher"
 	@echo "  qemu-virt-check   mechanized virt boot assertions (ROOTFS=.. [WAVEFORM=..])"
+	@echo "  power-check       fake-root tests for the read-only Guile power recorder"
+	@echo "  suspend-check     offline fail-closed e-reader suspend qualification gates"
 	@echo
 	@echo "Deployment is manual by design: see doc/hardware-deploy.md."
 
@@ -133,9 +135,22 @@ rastersim-check:
 koreader-input-check:
 	$(MAKE) -C pinenote/tools/koreader-input check KOREADER_BUNDLE=$(KOREADER_BUNDLE)
 
+orientation-check:
+	guix shell luajit -- $(MAKE) -C pinenote/tools/orientation check
+
 # E-ink optical-defect detectors (optics harness analysis core). Deterministic
 # validation of the flash/ghost/settle/double-flash classifiers against
 # synthetic clips with known injected defects; no camera, no device.
 #   make optics-check
 optics-check:
 	guix shell python python-numpy python-scipy python-pillow ffmpeg -- $(MAKE) -C pinenote/tools/optics check
+
+# Read-only power snapshot/delta recorder tests.  Guile is present in the
+# final4 system profile and the tool uses only base Guile modules.
+power-check:
+	guix shell guile python -- $(MAKE) -C pinenote/tools/power check
+
+# Fail-closed suspend qualification checks. These prove only static config,
+# approved DT wake capability, and restricted KOReader policy evaluation.
+suspend-check:
+	guix shell dtc python luajit -- sh pinenote/scripts/preflight/test-inspect-pinenote-suspend-gates.sh
