@@ -625,6 +625,7 @@ def cmd_record(args):
             # the webcam context wraps THIS run only: each capture holds its
             # own sync flashes (run_scenario re-opens the card + re-syncs per
             # set), so analyze's single-find_sync assumption holds per bundle
+            scenario_error = None
             with _webcam(args.camera, video_path,
                          args.camera_args.split() if args.camera_args else None):
                 try:
@@ -636,19 +637,21 @@ def cmd_record(args):
                                         deep_clean_n=args.deep_clean,
                                         run_index_start=i)
                 except ScenarioRunError as error:
-                    partial_dir = _partial_run_dir(run_dir)
-                    partial_run = {
-                        "run_id": "r%d" % i, "label": label, "params": dict(params),
-                        "frontlight_level": args.frontlight_level,
-                        "panel_temp_c_start": None, "panel_temp_c_end": None,
-                        "events_source": "measured", "events": error.events,
-                    }
-                    session, trace_name = _session_for_run(
-                        args, driver, device, wf_ident, camera_meta, baseline_params,
-                        partial_run, error.trace_data)
-                    _write_partial_session(partial_dir, video_path, session,
-                                           trace_name, error.trace_data, error)
-                    raise
+                    scenario_error = error
+            if scenario_error is not None:
+                partial_dir = _partial_run_dir(run_dir)
+                partial_run = {
+                    "run_id": "r%d" % i, "label": label, "params": dict(params),
+                    "frontlight_level": args.frontlight_level,
+                    "panel_temp_c_start": None, "panel_temp_c_end": None,
+                    "events_source": "measured", "events": scenario_error.events,
+                }
+                session, trace_name = _session_for_run(
+                    args, driver, device, wf_ident, camera_meta, baseline_params,
+                    partial_run, scenario_error.trace_data)
+                _write_partial_session(partial_dir, video_path, session, trace_name,
+                                       scenario_error.trace_data, scenario_error)
+                raise scenario_error
             r = runs[0]
             session, trace_name = _session_for_run(
                 args, driver, device, wf_ident, camera_meta, baseline_params,

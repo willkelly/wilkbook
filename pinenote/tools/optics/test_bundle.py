@@ -657,7 +657,8 @@ def main():
                 def __enter__(self):
                     with open(self.path, "wb") as f: f.write(b"partial capture")
                     return self
-                def __exit__(self, *_exc): pass
+                def __exit__(self, *_exc):
+                    with open(self.path, "ab") as f: f.write(b" finalized")
             recorder._webcam = FakeWebcam
             failing = FailingRecordDriver(fail_run=1, fail_at="open")
             drvmod.make_driver = lambda **kw: failing
@@ -680,7 +681,9 @@ def main():
                   and open(os.path.join(complete_dir, "capture.mkv"), "rb").read()
                      == b"completed capture"
                   and open(os.path.join(complete_dir + ".partial", "capture.mkv"), "rb").read()
-                     == b"partial capture"
+                     == b"partial capture finalized"
+                  and partial.get("capture", {}).get("sha256")
+                     == B.sha256_file(os.path.join(complete_dir + ".partial", "capture.mkv"))
                   and any("needs events" in problem for problem in partial_problems))
     finally:
         drvmod.make_driver = orig_make
