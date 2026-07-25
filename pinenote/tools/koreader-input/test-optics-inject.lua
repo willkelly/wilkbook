@@ -218,6 +218,15 @@ end
 report(extra == 0, "no spurious slots (pen 2nd interface ignored)",
        extra .. " extra")
 
+local required = {}
+PineNote._registerRequiredInputDevices({
+    setRequiredDevice = function(path) required[#required + 1] = path end,
+}, found)
+report(#required == 2 and required[1] == found.optics_inject
+       and required[2] == found.gsensor,
+       "production init registers optics and orientation as required",
+       table.concat(required, ","))
+
 local gyro = { type = 4, code = 3, value = 2, src = "/dev/input/event7" }
 report(PineNote._translateGyroEvent(gyro, "/dev/input/event7")
        and gyro.code == 71 and gyro.value == 2 and gyro.wilkbook_gsensor,

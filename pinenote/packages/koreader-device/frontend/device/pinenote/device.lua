@@ -85,6 +85,17 @@ local function findInputDevices(sysfs_base)
     return found
 end
 
+-- Both virtual devices are owned by services outside KOReader. Their loss
+-- means the process must restart and enumerate their replacement nodes.
+local function registerRequiredInputDevices(input_backend, devs)
+    if devs.optics_inject then
+        input_backend.setRequiredDevice(devs.optics_inject)
+    end
+    if devs.gsensor then
+        input_backend.setRequiredDevice(devs.gsensor)
+    end
+end
+
 -- DRM_IOCTL_ROCKCHIP_EBC_GLOBAL_REFRESH:
 -- _IOWR('d', 0x40, struct { bool }) = 0xC0016440
 local DRM_GLOBAL_REFRESH = 0xC0016440
@@ -339,9 +350,9 @@ function PineNote:init()
     if devs.optics_inject then
         self.input:open(devs.optics_inject, "wilkbook-optics injector")
     end
+    local evdev = require("ffi/input_evdev")
     if devs.gsensor then
         self.input:open(devs.gsensor, "wilkbook-orientation")
-        require("ffi/input_evdev").setRequiredDevice(devs.gsensor)
         -- The bridge emits nothing until KOReader has opened this node,
         -- otherwise the initial orientation could be lost before an evdev
         -- client exists and then suppressed as a duplicate.
@@ -355,6 +366,7 @@ function PineNote:init()
     else
         logger.warn("PineNote: wilkbook-orientation input device not found")
     end
+    registerRequiredInputDevices(evdev, devs)
     if not (devs.pen or devs.touch) then
         -- Offline visual loop on qemu-virt: no PineNote input hardware
         -- exists, but the harness attaches virtio tablet/keyboard.
@@ -535,6 +547,7 @@ PineNote.battery_sysfs = firstExistingDir{
 -- name->slot mapping against a fake sysfs tree, offline); nothing on
 -- the device calls this.
 PineNote._findInputDevices = findInputDevices
+PineNote._registerRequiredInputDevices = registerRequiredInputDevices
 PineNote._translateGyroEvent = translateGyroEvent
 PineNote._installGyroHandler = installGyroHandler
 PineNote._syncGyroState = syncGyroState
