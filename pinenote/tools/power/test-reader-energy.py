@@ -61,6 +61,7 @@ class FakeTransport:
         self.files[path] = data; self.events.append(("push", path))
     def run(self, command, timeout=None, detach=False):
         self.commands.append(command)
+        self.events.append(("run", command))
         if detach:
             self.detached.append(command); self.events.append("detach"); return 0, ""
         if "create private remote directory" in command: return 0, ""
@@ -163,7 +164,14 @@ def main():
         meta = json.load(open(os.path.join(d, legs[0], "metadata.json")))
         check("watchdog launch is detached, never a blocking sleeper", len(t.detached) == 1 and "setsid" in t.detached[0])
         check("ABBA emits four complete legs", len(legs) == 4 and meta["status"] == "ok")
-        check("snapshots occur after stage and sync", t.events.index("sync") < next(i for i, c in enumerate(t.commands) if " snapshot " in c))
+        check("ABBA leg governors follow conservative,powersave,powersave,conservative",
+              [json.load(open(os.path.join(d, leg, "metadata.json")))["governor"]
+               for leg in legs] == ["conservative", "powersave", "powersave", "conservative"])
+        first_snapshot = next(i for i, event in enumerate(t.events)
+                              if isinstance(event, tuple) and event[0] == "run"
+                              and " snapshot " in event[1])
+        check("snapshots occur after stage and sync",
+              t.events.index("stage") < t.events.index("sync") < first_snapshot)
         check("metadata records device/card/actual profile provenance",
               meta["provenance"]["device"]["model"] == "PineNote"
               and meta["provenance"]["card"]["pages"] == 49
