@@ -148,10 +148,14 @@ eventually (map wlroots `app_id` → EBC hint values).
   `usb-otg_eth.sh` is a configfs reference). `gud-gadget` (PineNote as
   USB e-ink monitor) is a compelling later feature and doubles as a
   display-debug path.
-- Suspend/resume on 6.x needs the `rk_suspend_driver` topic branch *and*
-  a known-good U-Boot (factory batch-2 U-Boot silently breaks suspend);
-  every distro does a full EBC refresh after resume. For a reader,
-  aggressive runtime PM + panel-off may matter more than S3.
+- Suspend/resume has two firmware lineages: upstream TF-A can provide PSCI
+  `SYSTEM_SUSPEND` directly, while BSP-style TF-A needs the matching
+  `rk_suspend_driver`/Rockchip SIP configuration path. Both need a known-good
+  boot-firmware stack (factory batch-2 U-Boot silently breaks suspend), and
+  every PineNote distro repairs the display with a full EBC refresh after
+  resume. CPU `idle-states` are a separate awake-idle concern, not proof for or
+  against system suspend. For a reader, aggressive runtime PM + panel-off may
+  still matter alongside suspend-to-RAM.
 
 ## 6. RT-specific watch list (we are the first RT PineNote)
 

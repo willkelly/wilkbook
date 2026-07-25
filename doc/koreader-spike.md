@@ -115,7 +115,10 @@ files, grafted into the bundle by the package
   turns and UI flashes get a real GC16 wash.
 - `frontend/device/pinenote/powerd.lua` — frontlight via the two PWM
   backlights (`/sys/class/backlight/backlight_{cool,warm}`, warmth
-  cross-fades between them), battery via the rk817 fuel gauge.
+  cross-fades between them); battery support targets the RK817 fuel gauge,
+  and the DTS-enabled 2026-07-24 boot now exposes the hardware-qualified
+  `rk817-battery` supply. Capacity accuracy remains provisional until a
+  controlled charge/discharge cycle.
 
 The probe hook (patched into `frontend/device.lua` before the SDL
 fallback) matches `PineNote` in `/proc/device-tree/model`.

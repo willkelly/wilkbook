@@ -1,19 +1,18 @@
 # Wi-Fi and networking
 
-The reading-first reader flavor has no way to join a network, and there is
-no story for supplying Wi-Fi credentials without committing a secret. This
-is the last open item on ROADMAP §4 and the gate in front of two concrete
-goals: the on-device optics recorder (`pinenote/tools/optics/`), which must
-drive the device "over the network," and general usefulness (syncing books,
-reaching the reader without the UART/ACM cable).
+The reading-first reader flavor now joins Wi-Fi from a per-device credential
+file on the persistent `data` partition and exposes a key-only root SSH
+endpoint. Association, DHCP, SSH, and `scp` were hardware-proven on
+2026-07-24. This document preserves the option analysis that led to that
+implementation and records the remaining work, including on-device network
+selection and persistent SSH identity across reflashes.
 
 This doc lays out the state of play, the option space with tradeoffs, a
 credentials plan that respects the repo's "never commit/bundle per-device
 secrets" culture, a concrete recommended approach with an implementation
 sketch, and the short list of assumptions that only a hardware or os1-oracle
-session can confirm. Everything below the "recommended approach" heading is
-**design, not proven** — no networking userland has been booted on the
-device yet.
+session can confirm. Resolved hardware questions are labelled with their
+validation date; unlabelled items in §6 remain open.
 
 Related docs: `doc/status.md` (hardware truth), `doc/kernel-forward-port.md`
 (the Wi-Fi deblob history and the config), `doc/refresh-policy.md` +
@@ -61,20 +60,16 @@ The radio and firmware layer works. Verified in the repo and on hardware:
   regdomain *mechanism* is present; the regdomain still has to be
   *selected* (§6).
 
-### What is absent
+### What Phase 1 added
 
-- **No connection userland on the reader.** The `reader` and `usb-console`
-  flavors carry no supplicant, no DHCP client, and nothing that brings
-  `wlan0` up. They reach the device only over UART (`ttyS2`) and the USB
-  ACM gadget (`ttyGS0`) — and on the reader image the ACM console lands in
-  the unprivileged `reader` shell, so even that is not a root control path
-  (`doc/status.md`, 2026-07-05 unattended-boot note).
-- **No credentials story.** Nothing supplies an SSID/PSK, and the repo
-  culture forbids committing one (CLAUDE.md safety model; same rule as the
-  waveform/VCOM).
-- **No remote-access service.** `grep` across `pinenote/` finds no
-  `openssh`, `dropbear`, `nginx`, `avahi`, or any listener. The device is
-  currently unreachable over IP even if it associated.
+- **Connection userland on the reader.** The reader flavor carries the
+  one-shot `pinenote-wifi` service, `wpa_supplicant`, and `dhcpcd`; together
+  they bring up `wlan0` when a credential file is present (§4.1).
+- **A credentials story without repository secrets.** The service reads a
+  mode-0600 PSK-hash configuration from the persistent `data` partition. No
+  SSID, passphrase, or per-device credential is committed or bundled.
+- **Remote access.** The current reader image exposes key-only root OpenSSH;
+  association, DHCP, SSH, and `scp` were hardware-proven on 2026-07-24.
 - **The `networked` flavor is a size baseline, not a working join.** It
   already wires `dhcpcd-service-type` plus a D-Bus-free
   `wpa-supplicant-service-type` on `wlan0`
@@ -316,12 +311,13 @@ network={
    lease, and answers SSH on the key. Harvest the association dmesg and
    `iw`/`ip` output for the doc.
 
-### 4.1 Phase 1 — implemented (2026-07-10), offline-gated
+### 4.1 Phase 1 — implemented (2026-07-10), hardware-proven 2026-07-24
 
 The Wi-Fi userland now ships on the **reader** flavor and is gated through
 `guix system build pinenote-reader` (derivation graph sound) with the boot
-script `sh -n` + shellcheck clean and its no-op path verified. **Association
-itself is the hardware step still pending** (§6, the headline unknown).
+script `sh -n` + shellcheck clean and its no-op path verified. Association,
+DHCP, key-only root SSH, and `scp` are hardware-proven on the current reader
+image (2026-07-24; §6 and `doc/status.md`).
 
 - `pinenote/services/wifi.scm` — `pinenote-wifi-service-type`, a one-shot
   that runs a boot script (a `computed-file`, so no secret and no edit to the
@@ -375,12 +371,13 @@ device-driving is now factored into a Transport × RenderBackend matrix
 CDC-ACM console drives a real capture tethered, today, with no network at
 all** — the device in the camera box is reachable over the same USB-C cable
 that powers it, via the `/dev/ttyGS0` shell `usb-gadget.scm` already exposes.
-Wi-Fi/`SSHTransport` remains the answer for **friends' devices and untethered
-use**, and is still the right thing to build; it is just no longer the gate in
-front of the operator's own baseline captures. The KOReader-vs-framebuffer
+Wi-Fi/`SSHTransport` is the answer for **friends' devices and untethered use**.
+The key-only `root@` endpoint, `scp` round-trip, association, DHCP, and host
+reachability are hardware-proven on the current reader image (2026-07-24; see
+`doc/status.md`). The KOReader-vs-framebuffer
 backend split (measuring KOReader's own influence on the optics) is orthogonal
 to the transport. The rest of this section describes the SSH channel that
-`SSHTransport` targets once the link is up.
+`SSHTransport` now targets.
 
 The optics recorder's SSH path is the "over the network" surface;
 everything the player needs to actuate already exists on the device.
@@ -424,11 +421,12 @@ alongside the existing ACM one (`pinenote/services/usb-gadget.scm` is the
 model). Wi-Fi remains the answer for untethered use and for friends'
 devices; USB-ECM is the reliable tethered fallback.
 
-## 6. What needs a hardware / os1-oracle check to validate
+## 6. Hardware / os1-oracle validation ledger
 
-Everything in §§2–5 is offline reasoning. These assumptions can only be
-confirmed on the device (cheap os1-oracle checks first, then an os2
-session):
+Sections 2–3 preserve the design reasoning; §4 records the implementation and
+§5 its recorder use. Resolved checks below carry dates and evidence links. The
+remaining unlabelled checks still need the device (cheap os1-oracle checks
+first, then an os2 session):
 
 - **os1 reference (os1 oracle, read-only):** what supplicant and DHCP
   client stock Debian actually runs, and — crucially — the **interface
@@ -461,8 +459,9 @@ session):
   reservations and any allow-listing. Confirm the shipped
   `...pine64,pinenote-v1.2.txt` NVRAM yields a stable MAC (or plan to pin
   one).
-- **DHCP + reachability end to end.** Lease acquisition on `wlan0`, and SSH
-  reachable on the key from the capture host.
+- **DHCP + reachability end to end — RESOLVED 2026-07-24.** Lease acquisition
+  on `wlan0`, key-only `root@` SSH, and an `scp` round-trip are hardware-proven
+  from the capture host; exact evidence is in `doc/status.md`.
 - **SSH identity persistence.** Confirm host keys and authorized_keys read
   from `/state` survive an os2 reflash (the whole point of putting them on a
   persistent partition); otherwise every reflash changes the host
