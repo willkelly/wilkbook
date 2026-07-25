@@ -37,7 +37,7 @@ The Guix preflight target should continue to use Guix initrd label shorthand:
 Two backup copies currently exist:
 
 - `/home/wkelly/pinenote-backup/2026-05-08`
-- `/mnt/nastyboy/main/wkelly/pinenote-backup/2026-05-08`
+- `/mnt/nastyboy/main/home/wkelly/pinenote-backup/2026-05-08`
 
 Both copies verified with `sha256sum -c SHA256SUMS`, and matching files have the
 same SHA-256 hashes and apparent sizes.
@@ -58,7 +58,7 @@ Existing backed-up artifacts:
 A read-only supplement also exists in both backup roots:
 
 - `/home/wkelly/pinenote-backup/2026-05-10`
-- `/mnt/nastyboy/main/wkelly/pinenote-backup/2026-05-10`
+- `/mnt/nastyboy/main/home/wkelly/pinenote-backup/2026-05-10`
 
 The supplement fills the pre-Gate-6 gaps that were safe to fill from stock
 Debian over SSH. Both copies verify with their `SHA256SUMS`, and matching files
@@ -76,6 +76,18 @@ Supplement artifacts:
 | `service-units.txt` | present in both copies | Relevant stock systemd unit definitions. |
 | `ssh-host-keys.txt`, `ssh-host-key-fingerprints.txt` | present in both copies | Public SSH host keys/fingerprints only; no private keys or passwords. |
 | `uboot-env-printenv.txt` | present in both copies | Device-tree model/compatible strings plus read-only `fw_printenv` attempt. |
+
+The 2026-07-25 offline firmware comparison verified all four backup manifests,
+then compared the installer-defined byte ranges against PNDeb's
+`stable_1056mhz` payload (image repository commit `e6cf6f15c7af3419196b70e714cc9f94d433dad0`).
+The current backup is byte-for-byte identical: idblock SHA-256
+`7a935efc67a08fee57c4393ada1d136bfc9685a594ea43b88a06a90372d75a41`
+and U-Boot FIT SHA-256
+`078f81dcab0a41cc4d4bd046e8b81a833d1994c6c1b09fb34c7aaf2f14cc9031`.
+The stable installer would rewrite identical bytes; do not run it as a suspend
+experiment. The owner-only extraction and component manifest are under
+`/tmp/opencode/pinenote-boot-firmware-compare-20260725/` and must not be
+committed as binary artifacts.
 
 ## Backup sufficiency checklist
 

@@ -1,6 +1,192 @@
 # Hardware status
 
-Last updated: 2026-07-15.
+Last updated: 2026-07-24.
+
+**2026-07-19 hardware verdict: final4 autorotation and touch normalization are
+deployed and fully accepted on glass.** The final image booted from os2 with the
+bridge and reader ordered correctly, the consumer handshake complete, and
+event7 advertising `capabilities/ev=11` plus
+`capabilities/msc=8`. Its production self-test passed the exact virtual identity
+and an MSC_RAW mode 2 + SYN_REPORT delivery. This closed the first image's root
+cause: it had used `0x4004556a` (`UI_SET_SNDBIT`) instead of `0x40045568`
+(`UI_SET_MSCBIT`), so uinput accepted writes but discarded every undeclared
+MSC_RAW frame.
+
+Supervised pose capture established the sensor truth (TOP raw -X, RIGHT raw -Y,
+BOTTOM raw +X, LEFT raw +Y). A reversible on-device `+2 mod 4` A/B then corrected
+all on-glass orientations, proving that the final KOReader contract is **TOP ->
+mode 1, RIGHT -> 0, BOTTOM -> 3, LEFT -> 2**; the earlier TOP3/RIGHT2/BOTTOM1/
+LEFT0 conclusion was wrong and is superseded. The source table and host tests
+now carry the proven values, so the temporary orientation patch is not part of
+the final image.
+
+Finger inaccuracy was separate and equally measurable. With the 1404x1872
+target EPUB frozen and KOReader stopped, raw cyttsp5 taps at T02/T03/T04/T05/T01
+were `(1757,102)`, `(1763,1332)`, `(113,1297)`, `(102,72)`, and `(926,693)`.
+The live MT ranges are X `0..1871`, Y `0..1403`; mirroring both axes before
+KOReader rotation maps all five targets within 25 px (center residual 8x9 px).
+A combined reversible patch first passed the user verdict: finger and pen both
+selected small controls accurately across the screen and rotation remained
+correct. Production now discovers the touch node and mirrors each axis from its
+queried min/max; pen scaling is unchanged. The baked implementation then passed
+the same verdict without any userpatch: all four poses followed the physical
+edge, and finger and pen selected small controls accurately across the screen.
+
+The final baked rootfs is
+`/tmp/opencode/pinenote-rootfs-artifacts-final4/pinenote-reader-PNGuixRoot-20260719.ext4`,
+SHA-256 `d64b1e820d37071108a361f97fd1383630bd36a97b536e4c157407fd4db8fbdc`,
+1,945,276,416 bytes. Orientation/input suites, deterministic target generation,
+reader/system/rootfs builds, preflight inspection, rung 4, and rung 4v are all
+green. It was written from stock Debian os1 with p5 confirmed as root and p6
+unmounted; the staged file SHA-matched, exactly 1,945,276,416 bytes were flushed
+with `dd conv=fsync`, and readback of that exact range from eMMC SHA-matched.
+
+First-boot acceptance is complete: root is `/dev/mmcblk0p6`; the temporary A/B
+patch is absent; the reader logs `touch MT axes X=0..1871 Y=0..1403 (mirrored)`;
+and bridge/reader logs contain no scan, uinput, orientation, or range-query
+error. Toggle/replay passed (ignore events suppresses rotation; re-enable while
+still immediately synchronizes). Finger and pen contact defer rotation until
+lift, while pen hover alone does not block it. Restarting `orientation-bridge`
+replaced both processes (bridge PID 383 -> 656, reader -> 669), recreated the
+consumer handshake and event7 capabilities, and a fresh physical-TOP hold
+committed mode 1 and displayed correctly.
+
+**2026-07-20 power evidence baseline (same final4 boot): read-only collection
+plus a reversible governor A/B completed; no energy or battery-life verdict.**
+The new streamed Guile recorder captured wakeup sources, IRQs, runtime PM,
+cpufreq transitions, and workload context without installing code or writing
+kernel interfaces. EBC stayed runtime-suspended during a no-refresh interval.
+The live DT exposes wake-source properties only for the cover switch and RK817
+PMIC, and has no CPU idle-state nodes. The only power supply is the unusable
+`ws8100_pen`; no RK817 battery/charger telemetry exists on final4 because its
+DT lacks the battery profile and charger linkage.
+
+A short SSH-instrumented A/B temporarily selected `powersave`, `conservative`,
+and `ondemand`; a shell trap restored `schedutil`, and the stock min/max limits
+and reader/orientation services were rechecked healthy. `schedutil` produced
+about 57.22 transitions/s and 1027.13 IRQ29 events/s; `powersave` produced zero
+of both; `conservative` produced about 2.13 and 30.94; `ondemand` about 8.32
+and 60.97. This causally attributes the high-rate I2C0 interrupts to DVFS/
+TCS4525 traffic, but counters are not energy measurements and no governor
+change is persisted. Exact evidence and the supervised RK817 telemetry plan
+are in `doc/power-management.md`. No suspend state was requested; KOReader's
+exact disabled policy remains bound to `canSuspend`, and the offline suspend
+gate is a fail-closed qualification check rather than a hardware verdict.
+
+**2026-07-24 RK817 telemetry mechanism accepted for awake charge/discharge
+observations; no suspend attempted.** The reader rootfs is
+`/tmp/opencode/pinenote-rootfs-artifacts-telemetry-current/pinenote-reader-PNGuixRoot-20260720.ext4`,
+SHA-256 `92837467ba2c0714bdef595d0a2f247536a82aa4dbcb80774902f4d0c1dac189`,
+1,945,272,320 bytes. Its full waveform/EBC/raster/input/orientation/optics/power/
+suspend host suites pass; the rootfs-extracted DTB passes the exact RK817
+battery profile/phandle gate and suspend gate; and QEMU rung 4 plus 4v pass.
+All local and NFS backup manifests verified. Stock os1 was verified as
+`/dev/mmcblk0p5`, os2 remained unmounted, and the file was staged at
+`/home/user/pinenote-reader-PNGuixRoot-20260720-telemetry.ext4`; its remote
+size and SHA-256 match the host artifact. Exactly 3,799,360 512-byte sectors
+(1,945,272,320 bytes) were written to `/dev/mmcblk0p6` with `conv=fsync`;
+SHA-256 of an exact-range readback is
+`92837467ba2c0714bdef595d0a2f247536a82aa4dbcb80774902f4d0c1dac189`.
+The 2026-07-24 UART/ACM-observed boot reached `/dev/mmcblk0p6` on kernel
+7.0.11 with the exact embedded Guix system store path. Waveform/EBC one-shots,
+orientation, reader, and Wi-Fi were healthy; live `refresh_waveform=6`; KOReader
+painted the document; and the reader/orientation PIDs stayed stable throughout
+the session.
+
+Both new supplies appeared. `rk817-battery` reports present with the exact DTS
+profile (4,000,000-uAh design/full charge, 3.5--4.2 V design range, 2-A charge
+limit, 4.2-V charge-voltage limit, and 300-mA termination); these are DTS inputs,
+not a measured usable capacity. Four unplugged polls
+showed charger `online=0`, charger voltage zero, then stable `Discharging` at
+-198 to -203 mA with declining voltage and `charge_now`; replugging produced
+`online=1`, `Charging/Standard`, +108 to +116 mA, and increasing `charge_now`.
+No relevant RK817/charger/regulator error or abnormal temperature appeared
+during this boot window; final CPU/GPU temperatures were 35.6/31.9 C.
+
+A recorder-bracketed, cable-free 61-second observation (frontlights zero, Wi-Fi up,
+USB not attached) consumed 3,440 uAh, equivalent to about 203 mA over that
+interval. EBC remained runtime-suspended throughout and no wakeup-source counter
+changed. `schedutil` made 2,828 transitions while IRQ29 fired 50,922 times
+(18.0 I2C0 IRQs/transition), independently confirming the DVFS/TCS4525 result.
+The full reports are under `/tmp/opencode/pinenote-power-20260724/`; this short,
+near-full observation is neither a representative low-power baseline nor a
+battery-life estimate.
+
+**2026-07-24 late-session governor energy A/B (device UTC 2026-07-25):
+`powersave` reduced static awake draw by about 11%, but is not persisted.** A
+cable-free, untouched ABBA run used four three-minute intervals with both
+frontlights zero and Wi-Fi associated; a trap restored `schedutil`. The two
+`schedutil` runs measured 201.84 and 205.26 mA from `charge_now`; the two
+`powersave` runs measured 178.36 and 184.09 mA. Means are 203.55 versus 181.23
+mA, a 22.32-mA (10.97%) reduction. IRQ29 fell from 843--875/s to 4.5/s and
+cpufreq transitions from 46.8--48.6/s to zero; arch-timer IRQs also fell from
+539--560/s to 187--193/s. EBC remained runtime-suspended for every interval,
+wake counters stayed flat, reader/orientation PIDs remained stable, and the
+original governor was restored. Reports are under
+`/tmp/opencode/pinenote-power-governor-abba-20260725/`. This is a static-idle
+result, not yet a responsiveness, reading-workload, or persistent-governor
+verdict; `conservative` remains the next adaptive candidate.
+
+**The follow-up powersave/conservative ABBA found no resolvable static-energy
+penalty for adaptive scaling.** The two `powersave` runs measured 181.72 and
+178.36 mA; the two `conservative` runs measured 180.32 and 181.31 mA. Their
+means, 180.04 and 180.82 mA, differ by only 0.78 mA (0.43%) in these short
+intervals. `conservative` made 3.2--3.7 transitions/s versus zero for
+`powersave`, far below `schedutil`'s 46.8--48.6/s. EBC remained suspended,
+wake counters stayed flat, services stayed stable, and `schedutil` was restored.
+Reports are under `/tmp/opencode/pinenote-power-conservative-abba-20260725/`.
+`conservative` then passed the deterministic page-turn/render gate. The
+unplugged SSH ABBA ran `conservative,powersave,powersave,conservative` over the
+exact 45-turn optics workload at 26 C with both frontlights zero and Wi-Fi
+associated. Conservative used 12.900 and 13.244 mAh in 176/177 s; powersave
+used 15.652 and 16.168 mAh in 209/209 s. The means are 13.072 versus 15.910 mAh
+per completed workload (17.8% less for conservative) and 176.5 versus 209.0 s
+(15.6% faster). Every leg carried exactly 45 fresh timestamp-correlated
+`[pn-refresh]` events (maximum residual 0.2604 s). The harness restored and
+read back the running image's original `schedutil`; its watchdog and optics
+reader were absent afterward and the normal reader service was running.
+
+The first attempt produced one valid conservative leg, then failed closed when
+the powersave trace exposed two KOReader processes writing the same truncated
+log. `KOReaderBackend.prepare()` had ignored a bounded prior-reader stop
+failure. It now refuses to relaunch unless the PID/cmdline-verified reader exits,
+with a bounded identity-checked `KILL` fallback; offline optics and power suites
+pass, and the repeated hardware ABBA completed all four legs. The forward-port
+defconfig now selects `CONFIG_CPU_FREQ_DEFAULT_GOV_CONSERVATIVE=y` for the next
+reader image. Boot-time governor readback remains a deployment check; no
+suspend was attempted and suspend remains disabled. Owner-only raw reports are
+under `/tmp/opencode/pinenote-reader-energy-ABBA-20260725-retry1/` and must not
+be committed or shared unsanitized.
+
+Suspend firmware inventory is now pinned far enough to choose the contract:
+live firmware reports PSCI v1.1, DT advertises `arm,psci-1.0` with `method=smc`,
+and Linux reports cpuidle driver `none`. The 2026-07-25 offline comparison found
+that the verified device backup is byte-for-byte identical to PNDeb/Pine64's
+`stable_1056mhz` idblock and U-Boot FIT (SHA-256 `7a935efc…` and `078f81dc…`).
+This excludes the partially flashed post-October-2024 factory payload; rerunning
+the installer would write identical bytes. The FIT contains Rockchip
+`U-Boot 2017.09-ge0ec1df #runner` (2024-10-25), a primary ATF segment built
+2022-06-09 with `rockchip_sip_svc`/`suspend_mode_config`/ultra-suspend strings,
+and OP-TEE 3.13 built 2023-06-07. It is the downstream BSP-ATF contract, not
+upstream TF-A 2.12+.
+
+Source review resolved one misleading kernel artifact: the 7.0 patch carried
+`CONFIG_ROCKCHIP_SUSPEND_MODE=y` but neither the downstream Rockchip SIP suspend
+driver nor its `rockchip-suspend` DT policy; upstream 7.0.11 does not define the
+symbol, so the ignored stale line has been removed. This is not an active BSP
+suspend path. The installed stable BSP ATF requires that complete Linux-side
+SIP driver plus DT policy, so the present firmware/kernel contract mismatch is
+the leading deep-suspend blocker. **Architecture decision (2026-07-25):** retain
+the byte-verified stable boot firmware for the first qualification and port
+Samuel Holland's complete `rockchip_sip` + `rockchip_pm_config` +
+`rockchip-suspend` compatibility stack into the recoverable os2 kernel/DT.
+Suspend remains disabled; the first hardware boot of that stack is a
+non-suspending bind/probe check under UART. An upstream-TF-A migration is a
+separate later project because os1 cannot recover a damaged boot chain. Public
+Kindle/Kobo/reMarkable/PocketBook integrations support the
+intended policy shape--save, paint and wait, disable light/radio, batch wakes,
+and use one platform owner--but provide no evidence that this PineNote's
+firmware, wake routing, or EBC resume contract works.
 
 **2026-07-15 (night): the "insane finger calibration" was nobody owning
 rotation — the touch chain itself is verified correct on glass.** After
@@ -23,11 +209,11 @@ rotation, so entering the FM (first hit 16 s after boot: the input-
 inhibit pair at 22:45:26, ~48 s of sideways UI before reopening the
 book) or switching books flips the UI relative to the user's hands.
 Touch stays internally consistent, which is exactly why it reads as
-miscalibration rather than rotation. Compounding it: the PineNote is a
-symmetric slab with NO accelerometer, so picking it up 180° from last
+miscalibration rather than rotation. Compounding it: the PineNote was then
+believed to be a symmetric slab with no accelerometer, so picking it up 180° from last
 time is routine (the sidecars ended the night disagreeing: Prydain 1,
 Mastering Emacs 3 — Will rotated via menu at 00:16:53 mid-diagnosis).
-FIX: `lock_rotation=true` (+ `closed_rotation_mode=1` for first start)
+Interim FIX: `lock_rotation=true` (+ `closed_rotation_mode=1` for first start)
 — upstream's own mechanism: docs and the FM stop imposing, rotation is
 one sticky user-owned value restored across restarts. Deployed live as
 a KOReader userpatch (`patches/2-lock-rotation.lua`, applies at the
@@ -51,7 +237,8 @@ evening — two shadow buffers flushing to one panel, plus fbcon churn
 from diagnostic restarts. With one instance owning the fb, portrait
 renders clean edge to edge (first functional portrait ever on this
 device — the historical A.2.6 portrait WEDGE did not reproduce on the
-hrdl-fixed kernel; the findings-report entry needs a follow-up note).
+A.2.8 fixed kernel. Two-band deferred-io quality remains a separate
+limitation; the historical finding is not a portrait-functional blocker).
 Fixes landed: optics driver.close() kills its reader+injector and
 restores reader-session; reader-session start pkills stray readers
 (one-owner rule at both ends). Wrong theories chased and discarded en
@@ -271,6 +458,8 @@ axis: fbcon text on the panel, USB ACM gadget console working end-to-end
 | Wi-Fi radio (wlan0 up, scan) | works | **yes** (2026-07-10: wlan0 autoloads, unblocked, stable MAC, scans 6 APs) |
 | Wi-Fi WPA association | yes | **yes — needs `brcmfmac.feature_disable=0x82000`** (2026-07-10: firmware WPA offload vs wpa_supplicant 2.11 broke the 4-way on 7.0; fix proven live — handshake completes, DHCP `192.168.86.143`, ping OK. In A.2.4 (`d911e57`) via modprobe.d + cmdline; A.2.3 on os2 lacks it. PATH fix `82f111c` lets the service launch the supplicant) |
 | KOReader on the panel (reader flavor) | n/a | **yes** (2026-07-05: native fbdev + evdev, pen- and finger-navigable, frontlight, MB Type fonts; unattended boot validated) |
+| SC7A20 autorotation | n/a | **yes** (2026-07-19 final4: all four physical edges, toggle/state replay, contact deferral, and bridge/reader restart recovery hardware-accepted; production mapping TOP1/RIGHT0/BOTTOM3/LEFT2) |
+| Finger/pen coordinates under rotation | n/a | **yes** (2026-07-19 final4: cyttsp5 MT axes mirrored from queried ranges; five target residuals <=25 px and small controls hardware-accepted with finger and pen) |
 
 The `pinenote-usb-console-linux-6-6` flavor is the fully working baseline.
 The `pinenote-usb-console` flavor (7.0 forward-port) is the kernel-currency
@@ -361,7 +550,48 @@ Also staged 2026-07-03:
 
 ## Current os2 contents
 
-os2 currently holds the **A.2.8-dbg build**, SHA
+os2 currently holds the **2026-07-20 RK817 telemetry candidate**, SHA
+`92837467ba2c0714bdef595d0a2f247536a82aa4dbcb80774902f4d0c1dac189` —
+written from os1 with the full protocol and exact-range readback verification.
+The staged copy is
+`/home/user/pinenote-reader-PNGuixRoot-20260720-telemetry.ext4`.
+**First boot and RK817 telemetry acceptance confirmed 2026-07-24; no suspend
+attempted.** The previously installed and hardware-accepted final4
+2026-07-19 autorotation reader build had SHA
+`d64b1e820d37071108a361f97fd1383630bd36a97b536e4c157407fd4db8fbdc`; its
+staged copy is
+`/home/user/pinenote-reader-PNGuixRoot-20260719-final4.ext4`.
+**First boot and full acceptance confirmed 2026-07-19:** bridge/reader startup,
+MSC_RAW delivery, four-pose rotation, toggle/state replay, contact deferral,
+finger/pen accuracy, and bridge/reader restart recovery all passed. No temporary
+userpatch is present. The superseded corrected-ioctl final3 image had SHA
+`5df3aceed5cf565cd2ceffc05684e028b9479aa35c0c88a8b51298fc02f64512`;
+it proved uinput delivery but required the temporary combined A/B patch because
+its mode table was opposite the final verdict and it lacked touch-axis mirroring.
+The superseded 2026-07-18 autorotation reader record follows: SHA
+`e27da1abc87ff4b564112a3cf5ea8a7910699d20f2800577c9007778779f7562` —
+**written 2026-07-18** with the full protocol (stock Debian os1 root confirmed
+at `/dev/mmcblk0p5`, p6 unmounted, staged artifact SHA-matched, exactly
+1,945,268,224 bytes written with `dd conv=fsync`, and readback of that exact
+range SHA-matched from eMMC). The staged copy is
+`/home/user/pinenote-reader-PNGuixRoot-20260718-autorotation.ext4`.
+**First boot confirmed 2026-07-18.** Both orientation and reader services came
+up cleanly; the first committed state was mode 1 and KOReader painted a rotated
+1404x1872 full refresh. The live state then traversed modes 0 and 1. Restarting
+`orientation-bridge` deliberately proved the dependency/recovery path: Shepherd
+stopped and relaunched KOReader around the replacement bridge and named evdev,
+with fresh consumer and state files and no logged error. This is the production
+reader flavor with the SC7A20
+buffered-IIO orientation bridge, KOReader source-gated gyro adapter, contact
+deferral, autorotation toggle/state replay, and bridge/reader restart recovery.
+The final offline ladder passed the orientation and KOReader input suites,
+system/rootfs builds, rung 4 service assertions, and rung 4v paint/tap loop.
+**Hardware verdict: superseded.** Its virtual node declared EV_MSC but no MSC_RAW
+code, so no orientation frame reached KOReader. The corrected-ioctl final3 image
+replaced it; the fully corrected final4 artifact and accepted hardware verdict
+are recorded at the top of this file.
+
+The superseded A.2.8-dbg record follows: SHA
 `34bde60c77c407336afe344f6829beaf70d540c29430352709e1315368165312` —
 **written 2026-07-13** with the full protocol (os1 root confirmed at
 `/dev/mmcblk0p5`, p6 unmounted, `dd conv=fsync`, readback of the exact
@@ -383,7 +613,7 @@ A.2.8-dbg = A.2.7-dbg + **hrdl's fixes for findings 1/2/7 in the primary
 kernel** (the finding-2 scheduler fix doubles as the quirk-2 corruption
 A/B — if overlap is the mechanism, corruption dies on this kernel) +
 **EXTRACT_FBS** in the debug kernel (belief-vs-glass instrument;
-`pinenote-ebc-dump` grabber in the image; one-smoke ride queued) + the
+`pinenote-ebc-dump` grabber in the image; idle live-DRM smoke passed) + the
 ttyS2-getty removal and the wifi-one-shot /data-mount fix (both
 live-mitigated on the current A.2.7-dbg boot, baked in here). All 385
 offline checks green at build.
@@ -430,15 +660,14 @@ USB cable removed (also the recorder's SSHTransport). Host keys regenerate on
 reflash (persistent `/data` host keys are a follow-up). The superseded A.2.4
 (`54579bab…`) staged copy remains on os1 for rollback.
 
-**A.2.6 is built and pending the next os2 write** (local rootfs
+**Superseded pre-deployment A.2.6 record:** the built local rootfs was
 `pinenote-reader-PNGuixRoot-20260711-a26.ext4`, SHA
 `1a1e13669a17e258487d6f78d862517c9765b9f172e962e52e63ce4cc2bb9b68`; payload
 checks PASS; verified to carry the optics device.lua changes — the
 `wilkbook-optics` injector whitelist + G_reader_settings flash fraction — plus
-the `/var/empty` sshd activation fix, so SSH works with no manual step). It is
-A.2.5 + the integrated optics blocker work; flashing it is prerequisite to the
-injector live proof and the first valid optics capture
-(`pinenote/tools/optics/PLAN.md`).
+the `/var/empty` sshd activation fix, so SSH works with no manual step). It was
+A.2.5 + the integrated optics blocker work and subsequently booted and used for
+the optics campaign recorded above.
 
 A.2.4 (Wi-Fi, first-boot-confirmed 2026-07-11: cold boot brought the full chain
 up on its own — `feature_disable` applied, `wlan0` associated to `largeprofanity`,
@@ -452,12 +681,13 @@ on the `data` partition (`0600`, persists across reflashes). The superseded
 A.2.3 (`196d601c…`) and A.2.2 (`b166d869…`) staged copies remain on os1 for
 rollback.
 
-**A.2.4 is built and pending the next os2 write** (local rootfs SHA
+**Historical A.2.4 build record (written and first-boot-confirmed 2026-07-11;
+now superseded):** local rootfs SHA
 `54579babf4462d05b4c572f6e09849f9f1f21e2bcd4a7054bfd50a8f6f49a4a7`,
-cmdline-verified to carry `brcmfmac.feature_disable=0x82000`). It is A.2.3 plus
+cmdline-verified to carry `brcmfmac.feature_disable=0x82000`. It was A.2.3 plus
 the confirmed Wi-Fi fix (the two `feature_disable` mechanisms + the `82f111c`
-PATH fix). A.2.3 (currently on os2) associates but cannot complete WPA without
-that option, so A.2.4 is the build that brings Wi-Fi up automatically on boot.
+PATH fix). A.2.3 associated but could not complete WPA without that option;
+A.2.4 was the first build to bring Wi-Fi up automatically on boot.
 
 Over A.2 it carries three fixes, each found on (or predicted by) the
 A.2 first boot the same night and proven offline before this write:
@@ -673,12 +903,13 @@ visible) before writing the port. Then the native device target
   wishlist: `EXTRACT_FBS` ioctl is stubbed `-EOPNOTSUPP` in the 7.0
   port (the buffer-dump oracle is unavailable on-device) and
   `CONFIG_DYNAMIC_DEBUG` is off (`drm.debug` sufficed).
-  *(Update 2026-07-12: EXTRACT_FBS is now implemented in the
+  *(Update 2026-07-13: EXTRACT_FBS is now implemented in the
   `linux-pinenote-debug` kernel — `linux-pinenote-debug-extract-fbs.patch`,
   offline-proven by the ebc-logic dbg suite; grabber `ebc-dump-grab`
   ships in the reader-debug image, host decoder `ebc-dump` in
-  pinenote/tools/ebc-logic. On-device smoke still pending; the primary
-  kernel keeps the stub.)*
+  pinenote/tools/ebc-logic. The idle `--verify` on-device smoke passed under
+  the live DRM master and decoded a pixel-faithful KOReader screen; a
+  mid-scribble sample remains. The primary kernel keeps the stub.)*
 - The pen pressure warning `w9013 … Ignoring pressure offset greater
   than 50%` appears whenever libinput handles the pen (cage runs);
   KOReader's evdev path doesn't involve libinput. Park for the pen
@@ -1007,41 +1238,15 @@ validation on hardware.
 
 ## Next sessions
 
-The next user-present device session, in order (everything here is
-pre-verified offline; the session is judgment + harvest):
-
-1. **Boot the A.2.2 build and judge** what A.2 left unjudged (the os2
-   write happens autonomously under the standing protocol once rung 4
-   passes — check the ledger above for whether it already happened):
-   - GL16 full-refresh optics (now actually applied at boot): the
-     every-N-pages wash should read as "the letters shimmer", not "the
-     screen shows a negative". Watch for believed-white residue
-     accumulating over a long session (`doc/refresh-policy.md`); the
-     boot blank's GC16 deep clean should leave a clean page at start.
-   - Input rework feel, remaining items: palm resting near the screen
-     while the pen hovers (ghost taps fixed), ws8100 pen-button page
-     turns (barrel long-press: pen-side = forward, eraser-side = back;
-     needs the BLE pen connected). Pinch is already validated.
-2. **Confirm the TOC-tap fix on hardware** (root-caused and fixed
-   offline — session record above): tap quickstart TOC links twice
-   over — once with the pen held near the glass (the posture that
-   triggered the bug: hover parks KOReader's cur_slot on the pen slot)
-   and once with the pen stowed. Both should follow the tapped link.
-   If it still misfires, arm the `cat /dev/input/eventN >
-   /tmp/cap-*.bin` capture (os2 /tmp survives reboots) and reproduce
-   one named tap inside the window.
-3. **Harvest for the phase B workbench**: `/var/log/reader-session.log`
-   after a real reading session (the first real trace from the A.2
-   boot is already committed — a longer organic-reading one is the
-   next payload); plus `evtest` captures of a pinch and a
-   palm-while-writing episode, and the gpio-keys node contents.
+Autorotation and touch acceptance are complete; no corrective device session is
+queued. Continue ordinary reading dogfood and harvest one organic `[pn-refresh]`
+trace for the phase-B workbench. If a future input failure appears, preserve the
+smallest failing evdev interval plus `/var/log/{wilkbook-orientation,
+reader-session}.log`; do not reopen calibration from an anecdotal miss alone.
 
 Still queued behind the display program:
 
-- Wi-Fi on 7.0 end-to-end (firmware load is proven; the reader flavor
-  has no networking userland — needs the networked flavor or a
-  credentials story). Consider the community-standard ECM ethernet
-  gadget alongside ACM.
+- The community-standard ECM ethernet gadget alongside ACM.
 - RT characterization under load (refresh + pen input; watch the EBC
   refresh kthread).
 - Finger-touch DTS validation happened 2026-07-05 (cyttsp5 works); the
