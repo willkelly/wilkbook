@@ -210,12 +210,11 @@ as it is understood that the image then contains the PSK and must not be
 shared. Recommend the `/state` file as the default and document the
 build-time-local option as the explicit "personal, non-shareable" shortcut.
 
-## 4. Recommended approach + implementation sketch
+## 4. Historical design sketch (superseded by §4.1)
 
-> **UNPROVEN — for review.** None of the Scheme below has been built or
-> booted. Field names and service wiring need a `make` gate and a hardware
-> session. It is a sketch of intent, in ladder order (builds → QEMU where
-> meaningful → hardware).
+> **Historical, not current status.** This was the pre-implementation review
+> sketch. The implemented and hardware-proven Phase 1 design starts at §4.1;
+> code below is retained only to show the decisions considered beforehand.
 
 **Where it goes:** add networking to the **reader** flavor, gated so it is a
 no-op when credentials are absent (the fonts pattern) — the reader is the
@@ -250,7 +249,7 @@ simpler.)
 Sketch (schematic — names/fields to verify against the installed Guix):
 
 ```scheme
-;; pinenote/services/wifi.scm  — UNPROVEN sketch
+;; pinenote/services/wifi.scm  — historical pre-implementation sketch
 (define pinenote-wifi-conf "/state/wifi/wlan0.conf") ; out-of-band, 0600
 
 (define (pinenote-wifi-shepherd-service _config)
@@ -273,7 +272,7 @@ Sketch (schematic — names/fields to verify against the installed Guix):
 ```
 
 ```scheme
-;; in pinenote/systems/pinenote-reader.scm  — UNPROVEN, added to services
+;; in pinenote/systems/pinenote-reader.scm  — historical sketch
 (service pinenote-wifi-service-type)
 (service dhcpcd-service-type)                      ; already used by `networked`
 (service openssh-service-type

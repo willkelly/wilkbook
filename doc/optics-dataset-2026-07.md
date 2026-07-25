@@ -266,10 +266,12 @@ fully-segmented full-cadence bundle: `cal-baseline`, `sweep1.r00`,
 — under-detection at the bad exposure; the shattered `neverx3.r01` reads 0
 on its 44 pseudo-repetitions.)
 
-### 3.5 GL16-vs-GC16 full flash depth: NOT concluded — verified as open
+### 3.5 GL16-vs-GC16 full flash depth: catalog-era result (superseded)
 
-Claim: both measured ~0.15–0.19 on n=2 clean samples; no separation
-claimed pending the NaN guard and the trace→transition join.
+At the time of this catalog pass, both measured ~0.15–0.19 on n=2 clean
+samples and no separation was claimed pending the NaN guard and the
+trace→transition join. Those hardenings and the attributed comparison later
+landed; `doc/refresh-policy.md` finding 12 is the current conclusion.
 
 Evidence: `sweep1.r00` (GL16) severe-flash depths 0.161–0.206 (n=5 with
 non-NaN depth); `sweep1.r01` (GC16) 0.153–0.201 (n=4). The ranges overlap
@@ -484,9 +486,10 @@ should know them.
 - **Finding 9's numbers and finding 1's barcode-cell readings are not in
   any committed report** (bespoke analyses of the captures); they are
   reproducible from the videos but not from the committed JSON.
-- **armB/armC verdicts are pending**: armB is complete and cataloged
-  (session + trace + checksummed video; no report yet); armC was still
-  being captured when this document was written.
+- **Historical assembly snapshot:** armB was complete and cataloged (session +
+  trace + checksummed video; no report yet), while armC was still being
+  captured. Later conclusions are recorded in `doc/refresh-policy.md` and the
+  current optics execution queue is `pinenote/tools/optics/PLAN.md`.
 
 ## 7. Reproduction
 

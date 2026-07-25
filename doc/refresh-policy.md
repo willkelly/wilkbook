@@ -435,9 +435,10 @@ bundles + reports under `pinenote/tools/optics/build/bundles/sweep1.*`):
     Log lines and the patch-strip detector agreed to ~0.5 s in every run;
     bundled washes additionally proven twice (r0/r1). This completes the
     finding-10 policy: `auto_refresh=0` + KOReader promotion off (`never`)
-    + the washer owning cadence is a fully working configuration; promotion
-    at 12 remains the belt-and-suspenders default until the washer has
-    dogfooding hours. Bundles: `.../idlewasher-accept*`.
+    + the washer owning cadence is a fully working configuration. Promotion
+    at 12 was the short-lived belt-and-suspenders seed during acceptance; the
+    shipped dogfood seed has been `never` (`0`) since 2026-07-13, while existing
+    user profiles remain untouched. Bundles: `.../idlewasher-accept*`.
 
 12. **GL16 vs GC16 fulls on real content: optically indistinguishable
     flash depth — the pair class dominates, not the waveform (first
