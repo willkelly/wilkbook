@@ -105,28 +105,34 @@ run_case test-touch-normalization.lua "$tool_dir/test-touch-normalization.lua" \
   "$koreader" "$device_lua"
 
 # Required-device loss is a poll/HUP contract, independent of input-event
-# payloads. A FIFO gives every host a permission-free fd with deterministic
-# HUP when its writer closes; the backend must return its fatal sentinel.
-required_tmp=$(mktemp -d)
-mkfifo "$required_tmp/node"
-"$luajit" "$tool_dir/test-required-device.lua" "$koreader" \
-  "$repo_root/pinenote/packages/koreader-device/ffi/input_evdev.lua" \
-  "$required_tmp/node" "$required_tmp/ready" > "$required_tmp/out" 2>&1 &
-required_pid=$!
-i=0
-while [ "$i" -lt 50 ] && [ ! -s "$required_tmp/ready" ]; do sleep 0.1; i=$((i+1)); done
-if [ -s "$required_tmp/ready" ]; then
-  : > "$required_tmp/node"
-  wait "$required_pid" || fail=1
-  cat "$required_tmp/out"
-  grep -q '^RESULT: ok$' "$required_tmp/out" || fail=1
-else
-  echo "FAIL: required-device lifecycle test did not open its FIFO" >&2
-  cat "$required_tmp/out" >&2 || true
-  kill "$required_pid" 2>/dev/null || true
-  fail=1
-fi
-rm -rf -- "$required_tmp"
+# payloads. Exercise both registrations and an optional node independently.
+run_required_case() {
+  label=$1; lost=$2; expected=$3
+  required_tmp=$(mktemp -d)
+  mkfifo "$required_tmp/first" "$required_tmp/second" "$required_tmp/optional"
+  "$luajit" "$tool_dir/test-required-device.lua" "$koreader" \
+    "$repo_root/pinenote/packages/koreader-device/ffi/input_evdev.lua" \
+    "$required_tmp/first" "$required_tmp/second" "$required_tmp/optional" \
+    "$required_tmp/$lost" "$expected" "$required_tmp/ready" > "$required_tmp/out" 2>&1 &
+  required_pid=$!
+  i=0
+  while [ "$i" -lt 50 ] && [ ! -s "$required_tmp/ready" ]; do sleep 0.1; i=$((i+1)); done
+  if [ -s "$required_tmp/ready" ]; then
+    : > "$required_tmp/$lost"
+    wait "$required_pid" || fail=1
+    cat "$required_tmp/out"
+    grep -q '^RESULT: ok$' "$required_tmp/out" || fail=1
+  else
+    echo "FAIL: $label lifecycle test did not open its FIFOs" >&2
+    cat "$required_tmp/out" >&2 || true
+    kill "$required_pid" 2>/dev/null || true
+    fail=1
+  fi
+  rm -rf -- "$required_tmp"
+}
+run_required_case first-required first fatal
+run_required_case second-required second fatal
+run_required_case optional optional nonfatal
 
 # --- opportunistic: the injector daemon body against the HOST's real
 # /dev/uinput (needs write access; skipped cleanly where root-only).
