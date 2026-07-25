@@ -184,9 +184,16 @@ reasoning behind this ordering — and the host tools in rung 0 — is in
    the same boot (kernel+RT, initrd waveform install, EBC module load,
    PNGuixRoot pre-root visibility, root mount — through Shepherd start).
 3. Kernel source inspection:
-   `pinenote/scripts/preflight/inspect-kernel-source.sh /path/to/linux`
+   `pinenote/scripts/preflight/inspect-kernel-source.sh /path/to/linux /path/to/build/.config`
    (read-only; checks `pinenote_defconfig`, PineNote DTS/DTSI, `rockchip_ebc`,
-   and the EBC/PMIC/Wi-Fi/pen defconfig markers).
+   the EBC/PMIC/Wi-Fi/pen defconfig markers, and battery prerequisites without
+   executing the inspected source tree's Makefile). Then run
+   `inspect-pinenote-battery-dtb.sh` on the generated PineNote v1.2 DTB and
+   `inspect-pinenote-suspend-gates.sh RESOLVED_CONFIG DTB SUSPEND_POLICY_LUA
+   KOREADER_DEVICE_LUA`. The suspend gate must pass while restricted false/true
+   policy injection proves the returned KOReader class follows the exact
+   disabled policy module; it is a qualification guard, not evidence that the
+   device can resume.
 4. Boot-bundle inspection (commands above).
 5. Mock helper tests: `pinenote/scripts/preflight/mock-pinenote-services.sh`
    (inspects hardware-targeted helpers without executing them; fixtures live

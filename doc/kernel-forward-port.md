@@ -99,6 +99,28 @@ Both live in `pinenote/packages/kernel.scm`:
   touchscreen with zero/garbage ABS ranges, the missing fallbacks are
   the first suspect — that would become a pinned quirk, not a silent
   driver fork.
+- the PineNote battery and RK817 charger DTS nodes (backported verbatim from
+  upstream Linux commit `1d608a269e24285eb399e08f0b47c2020b8c719a`,
+  *arm64: dts: rockchip: Add battery and charger on rk3566-pinenote*, Samuel
+  Holland, 2026-02-24). This is the exact 26-line DTS-only upstream change:
+  the root `simple-battery` profile and its `monitored-battery` RK817 child.
+  It deliberately carries no RK817 driver, Kconfig, defconfig, governor, or
+  policy change, and does not treat the OCV table, charge limits, or resistor
+  value as a per-device calibration to tune. `inspect-kernel-source.sh` checks
+  the source values; `inspect-pinenote-battery-dtb.sh` also checks the compiled
+  DTB and resolves its compiler-assigned phandle relationship.
+
+### RK817 battery first boot is supervised
+
+The backport can cause the existing RK817 driver to probe for the first time;
+that driver programs charge limits and persistent gauge state during probe.
+Consequently, the first `os2` boot is a supervised, human-present hardware
+step, preferably unplugged and observed on UART, after the offline patch,
+source, and generated-DTB checks are green. It is not a claim that telemetry
+is calibrated or that charging is hardware-proven. Keep `os1` untouched as the
+rescue system, use the normal os2-only deployment protocol, and collect the
+telemetry qualification described in `doc/power-management.md` before making
+any policy decision.
 
 ## Refreshing the patch for a new kernel
 
@@ -109,7 +131,7 @@ Both live in `pinenote/packages/kernel.scm`:
    (https://github.com/m-weigand/linux, branches like
    `branch_pinenote_6-12-11`).
 3. Sanity-check the tree without building:
-   `pinenote/scripts/preflight/inspect-kernel-source.sh /path/to/tree`
+   `pinenote/scripts/preflight/inspect-kernel-source.sh /path/to/tree /path/to/build/.config`
 4. Regenerate `pinenote/patches/linux-pinenote-7.0-forward-port.patch` as a
    single diff against the pristine source.
 5. Gate with derivation computation, then build:
