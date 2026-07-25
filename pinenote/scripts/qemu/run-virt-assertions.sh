@@ -17,9 +17,10 @@
 #   PARTNAME and installs it, loads the EBC display modules, sees
 #   PNGuixRoot before the root switch, root mounts by label, Shepherd
 #   brings up its base services, udev completes, the pinenote-waveform and
-#   pinenote-ebc-params one-shots run, and the reader-session service
-#   starts (its shepherd requirements — udev, user-processes, and both
-#   one-shots — make it a transitive check of the whole chain).  This is
+#   pinenote-ebc-params one-shots run, the orientation bridge creates its
+#   named uinput device, and the reader-session service starts after it (its
+#   shepherd requirements — udev, user-processes, the bridge, and both
+#   one-shots — make it a transitive check of the whole chain). This is
 #   the config/initrd/root-mount regression class (e.g. the VIRTIO_MENU
 #   olddefconfig drop) plus the service-ordering regression class that
 #   cost the first two hardware sessions.
@@ -207,6 +208,8 @@ probe_round() {
     "if grep -q 'Service pinenote-waveform has been started' /var/log/messages; then w=yes; else w=no; fi; echo VIRTCHK-WVF-\$w" \
     "if grep -q 'Service pinenote-ebc-params has been started' /var/log/messages; then e=yes; else e=no; fi; echo VIRTCHK-EBCP-\$e" \
     "v=\$(cat /sys/module/rockchip_ebc/parameters/refresh_waveform 2>/dev/null || echo absent); echo VIRTCHK-WF-\$v" \
+    "if grep -q 'Service orientation-bridge has been started' /var/log/messages; then o=yes; else o=no; fi; echo VIRTCHK-ORI-SVC-\$o" \
+    "if grep -q '^wilkbook-orientation\$' /sys/class/input/event*/device/name 2>/dev/null; then n=yes; else n=no; fi; echo VIRTCHK-ORI-NODE-\$n" \
     "if grep -q 'Service reader-session has been started' /var/log/messages; then r=yes; else r=no; fi; echo VIRTCHK-RDR-\$r" \
     "if [ \"\$r\" = yes ]; then timeout 20 herd stop reader-session > /dev/null 2>&1; fi" \
     2>/dev/null || true
@@ -217,6 +220,8 @@ all_sentinels_present() {
   grep -aq 'VIRTCHK-WVF-yes'  "$log" && \
   grep -aq 'VIRTCHK-EBCP-yes' "$log" && \
   grep -aq 'VIRTCHK-WF-6'     "$log" && \
+  grep -aq 'VIRTCHK-ORI-SVC-yes' "$log" && \
+  grep -aq 'VIRTCHK-ORI-NODE-yes' "$log" && \
   grep -aq 'VIRTCHK-RDR-yes'  "$log"
 }
 
@@ -320,6 +325,8 @@ require 'ebc-params one-shot ran'      'VIRTCHK-EBCP-yes'
 # value from inside the guest is the only check that catches the whole
 # chain (module loaded, one-shot ran, parameter actually took).
 require 'live refresh_waveform is GL16' 'VIRTCHK-WF-6'
+require 'orientation service started'    'VIRTCHK-ORI-SVC-yes'
+require 'orientation evdev exists'       'VIRTCHK-ORI-NODE-yes'
 require 'reader-session started'       'VIRTCHK-RDR-yes'
 require 'clean poweroff'               'reboot: Power down'
 

@@ -23,6 +23,9 @@
 
 (define %fbcon-bind "/sys/class/vtconsole/vtcon1/bind")
 
+(define %orientation-ready "/run/wilkbook-orientation.ready")
+(define %orientation-consumer "/run/wilkbook-orientation.consumer")
+
 ;; Blank the panel to clean white and run one global refresh, so the
 ;; boot console text does not linger on the e-ink (which retains it
 ;; unpowered) for the several seconds KOReader takes to start.  Runs via
@@ -76,12 +79,25 @@ if deep then set_wf(prior) end
     ;; the EBC module is loaded from the initrd, but the waveform
     ;; install and param application order ahead of anything that
     ;; would light the panel
-    (requirement '(udev user-processes
+    (requirement '(udev user-processes orientation-bridge
                    pinenote-waveform pinenote-ebc-params))
     (documentation "KOReader running natively on the e-ink framebuffer.")
     (respawn? #t)
     (start
      #~(lambda args
+         (define (orientation-node-ready?)
+           (let loop ((n 0))
+             (and (< n 64)
+                  (let ((name (string-append "/sys/class/input/event"
+                                             (number->string n)
+                                             "/device/name")))
+                    (if (file-exists? name)
+                        (or (call-with-input-file name
+                              (lambda (port)
+                                (eq? (read port)
+                                     'wilkbook-orientation)))
+                            (loop (+ n 1)))
+                        (loop (+ n 1)))))))
          ;; don't race the fb node on a slow module load; respawn
          ;; still covers the pathological case
          (let loop ((tries 0))
@@ -89,6 +105,22 @@ if deep then set_wf(prior) end
                        (>= tries 50))
              (usleep 200000)
              (loop (+ tries 1))))
+          ;; The bridge marker exists only after UI_DEV_CREATE and named-evdev
+          ;; discovery, not merely after its process has forked.
+         (let loop ((tries 0))
+           (unless (or (and (file-exists? #$%orientation-ready)
+                            (orientation-node-ready?))
+                       (>= tries 50))
+             (usleep 200000)
+             (loop (+ tries 1))))
+         (unless (and (file-exists? #$%orientation-ready)
+                      (orientation-node-ready?))
+           (error "wilkbook-orientation did not become ready"))
+         ;; This marker belongs to the evdev fd opened by one KOReader
+         ;; process. Removing it pauses the bridge until the new reader opens
+         ;; the named node and recreates the marker.
+         (when (file-exists? #$%orientation-consumer)
+           (delete-file #$%orientation-consumer))
          ;; the panel has ONE owner: kill any stray KOReader before
          ;; starting ours.  An optics-session viewer left running fought
          ;; the reading instance for the framebuffer on 2026-07-13 --

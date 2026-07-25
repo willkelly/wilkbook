@@ -9,6 +9,8 @@
   #:use-module (guix gexp)
   #:use-module (pinenote packages fonts)
   #:use-module (pinenote packages koreader)
+  #:use-module (pinenote packages orientation)
+  #:use-module (pinenote services orientation)
   #:use-module (pinenote services reader-session)
   #:use-module (pinenote services usb-gadget)
   #:use-module (pinenote services wifi)
@@ -29,7 +31,8 @@ reader ALL=(ALL) NOPASSWD: ALL
 
 (define pinenote-reader-services
   (append %pinenote-bringup-services
-          (list (service pinenote-reader-session-service-type)
+           (list (service pinenote-orientation-bridge-service-type)
+                 (service pinenote-reader-session-service-type)
                 ;; Wi-Fi (doc/networking.md): associate from an out-of-band
                 ;; credential file on the persistent data partition (no-op
                 ;; when absent), and lease with dhcpcd.  Credentials are
@@ -71,21 +74,10 @@ reader ALL=(ALL) NOPASSWD: ALL
                 ;; redundant). Seeding a DEFAULT — the user's menu
                 ;; changes persist, the seed never overwrites an
                 ;; existing profile.
-                ;; lock_rotation (2026-07-15, the phantom-calibration
-                ;; night): the PineNote is a symmetric slab with no
-                ;; accelerometer, so it is routinely picked up 180°
-                ;; from last time and the user corrects via the
-                ;; rotation menu.  Unlocked, everything then fights
-                ;; them: the file manager snaps to rotation 0 —
-                ;; LANDSCAPE on this native-landscape panel — and each
-                ;; book re-imposes its sidecar rotation, flipping the
-                ;; UI relative to their hands on every FM trip or book
-                ;; switch (touch stays self-consistent, so it reads as
-                ;; insane miscalibration; doc/status.md).  Locked,
-                ;; rotation is a single sticky user-owned value,
-                ;; restored across restarts via closed_rotation_mode —
-                ;; seeded to 1 (portrait) so the first boot isn't
-                ;; landscape.
+                 ;; The SC7A20 bridge owns physical orientation.  Upstream
+                 ;; lock_rotation remains authoritative for document/FM
+                 ;; overrides; input_ignore_gsensor is the sole autorotation
+                 ;; on/off setting and is intentionally not seeded here.
                 (simple-service 'pinenote-koreader-home-dir
                                 activation-service-type
                                 #~(let ((f "/root/.config/koreader/settings.reader.lua"))
@@ -120,7 +112,7 @@ reader ALL=(ALL) NOPASSWD: ALL
 (define pinenote-reader-base-os
   (make-pinenote-operating-system
    #:host-name "pinenote-reader"
-   #:packages (append (list koreader-bin
+    #:packages (append (list koreader-bin pinenote-orientation-bridge
                             ;; wpa_supplicant + wpa_cli in the
                             ;; profile: pinenote-wifi execs them,
                             ;; and Phase 2's KOReader Wi-Fi UI will
