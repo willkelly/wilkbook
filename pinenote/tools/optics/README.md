@@ -136,10 +136,9 @@ offline-tested (`test_bundle.py`, wired into `make check`):
 
   `test_driver.py` proves the whole command layer (param/frontlight/temp sysfs,
   serial byte push, both backends' page-turn sequences) against a fake transport
-  — no device. Five device-specific values (the KOReader input-injection
-  mechanism, the fb pixel format, the backlight/hwmon nodes, the koreader store
-  path) are the `HARDWARE_CHECKLIST` in `driver.py`: isolated constants a
-  hardware session pins with no structural change.
+  — no device. The five device-specific values in `driver.py`'s
+  `HARDWARE_CHECKLIST` are all hardware-pinned: KOReader input injection,
+  `/dev/fb0` XR24 layout, backlight and hwmon nodes, and the KOReader store path.
 - **`RECORDING.md`** — the friend-facing rig + capture instructions (device in a
   dark box under its own frontlight, camera placement, locking exposure/focus/WB,
   keeping all four fiducials in frame, what to run, and exactly which files to
@@ -217,12 +216,11 @@ declines explicitly rather than guessing.
 
 ## Next (in build order)
 
-1. **Confirm the driver against a real device (tethered, no Wi-Fi).** The driver
-   command layer is built and tested; a hardware session pins the five
-   `HARDWARE_CHECKLIST` values in `driver.py` — chiefly the KOReader
-   headless-page-turn injection and the `/dev/fb0` pixel format — then
-   `recorder.py record --transport serial --backend {koreader,fb}` drives a real
-   capture over the USB cable. This is the first "your own baseline device" run.
+1. **Record the first camera baseline.** The SSH KOReader path, persistent
+   injector, and exact 45-turn card playback are hardware-proven by the
+   2026-07-25 reader-energy ABBA. The remaining baseline step is camera capture
+   and analysis. The raw-framebuffer control is also ready: its `/dev/fb0` XR24
+   layout and write-plus-refresh path are hardware-pinned.
 2. **Scoring + optimization** — once multi-panel data lands, feed the per-panel
    defect vectors back to rank waveform/threshold/flash-frac candidates, and
    ground-truth `ebc-replay`'s proxies against measured optics.

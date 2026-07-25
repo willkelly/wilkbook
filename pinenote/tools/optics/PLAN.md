@@ -91,7 +91,7 @@ Build-order additions (all non-blocking, after the first capture):
 
 | # | Task | Size |
 |---|---|---|
-| 23 | EXTRACT_FBS harness: ~~on-device dump helper + host decode~~ **landed 2026-07-12** (kernel side: `linux-pinenote-debug-extract-fbs.patch`; grabber `ebc-dump-grab` in the reader-debug image; decoder `ebc-dump` with `--json`, offline-proven by the ebc-logic dbg suite incl. a decode differential; needs its one-smoke device ride). REMAINING: the camera↔driver-belief correlation check in analyze (join `ebc-dump --json` patch means vs normalized camera patch means over the card regions) | M→S |
+| 23 | EXTRACT_FBS harness: ~~on-device dump helper + host decode + idle device smoke~~ **landed and hardware-smoked 2026-07-13** (kernel side: `linux-pinenote-debug-extract-fbs.patch`; grabber `ebc-dump-grab` in the reader-debug image; decoder `ebc-dump` with `--json`; offline-proven by the ebc-logic dbg suite incl. a decode differential; `--verify` passed under the live DRM master and decoded a pixel-faithful KOReader screen). REMAINING: one mid-scribble dump and the camera↔driver-belief correlation check in analyze (join `ebc-dump --json` patch means vs normalized camera patch means over the card regions) | M→S |
 | 24 | ~~Delayed-quality-redraw prototype~~ **DONE as the idle-washer** (`idlewasher.koplugin`: full-screen debt+idle washes, not region repaint — hardware-validated 2026-07-12, refresh-policy finding 11; thresholds sweepable via the `ko` namespace) | M |
 | 25 | Port `globre_convert_before` into the forward-port patch (rung 1–3 offline proof) + add to paramspace | S |
 | 26 | Blue-noise dither tables into the bw_mode/low-bit path (or KOReader render) + grayramp rig evaluation | M–L |
@@ -193,7 +193,13 @@ Core camera-facing factorial ≈ **54–72 configs** + a 4–6-config DU/bw_mode
 4. Documented fallback: camera full factorial (~180–230 runs, 3–6 h overnight) if anchor R² is low or rank order disagrees.
 - Wash-rate power: `--laps N` implemented as **prev-key rewind** (rewind window tagged in events and excluded from scoring; no KOReader relaunch between laps — that would reset the full_refresh_count accumulator). (OL7)
 
-**Minimal first experiment once the camera box exists**: one baseline-config run — card v2, KOReaderBackend over SSH, camera locked. It proves in a single ~5-minute session: injector daemon, per-run bundle+attribution, panel-region sync detection, trace harvest + per-turn intent verification (full vs partial — never assume), and the latency join. Immediately follow with the **10-repeat single-stress-pair noise pilot** to measure between-repeat σ and fix N by the paired-design formula (human paging as fallback if the injector's live proof slips). (ME2, OL10, OL9)
+**Minimal first camera experiment**: one baseline-config run — card v2,
+KOReaderBackend over SSH, camera locked. The injector and exact 45-turn SSH
+playback are hardware-proven by the 2026-07-25 reader-energy ABBA; this run must
+prove per-run video/bundle attribution, panel-region sync detection, and the
+camera latency join. Immediately follow with the **10-repeat single-stress-pair
+noise pilot** to measure between-repeat σ and fix N by the paired-design formula.
+(ME2, OL10, OL9)
 
 ---
 
@@ -203,6 +209,12 @@ Core camera-facing factorial ≈ **54–72 configs** + a 4–6-config DU/bw_mode
 - **The injector, persistent-daemon form** (OL3, KR2): a luajit-ffi process started by `prepare()` *before* the KOReader relaunch that creates the uinput keyboard and **holds the fd** (one-shot create/emit/exit is not viable — the device vanishes and KOReader enumerates input once at init). Device name: add an explicit `'wilkbook-optics'` match to device.lua's whitelist (cleaner than shadowing `ws8100_pen`; device.lua is wilkbook-owned, so this doesn't violate the upstream-bugs policy). Declare keybits 158/159 (+139 KEY_MENU for UI actions), emit EV_SYN per press/release; `/root/optics-inject` becomes a FIFO client; `_ensure_injector`'s `|| :` becomes a hard failure. Offline-prove the 159/158→RPgFwd/RPgBack chain on the koreader-input harness and create-then-enumerate ordering on QEMU rung 4v. Fix the "mechanism pinned" overstatement at driver.py:74.
 - **Promotion-regime axis** (KR1): seed `refresh_on_pages_with_images` **explicitly false** (makeFalse semantics — deletion re-enables it) + explicit `full_refresh_count` in a scenario-owned settings file pushed *after* the old KOReader stops and *before* relaunch; run a defaults regime as contrast; **assert which intent fired per turn from the harvested trace** — this is the only way to know the card measured the diff-masked partial path readers actually live in.
 - **Dedicated KO_HOME** (`/root/.config/koreader-optics`, KR8): seeded settings + fonts replicating reader-session.scm's dogfooding typography; per-book .sdr/history isolated for free; restart reader-session after the run; record seeded settings in the bundle next to ebc_params; record flash_area_fraction as image/package metadata (hardcoded per image until OL2 lands).
+- **Single-reader lifecycle (hardware-found 2026-07-25):** never ignore a
+  PID/cmdline-verified stop failure before relaunch. The first reader-energy
+  attempt left the old process writing across a truncated log and produced two
+  refresh streams. `prepare()` now aborts unless the old reader exits, with a
+  bounded identity-checked `KILL` fallback; offline regression coverage and the
+  repeated four-leg hardware ABBA pass.
 - **ko param namespace** (OL2): param sets become `{"ebc": {...}, "ko": {"full_refresh_count": N, "pinenote_flash_area_fraction": F}}`; device.lua reads `pinenote_flash_area_fraction` from G_reader_settings with a nil-guard, default 0.60; ko.* written in prepare()'s stop→relaunch window (zero extra restarts).
 - **Real UI actions** (KR3, KR6): prefer a tiny optics plugin polling a command file via UIManager/Dispatcher (SSH transport) over injection for menu open/close, footer toggle, keyboard; overlay-ghost metric = settled-pre vs settled-post-undo frame diff (a genuinely **new analyzer path** — action events, not manifest page pairs, are the segmentation authority for sub-eps regions); sweep dialog size across the 0.60 boundary using the trace's damage rects.
 
@@ -224,18 +236,17 @@ Core camera-facing factorial ≈ **54–72 configs** + a 4–6-config DU/bw_mode
 > daemon). Two integration seams were wired at merge exactly as the
 > workstreams' seam notes prescribed (reserved-key no-op test vs the
 > always-reserved card; harvest_trace default moved into the DeviceDriver ABC
-> with pull-fallback-on-None). Remaining before the FIRST VALID CAPTURE:
-> **(a) flash A.2.6** (the device.lua whitelist + G_reader_settings read ride
-> in the koreader-bin graft — the deployed A.2.5 image predates them), and
-> **(b) the injector live proof** over SSH (create-before-KOReader-enumerates
-> ordering + evdev delivery — the precisely-stated residual gap), then the
-> smoke run + 10-repeat noise pilot. Tasks 9+ remain open.
+> with pull-fallback-on-None). The injector's create-before-enumeration order,
+> evdev delivery, and exact 45-turn SSH playback are now hardware-proven by four
+> reader-energy legs (2026-07-25). Remaining before the first valid *camera*
+> capture: the locked-camera smoke run and 10-repeat noise pilot. Tasks 9+
+> remain open.
 
 All tasks offline-provable except where noted. **[BLOCKER]** = blocks the first *valid* real capture; everything else can follow it.
 
 | # | Task | Why | Offline-provable | Size | Gate |
 |---|---|---|---|---|---|
-| 1 | Injector daemon + device.lua `wilkbook-optics` whitelist + keybits/EV_SYN + FIFO client; harness + QEMU proof; fix driver.py:74 wording | Only path to KOReaderBackend captures (OL3, KR2) | Yes (koreader-input harness, QEMU 4v); live proof = step 1 of next SSH session | M | **[BLOCKER]** |
+| 1 | Injector daemon + device.lua `wilkbook-optics` whitelist + keybits/EV_SYN + FIFO client; harness + QEMU proof; fix driver.py wording | Only path to KOReaderBackend captures (OL3, KR2) | **Complete:** offline harness/QEMU plus four 45-turn SSH hardware legs (2026-07-25) | M | done |
 | 2 | Per-param-set video+bundle; `add_run` params fix; `--camera-lock` with readback | Transition→config join; photometric stability (ME1, OL8) | Yes (FakeClock/fake drivers, test_bundle) | M | **[BLOCKER]** |
 | 3 | find_sync panel-region fix + two-run split test | sync_end is wrongly early on real footage (ME1) | Yes (synthcam) | S | **[BLOCKER]** |
 | 4 | Card v2 core: pid-varied content, page number + parity tile with manifest-reserved cell + mask exclusion, stress ×3, 3 s pace; regen fixtures | Real STRESS pairs, operator feedback, variance data (CC1, CC2, CC7, ME7) | Yes (synth round-trip) | M | **[BLOCKER]** |
@@ -258,4 +269,7 @@ All tasks offline-provable except where noted. **[BLOCKER]** = blocks the first 
 | 21 | fb-backend extension: default_waveform writes + partial-damage induction + controlled-rect flashui fractions | A2/DU partials and the flash-fraction boundary — unreachable via epub (KR7, CC8) | Yes | M | after |
 | 22 | Docs refresh: README Next, ROADMAP §4, refresh-policy.md:233 prune, transport docstrings (SSH-hedged) | Plans match reality (OL10) | Yes | S | anytime |
 
-**Critical path to first valid capture**: 1 → (2,3,4,5,6,8 in parallel) → 7 → smoke run + injector live proof + 10-repeat noise pilot on the A.2.5 SSH session. Everything from task 9 down improves what you *learn* from captures; tasks 1–8 determine whether a capture is worth anything at all.
+**Critical path to first valid camera capture**: the implementation tasks 1–8
+are complete, including injector hardware proof. Run the locked-camera smoke
+capture and 10-repeat noise pilot next. Everything from task 9 down improves
+what you *learn* from captures.
