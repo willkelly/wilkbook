@@ -115,25 +115,18 @@ with descriptive messages. Keep `doc/status.md` in sync with reality after
 any hardware session. Don't commit the per-device waveform or anything
 under a tool's gitignored `build/`.
 
-## Where we are (2026-07-05)
+## Where we are (2026-07-25)
 
 7.0.x is the validated primary: e-ink display with temperature-compensated
-waveforms, Wi-Fi/BT, USB gadget console, and PREEMPT_RT — all confirmed on
-hardware. **Reader first light achieved**: KOReader runs natively on the
-framebuffer (no compositor — the cage/SDL kiosk died on hardware evidence,
-`doc/koreader-spike.md` §3) with pen- and finger-navigable UI (cyttsp5
-touch hardware-validated; pinch-zoom confirmed on the A.2 boot). Offline
-ladder rungs 1–4 (+4v visual loop) are built and green, and the
-refresh-policy program has its offline workbench plus its first real
-device trace (`ebc-replay`, rung 7a phase B — `doc/refresh-policy.md`).
-The A.2 boot surfaced two bugs, both root-caused and fixed offline the
-same night: the refresh_waveform config bug (cmdline module params are
-inert; the params one-shot owns them now, and rung 4 asserts the live
-value) and the TOC-tap bug (pen hover captured finger taps into the
-pen slot — fixed by `mixedrouter.lua`, proven on the `koreader-input`
-host harness). Staged for the next device session: the A.2.2 image
-(all three fixes; os2 ledger in `doc/status.md`). Open next steps
-(ROADMAP): the GL16 optics + tap-fix hardware verdicts, refresh-policy
-tuning on the workbench, a Wi-Fi networking/credentials story. See
-`ROADMAP.md` and
-`doc/status.md` for specifics.
+waveforms, Wi-Fi/BT, USB gadget console, and PREEMPT_RT are hardware-proven.
+KOReader runs directly on fbdev with pen and finger input; final4 validated
+all four orientations, state replay, contact deferral, and normalized cyttsp5
+coordinates on glass. Wi-Fi association, DHCP, and key-only SSH are proven on
+the reader image. The optics pipeline has real device datasets plus an offline
+round-trip harness, and the awake-power program selected `conservative` after
+static and exact-reader-workload ABBAs; the next image must still verify the
+boot-time governor readback. Suspend remains deliberately disabled. Firmware
+inventory identified the downstream BSP-ATF contract, so the next suspend step
+is an offline compatibility port of the complete Rockchip SIP/PM stack followed
+by a non-suspending bind/probe boot under UART—not a firmware reflash. See
+`ROADMAP.md`, `doc/status.md`, and `doc/power-management.md` for specifics.

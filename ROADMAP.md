@@ -215,8 +215,10 @@ the start of this track — no panel required. Policy background in
       hardware-validated): area-thresholded flash policy +
       `[pn-refresh]` intent tracing in the device target, panel
       blank+wash before KOReader spawns, and the rung-4v visual loop.
-      Phase A.2 (landed, awaiting the os2 write): GL16 globals + the
-      input-architecture rework. Phase B workbench **built 2026-07-05**
+      Phase A.2 landed and was superseded by later reader images; the GL16
+      global policy and input architecture are hardware-proven, and final4's
+      autorotation/touch fixes were accepted 2026-07-19. Phase B workbench
+      **built 2026-07-05**
       (`ebc-replay` in `pinenote/tools/ebc-logic/`, runs in
       `make ebc-logic-check`): replays `[pn-refresh]` traces through
       the verbatim driver's refresh thread under candidate policies —
@@ -226,10 +228,13 @@ the start of this track — no panel required. Policy background in
       full_refresh_count's scrub value collapses under GL16 (a GC16
       "deep clean" action becomes the load-bearing residue answer); the
       accumulator ignores manual washes (ebc-logic README finding 7).
-      Phase B next: replay a real harvested trace, design the
-      deep-clean trigger, DU-partial experiments.
-      Phase C: one hardware session validates the winning policy's
-      optics. The `org.pinenote.ebc` dbus/UAPI compatibility story
+      Real harvested traces and the first camera dataset now drive the findings
+      in `doc/refresh-policy.md` and `doc/optics-dataset-2026-07.md`; the
+      idle-washer/deep-clean policy is hardware-validated. Phase B next:
+      tune candidates through the hardened recorder and keep DU-partial
+      experiments behind optical evidence. Phase C: validate each winning
+      policy's optics across controlled captures. The `org.pinenote.ebc`
+      dbus/UAPI compatibility story
       stays in scope for phase B design.
 - [x] Hardware-validate SC7A20 autorotation, disable/re-enable state replay,
       touch/pen-contact deferral, and cyttsp5 coordinate normalization (final4

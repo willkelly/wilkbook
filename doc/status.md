@@ -1,6 +1,6 @@
 # Hardware status
 
-Last updated: 2026-07-24.
+Last updated: 2026-07-25.
 
 **2026-07-19 hardware verdict: final4 autorotation and touch normalization are
 deployed and fully accepted on glass.** The final image booted from os2 with the
@@ -461,9 +461,10 @@ axis: fbcon text on the panel, USB ACM gadget console working end-to-end
 | SC7A20 autorotation | n/a | **yes** (2026-07-19 final4: all four physical edges, toggle/state replay, contact deferral, and bridge/reader restart recovery hardware-accepted; production mapping TOP1/RIGHT0/BOTTOM3/LEFT2) |
 | Finger/pen coordinates under rotation | n/a | **yes** (2026-07-19 final4: cyttsp5 MT axes mirrored from queried ranges; five target residuals <=25 px and small controls hardware-accepted with finger and pen) |
 
-The `pinenote-usb-console-linux-6-6` flavor is the fully working baseline.
-The `pinenote-usb-console` flavor (7.0 forward-port) is the kernel-currency
-track with the open issues below.
+The `pinenote-usb-console` flavor (7.0 forward-port) is the validated primary.
+The `pinenote-usb-console-linux-6-6` flavor remains only for regression
+isolation; the dated findings below preserve the path by which 7.0 reached
+parity and then became primary.
 
 ## 7.0 forward-port: findings so far
 
