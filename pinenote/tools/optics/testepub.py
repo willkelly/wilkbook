@@ -28,6 +28,7 @@ Needs Pillow. See README.md.
 from __future__ import annotations
 from dataclasses import dataclass, field
 import json
+import hashlib
 import os
 import zipfile
 
@@ -479,8 +480,9 @@ def build(outdir):
     os.makedirs(outdir, exist_ok=True)
     pages = build_pages()
     manifest = build_manifest(pages)
-    with open(os.path.join(outdir, "manifest.json"), "w") as f:
-        json.dump(manifest, f, indent=2)
+    manifest_bytes = (json.dumps(manifest, indent=2, sort_keys=True) + "\n").encode("utf-8")
+    with open(os.path.join(outdir, "manifest.json"), "wb") as f:
+        f.write(manifest_bytes)
 
     epub_path = os.path.join(outdir, "optics-testcard.epub")
     with zipfile.ZipFile(epub_path, "w", zipfile.ZIP_DEFLATED) as z:
@@ -488,6 +490,7 @@ def build(outdir):
         z.writestr(zipfile.ZipInfo("mimetype"), "application/epub+zip",
                    compress_type=zipfile.ZIP_STORED)
         z.writestr("META-INF/container.xml", CONTAINER)
+        z.writestr("META-INF/wilkbook-manifest.sha256", hashlib.sha256(manifest_bytes).hexdigest() + "\n")
         z.writestr("OEBPS/content.opf", _opf(pages))
         for p in pages:
             img = render_page(p)

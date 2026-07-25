@@ -8,6 +8,7 @@ marker), and that the epub is well formed.
 Run: python3 test_epub.py  (needs Pillow + numpy).
 """
 import io
+import hashlib
 import sys
 import tempfile
 import zipfile
@@ -237,7 +238,7 @@ def main():
 
     print("case: epub is well formed")
     with tempfile.TemporaryDirectory() as d:
-        epub_path, _ = te.build(d)
+        epub_path, manifest_path = te.build(d)
         with zipfile.ZipFile(epub_path) as z:
             names = z.namelist()
             check("mimetype is first entry", names[0] == "mimetype")
@@ -247,6 +248,10 @@ def main():
             check("mimetype content correct",
                   z.read("mimetype") == b"application/epub+zip")
             check("container.xml present", "META-INF/container.xml" in names)
+            with open(manifest_path, "rb") as f:
+                manifest_hash = hashlib.sha256(f.read()).hexdigest()
+            check("EPUB binds the exact deterministic manifest bytes",
+                  z.read("META-INF/wilkbook-manifest.sha256").decode().strip() == manifest_hash)
             opf = z.read("OEBPS/content.opf").decode()
             check("opf lists every page in spine",
                   all(f'idref="pg{p.index}"' in opf for p in pages))
