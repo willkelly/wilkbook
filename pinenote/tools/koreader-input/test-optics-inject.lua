@@ -166,6 +166,8 @@ os.remove(base)
 
 local devices = {
     [0] = "wilkbook-optics",
+    [7] = "wilkbook-orientation",
+    [8] = "wilkbook-orientation", -- spoofed name, wrong/missing virtual ID
     [1] = "cyttsp5",
     [2] = "w9013 2D1F:0095 Stylus",
     [3] = "w9013 2D1F:0095",       -- the pen's 2nd interface: must NOT match
@@ -177,6 +179,13 @@ for n, name in pairs(devices) do
     os.execute(string.format("mkdir -p '%s/event%d/device'", base, n))
     local f = assert(io.open(string.format("%s/event%d/device/name", base, n), "w"))
     f:write(name, "\n")
+    f:close()
+end
+os.execute(string.format("mkdir -p '%s/event7/device/id'", base))
+for field, value in pairs({ bustype = "0006", vendor = "1209",
+                            product = "0002", version = "0001" }) do
+    local f = assert(io.open(string.format("%s/event7/device/id/%s", base, field), "w"))
+    f:write(value, "\n")
     f:close()
 end
 
@@ -192,6 +201,7 @@ local expected = {
     { "penbtn",        "/dev/input/event4" },
     { "pwrkey",        "/dev/input/event5" },
     { "gpiokeys",      "/dev/input/event6" },
+    { "gsensor",       "/dev/input/event7" },
 }
 local expected_set = {}
 for _, e in ipairs(expected) do
@@ -207,6 +217,87 @@ for slot in pairs(found) do
 end
 report(extra == 0, "no spurious slots (pen 2nd interface ignored)",
        extra .. " extra")
+
+local gyro = { type = 4, code = 3, value = 2, src = "/dev/input/event7" }
+report(PineNote._translateGyroEvent(gyro, "/dev/input/event7")
+       and gyro.code == 71 and gyro.value == 2 and gyro.wilkbook_gsensor,
+       "orientation MSC_RAW translates to private MSC_GYRO", gyro.code)
+local invalid = { type = 4, code = 3, value = 4, src = "/dev/input/event7" }
+report(not PineNote._translateGyroEvent(invalid, "/dev/input/event7")
+       and invalid.code == 0 and invalid.value == 0,
+       "invalid orientation MSC_RAW is rejected", invalid.code)
+local foreign = { type = 4, code = 3, value = 1, src = "/dev/input/event2" }
+report(not PineNote._translateGyroEvent(foreign, "/dev/input/event7")
+       and foreign.code == 3,
+       "MSC_RAW translation is source-gated", foreign.code)
+local absent = { type = 4, code = 3, value = 1, src = nil }
+report(not PineNote._translateGyroEvent(absent, nil) and absent.code == 3,
+       "MSC_RAW translation requires an enrolled sensor", absent.code)
+
+-- KOReader's verbatim canonical gyro handler owns setting semantics.  The
+-- device only reaches it after source-gated translation; test all accepted
+-- modes and the upstream input_ignore_gsensor toggle without inventing state.
+local gyro_input = Input:new{ device = FakeDevice, input = StubBackend }
+gyro_input.handleGyroEv = gyro_input.handleMiscGyroEv
+local modes_ok = true
+local mode_results = {}
+for _, value in ipairs({ 0, 1, 2, 3 }) do
+    local event = gyro_input:handleGyroEv({ value = value })
+    if value == 0 then
+        modes_ok = modes_ok and event == nil
+    else
+        modes_ok = modes_ok and event and (event.handler == "onSetRotationMode"
+            or event.name == "onSetRotationMode") and event.args[1] == value
+    end
+    mode_results[#mode_results + 1] = string.format("%d:%s", value,
+        event and (event.handler or event.name or "event") or "nil")
+end
+report(modes_ok, "canonical gyro handler accepts all four rotation modes",
+       table.concat(mode_results, ","))
+gyro_input:toggleGyroEvents(false)
+report(gyro_input:handleGyroEv({ value = 2 }) == nil,
+       "input_ignore_gsensor toggle suppresses gyro handling", "ignored")
+gyro_input:toggleGyroEvents(true)
+local reenabled = gyro_input:handleGyroEv({ value = 2 })
+report(reenabled and reenabled.handler == "onSetRotationMode"
+       and reenabled.args[1] == 2,
+       "input_ignore_gsensor toggle restores standard gyro handling", "enabled")
+local state_path = os.tmpname()
+local state = assert(io.open(state_path, "w"))
+state:write("3\n")
+state:close()
+local replayed = PineNote._syncGyroState(gyro_input, state_path)
+os.remove(state_path)
+report(replayed and replayed.handler == "onSetRotationMode"
+       and replayed.args[1] == 3,
+       "re-enable replays the bridge's current committed orientation", "mode 3")
+
+-- A physical rotation must not split a gesture across coordinate spaces.
+-- Queue only the latest mode while contact is active, then append it after
+-- the lift gesture. Pen hover does not increase contact_count.
+local applied = {}
+local deferred_input = {
+    gesture_detector = { contact_count = 1 },
+    handleMiscEv = function() return nil end,
+    handleTouchEv = function() return { { handler = "onGesture" } } end,
+    handleGyroEv = function(_, ev)
+        applied[#applied + 1] = ev.value
+        return { handler = "onSetRotationMode", args = { ev.value } }
+    end,
+}
+PineNote._installGyroHandler(deferred_input)
+deferred_input:handleMiscEv({ code = 71, value = 1, wilkbook_gsensor = true })
+deferred_input:handleMiscEv({ code = 71, value = 3, wilkbook_gsensor = true })
+report(#applied == 0, "rotation waits for active contact lift", #applied)
+deferred_input.gesture_detector.contact_count = 0
+local lifted = deferred_input:handleTouchEv({})
+report(#applied == 1 and applied[1] == 3 and #lifted == 2
+       and lifted[2].handler == "onSetRotationMode",
+       "latest deferred rotation follows the completed gesture",
+       table.concat(applied, ","))
+deferred_input:handleMiscEv({ code = 71, value = 2, wilkbook_gsensor = true })
+report(#applied == 2 and applied[2] == 2,
+       "rotation applies immediately without contact", table.concat(applied, ","))
 
 ------------------------------------------------------------------------
 -- 2. The injector event stream through the bundle's real input stack.

@@ -5,7 +5,8 @@
 #
 #   * test-mixedrouter.lua   -- the pen-hover tap-capture bug + the
 #                               REPO's mixedrouter.lua fix under test;
-#   * test-optics-inject.lua -- the optics page-turn injector chain:
+#   * test-optics-inject.lua -- the optics page-turn injector and orientation
+#                               bridge discovery/MSC_RAW translation chains:
 #                               the REPO device.lua's 'wilkbook-optics'
 #                               whitelist + the 159/158 -> RPgFwd/RPgBack
 #                               key mapping (optics PLAN task 1);
@@ -15,6 +16,8 @@
 #                               UIManager over the bundle's verbatim
 #                               hook container (doc/refresh-policy.md
 #                               finding 10's userspace-wash policy).
+#   * test-touch-normalization.lua -- cyttsp5 source-gated MT-axis mirror
+#                               against measured TOP-mode calibration points.
 #
 # Usage: run-tests.sh [/gnu/store/...-koreader-bin-...]
 #
@@ -98,6 +101,32 @@ run_case test-optics-inject.lua "$tool_dir/test-optics-inject.lua" \
   "$koreader" "$device_lua" "$router"
 run_case test-idlewasher-logic.lua "$tool_dir/test-idlewasher-logic.lua" \
   "$koreader" "$idlewasher"
+run_case test-touch-normalization.lua "$tool_dir/test-touch-normalization.lua" \
+  "$koreader" "$device_lua"
+
+# Required-device loss is a poll/HUP contract, independent of input-event
+# payloads. A FIFO gives every host a permission-free fd with deterministic
+# HUP when its writer closes; the backend must return its fatal sentinel.
+required_tmp=$(mktemp -d)
+mkfifo "$required_tmp/node"
+"$luajit" "$tool_dir/test-required-device.lua" "$koreader" \
+  "$repo_root/pinenote/packages/koreader-device/ffi/input_evdev.lua" \
+  "$required_tmp/node" "$required_tmp/ready" > "$required_tmp/out" 2>&1 &
+required_pid=$!
+i=0
+while [ "$i" -lt 50 ] && [ ! -s "$required_tmp/ready" ]; do sleep 0.1; i=$((i+1)); done
+if [ -s "$required_tmp/ready" ]; then
+  : > "$required_tmp/node"
+  wait "$required_pid" || fail=1
+  cat "$required_tmp/out"
+  grep -q '^RESULT: ok$' "$required_tmp/out" || fail=1
+else
+  echo "FAIL: required-device lifecycle test did not open its FIFO" >&2
+  cat "$required_tmp/out" >&2 || true
+  kill "$required_pid" 2>/dev/null || true
+  fail=1
+fi
+rm -rf -- "$required_tmp"
 
 # --- opportunistic: the injector daemon body against the HOST's real
 # /dev/uinput (needs write access; skipped cleanly where root-only).

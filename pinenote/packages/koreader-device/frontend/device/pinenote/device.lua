@@ -10,10 +10,12 @@ use the driver's global-refresh ioctl.
 
 local Generic = require("device/generic/device")
 local logger = require("logger")
+local suspend_qualified = require("device/pinenote/suspend_policy")
 
 local ffi = require("ffi")
 local bit = require("bit")
 local C = ffi.C
+local EV_MSC = 4
 
 require("ffi/posix_h")
 require("ffi/linux_input_h")
@@ -55,6 +57,21 @@ local function findInputDevices(sysfs_base)
             -- 158/159 ride the same event_map as the pen buttons.
             elseif name == "wilkbook-optics" then
                 found.optics_inject = node
+            elseif name == "wilkbook-orientation" then
+                local id_base = string.format("%s/event%d/device/id/", sysfs_base, n)
+                local function id(field)
+                    local id_file = io.open(id_base .. field, "r")
+                    if not id_file then return nil end
+                    local value = id_file:read("*line")
+                    id_file:close()
+                    return value
+                end
+                -- A name alone is spoofable. Require the immutable identity
+                -- assigned by our uinput bridge as defense in depth.
+                if id("bustype") == "0006" and id("vendor") == "1209"
+                   and id("product") == "0002" and id("version") == "0001" then
+                    found.gsensor = node
+                end
             -- QEMU virt visual loop (offline testing ladder): scripted
             -- input arrives via virtio-input devices.  Only ever present
             -- inside the VM; harmless to look for on hardware.
@@ -82,6 +99,98 @@ local function firstExistingDir(candidates)
     end
 end
 
+local ORIENTATION_STATE = "/run/wilkbook-orientation.state"
+
+local function syncGyroState(input, path)
+    local f = io.open(path or ORIENTATION_STATE, "r")
+    if not f then return nil end
+    local mode = tonumber(f:read("*line"))
+    f:close()
+    if not mode or mode < 0 or mode > 3 or mode ~= math.floor(mode) then
+        return nil
+    end
+    return input:handleGyroEv({ value = mode })
+end
+
+-- Keep the private KOReader protocol at this boundary.  The kernel-facing
+-- bridge is deliberately standard EV_MSC/MSC_RAW only.
+local function translateGyroEvent(ev, gsensor)
+    local MSC_RAW, MSC_GYRO = 3, 71
+    if gsensor and ev.src == gsensor and ev.type == 4 and ev.code == MSC_RAW then
+        if ev.value >= 0 and ev.value <= 3 then
+            ev.code = MSC_GYRO
+            ev.wilkbook_gsensor = true
+            return true
+        end
+        ev.code, ev.value = 0, 0
+    end
+    return false
+end
+
+-- cyttsp5 reports its multitouch axes inverted relative to the PineNote's
+-- physical TOP orientation.  Keep this source-gated and range-driven: the
+-- input node is dynamic and panel ranges belong to the device, not the image.
+local function mirrorTouchMTPosition(ev, touch, min_x, max_x, min_y, max_y)
+    if ev.src ~= touch or ev.type ~= C.EV_ABS then return false end
+    if ev.code == C.ABS_MT_POSITION_X and min_x ~= nil and max_x ~= nil then
+        ev.value = min_x + max_x - ev.value
+        return true
+    elseif ev.code == C.ABS_MT_POSITION_Y and min_y ~= nil and max_y ~= nil then
+        ev.value = min_y + max_y - ev.value
+        return true
+    end
+    return false
+end
+
+local function adjustTouchEvent(ev, touch, min_x, max_x, min_y, max_y)
+    if ev.src ~= touch then return false end
+    if ev.type == C.EV_KEY and ev.code == C.BTN_TOUCH then
+        ev.type = EV_MSC -- handleMiscEv is a no-op here
+        return true
+    elseif ev.type == C.EV_ABS then
+        local adjusted = mirrorTouchMTPosition(ev, touch, min_x, max_x, min_y, max_y)
+        if ev.code == C.ABS_X or ev.code == C.ABS_Y or ev.code == C.ABS_PRESSURE then
+            ev.type = EV_MSC -- keep legacy aliases out of the pen slot
+            return true
+        end
+        return adjusted
+    end
+    return false
+end
+
+-- Keep one coordinate space for the lifetime of a touch or pen contact.
+-- Rotation while a contact is down is deferred until the gesture detector
+-- has consumed the lift; only the newest pending orientation matters.
+-- Pen hover does not increment contact_count, so it cannot pin rotation.
+local function installGyroHandler(input)
+    local pending_rotation
+    local misc_handler = input.handleMiscEv
+    input.handleMiscEv = function(this, ev)
+        if ev.wilkbook_gsensor and ev.code == 71 then
+            if this.gesture_detector.contact_count > 0 then
+                pending_rotation = ev.value
+                return nil
+            end
+            return this:handleGyroEv(ev)
+        end
+        return misc_handler(this, ev)
+    end
+
+    local touch_handler = input.handleTouchEv
+    input.handleTouchEv = function(this, ev)
+        local events = touch_handler(this, ev)
+        if pending_rotation ~= nil and this.gesture_detector.contact_count == 0 then
+            local rotation = this:handleGyroEv({ value = pending_rotation })
+            pending_rotation = nil
+            if rotation then
+                events = events or {}
+                events[#events + 1] = rotation
+            end
+        end
+        return events
+    end
+end
+
 local PineNote = Generic:extend{
     model = "PineNote",
     isPineNote = yes,
@@ -90,11 +199,12 @@ local PineNote = Generic:extend{
     hasEinkScreen = yes,
     hasFrontlight = yes,
     hasNaturalLight = yes,
+    hasGSensor = yes,
     canHWInvert = no,
     hasColorScreen = no,
     canReboot = yes,
     canPowerOff = yes,
-    canSuspend = no, -- not validated on this kernel yet
+    canSuspend = suspend_qualified and yes or no, -- not validated on this kernel yet
     hasOTAUpdates = no,
     hasWifiManager = no,
     display_dpi = 227,
@@ -229,6 +339,22 @@ function PineNote:init()
     if devs.optics_inject then
         self.input:open(devs.optics_inject, "wilkbook-optics injector")
     end
+    if devs.gsensor then
+        self.input:open(devs.gsensor, "wilkbook-orientation")
+        require("ffi/input_evdev").setRequiredDevice(devs.gsensor)
+        -- The bridge emits nothing until KOReader has opened this node,
+        -- otherwise the initial orientation could be lost before an evdev
+        -- client exists and then suppressed as a duplicate.
+        local ready = io.open("/run/wilkbook-orientation.consumer", "w")
+        if ready then
+            ready:write("ready\n")
+            ready:close()
+        else
+            logger.warn("PineNote: cannot signal orientation consumer readiness")
+        end
+    else
+        logger.warn("PineNote: wilkbook-orientation input device not found")
+    end
     if not (devs.pen or devs.touch) then
         -- Offline visual loop on qemu-virt: no PineNote input hardware
         -- exists, but the harness attaches virtio tablet/keyboard.
@@ -307,7 +433,8 @@ function PineNote:init()
     --  * pen: scale digitizer units (20966x15725) to screen pixels,
     --    unconditionally — the mixed handler only consumes plain ABS
     --    in the pen slot, so touch is unaffected;
-    --  * touchscreen: neutralize its legacy single-touch aliases —
+    --  * touchscreen: mirror its inverted MT axes, then neutralize its legacy
+    --    single-touch aliases —
     --    BTN_TOUCH would poison the wacom contact gate while the pen
     --    hovers (ghost pen taps from a resting palm), and the
     --    pointer-emulation ABS_X/ABS_Y/ABS_PRESSURE would be honored
@@ -317,10 +444,24 @@ function PineNote:init()
     --    wrappers the driver emits around every button event — they
     --    would fight the digitizer's true proximity state; the KEY_*
     --    events pass through to event_map.
-    local EV_MSC = 4
     local BTN_TOOL_RUBBER = 0x141
     local evdev = require("ffi/input_evdev")
     local pen_scale_x, pen_scale_y
+    local touch_min_x, touch_max_x, touch_min_y, touch_max_y
+    if devs.touch then
+        touch_min_x, touch_max_x = evdev.absinfo(devs.touch, C.ABS_MT_POSITION_X)
+        touch_min_y, touch_max_y = evdev.absinfo(devs.touch, C.ABS_MT_POSITION_Y)
+        if touch_min_x ~= nil and touch_max_x ~= nil
+           and touch_min_y ~= nil and touch_max_y ~= nil
+           and touch_max_x >= touch_min_x and touch_max_y >= touch_min_y then
+            logger.info(string.format(
+                "PineNote: touch MT axes X=%d..%d Y=%d..%d (mirrored)",
+                touch_min_x, touch_max_x, touch_min_y, touch_max_y))
+        else
+            touch_min_x, touch_max_x, touch_min_y, touch_max_y = nil, nil, nil, nil
+            logger.warn("PineNote: could not query touch MT axis ranges; touch coordinates unmirrored")
+        end
+    end
     if devs.pen then
         local _min, max_x = evdev.absinfo(devs.pen, C.ABS_X)
         local _min2, max_y = evdev.absinfo(devs.pen, C.ABS_Y)
@@ -346,13 +487,8 @@ function PineNote:init()
                 end
             end
         elseif ev.src == devs.touch then
-            if ev.type == C.EV_KEY and ev.code == C.BTN_TOUCH then
-                ev.type = EV_MSC -- handleMiscEv is a no-op here
-            elseif ev.type == C.EV_ABS and
-                   (ev.code == C.ABS_X or ev.code == C.ABS_Y or
-                    ev.code == C.ABS_PRESSURE) then
-                ev.type = EV_MSC
-            end
+            adjustTouchEvent(ev, devs.touch,
+                touch_min_x, touch_max_x, touch_min_y, touch_max_y)
         elseif ev.src == devs.penbtn then
             if ev.type == C.EV_KEY and
                (ev.code == C.BTN_TOOL_PEN or ev.code == BTN_TOOL_RUBBER) then
@@ -362,6 +498,23 @@ function PineNote:init()
     end)
 
     Generic.init(self)
+    -- Linux MSC_RAW is intentionally translated only for this virtual source.
+    -- KOReader's private MSC_GYRO (71) reaches the upstream gyro handler here.
+    self.input:registerEventAdjustHook(function(_, ev)
+        translateGyroEvent(ev, devs.gsensor)
+    end)
+    installGyroHandler(self.input)
+end
+
+
+function PineNote:toggleGSensor(toggle)
+    Generic.toggleGSensor(self, toggle)
+    if toggle == true then
+        local rotation = syncGyroState(self.input)
+        if rotation then
+            require("ui/uimanager"):broadcastEvent(rotation)
+        end
+    end
 end
 
 function PineNote:powerOff()
@@ -382,5 +535,10 @@ PineNote.battery_sysfs = firstExistingDir{
 -- name->slot mapping against a fake sysfs tree, offline); nothing on
 -- the device calls this.
 PineNote._findInputDevices = findInputDevices
+PineNote._translateGyroEvent = translateGyroEvent
+PineNote._installGyroHandler = installGyroHandler
+PineNote._syncGyroState = syncGyroState
+PineNote._mirrorTouchMTPosition = mirrorTouchMTPosition
+PineNote._adjustTouchEvent = adjustTouchEvent
 
 return PineNote
