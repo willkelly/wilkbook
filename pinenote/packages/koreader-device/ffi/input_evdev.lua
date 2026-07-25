@@ -56,6 +56,7 @@ local open_fds = {}   -- path -> fd
 local poll_fds = nil  -- struct pollfd[n], rebuilt when the set changes
 local poll_paths = {} -- pollfd index -> path
 local poll_n = 0
+local required_path = nil -- loss is fatal so the owning service can respawn
 
 local function rebuildPollSet()
     local paths = {}
@@ -103,6 +104,14 @@ function input.closeAll()
     end
     rebuildPollSet()
     return true
+end
+
+--- Mark one device as required for this backend generation. If that evdev
+-- node disappears, waitForEvent returns a fatal error instead of silently
+-- dropping it; reader-session then respawns KOReader and re-enumerates the
+-- replacement uinput node.
+function input.setRequiredDevice(path)
+    required_path = path
 end
 
 --- Query an absolute axis range; returns min, max (or nil on failure).
@@ -181,19 +190,25 @@ function input.waitForEvent(sec, usec)
     end
     local events = {}
     local lost_device = false
+    local lost_required = false
     for i = 0, poll_n - 1 do
         local revents = poll_fds[i].revents
         if bit.band(revents, POLLIN) ~= 0 then
             drainFd(poll_fds[i].fd, events, poll_paths[i + 1])
-        elseif bit.band(revents, bit.bor(POLLERR, POLLHUP, POLLNVAL)) ~= 0 then
+        end
+        if bit.band(revents, bit.bor(POLLERR, POLLHUP, POLLNVAL)) ~= 0 then
+            local path = poll_paths[i + 1]
             C.close(poll_fds[i].fd)
-            open_fds[poll_paths[i + 1]] = nil
+            open_fds[path] = nil
             lost_device = true
+            lost_required = lost_required or path == required_path
         end
     end
     if lost_device then
         rebuildPollSet()
-        if poll_n == 0 then
+        if lost_required then
+            return nil, "required input device lost"
+        elseif poll_n == 0 then
             return false, ENODEV
         end
     end
