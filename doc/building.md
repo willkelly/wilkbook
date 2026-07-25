@@ -13,7 +13,7 @@ See `doc/pinenote-flavors.md` for the flavor matrix. Build a system closure:
 
 ```sh
 guix system build -L . --target=aarch64-linux-gnu \
-  pinenote/systems/pinenote-usb-console-linux-6-6.scm
+  pinenote/systems/pinenote-usb-console.scm
 ```
 
 Build the deployable disk image (an MBR image with a single ext4 partition;
@@ -21,13 +21,12 @@ the rootfs gets extracted from it before deployment, see below):
 
 ```sh
 guix system image -t raw-with-offset -L . --target=aarch64-linux-gnu \
-  pinenote/systems/pinenote-usb-console-linux-6-6.scm
+  pinenote/systems/pinenote-usb-console.scm
 ```
 
 Substitute any other flavor entrypoint from `pinenote/systems/`. The
-`usb-console-linux-6-6` flavor is the hardware-validated baseline; the
-`usb-console` flavor carries the current forward-ported kernel
-(see `doc/status.md` for what works on each).
+`usb-console` flavor carries the hardware-validated primary 7.0 kernel; use
+`usb-console-linux-6-6` only for regression isolation (see `doc/status.md`).
 
 ## Packages
 

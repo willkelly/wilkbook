@@ -25,6 +25,12 @@ help:
 	@echo "  packages          build the helper/firmware packages"
 	@echo "  qemu-smoke        build the generic ARM64 QEMU smoke VM launcher"
 	@echo "  qemu-virt-check   mechanized virt boot assertions (ROOTFS=.. [WAVEFORM=..])"
+	@echo "  wbf-check         waveform parser checks (WBF=..; never committed)"
+	@echo "  ebc-logic-check   extracted EBC driver logic checks ([WBF=..])"
+	@echo "  rastersim-check   raster/waveform simulation checks ([WBF=..])"
+	@echo "  koreader-input-check  KOReader input, touch, and virtual-node lifecycle tests"
+	@echo "  orientation-check SC7A20 classifier and uinput bridge tests"
+	@echo "  optics-check      deterministic recorder/bundle/analysis tests"
 	@echo "  power-check       fake-root tests for the read-only Guile power recorder"
 	@echo "  suspend-check     offline fail-closed e-reader suspend qualification gates"
 	@echo

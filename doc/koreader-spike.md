@@ -127,26 +127,23 @@ fallback) matches `PineNote` in `/proc/device-tree/model`.
 reader.lua` directly as a respawning Shepherd service (root, v1) after
 udev/waveform/EBC-params, unbinding fbcon for the session's duration.
 
-**Hardware status (2026-07-05):** quickstart guide renders, pen taps
-and UI navigation work, exit via menu works. Finger touch requires the
-cyttsp5 touchscreen — driver was enabled but the mainline DTS carries
-no node for it; the forward-port patch now adds one (untested on
-hardware as of this writing; see `doc/kernel-forward-port.md`).
+**Hardware status (updated 2026-07-19):** quickstart and real documents render;
+pen and finger navigation, pinch, all four physical orientations, contact-aware
+rotation deferral, and cyttsp5 coordinate normalization are accepted on glass.
+The forward-port DTS node is therefore hardware-validated; exact target
+residuals and restart/replay evidence are in `doc/status.md`.
 
 ## 5. Remaining work
 
-1. **Touchscreen**: validate the new cyttsp5 DTS node; if coordinates
-   come out garbage, the mainline driver's missing sysinfo fallbacks
-   (m-weigand's tree patches them in) are the first suspect.
-2. **Refresh polish**: partial refreshes ride deferred-io defaults;
+1. **Refresh polish**: partial refreshes ride deferred-io defaults;
    tune refresh_threshold / explicit flash policy per KOReader's
    refresh hints (it distinguishes partial/UI/full — the plumbing to
    map more of those onto EBC behavior is in place).
-3. **Pen niceties**: hover cursor, pen buttons (ws8100, `event5`),
-   pressure curves; upstream gap #14694 (stylus tagged as finger).
-4. **Hardening**: unprivileged user, read-only bundle, books dir
+2. **Pen niceties**: hover cursor and pressure curves; ws8100 barrel-button
+   page turns are already wired.
+3. **Hardening**: unprivileged user, read-only bundle, books dir
    convention (`home_dir` is `/root` for now).
-5. **Upstreaming**: the pinenote device target + pure-Lua evdev
+4. **Upstreaming**: the pinenote device target + pure-Lua evdev
    backend are candidates for upstream KOReader once touch and a
    couple of weeks of dogfooding are in.
 
