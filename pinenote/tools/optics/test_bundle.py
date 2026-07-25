@@ -169,6 +169,28 @@ class HarvestFakeDriver(TransportFakeDriver):
         return "[pn-refresh] via-harvest intent=full page=1\n"
 
 
+class FailingRecordDriver(HarvestFakeDriver):
+    """Fails a selected scenario after preserving its trace-visible prefix."""
+
+    def __init__(self, fail_run, fail_at="page"):
+        super().__init__()
+        self.fail_run, self.fail_at, self.run_number = fail_run, fail_at, 0
+
+    def open_testcard(self, epub_path=None):
+        self.run_number += 1
+        super().open_testcard(epub_path)
+        if self.run_number == self.fail_run and self.fail_at == "open":
+            raise RuntimeError("injected open failure")
+
+    def goto_page(self, index):
+        super().goto_page(index)
+        if self.run_number == self.fail_run and self.fail_at == "page":
+            raise RuntimeError("injected page failure")
+
+    def harvest_trace(self):
+        return b"[pn-refresh] partial evidence\n"
+
+
 def encode_video(frames_float, path, fps):
     """Encode float[0,1] grayscale frames to a lossless ffv1 mkv (like the
     ffmpeg round-trip in test_ingest.py) so analyze decodes a REAL file."""
@@ -586,6 +608,83 @@ def main():
                                  "--video", mpath]) == 2)
     finally:
         drvmod.make_driver = orig_make
+
+    print("case: cmd_record persists completed and failed-run evidence immediately")
+    orig_make = drvmod.make_driver
+    orig_webcam = recorder._webcam
+    try:
+        with tempfile.TemporaryDirectory() as d:
+            mpath = os.path.join(d, "manifest.json")
+            with open(mpath, "w") as f:
+                json.dump(manifest, f)
+            pspath = os.path.join(d, "param_sets.json")
+            with open(pspath, "w") as f:
+                json.dump([["A", {}], ["B", {"refresh_waveform": 6}]], f)
+            failing = FailingRecordDriver(fail_run=2)
+            drvmod.make_driver = lambda **kw: failing
+            try:
+                recorder.main(["record", "--manifest", mpath, "--bundle", os.path.join(d, "bun"),
+                               "--param-sets", pspath, "--frontlight-level", "60",
+                               "--page-period", "0", "--deep-clean", "0"])
+                error = None
+            except recorder.ScenarioRunError as caught:
+                error = caught
+            complete_path = os.path.join(d, "bun.r00-A", "session.json")
+            partial_dir = os.path.join(d, "bun.r01-B")
+            partial_path = os.path.join(partial_dir, "session.partial.json")
+            partial = json.load(open(partial_path)) if os.path.exists(partial_path) else {}
+            check("later failure leaves the prior completed session intact",
+                  isinstance(error, recorder.ScenarioRunError)
+                  and os.path.exists(complete_path)
+                  and not os.path.exists(os.path.join(d, "bun.r00-A", "session.partial.json")))
+            check("failed current run records status, event prefix, trace sidecar, and close",
+                  partial.get("status") == "failed"
+                  and partial.get("runs", [{}])[0].get("events")
+                  and partial.get("runs", [{}])[0].get("trace") == "trace.r1.log"
+                  and open(os.path.join(partial_dir, "trace.r1.log"), "rb").read()
+                     == b"[pn-refresh] partial evidence\n"
+                  and failing.calls[-1] == ("close",))
+
+            complete_dir = os.path.join(d, "existing")
+            os.makedirs(complete_dir)
+            complete_session = os.path.join(complete_dir, "session.json")
+            with open(complete_session, "w") as f:
+                json.dump({"complete": True}, f)
+            with open(os.path.join(complete_dir, "capture.mkv"), "wb") as f:
+                f.write(b"completed capture")
+            class FakeWebcam:
+                def __init__(self, _device, path, _extra): self.path = path
+                def __enter__(self):
+                    with open(self.path, "wb") as f: f.write(b"partial capture")
+                    return self
+                def __exit__(self, *_exc): pass
+            recorder._webcam = FakeWebcam
+            failing = FailingRecordDriver(fail_run=1, fail_at="open")
+            drvmod.make_driver = lambda **kw: failing
+            try:
+                recorder.main(["record", "--manifest", mpath, "--bundle", complete_dir,
+                               "--frontlight-level", "60", "--page-period", "0", "--deep-clean", "0",
+                               "--camera", "/dev/video-test"])
+                error = None
+            except recorder.ScenarioRunError as caught:
+                error = caught
+            partial_path = os.path.join(complete_dir + ".partial", "session.partial.json")
+            partial = json.load(open(partial_path)) if os.path.exists(partial_path) else {}
+            partial_problems = B.validate_session(partial) if partial else []
+            check("empty-prefix failure preserves existing session in a distinct partial directory",
+                  isinstance(error, recorder.ScenarioRunError)
+                  and json.load(open(complete_session)) == {"complete": True}
+                  and partial.get("status") == "failed"
+                  and partial.get("runs", [{}])[0].get("events") == []
+                  and partial.get("runs", [{}])[0].get("trace") == "trace.r0.log"
+                  and open(os.path.join(complete_dir, "capture.mkv"), "rb").read()
+                     == b"completed capture"
+                  and open(os.path.join(complete_dir + ".partial", "capture.mkv"), "rb").read()
+                     == b"partial capture"
+                  and any("needs events" in problem for problem in partial_problems))
+    finally:
+        drvmod.make_driver = orig_make
+        recorder._webcam = orig_webcam
 
     print("case: [pn-refresh] trace parses (kinds, rects, dither, waveform, epoch t)")
     trace_text = (

@@ -30,7 +30,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
+import shutil
 import sys
 import time
 
@@ -490,6 +492,75 @@ def _run_bundle_dir(base, i, label, n_runs):
     return "%s.r%02d-%s" % (base.rstrip("/"), i, slug)
 
 
+def _partial_run_dir(run_dir):
+    """Choose a failure-evidence directory without replacing a completed run."""
+    if not (os.path.exists(os.path.join(run_dir, bundle_mod.SESSION_NAME))
+            or os.path.exists(os.path.join(run_dir, "session.partial.json"))):
+        return run_dir
+    candidate = run_dir + ".partial"
+    suffix = 1
+    while os.path.exists(candidate):
+        candidate = "%s.partial-%d" % (run_dir, suffix)
+        suffix += 1
+    return candidate
+
+
+def _session_for_run(args, driver, device, waveform_identity, camera_meta,
+                     baseline_params, run, trace_data=None):
+    """Build the common session record for a completed or partial scenario."""
+    seeded = getattr(driver, "backend", None)
+    seeded = getattr(seeded, "_seeded_settings", None) or {}
+    reader_meta = {
+        "full_refresh_count": seeded.get("full_refresh_count"),
+        "flash_area_fraction": seeded.get("pinenote_flash_area_fraction"),
+    } if seeded else None
+    session = bundle_mod.new_session(
+        device=dict(device), illuminant_level=args.frontlight_level,
+        ebc_params=baseline_params,
+        panel_temp_c=run.get("panel_temp_c_start"),
+        camera=dict(camera_meta), reader=reader_meta)
+    session["capture"]["fps"] = args.fps
+    session["device"].setdefault("wbf_sha256", waveform_identity.get("wbf_sha256"))
+    trace_name = None
+    if trace_data:
+        trace_name = "trace.%s.log" % run["run_id"]
+    bundle_mod.add_run(session, run_id=run["run_id"], events=run["events"],
+                       label=run["label"], params=run["params"],
+                       frontlight_level=run.get("frontlight_level"),
+                       panel_temp_c_start=run.get("panel_temp_c_start"),
+                       panel_temp_c_end=run.get("panel_temp_c_end"),
+                       events_source=run.get("events_source", "measured"),
+                       trace=trace_name)
+    if args.wbf_info:
+        with open(args.wbf_info) as f:
+            bundle_mod.set_waveform_decode(
+                session, bundle_mod.waveform_summary_from_wbf_info(
+                    f.read(), wbf_sha256=waveform_identity.get("wbf_sha256")))
+    return session, trace_name
+
+
+def _write_partial_session(run_dir, video_path, session, trace_name,
+                           trace_data, error):
+    """Persist failed-run evidence without presenting it as a valid bundle."""
+    os.makedirs(run_dir, exist_ok=True)
+    if trace_name and trace_data:
+        with open(os.path.join(run_dir, trace_name), "wb") as f:
+            f.write(trace_data)
+    if os.path.exists(video_path):
+        ext = os.path.splitext(video_path)[1].lstrip(".").lower() or "bin"
+        capture_name = "capture.%s" % ext
+        capture_path = os.path.join(run_dir, capture_name)
+        if os.path.abspath(video_path) != os.path.abspath(capture_path):
+            shutil.copyfile(video_path, capture_path)
+        session["capture"].update({"file": capture_name, "container": ext,
+                                   "sha256": bundle_mod.sha256_file(capture_path)})
+    session["status"] = "failed"
+    session["partial"] = {"error": str(error),
+                          "error_type": type(error.original).__name__}
+    with open(os.path.join(run_dir, "session.partial.json"), "w") as f:
+        json.dump(session, f, indent=2)
+
+
 def cmd_record(args):
     """Drive a device through the test card while a camera films; write one
     bundle (own video + own sync flashes) PER PARAM SET, so every transition is
@@ -499,7 +570,6 @@ def cmd_record(args):
     needs no Wi-Fi. All device I/O is the driver.py Transport x RenderBackend
     matrix (proven in test_driver.py); the per-run bundling/attribution here is
     proven offline in test_bundle.py against a fake driver."""
-    import os
     import driver as drv_mod
 
     manifest = _load_json(args.manifest)
@@ -538,13 +608,18 @@ def cmd_record(args):
                    "controls": lock["controls"] if lock else None,
                    "exposure_locked": bool(lock and lock["exposure_locked"])}
 
-    driver.connect()
-    captured = []                                  # (run, run_dir, video_path)
+    wrote = []
     try:
+        driver.connect()
         device = _safe(driver.device_info) or {"model": args.model or "PineNote"}
         wf_ident = _safe(driver.waveform_summary) or {}
         for i, (label, params) in enumerate(ordered):
             run_dir = _run_bundle_dir(args.bundle, i, label, len(ordered))
+            # Never film a retry into a completed bundle: its capture and
+            # session remain the successful evidence, while this attempt gets
+            # its own directory (and session.partial.json if it fails).
+            if os.path.exists(os.path.join(run_dir, bundle_mod.SESSION_NAME)):
+                run_dir = _partial_run_dir(run_dir)
             os.makedirs(run_dir, exist_ok=True)
             video_path = args.video or os.path.join(run_dir, "capture.mkv")
             # the webcam context wraps THIS run only: each capture holds its
@@ -552,64 +627,47 @@ def cmd_record(args):
             # set), so analyze's single-find_sync assumption holds per bundle
             with _webcam(args.camera, video_path,
                          args.camera_args.split() if args.camera_args else None):
-                runs = run_scenario(driver, manifest, param_sets=[(label, params)],
-                                    page_period_s=args.page_period,
-                                    epub_path=args.epub,
-                                    frontlight_level=args.frontlight_level,
-                                    baseline_params=baseline_params,
-                                    deep_clean_n=args.deep_clean,
-                                    run_index_start=i)
-            captured.append((runs[0], run_dir, video_path))
+                try:
+                    runs = run_scenario(driver, manifest, param_sets=[(label, params)],
+                                        page_period_s=args.page_period,
+                                        epub_path=args.epub,
+                                        frontlight_level=args.frontlight_level,
+                                        baseline_params=baseline_params,
+                                        deep_clean_n=args.deep_clean,
+                                        run_index_start=i)
+                except ScenarioRunError as error:
+                    partial_dir = _partial_run_dir(run_dir)
+                    partial_run = {
+                        "run_id": "r%d" % i, "label": label, "params": dict(params),
+                        "frontlight_level": args.frontlight_level,
+                        "panel_temp_c_start": None, "panel_temp_c_end": None,
+                        "events_source": "measured", "events": error.events,
+                    }
+                    session, trace_name = _session_for_run(
+                        args, driver, device, wf_ident, camera_meta, baseline_params,
+                        partial_run, error.trace_data)
+                    _write_partial_session(partial_dir, video_path, session,
+                                           trace_name, error.trace_data, error)
+                    raise
+            r = runs[0]
+            session, trace_name = _session_for_run(
+                args, driver, device, wf_ident, camera_meta, baseline_params,
+                r, r.get("trace_data"))
+            if trace_name:
+                with open(os.path.join(run_dir, trace_name), "wb") as f:
+                    f.write(r["trace_data"])
+            if not (args.camera or args.video):
+                with open(os.path.join(run_dir, "session.json"), "w") as f:
+                    json.dump(session, f, indent=2)
+                wrote.append(run_dir)
+            else:
+                wrote.append(bundle_mod.write_bundle(run_dir, session, video_path,
+                                                     args.manifest))
     finally:
         driver.close()
 
-    wrote = []
-    for r, run_dir, video_path in captured:
-        # per-run reader regime: the KOReaderBackend records what it actually
-        # seeded into the dedicated KO_HOME (PLAN task 5 seam); fb backend and
-        # fakes have no seeded settings -> reader block stays at defaults
-        seeded = getattr(getattr(driver, "backend", None), "_seeded_settings",
-                         None) or {}
-        reader_meta = {
-            "full_refresh_count": seeded.get("full_refresh_count"),
-            "flash_area_fraction": seeded.get("pinenote_flash_area_fraction"),
-        } if seeded else None
-        session = bundle_mod.new_session(
-            device=dict(device), illuminant_level=args.frontlight_level,
-            ebc_params=baseline_params,
-            panel_temp_c=r.get("panel_temp_c_start"),
-            camera=dict(camera_meta), reader=reader_meta)
-        session["capture"]["fps"] = args.fps
-        session["device"].setdefault("wbf_sha256", wf_ident.get("wbf_sha256"))
-        trace_name = None
-        if r.get("trace_data"):
-            trace_name = "trace.%s.log" % r["run_id"]
-            with open(os.path.join(run_dir, trace_name), "wb") as f:
-                f.write(r["trace_data"])
-        bundle_mod.add_run(session, run_id=r["run_id"], events=r["events"],
-                           label=r["label"], params=r["params"],
-                           frontlight_level=r["frontlight_level"],
-                           panel_temp_c_start=r.get("panel_temp_c_start"),
-                           panel_temp_c_end=r.get("panel_temp_c_end"),
-                           events_source=r.get("events_source", "measured"),
-                           trace=trace_name)
-        if args.wbf_info:
-            with open(args.wbf_info) as f:
-                bundle_mod.set_waveform_decode(
-                    session, bundle_mod.waveform_summary_from_wbf_info(
-                        f.read(), wbf_sha256=wf_ident.get("wbf_sha256")))
-
-        if not (args.camera or args.video):
-            # no video captured -> emit the session for a later `package` step
-            with open(os.path.join(run_dir, "session.json"), "w") as f:
-                json.dump(session, f, indent=2)
-            wrote.append(run_dir)
-        else:
-            wrote.append(bundle_mod.write_bundle(run_dir, session, video_path,
-                                                 args.manifest))
-
     if not (args.camera or args.video):
-        print(f"drove {len(captured)} run(s); wrote session.json under: "
+        print(f"drove {len(wrote)} run(s); wrote session.json under: "
               f"{', '.join(wrote)}\n"
               f"  no camera: film the panel, then: recorder.py package "
               f"--video CLIP --manifest {args.manifest} --bundle DIR ...",
