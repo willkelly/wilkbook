@@ -1,6 +1,19 @@
 # koreader-input — host tests for KOReader's input routing (offline ladder)
 
-Two proof sets, entirely on the workstation — no device, no KOReader UI:
+`touch_target_epub.py` is a separate Pillow-based calibration aid for manual
+finger/pen investigation.  It generates and self-checks a single-page EPUB3
+fixed at the corrected 1404x1872 portrait coordinate space, with numbered
+crosshair targets, quarter-grid lines, and edge rulers.  The page is a
+full-resolution grayscale PNG in the same fixed-layout XHTML packaging used by
+the hardware-proven optics card (rather than inline SVG).  Its default output
+is `/tmp/opencode/pinenote-touch-targets.epub`; pass another path to override
+it, or use `--check PATH` to validate an existing artifact.
+
+```sh
+python3 pinenote/tools/koreader-input/touch_target_epub.py
+```
+
+The host suite runs entirely on the workstation — no device or KOReader UI:
 
 1. **`test-mixedrouter.lua`** — the pen-hover tap-capture bug in
    upstream KOReader's input stack and the repo's fix
@@ -17,7 +30,18 @@ Two proof sets, entirely on the workstation — no device, no KOReader UI:
    `run-tests.sh` additionally runs the **daemon body live**: it must
    create a uinput device named `wilkbook-optics` with exactly keybits
    139/158/159 + EV_SYN|EV_KEY and destroy it on `QUIT` (no key event is
-   ever emitted); skipped cleanly elsewhere.
+   ever emitted). The repo evdev backend opens that live node as required;
+   destroying it must return a fatal error so reader-session can respawn
+   KOReader and enumerate a replacement. These checks skip cleanly where
+   host uinput access is unavailable.
+3. **`test-touch-normalization.lua`** — cyttsp5's source-gated MT X/Y
+   mirroring using the measured axis ranges and five static TOP-mode
+   calibration points, including no-op behavior for pen, foreign, legacy,
+   and unavailable-range events.
+4. **`test-idlewasher-logic.lua`** — the idle-washer policy core and plugin
+   integration against KOReader's hook container.
+5. **`test-required-device.lua`** — required evdev-node loss returns the
+   fatal sentinel; `run-tests.sh` executes it through a deterministic FIFO.
 
 **The bug** (hardware-observed 2026-07-05, mechanism in
 `mixedrouter.lua`'s header): upstream `Input` keeps ONE global
@@ -73,14 +97,27 @@ behavior) and with it (expects the fix):
 
 `run-tests.sh` also checks output determinism across two runs.
 
+The fake-sysfs portion additionally proves that only the exact
+`wilkbook-orientation` virtual-device name becomes the PineNote G-sensor slot.
+Its Linux-standard `EV_MSC/MSC_RAW` values 0--3 translate to KOReader's private
+`MSC_GYRO` 71 only from that source; invalid and foreign-source values are inert.
+The PineNote adapter defers a gyro event while a finger or pen contact is down,
+then appends only the latest pending rotation after the lift gesture; pen hover
+alone does not block rotation.
+Re-enabling the accelerometer handler replays the bridge's current `/run`
+state, covering rotations that occurred while automatic events were ignored.
+The bridge classifier itself is tested separately with `make orientation-check`.
+
 ## What this does and does not cover
 
 Covers the slot-routing logic and gesture classification for the mixed
 pen+touch protocol, the `findInputDevices` name→slot mapping, the
 injector's key-event chain (159/158 → RPgFwd/RPgBack), and — where the
-host permits — the injector daemon's uinput create/destroy path.  Does
-**not** cover: evdev delivery (`ffi/input_evdev` is stubbed), the
-adjust hooks themselves, `device.lua` `init()` glue (the
+host permits — the injector daemon's uinput create/destroy path and required-fd
+loss, plus the pure source-gated touch adjustment seam (MT mirroring and
+legacy alias neutralization). Does **not** cover: ordinary evdev event delivery
+(`ffi/input_evdev` is stubbed in gesture scenarios), registration of the
+adjust hook or `device.lua` `init()` glue (such as the
 `input:open(devs.optics_inject, ...)` line), the live
 create-before-KOReader-enumerates ordering, timer-driven gestures
 (hold, double-tap), or real touch panel timing/noise — those stay on
