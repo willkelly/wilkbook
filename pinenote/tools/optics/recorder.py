@@ -148,6 +148,15 @@ class FakeClock(Clock):
         self.t += seconds
 
 
+class ScenarioRunError(RuntimeError):
+    """A failed scenario with its completed event prefix and best-effort trace."""
+    def __init__(self, error, events, trace_data):
+        super().__init__(str(error))
+        self.original = error
+        self.events = list(events)
+        self.trace_data = trace_data
+
+
 def deep_clean(driver, n=3):
     """Panel-state reset (PLAN §3 ME3): under the CURRENT params, save the live
     refresh_waveform, flip it to 4 (GC16) via driver.set_ebc_params, fire `n`
@@ -228,8 +237,9 @@ def pull_trace(driver):
 
 
 def run_scenario(driver, manifest, param_sets=None, page_period_s=3.0,
-                 epub_path=None, clock=None, frontlight_level=None,
-                 baseline_params=None, deep_clean_n=3, run_index_start=0):
+                  epub_path=None, clock=None, frontlight_level=None,
+                  baseline_params=None, deep_clean_n=3, run_index_start=0,
+                  before_content=None, after_content=None):
     """Drive one capture session and return the list of run dicts (each ready
     for bundle.add_run). For every param set: reset the panel state (apply the
     baseline params, then deep_clean -- logged as a 'clean' event), flip the
@@ -251,7 +261,10 @@ def run_scenario(driver, manifest, param_sets=None, page_period_s=3.0,
     caller invoking run_scenario once per param set still gets distinct ids.
 
     frontlight_level: if set, apply it once (the standardized illuminant) and
-    record the level actually applied on each run."""
+    record the level actually applied on each run. before_content(run_context)
+    runs after staging and sync immediately before the first content turn;
+    after_content(run_context) runs after the final content settle. Hooks are
+    optional and leave existing callers and returned run records unchanged."""
     clock = clock or Clock()
     param_sets = param_sets or [("default", {})]
     if baseline_params is None:
@@ -269,26 +282,35 @@ def run_scenario(driver, manifest, param_sets=None, page_period_s=3.0,
             driver.set_ebc_params(dict(baseline_params))
             cleaned = deep_clean(driver, n=deep_clean_n)
         applied = driver.set_ebc_params(params) or dict(params)
-        driver.open_testcard(epub_path)
-        temp_start = _safe(driver.read_panel_temp)
-
-        driver.emit_sync()
-        t0 = clock.now()                      # clock-zero = first sync flash
         events = []
         if deep_clean_n:
             events.append({"t": 0.0, "event": "clean", "n": cleaned})
-        events.append({"t": 0.0, "event": "sync",
-                       "detail": "opening black/white flashes (clock-zero)"})
-        if params:
-            events.append({"t": 0.0, "event": "param", "params": dict(params)})
+        try:
+            driver.open_testcard(epub_path)
+            temp_start = _safe(driver.read_panel_temp)
+            driver.emit_sync()
+            t0 = clock.now()                  # clock-zero = first sync flash
+            events.append({"t": 0.0, "event": "sync",
+                           "detail": "opening black/white flashes (clock-zero)"})
+            if params:
+                events.append({"t": 0.0, "event": "param", "params": dict(params)})
 
-        for p in content:
-            clock.sleep(page_period_s)
-            driver.goto_page(p["index"])
-            events.append({"t": round(clock.now() - t0, 4), "event": "page",
-                           "page_index": p["index"], "pid": p["pid"],
-                           "kind": p["kind"]})
-        clock.sleep(page_period_s)            # let the last transition settle
+            context = {"run_id": f"r{run_index_start + i}", "label": label,
+                       "params": applied, "events": events, "content": content,
+                       "clock_zero": t0, "clock": clock}
+            if before_content is not None:
+                before_content(context)
+            for p in content:
+                clock.sleep(page_period_s)
+                driver.goto_page(p["index"])
+                events.append({"t": round(clock.now() - t0, 4), "event": "page",
+                               "page_index": p["index"], "pid": p["pid"],
+                                 "kind": p["kind"]})
+            clock.sleep(page_period_s)            # let the last transition settle
+            if after_content is not None:
+                after_content(context)
+        except Exception as error:
+            raise ScenarioRunError(error, events, pull_trace(driver)) from error
 
         runs.append({
             "run_id": f"r{run_index_start + i}",

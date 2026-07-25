@@ -406,6 +406,70 @@ def main():
           all(r["events_source"] == "measured" for r in runs))
     check("no-transport driver: deep_clean no-ops (clean n=0), no trace",
           runs[0]["events"][0]["n"] == 0 and runs[0]["trace_data"] is None)
+    hook_driver = FakeDriver()
+    hook_driver.harvest_trace = lambda: hook_driver.calls.append(("harvest",)) or "[pn-refresh] hook\n"
+    recorder.run_scenario(hook_driver, manifest, param_sets=[("hook", {})],
+                          page_period_s=0, clock=recorder.FakeClock(), deep_clean_n=0,
+                          before_content=lambda context: hook_driver.calls.append(("before", len(context["events"]))),
+                          after_content=lambda context: hook_driver.calls.append(("after", len(context["events"]))))
+    hook_names = [call[0] for call in hook_driver.calls]
+    check("optional scenario hooks bracket only content turns",
+          hook_names.index("open") < hook_names.index("sync") < hook_names.index("before")
+          < hook_names.index("page") < hook_names.index("after") < hook_names.index("harvest")
+          and hook_driver.calls[hook_names.index("before")][1] == 1
+          and hook_driver.calls[hook_names.index("after")][1] == 1 + n_content)
+    for hook_name in ("before", "after"):
+        failing_driver = FakeDriver()
+        failing_driver.harvest_trace = lambda: b"[pn-refresh] partial partial t=1.0\n"
+        def fail_hook(_context, name=hook_name):
+            raise RuntimeError(name + " hook failed")
+        kwargs = {hook_name + "_content": fail_hook}
+        try:
+            recorder.run_scenario(failing_driver, manifest, param_sets=[("hook-fail", {})],
+                                  page_period_s=0, clock=recorder.FakeClock(),
+                                  deep_clean_n=0, **kwargs)
+            scenario_error = None
+        except recorder.ScenarioRunError as error:
+            scenario_error = error
+        expected_events = 1 if hook_name == "before" else 1 + n_content
+        check(hook_name + " hook failure preserves event prefix and trace",
+              scenario_error is not None
+              and len(scenario_error.events) == expected_events
+              and scenario_error.trace_data == b"[pn-refresh] partial partial t=1.0\n")
+
+    sync_driver = FakeDriver()
+    sync_driver.harvest_trace = lambda: b"[pn-refresh] sync partial t=1.0\n"
+    def fail_sync():
+        sync_driver.calls.append(("sync",))
+        raise RuntimeError("sync failed")
+    sync_driver.emit_sync = fail_sync
+    try:
+        recorder.run_scenario(sync_driver, manifest, param_sets=[("sync-fail", {})],
+                              page_period_s=0, clock=recorder.FakeClock())
+        sync_error = None
+    except recorder.ScenarioRunError as error:
+        sync_error = error
+    check("sync failure preserves completed clean event and partial trace",
+          sync_error is not None
+          and [event["event"] for event in sync_error.events] == ["clean"]
+          and sync_error.trace_data == b"[pn-refresh] sync partial t=1.0\n")
+
+    open_driver = FakeDriver()
+    open_driver.harvest_trace = lambda: b"[pn-refresh] open partial t=1.0\n"
+    def fail_open(_epub_path=None):
+        open_driver.calls.append(("open",))
+        raise RuntimeError("open failed")
+    open_driver.open_testcard = fail_open
+    try:
+        recorder.run_scenario(open_driver, manifest, param_sets=[("open-fail", {})],
+                              page_period_s=0, clock=recorder.FakeClock())
+        open_error = None
+    except recorder.ScenarioRunError as error:
+        open_error = error
+    check("open failure preserves completed clean event and partial trace",
+          open_error is not None
+          and [event["event"] for event in open_error.events] == ["clean"]
+          and open_error.trace_data == b"[pn-refresh] open partial t=1.0\n")
 
     print("case: deep_clean saves/flips/refreshes/restores via the transport")
     tdrv = TransportFakeDriver(wf="6")
