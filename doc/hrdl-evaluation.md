@@ -290,8 +290,9 @@ Separable and worth taking (in ladder order, harness-first):
    **LANDED 2026-07-12**: `linux-pinenote-debug-extract-fbs.patch` plus
    the ebc-dump grab/decode pair, offline-proven by the ebc-logic dbg
    suite; four defects found in his reference implementation, corrected
-   in our port and reported (findings report, EXTRACT_FBS note).
-   Awaiting its one-smoke device ride.
+   in our port and reported (findings report, EXTRACT_FBS note). The idle
+   `--verify` device smoke passed under the live DRM master on 2026-07-13;
+   a mid-scribble dump and camera correlation remain.
 4. **Blue-noise dither tables** (4e6f4f4fffea) — verbatim constants,
    relevant only if we ever enable `bw_mode` dithering; zero risk to
    carry in the toolbox.

@@ -507,7 +507,7 @@ make -C pinenote/tools/optics testcard OUT=build/testcard
 # 2) Record (shape of the sweep commands; device-present step —
 #    per-run configs are authoritative in each bundle's runs[].params):
 python3 recorder.py record \
-  --manifest build/testcard/manifest.json --epub build/testcard/card.epub \
+  --manifest build/testcard/manifest.json --epub build/testcard/optics-testcard.epub \
   --bundle build/bundles/<name> \
   --transport ssh --host <device> --backend koreader \
   --camera /dev/videoN --camera-lock --fps 30 \

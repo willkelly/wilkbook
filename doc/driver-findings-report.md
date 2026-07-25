@@ -166,6 +166,13 @@ together with 1 in one blitter-hygiene pass would be natural.
 
 ## Finding (2026-07-11, live): portrait rotation wedges the EBC; module reload is not a safe recovery
 
+**Historical correction (2026-07-18):** this A.2.6 finding did not reproduce
+on the A.2.8 fixed kernel: portrait renders correctly when one KOReader owns
+the framebuffer. The remaining two-band deferred-io paint quality visible in
+portrait is a separate latency/quality limitation, not an EBC wedge or a
+portrait-functional blocker. The original report remains below as A.2.6
+evidence, not as the current-kernel verdict.
+
 Reproduced twice on the A.2.6 image (7.0.11, rockchip_ebc 0.3.0, GL16 policy):
 with KOReader rendering in **portrait** (`copt_rotation_mode=1` on the
 landscape-native 1872x1404 fb), the first portrait refresh leaves the panel

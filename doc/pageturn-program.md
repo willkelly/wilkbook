@@ -183,13 +183,12 @@ close or explicitly descope.
   never what happened (the A.2 config bug is the canonical
   intent≠reality failure).
 - **EXTRACT_FBS** — *driver belief* (live prev/next buffers).
-  **CORRECTION (verified against source): this plane does not exist in
-  our kernel.** The 7.0 forward-port stubs the ioctl —
-  `return -EOPNOTSUPP` (:398–402; also recorded in
-  `doc/kernel-forward-port.md`). PLAN §1a/§1b and eink-research §8's
-  "our lineage already ships EXTRACT_FBS" describe the m-weigand 6.x
-  lineage, not our port. PLAN task 23 is **blocked on a port** of
-  m-weigand's implementation (§5.2).
+  The primary 7.0 forward-port intentionally retains the
+  `return -EOPNOTSUPP` stub (:398–402), but the separate
+  `linux-pinenote-debug` kernel gained the port on 2026-07-12 (§5.2).
+  Its idle `--verify` device smoke passed under the live DRM master on
+  2026-07-13 and decoded a pixel-faithful KOReader screen; camera
+  correlation and a mid-scribble sample remain.
 
 Composition is where the value is: divergence between intent, action,
 belief, and glass IS the diagnosis. All clocks align for free through
@@ -200,7 +199,7 @@ camera frames, the kernel log, and the trace).
 
 **D** direct, **P** partial/one-segment, **X** proxy/inference, **–** blind.
 
-| Metric | Camera | dbg v1 | dbg v2 (proposed) | [pn-refresh] | EXTRACT_FBS (after port) |
+| Metric | Camera | dbg v1 | dbg v2 (proposed) | [pn-refresh] | EXTRACT_FBS (debug kernel) |
 |---|---|---|---|---|---|
 | Turn-to-glass latency | P — end anchor only, ±1 frame each end | P — globals only | **D** driver segment: intent→blit→burst→last DSP_END, ms precision | P — start anchor | – |
 | Drive duration | P — optical envelope; quantization kills fast modes | D globals / **– partials** | **D** — frames + ms per partial burst | – | – |
@@ -268,9 +267,9 @@ v2; injector proven; params one-shot carries the candidate config.
    lap): candidate / baseline / baseline / candidate, one video + one
    bundle per arm; the stress ×3 block supplies within-lap repeats
    against the σ 0.003–0.006 floor.
-5. **Belief probes — deferred** until the EXTRACT_FBS port lands
-   (§5.2). Until then, believed-state divergence stays camera-inferred
-   (finding-8 style).
+5. **Belief probes — available on the debug image** (§5.2). The idle
+   live-DRM path is hardware-proven; capture a mid-scribble dump and join
+   its patch means to camera regions for the first full correlation run.
 6. **Harvest per arm:** video, `optics-koreader.log` trace, dmesg
    (`ebc-dbg` lines via the standing post-mortem protocol). Nothing
    else touches the device.
@@ -498,12 +497,13 @@ roundtrip, exact sizes under ASan, NULL planes, -EFAULT injection, the
 mid-copy kref lifetime guarantee) and the dump/decode pair
 (`ebc-dump-grab` on-device via the `pinenote-ebc-dump` package;
 `ebc-dump` host decoder, pinned to the driver's Y4 conventions by a
-decode differential).  Still device-untested: real `copy_to_user`
-fault/pagefault behavior, `drm_modeset_lock` vs a live commit stream,
-DRM_AUTH plumbing through /dev/dri, RT timing — one smoke (idle
-`--verify` dump + one mid-scribble dump) rides the next scheduled
-session.  Protocol step 5 (belief probes) is unblocked once that smoke
-passes.
+decode differential). The 2026-07-13 idle `--verify` smoke passed under
+the live DRM master: it produced a double-read-stable 9,199,048-byte dump,
+and the decoded `final` plane was a pixel-faithful KOReader screen.
+Still untested are fault/pagefault behavior during real `copy_to_user`, a
+mid-scribble dump against the live commit stream, and RT timing under that
+load. Protocol step 5 (belief probes) is available on the debug image;
+camera correlation remains to be run.
 
 ### 5.3 Tasks 25/26 placement
 
