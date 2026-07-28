@@ -198,6 +198,21 @@ would hit this on any mainline-ish kernel. Repro recipe: fbdev client renders
 
 ## Finding (2026-07-12, live): threshold-triggered auto-globals corrupt panel state; ioctl-triggered globals are clean
 
+**Behavior change, 2026-07-27 — fail-closed refresh barrier.** The permanent
+forward-port now carries a fixed-width `REFRESH_BARRIER` submit/wait ioctl at
+DRM command `+0x03`, while retaining the legacy fire-and-forget
+`GLOBAL_REFRESH` ABI.  `SUBMIT` and a finite uncompleted `WAIT` report
+`result=-EINPROGRESS`; malformed requests remain ioctl errors.  The single refresh worker snapshots accepted
+generations before a physical global and publishes them only after the global
+hardware, buffer, output, and PM bookkeeping complete.  A timeout in either a
+partial frame or global playback permanently poisons that EBC instance with
+`-ETIMEDOUT`: queued and later waiters receive that same terminal result, and
+no later hardware start, late END, or userspace wait expiry can heal it.  This
+is a local safety containment, not an optics claim or a suspend/activation
+change.  The original deferred-END reproducer remains below as historical
+root-cause evidence; `ebc-refresh-test` now pins the corrected fail-closed
+behavior instead of expecting its residual completion credit.
+
 On the A.2.6 image (7.0.11, rockchip_ebc 0.3.0, GL16 global waveform), full
 refreshes fired by the driver's own damage-threshold path (`auto_refresh=1`,
 `area_count >= refresh_threshold * one_screen_area`) progressively corrupt
@@ -229,15 +244,27 @@ retained honestly: two unexplained global-like events in one auto=0 soak
 (t≈100/105 s) — possibly the known spontaneous-global flakiness.
 
 Workaround shipped in wilkbook: `auto_refresh=0`; all full refreshes owned by
-userspace via the ioctl. Root cause below (offline analysis + quirk F).
+userspace via the ioctl. The historical quirk-F hypothesis is preserved below;
+the evidence-audit update later in this report records its instrumented
+refutation.
 
-### Root cause: the threshold path is the driver's only zero-gap launcher, and the refresh handshake cannot survive one
+### Historical root-cause hypothesis: the threshold path was the driver's only zero-gap launcher
 
 Line numbers are patch lines in our tree
 (`pinenote/patches/linux-pinenote-7.0-forward-port.patch`; the same code
 ships in m-weigand 6.6/6.12 and everything derived from it).
 
-**What is NOT the cause.** Both full-refresh paths execute the identical
+This subsection preserves the 2026-07-12 hypothesis that motivated the fix; its
+causal claims are **superseded by the instrumented refutation below** and do
+not describe either the observed corruption cause or the current wilkbook
+handshake. The current tree
+reinitializes completion before every physical start and treats any setup or
+hardware timeout as terminal poison. It retains uncertain DMA/context/module/
+power ownership until reboot, blocks runtime/system suspend, remove, and
+shutdown from powering the device down, and rejects every later refresh even if
+a late DSP_END arrives.
+
+**Historical elimination claim.** Both full-refresh paths execute the identical
 code from `do_one_full_refresh` onward: the ioctl handler (3110–3117) and
 the threshold epilogue (4271–4280) set the same flag, consumed at the same
 place in the refresh thread (4361–4369 → `rockchip_ebc_refresh(…, true,
@@ -251,7 +278,7 @@ executes exactly these paths against the fake device and confirms:
 identical update streams produce identical pixel outcomes through either
 path. The corruption is not a buffer-state bug the ioctl path avoids.
 
-**The asymmetry.** The threshold path has exactly one property the ioctl
+**Historical proposed asymmetry.** The threshold path has exactly one property the ioctl
 path never exhibits in practice: **zero-gap chaining**. The flag is set in
 the epilogue of the very partial refresh that crossed the threshold —
 i.e. microseconds after the burst's last frame — and the thread's
@@ -260,7 +287,7 @@ fires while the refresh thread idles (KOReader's wash beats the ~50 ms
 deferred-io flush; the thread sleeps at 4389–4395), so the panel pipeline
 has been quiet for at least tens of milliseconds when the global starts.
 
-**Why zero-gap kills it.** The per-frame handshake in
+**Historical proposed failure mechanism.** The per-frame handshake in
 `rockchip_ebc_partial_refresh` is fragile in precisely the way a zero-gap
 global exposes:
 
@@ -301,27 +328,27 @@ measured). Firing phase is randomized by finding 7 (the accumulator never
 resets on manual washes and persists across sessions), matching the
 stochastic on-camera timing.
 
-The ioctl path is structurally immune in the shipped stack: stragglers
-land during the idle gap where nobody waits, and the next global's
-`reinit_completion` absorbs the stale credit before arming its wait.
+The historical analysis therefore claimed that the ioctl path was structurally
+immune because stragglers would land during an idle gap. The instrumented run
+did not establish either the proposed stragglers or inherent ioctl immunity.
 
-**Executed evidence (offline).** `pinenote/tools/ebc-logic/ebc-refresh-test`
-quirk F (`test_quirk_threshold_zero_gap_global`): the fake device gained an
-IRQ-latency knob, and one scripted session — partial burst whose final
-frame's DSP_END is delivered late, then a full refresh, then more damage —
-runs through both launch contexts. Identical stream, identical
-perturbation: only the threshold-fired variant ends with a residual
-`display_end` credit (a wait satisfied by the straggler; on hardware, a
-wait that returned mid-playback), and the test also pins the harness
-limit honestly — the synchronous device model shows identical final pixels
-for both paths, so the optical corruption itself stays hardware-only.
-Which straggler source dominates on silicon (late IRQ delivery, coalescing
-losing an END, or an unmodeled DSP_END raised by the `DSP_OUT_LOW`
-epilogue) is the remaining on-device question; the zero-gap structure is
-what turns any of them into a truncated wash.
+**Current executed evidence.**
+`pinenote/tools/ebc-logic/ebc-refresh-test` retains the IRQ-latency
+reproducer, but its regression now asserts stronger containment: a deferred
+final partial DSP_END immediately poisons the instance, cannot arm a
+threshold follow-up, and cannot be healed by the late interrupt. Separate
+global/partial and teardown-race cases assert reboot-lifetime ownership and
+that no later physical start or power-down occurs. The synchronous device
+model still cannot prove the optical corruption itself.
+The instrumented hardware run then observed zero straggler credits, early waits,
+or frame timeouts across 37 threshold and 33 ioctl globals. Quirk F therefore
+stands as a latent robustness finding, not the demonstrated corruption cause;
+the live investigation returned to content bookkeeping.
 
-**Minimal fix sketch** (not applied in our tree per the no-silent-driver-
-fix policy):
+**Historical minimal fix sketch (superseded).** This was the proposed narrow
+change before the stronger fail-closed containment landed; it is retained for
+the upstream investigation, not as an unapplied description of the current
+tree:
 
 ```diff
 @@ rockchip_ebc_partial_refresh @@
@@ -615,10 +642,11 @@ spontaneous-global family can carry the same signature). The shipped
 workaround (`auto_refresh=0`, ioctl-owned washes) remains the right
 call on this evidence: it removes the only REGULAR unexplained-global
 source, and every ioctl wash across the dataset (~30+ on camera,
-including 6 idlewasher acceptance washes) remains corruption-free. The
-zero-gap mechanism (quirk F) stays the best-supported hypothesis for
-HOW a wash damages state when it does; the instrumented kernel remains
-the decisive instrument. The upstream draft below has been revised to
+including 6 idlewasher acceptance washes) remains corruption-free. At
+this pre-instrumentation point, the zero-gap mechanism (quirk F) was the
+best-supported hypothesis for HOW a wash damaged state; the instrumented
+result immediately below supersedes that conclusion and retains quirk F
+only as latent hardening. The upstream draft below has been revised to
 match the audited evidence.
 
 **Instrumented run 1 (2026-07-12, A.2.7-dbg first session): the
@@ -642,14 +670,11 @@ camera-verified. A future corrupting session under the debug kernel —
 camera + instrumentation combined — is the remaining falsification
 path.) Bundle: `pinenote/tools/optics/build/bundles/corrupter-repro-dbg/`.
 
-**Instrumented kernel (built offline, staged for the next device
-session):** point (3)'s decisive experiment exists as
-`linux-pinenote-debug` — the primary kernel (byte-identical, untouched)
-plus one printk-only patch
-(`pinenote/patches/linux-pinenote-debug-dspend-straggler.patch`, applied
-after the forward-port patch) — and ships in the `reader-debug` flavor
-(`make rootfs-reader-debug`), which differs from the production reader
-image only in kernel and host name. Three log lines: (a) `ebc-dbg:
+**Retired instrumentation record:** the former DSP_END printk patch is no
+longer in `linux-pinenote-debug`: after the fail-closed containment changes it
+no longer applied as one exact patch, so it was removed rather than allowing a
+partial debug driver. The following describes that historical
+`make rootfs-reader-debug` instrumentation. Three log lines: (a) `ebc-dbg:
 straggler credit present at global launch (threshold=… src=…
 burst_timeouts=… total_timeouts=…)` — `completion_done()` was true
 immediately before the global's `reinit_completion()`, i.e. an
@@ -672,7 +697,13 @@ DSP_OUT_LOW-raised END) fits; nothing ever firing across a corrupting
 workload → the straggler mechanism is refuted on this silicon and the
 investigation reopens at the content-bookkeeping evidence.
 
-### Upstream notification draft (m-weigand / PNDeb / hrdl / ayakael)
+### Historical upstream notification draft (m-weigand / PNDeb / hrdl / ayakael)
+
+This draft records what could have been sent before containment landed. Its
+handshake and test descriptions below are historical; any future report must
+instead describe per-start completion reinitialization, terminal timeout
+poison, reboot-only ownership retention, and the current no-late-healing
+regressions.
 
 > Subject: rockchip_ebc: auto_refresh threshold path can truncate its own
 > global refresh (progressive panel-state corruption); PNDeb default

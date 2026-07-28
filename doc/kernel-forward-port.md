@@ -52,6 +52,31 @@ Both live in `pinenote/packages/kernel.scm`:
   `pinenote_defconfig`. This is the kernel-currency track. The channel
   therefore depends on nonguix (see `.guix-channel` / `channels.scm`).
 
+The BSP SIP compatibility milestone is a second, separately applied patch:
+`linux-pinenote-7.0-bsp-sip-probe.patch`. It is a narrow port of Samuel
+Holland's donor `72127ca`, not a port of its DRAM, shared-memory, FIQ, secure
+register, or SCMI machinery. The 2026-07-25 probe-only
+boot rejected its private legacy version-query gate with `-EOPNOTSUPP`; that
+gate is retired rather than firmware-compatibility evidence. The corrected
+architecture now production-links the strict OF parser, typed model, unwind-safe
+executor, exact-node regulator consumer API with locked suspend wrappers, and
+narrow SIP/regulator/CPU/modern-PSCI backend. A separate activation object owns
+the active platform driver and its device-PM `.prepare`/executor edge; hidden
+exact-default-n Kconfig omits it. Production accepts only MEM regulator policy
+and rejects virtual-poweroff. CPU/PSCI methods remain linked but dormant. The
+policy-free source/compiled DT has `compatible` and `status`; Linux OF adds its
+standard `name` property to the live node. The first activation-hard-off boot
+rejected that omitted metadata exception with `-EINVAL` before binding. The
+corrected parser accepts exactly `compatible`, `name`, and `status` as metadata,
+is host-validated, and booted and bound dormant on 2026-07-26 with activation
+compiled out and zero firmware calls; that bind makes no firmware-compatibility
+claim.
+Regulator provider identities are deduplicated, and exact prior suspend settings
+are restored after local failure, PM completion, and driver teardown. Kconfig
+requires `SUSPEND`, closing the ARM64 `CPU_PM` dependency for the linked backend.
+Host fixtures exercise the same model and executor with fakes only.
+It does not change Linux 7.0's `ROCKCHIP_SLEEP_PD_CONFIG=0xff` pmdomain ABI.
+
 ## What the forward-port patch carries
 
 - the `rockchip_ebc` DRM driver (EBC e-ink controller),
@@ -122,6 +147,18 @@ rescue system, use the normal os2-only deployment protocol, and collect the
 telemetry qualification described in `doc/power-management.md` before making
 any policy decision.
 
+## EBC lifecycle boundary
+
+The EBC is a static base-DT device on the PineNote, not a supported dynamic
+hotplug or unbind topology. Its driver sets `suppress_bind_attrs`, and a
+timeout pins the module along with the active DMA/context ownership. If a
+timeout makes that ownership uncertain, every suspend/resume boundary retains
+power and returns `-EBUSY`; shutdown stops the worker and returns because a
+reboot follows. An unexpected `.remove` first stops and rechecks the worker,
+then panics rather than returning into driver-core devres teardown. That panic
+is the last-resort fail-stop boundary for an impossible supported topology, not
+a claim that dynamic EBC removal is safe or supported.
+
 ## Refreshing the patch for a new kernel
 
 1. Check the current vanilla kernel version the package inherits:
@@ -131,7 +168,8 @@ any policy decision.
    (https://github.com/m-weigand/linux, branches like
    `branch_pinenote_6-12-11`).
 3. Sanity-check the tree without building:
-   `pinenote/scripts/preflight/inspect-kernel-source.sh /path/to/tree /path/to/build/.config`
+   `guix shell git python -- pinenote/scripts/preflight/inspect-kernel-source.sh
+   /path/to/tree /path/to/build/.config` (from the full checkout)
 4. Regenerate `pinenote/patches/linux-pinenote-7.0-forward-port.patch` as a
    single diff against the pristine source.
 5. Gate with derivation computation, then build:
@@ -142,7 +180,30 @@ any policy decision.
    ```
 
 6. Verify the output contains uncompressed `Image`, modules, and
-   `lib/dtbs/rockchip/rk3566-pinenote-v1.2.dtb`.
+    `lib/dtbs/rockchip/rk3566-pinenote-v1.2.dtb`.
+
+### Regenerating the BSP SIP compatibility patch
+
+Do not regenerate the forward-port patch for a BSP PM edit. From the applied
+7.0.11 worktree, require base
+`5e2c0c5659cc3909cd7d99b5fb1dab60e0ae6bb2`, verify that its changed-path set
+is exactly `PATHS` in `pinenote/tools/rockchip-pm/check.py`, then generate the
+canonical full-index diff only over that inventory:
+
+```sh
+base=5e2c0c5659cc3909cd7d99b5fb1dab60e0ae6bb2
+tree=/tmp/opencode/linux-7.0.11-executor-work
+patch="$PWD/pinenote/patches/linux-pinenote-7.0-bsp-sip-probe.patch"
+test "$(git -C "$tree" rev-parse HEAD)" = "$base"
+paths=$(python3 -c 'from pathlib import Path; ns = {}; exec(Path("pinenote/tools/rockchip-pm/check.py").read_text(), ns); print("\n".join(ns["PATHS"]))')
+diff -u <(printf '%s\n' "$paths") <(git -C "$tree" diff --name-only "$base" | sort)
+git -C "$tree" diff --check "$base" -- $paths
+git -C "$tree" diff --no-ext-diff --full-index "$base" -- $paths >"$patch"
+git -C "$tree" apply --check "$patch"
+```
+
+The path-set comparison is the unrelated-drift guard. Follow it with
+`make rockchip-pm-check` and preserve the resulting patch's full-index form.
 
 For a *single-file* edit (a cherry-pick, a pinned-quirk fix landing from
 upstream) a full refresh is overkill: extract the file, edit it, and
@@ -151,6 +212,23 @@ the extraction round-trips and gate in ladder order. The step-by-step
 recipe with commands is `doc/worked-examples.md` case study 3.
 
 ## Cherry-picks from the community lineage (2026-07-04)
+
+### EBC refresh-barrier containment (2026-07-27)
+
+The permanent EBC patch now carries a local, fail-closed refresh-completion
+contract: command `DRM_COMMAND_BASE + 0x03` uses fixed-width UAPI fields
+(`version`, `op`, `request_id`, `timeout_ms`, `result`, reserved words) for
+submit/wait generations.  It leaves the existing boolean `GLOBAL_REFRESH`
+ABI intact.  The worker serializes physical starts, snapshots a generation
+batch before each global, and publishes completion only after the global's
+hardware and bookkeeping are complete.  A partial or global hardware timeout
+poisons the instance permanently with `-ETIMEDOUT`; no later hardware start is
+allowed and a late DSP_END cannot recover it.  Accepted submits and finite
+wait queries use `result=-EINPROGRESS` until terminal publication; malformed
+requests return an ioctl error.  `make ebc-logic-check WBF=…`
+executes this against the verbatim extracted driver, including the pre-existing
+debug extraction.  This is display-driver containment only: it does not
+enable suspend, activation, a coordinator, or claim optical validation.
 
 The ROADMAP's four cherry-pick candidates from hrdl's v6.19 tree
 (`git.sr.ht/~hrdl/linux`, branch `v6.19_ebc_custom`) were evaluated
@@ -327,8 +405,9 @@ guard rebases. Highlights, in upstream-fix priority order:
    overlapping area's refresh window (more likely with the shipped
    `split_area_limit=0`); the deterministic reproducer in the tests now
    pins the fix.
-3. `rockchip_ebc_ctx_free` kfrees queue nodes inside `list_for_each_entry`
-   (UAF on teardown with queued damage).
+3. **(fixed in-tree and ASan-pinned)** `rockchip_ebc_ctx_free` kfreed queue
+   nodes inside `list_for_each_entry` (UAF on teardown with queued damage);
+   it now unlinks with the safe iterator before freeing.
 4. `rockchip_ebc_blit_direct` reads the packed LUT transposed relative to
    the waveform-file semantics (only matters if `direct_mode=1` is ever
    enabled; we ship 0 — hardware LUT mode indexes correctly in silicon).
@@ -336,19 +415,20 @@ guard rebases. Highlights, in upstream-fix priority order:
    cross-wired under `panel_reflection`, `panel_reflection=0` drops the
    last damage row, and — **fixed in-tree by `11c358d1ca7a`** —
    odd-`x1` "preserve" was a no-op that leaked one out-of-clip column.
-6. (2026-07-12, hardware-first) The `auto_refresh=1` threshold path
-   launches its global refresh zero-gap after the partial burst that
-   crossed the threshold, and the counting `display_end` handshake —
-   never reinit'd in the partial path, 25 ms frame timeout, no
-   resynchronization after a timeout — lets a straggling DSP_END satisfy
-   the global's wait mid-playback. The driver then rewrites `prev`,
-   drives outputs low, re-uploads the LUT and starts partial frames
-   against a panel mid-wash: recently-updated pixels land at
-   intermediate gray and the error compounds. Ioctl-fired washes launch
-   from idle and are immune. Pinned as quirk F in `ebc-refresh-test`;
-   root cause, fix sketch and upstream draft in
-   `doc/driver-findings-report.md`. Shipped mitigation: `auto_refresh=0`
-   (ebc.scm); PNDeb's defaults remain exposed.
+6. **Historical/latent QUIRK F (2026-07-12):** Source review identified a
+   plausible zero-gap straggler-truncation race when the `auto_refresh=1`
+   threshold path chains a global refresh after a partial burst. Instrumented
+   corrupting-class workloads subsequently produced no straggler credits,
+   early waits, or frame timeouts and **refuted this mechanism as the observed
+   corruption cause on this silicon**. The threshold/ioctl optical correlation
+   remains campaign evidence, not proof that ioctl launches are inherently
+   immune; the corruption investigation returned to content bookkeeping.
+   `quirk F` now pins latent handshake hardening and current containment:
+   reinitialize before every physical start and terminally poison on timeout,
+   so a late END cannot heal or start later work. The superseded hypothesis,
+   instrumented refutation, and current evidence are recorded in
+   `doc/driver-findings-report.md`. Shipped mitigation remains
+   `auto_refresh=0` (`ebc.scm`); PNDeb's defaults remain exposed.
 
 When refreshing the patch or cherry-picking from hrdl/ayakael, check
 whether their trees already fix any of these before re-pinning.
