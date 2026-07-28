@@ -1,0 +1,1659 @@
+diff --git a/arch/arm64/boot/dts/rockchip/rk3566-pinenote.dtsi b/arch/arm64/boot/dts/rockchip/rk3566-pinenote.dtsi
+index fafdedb2c4630b70e0ee9dc0dac75ff0c8176e8f..16aac50eae64adc52764bd2357f46841c5f3f8b6 100644
+--- a/arch/arm64/boot/dts/rockchip/rk3566-pinenote.dtsi
++++ b/arch/arm64/boot/dts/rockchip/rk3566-pinenote.dtsi
+@@ -11,6 +11,11 @@
+ / {
+ 	chassis-type = "tablet";
+ 
++	rockchip-suspend {
++		compatible = "rockchip,pm-rk3568";
++		status = "okay";
++	};
++
+ 	aliases {
+ 		mmc0 = &sdhci;
+ 	};
+diff --git a/arch/arm64/configs/pinenote_defconfig b/arch/arm64/configs/pinenote_defconfig
+index 8ad0cd079895e98e879ce01ff9de48c08b5b5c23..c246d5a2bf291223e43aa0c10c66b0a25b5d10af 100755
+--- a/arch/arm64/configs/pinenote_defconfig
++++ b/arch/arm64/configs/pinenote_defconfig
+@@ -1,4 +1,6 @@
+ CONFIG_DEFAULT_HOSTNAME="pinenote"
++CONFIG_ROCKCHIP_SUSPEND_MODE=y
++# CONFIG_ROCKCHIP_SUSPEND_MODE_ACTIVATE is not set
+ # CONFIG_SWAP is not set
+ CONFIG_SYSVIPC=y
+ CONFIG_POSIX_MQUEUE=y
+diff --git a/drivers/regulator/core.c b/drivers/regulator/core.c
+index 2286bdf6edcbf4d351cad2df6504943669ccb6ef..59143abc9300ae908bc837d87f8c21c97d9c0253 100644
+--- a/drivers/regulator/core.c
++++ b/drivers/regulator/core.c
+@@ -4557,6 +4557,84 @@ int regulator_suspend_disable(struct regulator_dev *rdev,
+ }
+ EXPORT_SYMBOL_GPL(regulator_suspend_disable);
+ 
++int regulator_set_suspend_enable(struct regulator *regulator,
++				 suspend_state_t state)
++{
++	int ret;
++
++	if (IS_ERR_OR_NULL(regulator))
++		return -EINVAL;
++	regulator_lock(regulator->rdev);
++	ret = regulator_suspend_enable(regulator->rdev, state);
++	regulator_unlock(regulator->rdev);
++
++	return ret;
++}
++EXPORT_SYMBOL_GPL(regulator_set_suspend_enable);
++
++int regulator_set_suspend_disable(struct regulator *regulator,
++				  suspend_state_t state)
++{
++	int ret;
++
++	if (IS_ERR_OR_NULL(regulator))
++		return -EINVAL;
++	regulator_lock(regulator->rdev);
++	ret = regulator_suspend_disable(regulator->rdev, state);
++	regulator_unlock(regulator->rdev);
++
++	return ret;
++}
++EXPORT_SYMBOL_GPL(regulator_set_suspend_disable);
++
++int regulator_set_suspend_enable_save(struct regulator *regulator,
++				      suspend_state_t state, bool enable,
++				      int *previous)
++{
++	struct regulator_state *rstate;
++	int ret;
++
++	if (IS_ERR_OR_NULL(regulator) || !previous)
++		return -EINVAL;
++	regulator_lock(regulator->rdev);
++	rstate = regulator_get_suspend_state(regulator->rdev, state);
++	if (!rstate) {
++		ret = -EINVAL;
++		goto out;
++	}
++	*previous = rstate->enabled;
++	if (enable)
++		ret = regulator_suspend_enable(regulator->rdev, state);
++	else
++		ret = regulator_suspend_disable(regulator->rdev, state);
++out:
++	regulator_unlock(regulator->rdev);
++
++	return ret;
++}
++EXPORT_SYMBOL_GPL(regulator_set_suspend_enable_save);
++
++int regulator_restore_suspend_enable(struct regulator *regulator,
++				     suspend_state_t state, int previous)
++{
++	struct regulator_state *rstate;
++	int ret = 0;
++
++	if (IS_ERR_OR_NULL(regulator) ||
++	    previous < DO_NOTHING_IN_SUSPEND || previous > ENABLE_IN_SUSPEND)
++		return -EINVAL;
++	regulator_lock(regulator->rdev);
++	rstate = regulator_get_suspend_state(regulator->rdev, state);
++	if (!rstate)
++		ret = -EINVAL;
++	else
++		rstate->enabled = previous;
++	regulator_unlock(regulator->rdev);
++
++	return ret;
++}
++EXPORT_SYMBOL_GPL(regulator_restore_suspend_enable);
++
+ static int _regulator_set_suspend_voltage(struct regulator *regulator,
+ 					  int min_uV, int max_uV,
+ 					  suspend_state_t state)
+diff --git a/drivers/regulator/of_regulator.c b/drivers/regulator/of_regulator.c
+index c0cc6cc0afd8bf3ec0850286d40c59c8d3f054c3..389490ec891fca50eb3986164d8490dfd209e871 100644
+--- a/drivers/regulator/of_regulator.c
++++ b/drivers/regulator/of_regulator.c
+@@ -642,6 +642,35 @@ static struct regulator_dev *of_find_regulator_by_node(struct device_node *np)
+ 	return dev ? dev_to_rdev(dev) : NULL;
+ }
+ 
++/**
++ * of_regulator_get_by_node - get a regulator consumer by exact OF node
++ * @dev: regulator consumer device
++ * @node: regulator provider device node
++ *
++ * Return: regulator consumer handle, -EINVAL for invalid input, or
++ * -EPROBE_DEFER if the provider is not registered yet.
++ */
++struct regulator *of_regulator_get_by_node(struct device *dev,
++					   struct device_node *node)
++{
++	struct regulator *regulator;
++	struct regulator_dev *rdev;
++
++	if (!dev || !node)
++		return ERR_PTR(-EINVAL);
++
++	rdev = of_find_regulator_by_node(node);
++	if (!rdev)
++		return ERR_PTR(-EPROBE_DEFER);
++
++	get_device(&rdev->dev);
++	regulator = _regulator_get_common(rdev, dev, "of-node", NORMAL_GET);
++	put_device(&rdev->dev);
++
++	return regulator;
++}
++EXPORT_SYMBOL_GPL(of_regulator_get_by_node);
++
+ /**
+  * of_regulator_dev_lookup - lookup a regulator device with device tree only
+  * @dev: Device pointer for regulator supply lookup.
+diff --git a/drivers/soc/rockchip/Kconfig b/drivers/soc/rockchip/Kconfig
+index 785f60c6f3ad1a09f517e69a69726a8178bed168..473b0399ecba01205b27953abf2ce31abfa234af 100644
+--- a/drivers/soc/rockchip/Kconfig
++++ b/drivers/soc/rockchip/Kconfig
+@@ -30,4 +30,22 @@ config ROCKCHIP_DTPM
+ 	  on this platform. That will create all the power capping capable
+ 	  devices.
+ 
++config ROCKCHIP_SUSPEND_MODE
++	bool "Rockchip BSP suspend-mode policy core"
++	depends on ARM64 && ARCH_ROCKCHIP && OF && REGULATOR && SUSPEND
++	help
++	  Build the strict Rockchip BSP suspend policy parser, typed sequence
++	  model, generic executor, and narrow hardware backend.  With activation
++	  disabled, the driver accepts only a policy-free node and performs no
++	  firmware, regulator, CPU, PSCI, or MMIO actions.
++
++config ROCKCHIP_SUSPEND_MODE_ACTIVATE
++	bool
++	depends on ROCKCHIP_SUSPEND_MODE
++	default n
++	help
++	  Link the callback-registration and executor-call edge.  This hidden
++	  option has no runtime enablement interface and is intentionally unset
++	  by the PineNote configuration.
++
+ endif
+diff --git a/drivers/soc/rockchip/Makefile b/drivers/soc/rockchip/Makefile
+index 23d414433c8c58557effc214337ec8e6ff17a461..d481bccb71095bba1426f33b16708543fbabbb86 100644
+--- a/drivers/soc/rockchip/Makefile
++++ b/drivers/soc/rockchip/Makefile
+@@ -5,3 +5,9 @@
+ obj-$(CONFIG_ROCKCHIP_GRF) += grf.o
+ obj-$(CONFIG_ROCKCHIP_IODOMAIN) += io-domain.o
+ obj-$(CONFIG_ROCKCHIP_DTPM) += dtpm.o
++obj-$(CONFIG_ROCKCHIP_SUSPEND_MODE) += rockchip_suspend_mode_drv.o
++rockchip_suspend_mode_drv-y := rockchip_suspend_mode.o rockchip_suspend_of.o \
++	rockchip_suspend_model.o rockchip_suspend_executor.o \
++	rockchip_suspend_backend.o
++rockchip_suspend_mode_drv-$(CONFIG_ROCKCHIP_SUSPEND_MODE_ACTIVATE) += \
++	rockchip_suspend_activate.o
+diff --git a/drivers/soc/rockchip/rockchip_suspend_activate.c b/drivers/soc/rockchip/rockchip_suspend_activate.c
+new file mode 100644
+index 0000000000000000000000000000000000000000..6f8e72b185bb8e7fd24711b8b840d26c7979db06
+--- /dev/null
++++ b/drivers/soc/rockchip/rockchip_suspend_activate.c
+@@ -0,0 +1,187 @@
++// SPDX-License-Identifier: GPL-2.0-only
++#include <linux/device.h>
++#include <linux/errno.h>
++#include <linux/kernel.h>
++#include <linux/module.h>
++#include <linux/of.h>
++#include <linux/platform_device.h>
++#include <linux/slab.h>
++#include <linux/suspend.h>
++
++#include "rockchip_suspend_backend.h"
++#include "rockchip_suspend_model.h"
++#include "rockchip_suspend_of.h"
++
++struct rockchip_suspend_activation {
++	struct device *dev;
++	struct rockchip_suspend_backend_context backend;
++	struct rockchip_suspend_model_policy policy;
++	struct rockchip_suspend_model_event probe_events[
++		ROCKCHIP_SUSPEND_MODEL_MAX_PROBE_EVENTS];
++	struct rockchip_suspend_model_event prepare_events[
++		ROCKCHIP_SUSPEND_MODEL_MAX_PREPARE_EVENTS];
++};
++
++static int rockchip_suspend_execute(struct rockchip_suspend_activation *activation,
++	struct rockchip_suspend_model_event *events, int count)
++{
++	u32 failed_index;
++
++	if (count < 0)
++		return count;
++	if (!count)
++		return 0;
++
++	return rockchip_suspend_executor_run(&rockchip_suspend_real_ops,
++		&activation->backend,
++		 events, count, &failed_index);
++}
++
++static int rockchip_suspend_fail(struct device *dev,
++	struct rockchip_suspend_activation *activation, int error, bool rollback)
++{
++	int rollback_error = 0;
++
++	rockchip_suspend_model_transaction_poison(
++		&activation->backend.transaction);
++	if (rollback)
++		rollback_error = rockchip_suspend_backend_rollback(&activation->backend);
++	if (rollback_error)
++		dev_err(dev, "failed to restore regulator suspend policy: %d\n",
++			rollback_error);
++
++	return error ? error : rollback_error;
++}
++
++static int rockchip_suspend_prepare(struct device *dev)
++{
++	struct rockchip_suspend_activation *activation = dev_get_drvdata(dev);
++	int prepare_count;
++	int probe_count;
++	int ret;
++
++	if (!activation)
++		return -ENODEV;
++	ret = rockchip_suspend_model_transaction_begin(
++		&activation->backend.transaction);
++	if (ret)
++		return rockchip_suspend_fail(dev, activation, ret, true);
++	if (pm_suspend_target_state != PM_SUSPEND_MEM)
++		return rockchip_suspend_fail(dev, activation, -EOPNOTSUPP, false);
++	probe_count = rockchip_suspend_model_build_probe(&activation->policy,
++		activation->probe_events, ARRAY_SIZE(activation->probe_events));
++	if (probe_count < 0)
++		return rockchip_suspend_fail(dev, activation, probe_count, false);
++	prepare_count = rockchip_suspend_model_build_prepare(&activation->policy,
++		PM_SUSPEND_MEM, activation->prepare_events,
++		ARRAY_SIZE(activation->prepare_events));
++	if (prepare_count < 0)
++		return rockchip_suspend_fail(dev, activation, prepare_count, false);
++	ret = rockchip_suspend_execute(activation, activation->probe_events,
++		probe_count);
++	if (ret) {
++		return rockchip_suspend_fail(dev, activation, ret, true);
++	}
++	ret = rockchip_suspend_execute(activation, activation->prepare_events,
++		prepare_count);
++	if (ret)
++		return rockchip_suspend_fail(dev, activation, ret, true);
++
++	return 0;
++}
++
++static void rockchip_suspend_complete(struct device *dev)
++{
++	struct rockchip_suspend_activation *activation = dev_get_drvdata(dev);
++
++	if (activation) {
++		int ret = rockchip_suspend_backend_rollback(&activation->backend);
++
++		if (ret) {
++			rockchip_suspend_model_transaction_poison(
++				&activation->backend.transaction);
++			dev_err(dev, "failed to restore regulator suspend policy: %d\n",
++				ret);
++		}
++	}
++}
++
++static const struct dev_pm_ops rockchip_suspend_pm_ops = {
++	.prepare = rockchip_suspend_prepare,
++	.complete = rockchip_suspend_complete,
++};
++
++static void rockchip_suspend_rollback(void *data)
++{
++	struct rockchip_suspend_activation *activation = data;
++	int ret;
++
++	ret = rockchip_suspend_backend_rollback(&activation->backend);
++	if (ret) {
++		rockchip_suspend_model_transaction_poison(
++			&activation->backend.transaction);
++		dev_crit(activation->dev,
++			"failed to restore regulator suspend policy during teardown: %d\n",
++			ret);
++	}
++}
++
++static void rockchip_suspend_release_policy(void *data)
++{
++	struct rockchip_suspend_activation *activation = data;
++
++	rockchip_suspend_of_put(&activation->policy);
++}
++
++static int rockchip_suspend_activate_probe(struct platform_device *pdev)
++{
++	struct rockchip_suspend_activation *activation;
++	int ret;
++
++	activation = devm_kzalloc(&pdev->dev, sizeof(*activation), GFP_KERNEL);
++	if (!activation)
++		return -ENOMEM;
++	activation->dev = &pdev->dev;
++	ret = rockchip_suspend_of_parse(&pdev->dev, pdev->dev.of_node,
++		&activation->policy);
++	if (ret)
++		return ret;
++	if (!activation->policy.value.sleep_mode.present ||
++	    !activation->policy.value.wakeup.present) {
++		rockchip_suspend_of_put(&activation->policy);
++		return dev_err_probe(&pdev->dev, -ENODATA,
++			"activation requires sleep-mode and wakeup policy\n");
++	}
++	ret = devm_add_action_or_reset(&pdev->dev, rockchip_suspend_release_policy,
++		activation);
++	if (ret)
++		return ret;
++	ret = devm_add_action_or_reset(&pdev->dev, rockchip_suspend_rollback,
++		activation);
++	if (ret)
++		return ret;
++	platform_set_drvdata(pdev, activation);
++	dev_info(&pdev->dev, "BSP suspend policy activated\n");
++
++	return 0;
++}
++
++static const struct of_device_id rockchip_suspend_activate_of_match[] = {
++	{ .compatible = "rockchip,pm-rk3568" },
++	{ }
++};
++MODULE_DEVICE_TABLE(of, rockchip_suspend_activate_of_match);
++
++static struct platform_driver rockchip_suspend_activate_driver = {
++	.probe = rockchip_suspend_activate_probe,
++	.driver = {
++		.name = "rockchip-suspend-mode",
++		.of_match_table = rockchip_suspend_activate_of_match,
++		.pm = &rockchip_suspend_pm_ops,
++		.suppress_bind_attrs = true,
++	},
++};
++builtin_platform_driver(rockchip_suspend_activate_driver);
++
++MODULE_DESCRIPTION("Rockchip activated BSP SIP suspend policy");
++MODULE_LICENSE("GPL");
+diff --git a/drivers/soc/rockchip/rockchip_suspend_backend.c b/drivers/soc/rockchip/rockchip_suspend_backend.c
+new file mode 100644
+index 0000000000000000000000000000000000000000..e7c51112330662e0f4b89c584c7b1534014f074d
+--- /dev/null
++++ b/drivers/soc/rockchip/rockchip_suspend_backend.c
+@@ -0,0 +1,126 @@
++// SPDX-License-Identifier: GPL-2.0-only
++#include <linux/arm-smccc.h>
++#include <linux/cpu.h>
++#include <linux/errno.h>
++#include <linux/regulator/consumer.h>
++#include <linux/suspend.h>
++#include <asm/suspend.h>
++
++#include <soc/rockchip/rockchip_legacy_sip.h>
++
++#include "rockchip_suspend_backend.h"
++
++static int rockchip_suspend_sip(void *context, u32 control, u32 arg1, u32 arg2)
++{
++	struct arm_smccc_res result;
++
++	arm_smccc_smc(ROCKCHIP_LEGACY_SIP_SUSPEND_MODE, control, arg1, arg2,
++		0, 0, 0, 0, &result);
++
++	return rockchip_suspend_sip_status(result.a0);
++}
++
++static suspend_state_t rockchip_suspend_regulator_state(u32 state)
++{
++	if (state == ROCKCHIP_SUSPEND_MODEL_MEM)
++		return PM_SUSPEND_MEM;
++
++	return PM_SUSPEND_ON;
++}
++
++static int rockchip_suspend_regulator(void *context, unsigned long regulator,
++	enum rockchip_suspend_model_regulator_action action, u32 state)
++{
++	struct rockchip_suspend_backend_context *backend = context;
++	struct regulator *consumer;
++	suspend_state_t suspend_state;
++	int previous;
++	int ret;
++
++	if (!backend ||
++	    backend->transaction.restore_count >= ROCKCHIP_SUSPEND_MODEL_MAX_RESTORES)
++		return -ENOSPC;
++	suspend_state = rockchip_suspend_regulator_state(state);
++	if (suspend_state == PM_SUSPEND_ON)
++		return -EINVAL;
++	consumer = (struct regulator *)regulator;
++	if (!consumer)
++		return -EINVAL;
++	if (action != ROCKCHIP_SUSPEND_MODEL_REGULATOR_ENABLE &&
++	    action != ROCKCHIP_SUSPEND_MODEL_REGULATOR_DISABLE)
++		ret = -EINVAL;
++	else
++		ret = regulator_set_suspend_enable_save(consumer, suspend_state,
++			action == ROCKCHIP_SUSPEND_MODEL_REGULATOR_ENABLE,
++			&previous);
++	if (!ret)
++		ret = rockchip_suspend_model_transaction_add(&backend->transaction,
++			regulator, suspend_state, previous);
++	return ret;
++}
++
++static int rockchip_suspend_restore_regulator(void *context,
++	const struct rockchip_suspend_model_restore *restore)
++{
++	return regulator_restore_suspend_enable(
++		(struct regulator *)restore->target, restore->state,
++		restore->previous);
++}
++
++int rockchip_suspend_backend_rollback(
++	struct rockchip_suspend_backend_context *context)
++{
++	if (!context)
++		return -EINVAL;
++
++	return rockchip_suspend_model_transaction_rollback(&context->transaction,
++		rockchip_suspend_restore_regulator, NULL);
++}
++
++static int rockchip_suspend_regulator_prepare(void *context, u32 state)
++{
++	(void)context;
++	(void)state;
++
++	return -EOPNOTSUPP;
++}
++
++static int rockchip_suspend_regulator_finish(void *context)
++{
++	return rockchip_suspend_backend_rollback(context);
++}
++
++static int rockchip_suspend_disable_cpus(void *context)
++{
++	return suspend_disable_secondary_cpus();
++}
++
++static void rockchip_suspend_enable_cpus(void *context)
++{
++	suspend_enable_secondary_cpus();
++}
++
++static int rockchip_suspend_psci_finish(unsigned long unused)
++{
++	struct arm_smccc_res result;
++
++	arm_smccc_smc(ROCKCHIP_SUSPEND_MODEL_PSCI_FN64_SYSTEM_SUSPEND,
++		__pa_symbol(cpu_resume), 0, 0, 0, 0, 0, 0, &result);
++
++	return rockchip_suspend_psci_status(result.a0);
++}
++
++static int rockchip_suspend_psci(void *context)
++{
++	return cpu_suspend(0, rockchip_suspend_psci_finish);
++}
++
++const struct rockchip_suspend_executor_ops rockchip_suspend_real_ops = {
++	.sip = rockchip_suspend_sip,
++	.regulator = rockchip_suspend_regulator,
++	.regulator_prepare = rockchip_suspend_regulator_prepare,
++	.regulator_finish = rockchip_suspend_regulator_finish,
++	.disable_secondary_cpus = rockchip_suspend_disable_cpus,
++	.enable_secondary_cpus = rockchip_suspend_enable_cpus,
++	.psci_system_suspend = rockchip_suspend_psci,
++};
+diff --git a/drivers/soc/rockchip/rockchip_suspend_backend.h b/drivers/soc/rockchip/rockchip_suspend_backend.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..8a25896893a0b36b784d07da859b40347a7bdd28
+--- /dev/null
++++ b/drivers/soc/rockchip/rockchip_suspend_backend.h
+@@ -0,0 +1,15 @@
++/* SPDX-License-Identifier: GPL-2.0-only */
++#ifndef __ROCKCHIP_SUSPEND_BACKEND_H
++#define __ROCKCHIP_SUSPEND_BACKEND_H
++
++#include "rockchip_suspend_model.h"
++
++struct rockchip_suspend_backend_context {
++	struct rockchip_suspend_model_transaction transaction;
++};
++
++extern const struct rockchip_suspend_executor_ops rockchip_suspend_real_ops;
++int rockchip_suspend_backend_rollback(
++	struct rockchip_suspend_backend_context *context);
++
++#endif
+diff --git a/drivers/soc/rockchip/rockchip_suspend_executor.c b/drivers/soc/rockchip/rockchip_suspend_executor.c
+new file mode 100644
+index 0000000000000000000000000000000000000000..46231b45cc50b3804f2ad181f6dfa8c997aeafdc
+--- /dev/null
++++ b/drivers/soc/rockchip/rockchip_suspend_executor.c
+@@ -0,0 +1,145 @@
++// SPDX-License-Identifier: GPL-2.0-only
++#include <linux/errno.h>
++#include <soc/rockchip/rockchip_legacy_sip.h>
++
++#include "rockchip_suspend_model.h"
++
++int rockchip_suspend_sip_status(long status)
++{
++	switch (status) {
++	case 0:
++		return 0;
++	case -1:
++	case -2:
++		return -EOPNOTSUPP;
++	case -3:
++		return -EINVAL;
++	case -4:
++		return -EFAULT;
++	case -5:
++		return -EACCES;
++	case -6:
++		return -ETIMEDOUT;
++	default:
++		return -EIO;
++	}
++}
++
++int rockchip_suspend_psci_status(long status)
++{
++	switch (status) {
++	case 0:
++		return 0;
++	case -1:
++		return -EOPNOTSUPP;
++	case -2:
++	case -9:
++		return -EINVAL;
++	case -3:
++		return -EPERM;
++	default:
++		return -EINVAL;
++	}
++}
++
++static int rockchip_suspend_executor_validate_event(
++	const struct rockchip_suspend_executor_ops *ops,
++	const struct rockchip_suspend_model_event *event)
++{
++	switch (event->kind) {
++	case ROCKCHIP_SUSPEND_MODEL_LEGACY:
++		if (event->legacy.function != ROCKCHIP_LEGACY_SIP_SUSPEND_MODE ||
++		    event->legacy.control < ROCKCHIP_LEGACY_SUSPEND_MODE_CONFIG ||
++		    event->legacy.control > ROCKCHIP_LEGACY_LINUX_PM_STATE)
++			return -EINVAL;
++		return ops->sip ? 0 : -EOPNOTSUPP;
++	case ROCKCHIP_SUSPEND_MODEL_REGULATOR:
++		if (!ops->regulator || !event->regulator.regulator ||
++		    event->regulator.state >= ROCKCHIP_SUSPEND_MODEL_STATE_COUNT ||
++		    event->regulator.action > ROCKCHIP_SUSPEND_MODEL_REGULATOR_DISABLE)
++			return -EINVAL;
++		return 0;
++	case ROCKCHIP_SUSPEND_MODEL_REGULATOR_PREPARE:
++		if (event->regulator_prepare.linux_suspend_state != 3)
++			return -EINVAL;
++		return ops->regulator_prepare && ops->regulator_finish ? 0 :
++			-EOPNOTSUPP;
++	case ROCKCHIP_SUSPEND_MODEL_DISABLE_SECONDARY_CPUS:
++		return ops->disable_secondary_cpus && ops->enable_secondary_cpus ? 0 :
++			-EOPNOTSUPP;
++	case ROCKCHIP_SUSPEND_MODEL_PSCI_SYSTEM_SUSPEND:
++		if (event->psci.function !=
++		    ROCKCHIP_SUSPEND_MODEL_PSCI_FN64_SYSTEM_SUSPEND)
++			return -EINVAL;
++		return ops->psci_system_suspend ? 0 : -EOPNOTSUPP;
++	default:
++		return -EINVAL;
++	}
++}
++
++static int rockchip_suspend_executor_event(
++	const struct rockchip_suspend_executor_ops *ops, void *context,
++	const struct rockchip_suspend_model_event *event)
++{
++	switch (event->kind) {
++	case ROCKCHIP_SUSPEND_MODEL_LEGACY:
++		return ops->sip(context, event->legacy.control,
++			event->legacy.arg1, event->legacy.arg2);
++	case ROCKCHIP_SUSPEND_MODEL_REGULATOR:
++		return ops->regulator(context, event->regulator.regulator,
++			event->regulator.action, event->regulator.state);
++	case ROCKCHIP_SUSPEND_MODEL_REGULATOR_PREPARE:
++		return ops->regulator_prepare(context,
++			event->regulator_prepare.linux_suspend_state);
++	case ROCKCHIP_SUSPEND_MODEL_DISABLE_SECONDARY_CPUS:
++		return ops->disable_secondary_cpus(context);
++	case ROCKCHIP_SUSPEND_MODEL_PSCI_SYSTEM_SUSPEND:
++		return ops->psci_system_suspend(context);
++	default:
++		return -EINVAL;
++	}
++}
++
++int rockchip_suspend_executor_run(const struct rockchip_suspend_executor_ops *ops,
++	void *context, const struct rockchip_suspend_model_event *events, u32 count,
++	u32 *failed_index)
++{
++	bool regulator_prepare_attempted = false;
++	bool cpu_disable_attempted = false;
++	u32 i;
++	int finish_ret = 0;
++	int ret = 0;
++
++	if (!ops || !events || !count || !failed_index)
++		return -EINVAL;
++	*failed_index = count;
++	for (i = 0; i < count; i++) {
++		ret = rockchip_suspend_executor_validate_event(ops, &events[i]);
++		if (ret) {
++			*failed_index = i;
++			return ret;
++		}
++	}
++	for (i = 0; i < count; i++) {
++		if (events[i].kind == ROCKCHIP_SUSPEND_MODEL_REGULATOR_PREPARE)
++			regulator_prepare_attempted = true;
++		if (events[i].kind == ROCKCHIP_SUSPEND_MODEL_DISABLE_SECONDARY_CPUS)
++			cpu_disable_attempted = true;
++		ret = rockchip_suspend_executor_event(ops, context, &events[i]);
++		if (ret) {
++			*failed_index = i;
++			break;
++		}
++	}
++
++	if (cpu_disable_attempted)
++		ops->enable_secondary_cpus(context);
++	if (regulator_prepare_attempted)
++		finish_ret = ops->regulator_finish(context);
++	if (!ret && finish_ret) {
++		*failed_index = count;
++		ret = finish_ret;
++	}
++
++	return ret;
++}
+diff --git a/drivers/soc/rockchip/rockchip_suspend_mode.c b/drivers/soc/rockchip/rockchip_suspend_mode.c
+new file mode 100644
+index 0000000000000000000000000000000000000000..ca304e57af634a5d6a1d99717d38a053b9a0f0d0
+--- /dev/null
++++ b/drivers/soc/rockchip/rockchip_suspend_mode.c
+@@ -0,0 +1,42 @@
++// SPDX-License-Identifier: GPL-2.0-only
++#include <linux/module.h>
++#include <linux/of.h>
++#include <linux/platform_device.h>
++
++#include "rockchip_suspend_of.h"
++
++#if !IS_ENABLED(CONFIG_ROCKCHIP_SUSPEND_MODE_ACTIVATE)
++
++static int rockchip_suspend_mode_probe(struct platform_device *pdev)
++{
++	struct device_node *node = pdev->dev.of_node;
++	int ret;
++
++	if (!node)
++		return -ENODEV;
++	ret = rockchip_suspend_of_require_empty(&pdev->dev, node);
++	if (ret)
++		return ret;
++	dev_info(&pdev->dev, "DORMANT policy core bound; activation compiled out\n");
++
++	return 0;
++}
++
++static const struct of_device_id rockchip_suspend_mode_of_match[] = {
++	{ .compatible = "rockchip,pm-rk3568" },
++	{ }
++};
++MODULE_DEVICE_TABLE(of, rockchip_suspend_mode_of_match);
++
++static struct platform_driver rockchip_suspend_mode_driver = {
++	.probe = rockchip_suspend_mode_probe,
++	.driver = {
++		.name = "rockchip-suspend-mode",
++		.of_match_table = rockchip_suspend_mode_of_match,
++	},
++};
++module_platform_driver(rockchip_suspend_mode_driver);
++#endif
++
++MODULE_DESCRIPTION("Rockchip fail-closed BSP SIP suspend policy");
++MODULE_LICENSE("GPL");
+diff --git a/drivers/soc/rockchip/rockchip_suspend_model.c b/drivers/soc/rockchip/rockchip_suspend_model.c
+new file mode 100644
+index 0000000000000000000000000000000000000000..223ef2bbb4673208bbaf043154a0e8d41e48d7cb
+--- /dev/null
++++ b/drivers/soc/rockchip/rockchip_suspend_model.c
+@@ -0,0 +1,288 @@
++// SPDX-License-Identifier: GPL-2.0-only
++#include <linux/errno.h>
++#include <linux/string.h>
++#include <dt-bindings/suspend/rockchip-rk3568.h>
++#include <soc/rockchip/rockchip_legacy_sip.h>
++
++#include "rockchip_suspend_model.h"
++
++#define ROCKCHIP_SUSPEND_MODEL_SLEEP_MASK \
++	(RKPM_SLP_WFI | RKPM_SLP_ARMOFF | RKPM_SLP_CENTER_OFF | \
++	 RKPM_SLP_ARMOFF_LOGOFF | RKPM_SLP_FROM_UBOOT | RKPM_SLP_PMIC_LP | \
++	 RKPM_SLP_HW_PLLS_OFF | RKPM_SLP_PMUALIVE_32K | RKPM_SLP_OSC_DIS | \
++	 RKPM_SLP_32K_EXT | RKPM_SLP_32K_PVTM)
++#define ROCKCHIP_SUSPEND_MODEL_WAKE_MASK \
++	(RKPM_CPU0_WKUP_EN | RKPM_CPU1_WKUP_EN | RKPM_CPU2_WKUP_EN | \
++	 RKPM_CPU3_WKUP_EN | RKPM_GPIO_WKUP_EN | RKPM_UART0_WKUP_EN | \
++	 RKPM_SDMMC0_WKUP_EN | RKPM_SDMMC1_WKUP_EN | RKPM_SDMMC2_WKUP_EN | \
++	 RKPM_USB_WKUP_EN | RKPM_PCIE_WKUP_EN | RKPM_VAD_WKUP_EN | \
++	 RKPM_TIMER_WKUP_EN | RKPM_PWM0_WKUP_EN | RKPM_TIMEOUT_WKUP_EN | \
++	 RKPM_SFT_WKUP_EN | RKPM_USB_LINESTATE_WKUP_EN)
++#define ROCKCHIP_SUSPEND_MODEL_PWM_MASK \
++	(RKPM_SLP_LDO1_ON | RKPM_SLP_LDO2_ON | RKPM_SLP_LDO3_ON | \
++	 RKPM_SLP_LDO4_ON | RKPM_SLP_LDO5_ON | RKPM_SLP_LDO6_ON | \
++	 RKPM_SLP_LDO7_ON | RKPM_SLP_LDO8_ON | RKPM_SLP_LDO9_ON)
++
++static int rockchip_suspend_model_validate_list(
++	const struct rockchip_suspend_model_regulators *regulators)
++{
++	u32 i;
++	u32 j;
++
++	if (regulators->on_count > ROCKCHIP_SUSPEND_MODEL_MAX_REGULATORS ||
++	    regulators->off_count > ROCKCHIP_SUSPEND_MODEL_MAX_REGULATORS)
++		return -EINVAL;
++	for (i = 0; i < regulators->on_count; i++) {
++		if (!regulators->on[i])
++			return -EINVAL;
++		for (j = 0; j < i; j++)
++			if (regulators->on[i] == regulators->on[j])
++				return -EINVAL;
++		for (j = 0; j < regulators->off_count; j++)
++			if (regulators->on[i] == regulators->off[j])
++				return -EINVAL;
++	}
++	for (i = 0; i < regulators->off_count; i++) {
++		if (!regulators->off[i])
++			return -EINVAL;
++		for (j = 0; j < i; j++)
++			if (regulators->off[i] == regulators->off[j])
++				return -EINVAL;
++	}
++
++	return 0;
++}
++
++static int rockchip_suspend_model_validate_input(
++	const struct rockchip_suspend_model_policy_input *input)
++{
++	u32 i;
++
++	if (!input || input->gpio_count > ROCKCHIP_SUSPEND_MODEL_MAX_GPIOS)
++		return -EINVAL;
++	if ((input->sleep_mode.present &&
++	     input->sleep_mode.value & ~ROCKCHIP_SUSPEND_MODEL_SLEEP_MASK) ||
++	    (input->wakeup.present &&
++	     input->wakeup.value & ~ROCKCHIP_SUSPEND_MODEL_WAKE_MASK) ||
++	    (input->pwm_regulator.present &&
++	     input->pwm_regulator.value & ~ROCKCHIP_SUSPEND_MODEL_PWM_MASK) ||
++	    (input->virtual_poweroff.present && input->virtual_poweroff.value > 1))
++		return -EINVAL;
++	for (i = 0; i < input->gpio_count; i++)
++		if (input->gpios[i].number == 0xffff)
++			return -EINVAL;
++	for (i = 0; i < ROCKCHIP_SUSPEND_MODEL_STATE_COUNT; i++)
++		if (rockchip_suspend_model_validate_list(&input->regulators[i]))
++			return -EINVAL;
++
++	return 0;
++}
++
++int rockchip_suspend_model_parse(struct rockchip_suspend_model_policy *out,
++	const struct rockchip_suspend_model_policy_input *input)
++{
++	if (!out || rockchip_suspend_model_validate_input(input))
++		return -EINVAL;
++	memcpy(&out->value, input, sizeof(out->value));
++
++	return 0;
++}
++
++static int rockchip_suspend_model_finish(struct rockchip_suspend_model_event *events,
++	u32 capacity, const struct rockchip_suspend_model_event *built, u32 count)
++{
++	if (!count)
++		return 0;
++	if (!events)
++		return -EINVAL;
++	if (capacity < count)
++		return -ENOSPC;
++	memcpy(events, built, count * sizeof(*events));
++
++	return count;
++}
++
++static void rockchip_suspend_model_add_legacy(struct rockchip_suspend_model_event *event,
++	u32 control, u32 arg1, u32 arg2)
++{
++	*event = (struct rockchip_suspend_model_event) {
++		.kind = ROCKCHIP_SUSPEND_MODEL_LEGACY,
++		.legacy = { ROCKCHIP_LEGACY_SIP_SUSPEND_MODE, control, arg1, arg2 },
++	};
++}
++
++int rockchip_suspend_model_build_probe(const struct rockchip_suspend_model_policy *policy,
++	struct rockchip_suspend_model_event *events, u32 capacity)
++{
++	struct rockchip_suspend_model_event built[ROCKCHIP_SUSPEND_MODEL_MAX_PROBE_EVENTS] = { };
++	const struct rockchip_suspend_model_policy_input *input;
++	u32 count = 0;
++	u32 i;
++
++	if (!policy || rockchip_suspend_model_validate_input(&policy->value))
++		return -EINVAL;
++	input = &policy->value;
++	if (input->sleep_mode.present)
++		rockchip_suspend_model_add_legacy(&built[count++],
++			ROCKCHIP_LEGACY_SUSPEND_MODE_CONFIG, input->sleep_mode.value, 0);
++	if (input->wakeup.present)
++		rockchip_suspend_model_add_legacy(&built[count++],
++			ROCKCHIP_LEGACY_WAKEUP_SOURCE_CONFIG, input->wakeup.value, 0);
++	if (input->pwm_regulator.present)
++		rockchip_suspend_model_add_legacy(&built[count++],
++			ROCKCHIP_LEGACY_PWM_REGULATOR_CONFIG,
++			input->pwm_regulator.value, 0);
++	for (i = 0; i < input->gpio_count; i++)
++		rockchip_suspend_model_add_legacy(&built[count++],
++			ROCKCHIP_LEGACY_GPIO_POWER_CONFIG, i, input->gpios[i].number);
++	rockchip_suspend_model_add_legacy(&built[count++],
++		ROCKCHIP_LEGACY_GPIO_POWER_CONFIG, input->gpio_count, 0xffff);
++	if (input->sleep_debug.present)
++		rockchip_suspend_model_add_legacy(&built[count++],
++			ROCKCHIP_LEGACY_SUSPEND_DEBUG_ENABLE, input->sleep_debug.value, 0);
++	if (input->apios_suspend.present)
++		rockchip_suspend_model_add_legacy(&built[count++],
++			ROCKCHIP_LEGACY_APIOS_SUSPEND_CONFIG, input->apios_suspend.value, 0);
++
++	return rockchip_suspend_model_finish(events, capacity, built, count);
++}
++
++static int rockchip_suspend_model_state(u32 linux_suspend_state)
++{
++	switch (linux_suspend_state) {
++	case 3:
++		return ROCKCHIP_SUSPEND_MODEL_MEM;
++	case 4:
++		return ROCKCHIP_SUSPEND_MODEL_MEM_LITE;
++	case 5:
++		return ROCKCHIP_SUSPEND_MODEL_MEM_ULTRA;
++	default:
++		return -EINVAL;
++	}
++}
++
++int rockchip_suspend_model_build_prepare(const struct rockchip_suspend_model_policy *policy,
++	u32 linux_suspend_state, struct rockchip_suspend_model_event *events, u32 capacity)
++{
++	struct rockchip_suspend_model_event built[ROCKCHIP_SUSPEND_MODEL_MAX_PREPARE_EVENTS] = { };
++	const struct rockchip_suspend_model_regulators *regulators;
++	int state;
++	u32 count = 0;
++	u32 i;
++
++	if (!policy || rockchip_suspend_model_validate_input(&policy->value))
++		return -EINVAL;
++	rockchip_suspend_model_add_legacy(&built[count++], ROCKCHIP_LEGACY_LINUX_PM_STATE,
++		linux_suspend_state, 0);
++	state = rockchip_suspend_model_state(linux_suspend_state);
++	if (state < 0)
++		return rockchip_suspend_model_finish(events, capacity, built, count);
++	regulators = &policy->value.regulators[state];
++	for (i = 0; i < regulators->on_count; i++)
++		built[count++] = (struct rockchip_suspend_model_event) {
++			.kind = ROCKCHIP_SUSPEND_MODEL_REGULATOR,
++			.regulator = { state, ROCKCHIP_SUSPEND_MODEL_REGULATOR_ENABLE,
++				regulators->on[i] },
++		};
++	for (i = 0; i < regulators->off_count; i++)
++		built[count++] = (struct rockchip_suspend_model_event) {
++			.kind = ROCKCHIP_SUSPEND_MODEL_REGULATOR,
++			.regulator = { state, ROCKCHIP_SUSPEND_MODEL_REGULATOR_DISABLE,
++				regulators->off[i] },
++		};
++
++	return rockchip_suspend_model_finish(events, capacity, built, count);
++}
++
++int rockchip_suspend_model_build_virtual_poweroff(
++	const struct rockchip_suspend_model_policy *policy,
++	struct rockchip_suspend_model_event *events, u32 capacity)
++{
++	struct rockchip_suspend_model_event built[ROCKCHIP_SUSPEND_MODEL_VIRTUAL_POWEROFF_EVENTS] = { };
++
++	if (!policy || rockchip_suspend_model_validate_input(&policy->value))
++		return -EINVAL;
++	if (!policy->value.virtual_poweroff.present || !policy->value.virtual_poweroff.value)
++		return 0;
++	built[0] = (struct rockchip_suspend_model_event) {
++		.kind = ROCKCHIP_SUSPEND_MODEL_REGULATOR_PREPARE,
++		.regulator_prepare = { 3 },
++	};
++	built[1].kind = ROCKCHIP_SUSPEND_MODEL_DISABLE_SECONDARY_CPUS;
++	rockchip_suspend_model_add_legacy(&built[2], ROCKCHIP_LEGACY_VIRTUAL_POWEROFF,
++		0, 1);
++	built[3] = (struct rockchip_suspend_model_event) {
++		.kind = ROCKCHIP_SUSPEND_MODEL_PSCI_SYSTEM_SUSPEND,
++		.psci = { ROCKCHIP_SUSPEND_MODEL_PSCI_FN64_SYSTEM_SUSPEND },
++	};
++
++	return rockchip_suspend_model_finish(events, capacity, built,
++		ROCKCHIP_SUSPEND_MODEL_VIRTUAL_POWEROFF_EVENTS);
++}
++
++int rockchip_suspend_model_transaction_begin(
++	const struct rockchip_suspend_model_transaction *transaction)
++{
++	if (!transaction)
++		return -EINVAL;
++	if (transaction->poisoned)
++		return -EIO;
++	if (transaction->restore_count)
++		return -EBUSY;
++
++	return 0;
++}
++
++void rockchip_suspend_model_transaction_poison(
++	struct rockchip_suspend_model_transaction *transaction)
++{
++	if (transaction)
++		transaction->poisoned = true;
++}
++
++int rockchip_suspend_model_transaction_add(
++	struct rockchip_suspend_model_transaction *transaction,
++	unsigned long target, u32 state, int previous)
++{
++	struct rockchip_suspend_model_restore *restore;
++
++	if (!transaction || !target ||
++	    transaction->restore_count >= ROCKCHIP_SUSPEND_MODEL_MAX_RESTORES)
++		return -EINVAL;
++	restore = &transaction->restores[transaction->restore_count++];
++	restore->target = target;
++	restore->state = state;
++	restore->previous = previous;
++
++	return 0;
++}
++
++int rockchip_suspend_model_transaction_rollback(
++	struct rockchip_suspend_model_transaction *transaction,
++	rockchip_suspend_model_restore_fn restore, void *context)
++{
++	u32 original_count;
++	u32 retained_at;
++	u32 i;
++	int first_error = 0;
++
++	if (!transaction || (!restore && transaction->restore_count))
++		return -EINVAL;
++	original_count = transaction->restore_count;
++	retained_at = original_count;
++	for (i = original_count; i > 0; i--) {
++		int ret = restore(context, &transaction->restores[i - 1]);
++
++		if (!ret)
++			continue;
++		if (!first_error)
++			first_error = ret;
++		transaction->restores[--retained_at] = transaction->restores[i - 1];
++	}
++	transaction->restore_count = original_count - retained_at;
++	if (transaction->restore_count)
++		memmove(transaction->restores, &transaction->restores[retained_at],
++			transaction->restore_count * sizeof(transaction->restores[0]));
++
++	return first_error;
++}
+diff --git a/drivers/soc/rockchip/rockchip_suspend_model.h b/drivers/soc/rockchip/rockchip_suspend_model.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..d86acfd235de4c11fe6d730cffa67fd6c0528a58
+--- /dev/null
++++ b/drivers/soc/rockchip/rockchip_suspend_model.h
+@@ -0,0 +1,146 @@
++/* SPDX-License-Identifier: GPL-2.0-only */
++#ifndef __ROCKCHIP_SUSPEND_MODEL_H
++#define __ROCKCHIP_SUSPEND_MODEL_H
++
++#include <linux/types.h>
++
++#define ROCKCHIP_SUSPEND_MODEL_MAX_GPIOS	9
++#define ROCKCHIP_SUSPEND_MODEL_MAX_REGULATORS	30
++#define ROCKCHIP_SUSPEND_MODEL_MAX_RESTORES \
++	(ROCKCHIP_SUSPEND_MODEL_MAX_REGULATORS * 2)
++#define ROCKCHIP_SUSPEND_MODEL_MAX_PROBE_EVENTS	15
++#define ROCKCHIP_SUSPEND_MODEL_MAX_PREPARE_EVENTS	61
++#define ROCKCHIP_SUSPEND_MODEL_VIRTUAL_POWEROFF_EVENTS	4
++
++#define ROCKCHIP_SUSPEND_MODEL_PSCI_FN64_SYSTEM_SUSPEND	0xc400000e
++
++enum rockchip_suspend_model_state {
++	ROCKCHIP_SUSPEND_MODEL_MEM,
++	ROCKCHIP_SUSPEND_MODEL_MEM_LITE,
++	ROCKCHIP_SUSPEND_MODEL_MEM_ULTRA,
++	ROCKCHIP_SUSPEND_MODEL_STATE_COUNT,
++};
++
++enum rockchip_suspend_model_regulator_action {
++	ROCKCHIP_SUSPEND_MODEL_REGULATOR_ENABLE,
++	ROCKCHIP_SUSPEND_MODEL_REGULATOR_DISABLE,
++};
++
++struct rockchip_suspend_model_optional {
++	bool present;
++	u32 value;
++};
++
++struct rockchip_suspend_model_gpio {
++	u32 number;
++	u32 flags;
++};
++
++struct rockchip_suspend_model_regulators {
++	unsigned long on[ROCKCHIP_SUSPEND_MODEL_MAX_REGULATORS];
++	unsigned long off[ROCKCHIP_SUSPEND_MODEL_MAX_REGULATORS];
++	u32 on_count;
++	u32 off_count;
++};
++
++struct rockchip_suspend_model_policy_input {
++	struct rockchip_suspend_model_optional sleep_mode;
++	struct rockchip_suspend_model_optional wakeup;
++	struct rockchip_suspend_model_optional pwm_regulator;
++	struct rockchip_suspend_model_optional sleep_debug;
++	struct rockchip_suspend_model_optional apios_suspend;
++	struct rockchip_suspend_model_optional virtual_poweroff;
++	struct rockchip_suspend_model_gpio gpios[ROCKCHIP_SUSPEND_MODEL_MAX_GPIOS];
++	struct rockchip_suspend_model_regulators regulators[ROCKCHIP_SUSPEND_MODEL_STATE_COUNT];
++	u32 gpio_count;
++};
++
++struct rockchip_suspend_model_policy {
++	struct rockchip_suspend_model_policy_input value;
++};
++
++struct rockchip_suspend_model_restore {
++	unsigned long target;
++	u32 state;
++	int previous;
++};
++
++struct rockchip_suspend_model_transaction {
++	struct rockchip_suspend_model_restore restores[
++		ROCKCHIP_SUSPEND_MODEL_MAX_RESTORES];
++	u32 restore_count;
++	bool poisoned;
++};
++
++typedef int (*rockchip_suspend_model_restore_fn)(void *context,
++	const struct rockchip_suspend_model_restore *restore);
++
++enum rockchip_suspend_model_event_kind {
++	ROCKCHIP_SUSPEND_MODEL_LEGACY,
++	ROCKCHIP_SUSPEND_MODEL_REGULATOR,
++	ROCKCHIP_SUSPEND_MODEL_REGULATOR_PREPARE,
++	ROCKCHIP_SUSPEND_MODEL_DISABLE_SECONDARY_CPUS,
++	ROCKCHIP_SUSPEND_MODEL_PSCI_SYSTEM_SUSPEND,
++};
++
++struct rockchip_suspend_model_event {
++	enum rockchip_suspend_model_event_kind kind;
++	union {
++		struct {
++			u32 function;
++			u32 control;
++			u32 arg1;
++			u32 arg2;
++		} legacy;
++		struct {
++			enum rockchip_suspend_model_state state;
++			enum rockchip_suspend_model_regulator_action action;
++			unsigned long regulator;
++		} regulator;
++		struct {
++			u32 linux_suspend_state;
++		} regulator_prepare;
++		struct {
++			u32 function;
++		} psci;
++	};
++};
++
++struct rockchip_suspend_executor_ops {
++	int (*sip)(void *context, u32 control, u32 arg1, u32 arg2);
++	int (*regulator)(void *context, unsigned long regulator,
++			 enum rockchip_suspend_model_regulator_action action,
++			 u32 state);
++	int (*regulator_prepare)(void *context, u32 state);
++	int (*regulator_finish)(void *context);
++	int (*disable_secondary_cpus)(void *context);
++	void (*enable_secondary_cpus)(void *context);
++	int (*psci_system_suspend)(void *context);
++};
++
++int rockchip_suspend_model_parse(struct rockchip_suspend_model_policy *out,
++	const struct rockchip_suspend_model_policy_input *input);
++int rockchip_suspend_model_build_probe(const struct rockchip_suspend_model_policy *policy,
++	struct rockchip_suspend_model_event *events, u32 capacity);
++int rockchip_suspend_model_build_prepare(const struct rockchip_suspend_model_policy *policy,
++	u32 linux_suspend_state, struct rockchip_suspend_model_event *events, u32 capacity);
++int rockchip_suspend_model_build_virtual_poweroff(
++	const struct rockchip_suspend_model_policy *policy,
++	struct rockchip_suspend_model_event *events, u32 capacity);
++int rockchip_suspend_model_transaction_begin(
++	const struct rockchip_suspend_model_transaction *transaction);
++void rockchip_suspend_model_transaction_poison(
++	struct rockchip_suspend_model_transaction *transaction);
++int rockchip_suspend_model_transaction_add(
++	struct rockchip_suspend_model_transaction *transaction,
++	unsigned long target, u32 state, int previous);
++int rockchip_suspend_model_transaction_rollback(
++	struct rockchip_suspend_model_transaction *transaction,
++	rockchip_suspend_model_restore_fn restore, void *context);
++int rockchip_suspend_executor_run(const struct rockchip_suspend_executor_ops *ops,
++	void *context, const struct rockchip_suspend_model_event *events, u32 count,
++	u32 *failed_index);
++int rockchip_suspend_sip_status(long status);
++int rockchip_suspend_psci_status(long status);
++
++#endif
+diff --git a/drivers/soc/rockchip/rockchip_suspend_of.c b/drivers/soc/rockchip/rockchip_suspend_of.c
+new file mode 100644
+index 0000000000000000000000000000000000000000..0f941a5ffad032a6198fefd68f52ad539b055229
+--- /dev/null
++++ b/drivers/soc/rockchip/rockchip_suspend_of.c
+@@ -0,0 +1,264 @@
++// SPDX-License-Identifier: GPL-2.0-only
++#include <linux/device.h>
++#include <linux/errno.h>
++#include <linux/of.h>
++#include <linux/regulator/consumer.h>
++#include <linux/regulator/of_regulator.h>
++#include <linux/slab.h>
++#include <linux/string.h>
++
++#include "rockchip_suspend_of.h"
++
++struct rockchip_suspend_of_scalar {
++	const char *name;
++	size_t offset;
++};
++
++struct rockchip_suspend_of_regulators {
++	const char *name;
++	u32 state;
++	bool on;
++};
++
++#define OPTIONAL_OFFSET(member) \
++	offsetof(struct rockchip_suspend_model_policy_input, member)
++
++static const struct rockchip_suspend_of_scalar rockchip_suspend_scalars[] = {
++	{ "rockchip,sleep-mode-config", OPTIONAL_OFFSET(sleep_mode) },
++	{ "rockchip,wakeup-config", OPTIONAL_OFFSET(wakeup) },
++	{ "rockchip,pwm-regulator-config", OPTIONAL_OFFSET(pwm_regulator) },
++	{ "rockchip,sleep-debug-en", OPTIONAL_OFFSET(sleep_debug) },
++	{ "rockchip,apios-suspend", OPTIONAL_OFFSET(apios_suspend) },
++};
++
++static const struct rockchip_suspend_of_regulators rockchip_suspend_regulators[] = {
++	{ "rockchip,regulator-on-in-mem", ROCKCHIP_SUSPEND_MODEL_MEM, true },
++	{ "rockchip,regulator-off-in-mem", ROCKCHIP_SUSPEND_MODEL_MEM, false },
++};
++
++static bool rockchip_suspend_metadata_property(const char *name)
++{
++	return !strcmp(name, "compatible") || !strcmp(name, "name") ||
++		!strcmp(name, "status");
++}
++
++static bool rockchip_suspend_property_allowed(const char *name)
++{
++	u32 i;
++
++	if (rockchip_suspend_metadata_property(name) ||
++	    !strcmp(name, "rockchip,power-ctrl"))
++		return true;
++	for (i = 0; i < ARRAY_SIZE(rockchip_suspend_scalars); i++)
++		if (!strcmp(name, rockchip_suspend_scalars[i].name))
++			return true;
++	for (i = 0; i < ARRAY_SIZE(rockchip_suspend_regulators); i++)
++		if (!strcmp(name, rockchip_suspend_regulators[i].name))
++			return true;
++
++	return false;
++}
++
++static int rockchip_suspend_of_check_shape(struct device *dev,
++	struct device_node *node, bool empty)
++{
++	struct device_node *child;
++	struct property *property;
++
++	for_each_property_of_node(node, property) {
++		if (empty && !rockchip_suspend_metadata_property(property->name))
++			return dev_err_probe(dev, -EINVAL,
++				"policy property %s requires activation\n", property->name);
++		if (!empty && !rockchip_suspend_property_allowed(property->name))
++			return dev_err_probe(dev, -EINVAL,
++				"unsupported policy property %s\n", property->name);
++	}
++
++	for_each_child_of_node(node, child) {
++		dev_err(dev, "policy child %pOF is not supported\n", child);
++		of_node_put(child);
++		return -EINVAL;
++	}
++
++	return 0;
++}
++
++int rockchip_suspend_of_require_empty(struct device *dev, struct device_node *node)
++{
++	if (!dev || !node)
++		return -EINVAL;
++
++	return rockchip_suspend_of_check_shape(dev, node, true);
++}
++
++static int rockchip_suspend_of_parse_scalars(struct device_node *node,
++	struct rockchip_suspend_model_policy_input *input)
++{
++	u32 i;
++
++	for (i = 0; i < ARRAY_SIZE(rockchip_suspend_scalars); i++) {
++		struct rockchip_suspend_model_optional *optional;
++		int count;
++
++		optional = (void *)((char *)input + rockchip_suspend_scalars[i].offset);
++		if (!of_find_property(node, rockchip_suspend_scalars[i].name, NULL))
++			continue;
++		count = of_property_count_u32_elems(node, rockchip_suspend_scalars[i].name);
++		if (count != 1 || of_property_read_u32(node,
++			rockchip_suspend_scalars[i].name, &optional->value))
++			return -EINVAL;
++		optional->present = true;
++	}
++
++	return 0;
++}
++
++static int rockchip_suspend_of_parse_gpios(struct device_node *node,
++	struct rockchip_suspend_model_policy_input *input)
++{
++	struct of_phandle_args args;
++	u32 bank;
++	int count;
++	int alias;
++	int i;
++
++	if (!of_find_property(node, "rockchip,power-ctrl", NULL))
++		return 0;
++	count = of_count_phandle_with_args(node, "rockchip,power-ctrl", "#gpio-cells");
++	if (count <= 0 || count > ROCKCHIP_SUSPEND_MODEL_MAX_GPIOS)
++		return -EINVAL;
++	for (i = 0; i < count; i++) {
++		if (of_parse_phandle_with_args(node, "rockchip,power-ctrl",
++			"#gpio-cells", i, &args))
++			goto err_put;
++		if (args.args_count != 2 || args.args[0] > 31) {
++			of_node_put(args.np);
++			goto err_put;
++		}
++		alias = of_alias_get_id(args.np, "gpio");
++		if (alias < 0 ||
++		    (u32)alias > (U32_MAX - args.args[0]) / 32U) {
++			of_node_put(args.np);
++			goto err_put;
++		}
++		bank = (u32)alias;
++		input->gpios[i].number = bank * 32U + args.args[0];
++		input->gpios[i].flags = args.args[1];
++		input->gpio_count++;
++		of_node_put(args.np);
++	}
++
++	return 0;
++
++err_put:
++	return -EINVAL;
++}
++
++static int rockchip_suspend_of_parse_regulator_list(struct device *dev,
++	struct device_node *node,
++	const struct rockchip_suspend_of_regulators *description,
++	struct rockchip_suspend_model_policy_input *input)
++{
++	struct rockchip_suspend_model_regulators *regulators;
++	unsigned long *list;
++	u32 *count;
++	int elements;
++	int i;
++
++	if (!of_find_property(node, description->name, NULL))
++		return 0;
++	elements = of_property_count_u32_elems(node, description->name);
++	if (elements <= 0 || elements > ROCKCHIP_SUSPEND_MODEL_MAX_REGULATORS)
++		return -EINVAL;
++	regulators = &input->regulators[description->state];
++	list = description->on ? regulators->on : regulators->off;
++	count = description->on ? &regulators->on_count : &regulators->off_count;
++	for (i = 0; i < elements; i++) {
++		struct device_node *provider;
++		struct regulator *regulator;
++
++		provider = of_parse_phandle(node, description->name, i);
++		if (!provider)
++			return -EINVAL;
++		regulator = of_regulator_get_by_node(dev, provider);
++		of_node_put(provider);
++		if (IS_ERR(regulator))
++			return PTR_ERR(regulator);
++		for (u32 j = 0; j < regulators->on_count; j++)
++			if (regulator_is_equal(regulator,
++				(struct regulator *)regulators->on[j])) {
++				regulator_put(regulator);
++				return -EINVAL;
++			}
++		for (u32 j = 0; j < regulators->off_count; j++)
++			if (regulator_is_equal(regulator,
++				(struct regulator *)regulators->off[j])) {
++				regulator_put(regulator);
++				return -EINVAL;
++			}
++		list[*count] = (unsigned long)regulator;
++		(*count)++;
++	}
++
++	return 0;
++}
++
++void rockchip_suspend_of_put(struct rockchip_suspend_model_policy *policy)
++{
++	u32 state;
++	u32 i;
++
++	if (!policy)
++		return;
++	for (state = 0; state < ROCKCHIP_SUSPEND_MODEL_STATE_COUNT; state++) {
++		struct rockchip_suspend_model_regulators *regulators;
++
++		regulators = &policy->value.regulators[state];
++		for (i = 0; i < regulators->on_count; i++)
++			regulator_put((struct regulator *)regulators->on[i]);
++		for (i = 0; i < regulators->off_count; i++)
++			regulator_put((struct regulator *)regulators->off[i]);
++	}
++	memset(policy, 0, sizeof(*policy));
++}
++
++int rockchip_suspend_of_parse(struct device *dev, struct device_node *node,
++	struct rockchip_suspend_model_policy *policy)
++{
++	struct rockchip_suspend_model_policy *parsed;
++	u32 i;
++	int ret;
++
++	if (!dev || !node || !policy)
++		return -EINVAL;
++	parsed = kzalloc(sizeof(*parsed), GFP_KERNEL);
++	if (!parsed)
++		return -ENOMEM;
++	ret = rockchip_suspend_of_check_shape(dev, node, false);
++	if (ret)
++		goto err_free;
++	ret = rockchip_suspend_of_parse_scalars(node, &parsed->value);
++	if (ret)
++		goto err_free;
++	ret = rockchip_suspend_of_parse_gpios(node, &parsed->value);
++	if (ret)
++		goto err_free;
++	for (i = 0; i < ARRAY_SIZE(rockchip_suspend_regulators); i++) {
++		ret = rockchip_suspend_of_parse_regulator_list(dev, node,
++			&rockchip_suspend_regulators[i], &parsed->value);
++		if (ret)
++			goto err_put;
++	}
++	ret = rockchip_suspend_model_parse(policy, &parsed->value);
++	if (ret)
++		goto err_put;
++	kfree(parsed);
++
++	return 0;
++
++err_put:
++	rockchip_suspend_of_put(parsed);
++err_free:
++	kfree(parsed);
++	return ret;
++}
+diff --git a/drivers/soc/rockchip/rockchip_suspend_of.h b/drivers/soc/rockchip/rockchip_suspend_of.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..d990d6ddaa711d0f6a3fb8df03f88660f5941853
+--- /dev/null
++++ b/drivers/soc/rockchip/rockchip_suspend_of.h
+@@ -0,0 +1,15 @@
++/* SPDX-License-Identifier: GPL-2.0-only */
++#ifndef __ROCKCHIP_SUSPEND_OF_H
++#define __ROCKCHIP_SUSPEND_OF_H
++
++#include "rockchip_suspend_model.h"
++
++struct device;
++struct device_node;
++
++int rockchip_suspend_of_parse(struct device *dev, struct device_node *node,
++	struct rockchip_suspend_model_policy *policy);
++void rockchip_suspend_of_put(struct rockchip_suspend_model_policy *policy);
++int rockchip_suspend_of_require_empty(struct device *dev, struct device_node *node);
++
++#endif
+diff --git a/include/dt-bindings/suspend/rockchip-rk3568.h b/include/dt-bindings/suspend/rockchip-rk3568.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..c398b869c442fe69e777322340eac6463b60cf53
+--- /dev/null
++++ b/include/dt-bindings/suspend/rockchip-rk3568.h
+@@ -0,0 +1,49 @@
++/* SPDX-License-Identifier: (GPL-2.0+ OR MIT) */
++#ifndef __DT_BINDINGS_SUSPEND_ROCKCHIP_RK3568_H__
++#define __DT_BINDINGS_SUSPEND_ROCKCHIP_RK3568_H__
++
++#ifndef BIT
++#define BIT(nr)			(1U << (nr))
++#endif
++
++#define RKPM_SLP_WFI			BIT(0)
++#define RKPM_SLP_ARMOFF			BIT(1)
++#define RKPM_SLP_CENTER_OFF		BIT(2)
++#define RKPM_SLP_ARMOFF_LOGOFF		BIT(3)
++#define RKPM_SLP_FROM_UBOOT		BIT(4)
++#define RKPM_SLP_PMIC_LP		BIT(5)
++#define RKPM_SLP_HW_PLLS_OFF		BIT(6)
++#define RKPM_SLP_PMUALIVE_32K		BIT(7)
++#define RKPM_SLP_OSC_DIS		BIT(8)
++#define RKPM_SLP_32K_EXT		BIT(9)
++#define RKPM_SLP_32K_PVTM		BIT(10)
++
++#define RKPM_CPU0_WKUP_EN		BIT(0)
++#define RKPM_CPU1_WKUP_EN		BIT(1)
++#define RKPM_CPU2_WKUP_EN		BIT(2)
++#define RKPM_CPU3_WKUP_EN		BIT(3)
++#define RKPM_GPIO_WKUP_EN		BIT(4)
++#define RKPM_UART0_WKUP_EN		BIT(5)
++#define RKPM_SDMMC0_WKUP_EN		BIT(6)
++#define RKPM_SDMMC1_WKUP_EN		BIT(7)
++#define RKPM_SDMMC2_WKUP_EN		BIT(8)
++#define RKPM_USB_WKUP_EN		BIT(9)
++#define RKPM_PCIE_WKUP_EN		BIT(10)
++#define RKPM_VAD_WKUP_EN		BIT(11)
++#define RKPM_TIMER_WKUP_EN		BIT(12)
++#define RKPM_PWM0_WKUP_EN		BIT(13)
++#define RKPM_TIMEOUT_WKUP_EN		BIT(14)
++#define RKPM_SFT_WKUP_EN		BIT(15)
++#define RKPM_USB_LINESTATE_WKUP_EN	BIT(16)
++
++#define RKPM_SLP_LDO1_ON		BIT(0)
++#define RKPM_SLP_LDO2_ON		BIT(1)
++#define RKPM_SLP_LDO3_ON		BIT(2)
++#define RKPM_SLP_LDO4_ON		BIT(3)
++#define RKPM_SLP_LDO5_ON		BIT(4)
++#define RKPM_SLP_LDO6_ON		BIT(5)
++#define RKPM_SLP_LDO7_ON		BIT(6)
++#define RKPM_SLP_LDO8_ON		BIT(7)
++#define RKPM_SLP_LDO9_ON		BIT(8)
++
++#endif
+diff --git a/include/linux/regulator/consumer.h b/include/linux/regulator/consumer.h
+index 56fe2693d9b2284d04ebae50165f9aa7b1b3fee4..5a661b9e291526d1dd65f9def96f3433134fa0d9 100644
+--- a/include/linux/regulator/consumer.h
++++ b/include/linux/regulator/consumer.h
+@@ -266,6 +266,15 @@ void devm_regulator_unregister_notifier(struct regulator *regulator,
+ 					struct notifier_block *nb);
+ 
+ /* regulator suspend */
++int regulator_set_suspend_enable(struct regulator *regulator,
++				 suspend_state_t state);
++int regulator_set_suspend_disable(struct regulator *regulator,
++				  suspend_state_t state);
++int regulator_set_suspend_enable_save(struct regulator *regulator,
++				      suspend_state_t state, bool enable,
++				      int *previous);
++int regulator_restore_suspend_enable(struct regulator *regulator,
++				     suspend_state_t state, int previous);
+ int regulator_suspend_enable(struct regulator_dev *rdev,
+ 			     suspend_state_t state);
+ int regulator_suspend_disable(struct regulator_dev *rdev,
+@@ -629,6 +638,32 @@ static inline int regulator_suspend_enable(struct regulator_dev *rdev,
+ 	return -EINVAL;
+ }
+ 
++static inline int regulator_set_suspend_enable(struct regulator *regulator,
++					       suspend_state_t state)
++{
++	return -EINVAL;
++}
++
++static inline int regulator_set_suspend_disable(struct regulator *regulator,
++						suspend_state_t state)
++{
++	return -EINVAL;
++}
++
++static inline int regulator_set_suspend_enable_save(struct regulator *regulator,
++						     suspend_state_t state,
++						     bool enable, int *previous)
++{
++	return -EINVAL;
++}
++
++static inline int regulator_restore_suspend_enable(struct regulator *regulator,
++						    suspend_state_t state,
++						    int previous)
++{
++	return -EINVAL;
++}
++
+ static inline int regulator_suspend_disable(struct regulator_dev *rdev,
+ 					    suspend_state_t state)
+ {
+diff --git a/include/linux/regulator/of_regulator.h b/include/linux/regulator/of_regulator.h
+index df7f154a2ed588a0e172e2889c2163c75c8bb8ad..7bbe0c93209f69b81fcc5506f80bb615234edee6 100644
+--- a/include/linux/regulator/of_regulator.h
++++ b/include/linux/regulator/of_regulator.h
+@@ -7,7 +7,11 @@
+ #ifndef __LINUX_OF_REG_H
+ #define __LINUX_OF_REG_H
+ 
++#include <linux/err.h>
++#include <linux/kconfig.h>
++
+ struct regulator_desc;
++struct regulator;
+ 
+ struct of_regulator_match {
+ 	const char *name;
+@@ -17,7 +21,7 @@ struct of_regulator_match {
+ 	const struct regulator_desc *desc;
+ };
+ 
+-#if defined(CONFIG_OF)
++#if IS_ENABLED(CONFIG_OF) && IS_ENABLED(CONFIG_REGULATOR)
+ extern struct regulator_init_data
+ 	*of_get_regulator_init_data(struct device *dev,
+ 				    struct device_node *node,
+@@ -25,6 +29,8 @@ extern struct regulator_init_data
+ extern int of_regulator_match(struct device *dev, struct device_node *node,
+ 			      struct of_regulator_match *matches,
+ 			      unsigned int num_matches);
++struct regulator *of_regulator_get_by_node(struct device *dev,
++					   struct device_node *node);
+ #else
+ static inline struct regulator_init_data
+ 	*of_get_regulator_init_data(struct device *dev,
+@@ -41,6 +47,12 @@ static inline int of_regulator_match(struct device *dev,
+ {
+ 	return 0;
+ }
++
++static inline struct regulator *
++of_regulator_get_by_node(struct device *dev, struct device_node *node)
++{
++	return ERR_PTR(-ENODEV);
++}
+ #endif /* CONFIG_OF */
+ 
+ #endif /* __LINUX_OF_REG_H */
+diff --git a/include/soc/rockchip/rockchip_legacy_sip.h b/include/soc/rockchip/rockchip_legacy_sip.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..488a8c585a30f5c023645e580883b28e7ff45145
+--- /dev/null
++++ b/include/soc/rockchip/rockchip_legacy_sip.h
+@@ -0,0 +1,19 @@
++/* SPDX-License-Identifier: GPL-2.0-only */
++#ifndef __SOC_ROCKCHIP_LEGACY_SIP_H
++#define __SOC_ROCKCHIP_LEGACY_SIP_H
++
++#define ROCKCHIP_LEGACY_SIP_SUSPEND_MODE	0x82000003
++
++enum rockchip_legacy_suspend_control {
++	ROCKCHIP_LEGACY_SUSPEND_MODE_CONFIG = 0x01,
++	ROCKCHIP_LEGACY_WAKEUP_SOURCE_CONFIG = 0x02,
++	ROCKCHIP_LEGACY_PWM_REGULATOR_CONFIG = 0x03,
++	ROCKCHIP_LEGACY_GPIO_POWER_CONFIG = 0x04,
++	ROCKCHIP_LEGACY_SUSPEND_DEBUG_ENABLE = 0x05,
++	ROCKCHIP_LEGACY_APIOS_SUSPEND_CONFIG = 0x06,
++	ROCKCHIP_LEGACY_VIRTUAL_POWEROFF = 0x07,
++	ROCKCHIP_LEGACY_SUSPEND_WFI_TIME_MS = 0x08,
++	ROCKCHIP_LEGACY_LINUX_PM_STATE = 0x09,
++};
++
++#endif
