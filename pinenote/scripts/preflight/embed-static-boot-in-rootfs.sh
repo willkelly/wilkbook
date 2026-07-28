@@ -133,6 +133,12 @@ fi
 validate_source_path "$kernel_path" KERNEL
 validate_source_path "$initrd_path" INITRD
 validate_source_path "$fdt_path" FDT
+case "$kernel_path" in
+  /boot/Image) kernel_config_path=/boot/config ;;
+  */Image) kernel_config_path=${kernel_path%/Image}/.config ;;
+  *) fail "cannot derive kernel config from KERNEL path: $kernel_path" ;;
+esac
+validate_source_path "$kernel_config_path" "kernel config"
 
 case " $append_args " in
   *' gnu.system='*) ;;
@@ -154,6 +160,7 @@ tmpdir=$(mktemp -d /tmp/opencode/pinenote-static-boot.XXXXXX)
 trap 'rm -rf "$tmpdir"' EXIT HUP INT TERM
 
 dump_rootfs_file "$kernel_path" "$tmpdir/Image"
+dump_rootfs_file "$kernel_config_path" "$tmpdir/config"
 dump_rootfs_file "$initrd_path" "$tmpdir/initrd.cpio.gz"
 dump_rootfs_file "$fdt_path" "$tmpdir/rk3566-pinenote-v1.2.dtb"
 
@@ -169,10 +176,11 @@ LABEL pinenote-guix-preflight
 EOF
 
 replace_rootfs_file "$tmpdir/Image" /boot/Image
+replace_rootfs_file "$tmpdir/config" /boot/config
 replace_rootfs_file "$tmpdir/initrd.cpio.gz" /boot/initrd.cpio.gz
 replace_rootfs_file "$tmpdir/rk3566-pinenote-v1.2.dtb" /boot/rk3566-pinenote-v1.2.dtb
 replace_rootfs_file "$tmpdir/extlinux.conf" /boot/extlinux/extlinux.conf
 
-pass "embedded Image, PineNote DTB, and initrd under /boot"
+pass "embedded Image, matching kernel config, PineNote DTB, and initrd under /boot"
 pass "rewrote extlinux.conf to short /boot paths with root=PNGuixRoot"
 sha256sum "$rootfs_image"
