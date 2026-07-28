@@ -49,10 +49,35 @@ on `os1` as the rescue path. Nothing here touches `waveform`, `uboot`,
   flavors) the ACM gadget binding `ttyGS0`.
 - On the host, a successful ACM gadget enumerates as `/dev/ttyACM*`
   (gadget id 0525:a4a7) on the USB-C cable, with an auto-login `reader`
-  shell (passwordless sudo). On-device smoke tools: `pinenote-diagnostics`
-  and `pinenote-ebc-test [--draw-smoke]`.
+  shell (passwordless sudo). `pinenote-diagnostics` and the read-only default
+  `pinenote-ebc-test` report remain available. Do **not** use the older
+  `pinenote-ebc-test --draw-smoke` during the barrier campaign: it lacks the
+  reader-ownership, generation-barrier, and signal/restoration safeguards of
+  the dedicated command.
 - After the session, power-cycle back to `os1` and confirm the rescue path
   still works.
+
+## EBC barrier campaign (one supervised run)
+
+Before writing, record the exact manifest/rootfs SHA-256 and require
+`inspect-rootfs-image.sh` plus the rootfs-matched bundle inspection to pass;
+these bind `/boot/Image`, `/boot/config`, DTB, initrd, diagnostic, dormant Lua
+modules, disabled suspend policy, and production no-import state to one ext4
+identity. After boot, capture pre-run `dmesg`, then run only:
+
+```sh
+sudo herd stop reader-session
+pgrep -af reader.lua                 # must print nothing
+sudo pinenote-ebc-sleep-frame-test --run
+# after visible card, Enter restoration, and zero exit:
+sudo herd start reader-session
+```
+
+Capture UART and `dmesg` through reader restart. Accept only a fully visible
+card, two nonzero generation IDs, exact visible restoration, zero exit, and a
+normal reader repaint. Any initial failure ends the campaign without retry;
+any restore failure or EBC timeout/poison/uncertain-ownership signature requires
+a reboot before further display work. This is not suspend permission.
 
 ## Stop conditions
 

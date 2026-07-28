@@ -1,6 +1,298 @@
 # Hardware status
 
-Last updated: 2026-07-25.
+Last updated: 2026-07-28.
+
+**2026-07-28 signal-safe dormant EBC adapter candidate: written to os2 with
+exact readback verification; not booted.** A fresh reader artifact packages
+the root-only C diagnostic plus dormant LuaJIT barrier and injected sleep-frame
+modules. The production reader imports none of them, `suspend_policy.lua`
+remains exactly false, Rockchip activation remains compiled out, and the
+diagnostic has no suspend or power-state operation. Goal review found that a
+flag check followed by blocking `read()` left a signal race at acknowledgement.
+The corrected command blocks INT/TERM/HUP throughout setup and restoration and
+uses `pselect` to unmask them atomically only while waiting; bounded host tests
+cover both an already-pending signal and delivery while blocked. Security
+follow-up made `/proc` inspection fail closed, moved DRM acquisition before
+mutation, and added a second reader-ownership gate immediately before the
+snapshot; its tests prove a late reader or inspection error causes no
+framebuffer copy, fsync, or barrier call. EUID root is an operational gate, not
+an authorization boundary under the image's existing maintenance sudo policy.
+Final review then caught a startup interval before signal blocking and valid
+kernel SUBMIT/WAIT failures being collapsed into protocol errors. The shared
+signal guard now blocks before installing handlers, detects pending cancellation
+immediately before snapshot, and has a raised-SIGTERM zero-mutation regression;
+both C and Lua clients preserve valid negative kernel results.
+A second code review caught cancellation during the read-only snapshot window
+and teardown unblocking before original dispositions were restored. The core
+now rechecks after snapshot and directly before paint, with an injected-during-
+copy zero-mutation regression; teardown drains already-pending campaign signals
+while blocked, restores dispositions, then restores the original mask.
+Final review then closed two evidence gaps: `/proc` enumeration now
+distinguishes EOF from `readdir()` failure through an injected-test helper, so
+scan errors remain fail-closed, and a successful restore prints its second
+nonzero generation as required by the hardware acceptance contract.
+
+Host, ASan/UBSan, LuaJIT coordinator, activation-hard-off, suspend-spoof,
+AArch64 package, reader, rootfs, matched-bundle, QEMU rung 4, and visual rung 4v
+gates pass. Rootfs inspection now verifies `debugfs` emitted an inode, follows
+the persistent system-profile link, embeds the profile-matched `/boot/config`,
+and proves activation compiled out within the same ext4 identity; an image with
+`/boot/Image` removed is rejected. The exact offline rootfs is
+`/tmp/opencode/pinenote-rootfs-artifacts-ebc-adapter-release-reviewed-20260727/pinenote-reader-PNGuixRoot-20260727.ext4`,
+SHA-256 `1777dde4c5febd7eaaf9d763b422b48ab7d24ca5c75a615bc966406cf973ae64`,
+1,945,583,616 bytes (3,799,968 sectors), with matched bundle
+`/tmp/opencode/pinenote-reader-boot-bundle-ebc-adapter-release-reviewed-20260727`.
+
+All four local/NFS backup manifests passed immediately before deployment. The
+archived stock-os1 ED25519 fingerprint
+`SHA256:vT0BeMam25qi9bWdKQEFPUR/xEoEeAHCiSM6vMfxRtY` matched at
+`192.168.86.145`; Debian 6.12 was confirmed running from `/dev/mmcblk0p5`, p6
+was unmounted with 15,728,640,000-byte capacity, and the staged file matched the
+host size and SHA-256. `dd` wrote exactly 3,799,968 records to
+`/dev/mmcblk0p6` with `bs=512 count=3799968 iflag=fullblock conv=fsync`, then
+`blockdev --flushbufs` flushed p6. The exact same `bs=512 count=3799968
+iflag=fullblock` range read back with matching `1777dde4…ae64` SHA-256. The
+final check found root still on p5, p6 unmounted, and p6 labeled `PNGuixRoot`.
+No reboot, os2 boot, diagnostic, suspend, persistent boot-selection change, or
+write to another partition occurred. The replayable record is
+`doc/artifacts/pinenote-reader-ebc-adapter-20260727.md`.
+
+**2026-07-27 EBC generation-barrier candidate: exact image booted from os2 and
+passed read-only reader/containment acceptance.** The fresh reader rootfs is
+`/tmp/opencode/pinenote-rootfs-artifacts-ebc-barrier-20260727/pinenote-reader-PNGuixRoot-20260727.ext4`,
+SHA-256 `c15d023159e130633db87a0df742248ef5be2ac6e9aece9d4fc83f73c59cfd4d`,
+1,945,313,280 bytes, exactly 3,799,440 512-byte sectors. Rootfs and matched
+boot-bundle inspection passed; exact-artifact QEMU rung 4 and visual rung 4v
+also passed.
+
+All four local/NFS backup manifests were rerun successfully. Stock Debian os1
+was confirmed as `/dev/mmcblk0p5` at its new DHCP address `192.168.86.145`, p6
+was unmounted, and the staged artifact matched the host hash. Exactly 3,799,440
+sectors were written to `/dev/mmcblk0p6` with `iflag=fullblock conv=fsync`; an
+exact-range p6 readback produced the same SHA-256. The device remained on os1.
+No reboot, os2 boot, suspend, persistent boot-selection change, or write to any
+other partition occurred during deployment. The subsequent manual os2 boot
+selected `/gnu/store/27sd3c4537cqpfmqa2ik7gjghqqcp9n8-system` on
+`/dev/mmcblk0p6`; Linux 7.0.11 PREEMPT_RT reported taint zero, and the live
+Image, DTB, and initrd hashes matched the rootfs-bound bundle. The regenerated
+ED25519 SSH host-key fingerprint is
+`SHA256:vOfxe+6eauQjlK6gRjCj9zusG0R2rhkfVmCC5xqcPY0`.
+
+EBC loaded the device waveform version `0x19`, registered fb0 at 1872x1404,
+and had no timeout, poison, or uncertain-ownership signature. KOReader and the
+orientation bridge remained running; finger, pen, and orientation inputs,
+Wi-Fi/DHCP at `192.168.86.145`, gateway, and key-only SSH were present. The
+policy-free live `/rockchip-suspend` node contained only `compatible`, Linux
+OF's synthesized `name`, and `status`; the driver bound with `DORMANT policy
+core bound; activation compiled out`. Live packaged hashes prove
+`suspend_policy.lua` remains exactly `return false` and `device.lua` imports
+neither dormant PM module. No fatal kernel/reader signature appeared.
+
+This boot proves image compatibility and preserved fail-closed boundaries, not
+the generation barrier's hardware semantics: production still has no caller for
+the barrier UAPI. No suspend, firmware/SMC/PSCI, regulator, CPU, resume, or EBC
+repair action was requested. The artifact-bound record is
+`doc/artifacts/pinenote-reader-ebc-barrier-20260727.md`.
+
+**2026-07-26 OF-name fix bind verdict: the exact corrected image booted from os2
+and the activation-hard-off Rockchip PM driver bound successfully.** The live
+root is `/dev/mmcblk0p6`; cmdline selects
+`/gnu/store/arh9k85n6h7i8mr2w1f29s5v8pz6qpzv-system`; Linux reports 7.0.11
+`#1 SMP PREEMPT_RT` with taint zero. The regenerated ED25519 SSH host-key
+fingerprint is `SHA256:xsDSQhSAxtAK0b/A3SyavTqpo3Y5xjLrXm7P5hWxbJs`.
+
+The live `/rockchip-suspend` node contains exactly `compatible`, Linux OF's
+synthesized `name`, and `status`. Sysfs links the device to
+`rockchip-suspend-mode`, and dmesg reports `DORMANT policy core bound; activation
+compiled out` with no former `-EINVAL` rejection. The live config enables only
+the core, `System.map` contains the executor but no activation prepare/complete
+edge, and the packaged Lua policy remains exactly `return false`. No PM backend,
+firmware/SMC/PSCI, regulator, CPU, suspend, or resume action was requested by
+this stack.
+
+The rest of the reader boot is healthy: waveform `0x19`, EBC fb0 at 1872x1404,
+KOReader, orientation bridge, finger/pen/orientation inputs, Wi-Fi/DHCP, gateway,
+and key-only SSH are present. Suspend was not attempted. `/sys/power/state`
+advertising `mem` and `mem_sleep` advertising `deep` are capability strings, not
+firmware compatibility, suspend, wake, resume, display-repair, or energy proof.
+
+After that boot, the next **offline-only** slice completed without device access.
+The production-carried EBC patch now has a fixed-width generation barrier;
+the verbatim EBC/WBF harness proves batching and publication order, disable-tail
+caller/off-screen snapshots, exact completion accounting, and terminal poison
+after setup or hardware timeout. Active DMA mappings are retained, all waiters
+receive the same failure, and late DSP_END cannot start or complete later work.
+A closed provider constructor and pure injected-capability Lua coordinator prove transaction ordering,
+durable prepared/failure records, reverse restore, and permanent poison with no
+filesystem or sysfs authority. A distinct synthetic active DT policy executes
+probe and MEM events through fake Rockchip operations; its composite gate also
+reruns the unchanged production activation-hard-off preflight. None of these
+Lua changes is production-wired, enables activation, calls firmware, or requests
+suspend. The EBC UAPI has no production userspace caller yet.
+
+**2026-07-26 activation-hard-off candidate boot correction: the reader boot was
+healthy, but the Rockchip PM driver did not bind.** The live root was
+`/dev/mmcblk0p6`; the cmdline selected
+`/gnu/store/pdqr7rf00bzd4sb1d7mxqmk25qdbn83k-system`; Linux reported 7.0.11
+`#1 SMP PREEMPT_RT` with taint zero. The live `/proc/device-tree/rockchip-suspend`
+node contained only `compatible = "rockchip,pm-rk3568"`, Linux OF's synthesized
+`name = "rockchip-suspend"`, and `status = "okay"`. The parser incorrectly
+treated that standard `name` metadata as policy, logged `policy property name
+requires activation` (`-EINVAL`), and probe failed `-22`; the platform driver
+was unbound.
+
+The rest of the reader acceptance evidence was healthy: EBC loaded waveform
+`0x19` and registered fb0, KOReader, orientation, pen/finger input, Wi-Fi, and
+SSH were healthy. The omitted activation object meant no PM prepare/executor
+edge existed: no backend, firmware/SMC/PSCI, regulator, CPU, or suspend action
+occurred. This is a Linux live-OF normalization finding, not a firmware
+compatibility result. The corrected metadata handling and successful dormant
+bind are recorded above; the 2026-07-26 review-fix artifact is superseded as
+binding evidence, while its offline artifact facts remain historical.
+
+The corrected offline candidate is
+`/tmp/opencode/pinenote-rootfs-artifacts-bsp-pm-namefix-20260726/pinenote-reader-PNGuixRoot-20260726.ext4`,
+SHA-256 `0c67785ff434bac66e3652e940c1d088e2c242cf6dfd132fc66fd8e2b8f97f4f`,
+1,945,280,512 bytes, exactly 3,799,376 512-byte sectors. Its kernel is
+`/gnu/store/pk42mcgg1cvxnmjpa028n6x6ddniz1ba-linux-pinenote-7.0.11-pinenote`
+and embedded system is `/gnu/store/arh9k85n6h7i8mr2w1f29s5v8pz6qpzv-system`.
+The complete host rung, derivation, fresh kernel/packages/reader/rootfs builds,
+source/config/DT/package/helper gates, rootfs-matched bundle checks, QEMU rung 4,
+and visual rung 4v pass. The artifact-bound record is
+`doc/artifacts/pinenote-reader-bsp-pm-namefix-20260726.md`.
+
+The device then returned to stock os1: its archived ED25519 host key matched,
+the running root was `/dev/mmcblk0p5`, and `/dev/mmcblk0p6` was unmounted. The
+candidate was staged at
+`/home/user/pinenote-reader-PNGuixRoot-20260726-bsp-pm-namefix.ext4`; its remote
+size and SHA-256 matched the host. The p6 capacity was 15,728,640,000 bytes.
+Exactly 3,799,376 512-byte records (1,945,280,512 bytes) were written to p6
+with `bs=512 count=3799376 iflag=fullblock conv=fsync`. SHA-256 of an exact
+`bs=512 count=3799376 iflag=fullblock` p6 readback matched
+`0c67785ff434bac66e3652e940c1d088e2c242cf6dfd132fc66fd8e2b8f97f4f`.
+The device remained on os1, p6 remained unmounted, and no reboot or suspend was
+attempted during the write sequence; at that point the corrected image was
+written and readback-verified but unbooted. Its subsequent boot is recorded
+above.
+The two backup-root checksum verifications were not rerun in this session, so
+this is evidence of the guarded write and exact-range readback sequence, not a
+claim that every `doc/hardware-deploy.md` precondition was repeated.
+
+**2026-07-25 BSP SIP probe-only hardware verdict: the exact reader image boots
+cleanly, but the legacy version-query gate returns `-EOPNOTSUPP` and the
+platform driver remains unbound.** The live root is `/dev/mmcblk0p6`; cmdline
+selects the staged `/gnu/store/adf13n0abirx4y6lmmi0kblaf3ang6ah-system`; and
+the live `Image` resolves to the expected
+`/gnu/store/wwyn7zwl5x36xa0ay92rjl2g9fnnfwx6-linux-pinenote-7.0.11-pinenote`
+output. Its SHA-256 is byte-identical to the build, as are the live DTB and
+initrd against the staged boot bundle. The kernel reports 7.0.11
+`#1 SMP PREEMPT_RT`, taint zero, and boot-time policy0 governor
+`conservative`.
+
+The packaged config had `ROCKCHIP_LEGACY_SIP`, `ROCKCHIP_SUSPEND_MODE`, and the
+forced `ROCKCHIP_SUSPEND_MODE_PROBE_ONLY` all built in. The live DT node was
+exactly policy-free (`compatible`, `name`, and `status` only), and PSCI used the
+SMC conduit. At 0.252 seconds the kernel logged
+`legacy SIP version probe failed` with `-EOPNOTSUPP`, followed by platform probe
+error `-95`; the driver directory contains no bound-device symlink. Current
+logging cannot distinguish whether private legacy ID `0x82000001` failed, or
+whether it succeeded and `0x8200000a` failed. It proves only that one returned a
+raw signed `-1` or `-2`, which the transport deliberately maps to
+`-EOPNOTSUPP`. No suspend control ID was called and no suspend state was
+requested.
+
+The rest of the boot stayed healthy during the read-only acceptance window.
+EBC loaded the device waveform version `0x19`, registered fb0, and runtime
+suspended; KOReader and the orientation bridge stayed running with stable PIDs;
+the mirrored cyttsp5 axes and `wilkbook-orientation` MSC_RAW device were present;
+Wi-Fi associated and leased `192.168.86.145`; root SSH, gateway, and Internet
+reachability passed; and the fatal-kernel scan was clean. This is evidence of a
+healthy boot and a rejected probe gate, not of private SIP compatibility,
+suspend, DDR retention, wake, resume, EBC repair, or energy savings.
+
+The separate 7.0 probe patch then had a forced probe-only legacy SIP transport,
+policy-free DT node, and the two now-rejected version calls. That discovery
+premise is retired. The replacement execution-capable stack is fully
+offline-validated; its first activation-hard-off boot instead exposed the live
+OF `name` metadata parser rejection recorded above, and makes no
+firmware-compatibility claim. Its fresh kernel output is
+`/gnu/store/43aa16pq7hd5p5ahka01yczhrb1fcp8d-linux-pinenote-7.0.11-pinenote`;
+the matching image system is
+`/gnu/store/pdqr7rf00bzd4sb1d7mxqmk25qdbn83k-system`.
+
+The 2026-07-26 review-fix artifact that was subsequently deployed is
+`/tmp/opencode/pinenote-rootfs-artifacts-bsp-pm-reviewfix-20260726/pinenote-reader-PNGuixRoot-20260726.ext4`,
+SHA-256 `0d5c432d5db8291d023c8061d364745f820f8391d8264444a19882dc6330fef6`,
+1,945,288,704 bytes, exactly 3,799,392 512-byte sectors. Its rootfs-matched boot
+bundle is `/tmp/opencode/pinenote-reader-boot-bundle-bsp-pm-reviewfix-20260726`.
+The extracted `Image` and DTB byte-match the new kernel output; their SHA-256
+values are `a8b8cb89e0e71bab7aacbcca08c449a70890bbabfc4f251db18b85e4553290dc`
+and `9d981579a2bafd56b2c56c215c88b01a6ec2670dafc5d97a7dd949b66e229bf2`.
+The bundle's initrd SHA-256 is
+`db7d08cb6e304fdc87618b523d6848d7ddb4aef2268b200072e184de775065b7`.
+
+All reader-candidate host suites passed against the verified device waveform,
+as did the derivation, full AArch64 kernel, helper packages, reader closure,
+rootfs and boot-bundle inspectors, source/config/DT inspection, complete mock
+helper gate, generic ARM64 login smoke, real-artifact QEMU rung 4, and visual
+rung 4v. Files dumped back out of this exact ext4 image prove the packaged
+config leaves `ROCKCHIP_SUSPEND_MODE_ACTIVATE` disabled, the packaged Lua policy
+is exactly disabled, and `System.map` contains the executor but no activation
+symbol. At that pre-deployment point the candidate was ready for the separate
+user-present os2 write protocol; no device access, os2 write, reboot, suspend, or
+hardware action occurred while producing the offline evidence. Its later write
+and boot are recorded below and its binding claim is superseded. The
+artifact-bound command, input, hash, and log record is
+`doc/artifacts/pinenote-reader-bsp-pm-reviewfix-20260726.md`.
+
+On 2026-07-26 the exact candidate was copied to stock os1 at
+`/home/user/pinenote-reader-PNGuixRoot-20260726-bsp-pm-reviewfix.ext4`.
+The SSH host key matched the archived stock-os1 ED25519 fingerprint, the running
+root was `/dev/mmcblk0p5`, and the remote file matched the host at 1,945,288,704
+bytes and SHA-256
+`0d5c432d5db8291d023c8061d364745f820f8391d8264444a19882dc6330fef6`.
+The os2 write and exact-range readback sequence then completed from that same
+stock-os1 session.
+`/dev/mmcblk0p6` was confirmed unmounted and large enough before `dd`; exactly
+3,799,392 512-byte records (1,945,288,704 bytes) were written to p6 with
+`conv=fsync`. SHA-256 of an exact 3,799,392-sector readback from p6 matched
+`0d5c432d5db8291d023c8061d364745f820f8391d8264444a19882dc6330fef6`.
+The write session did not change boot selection or reboot the device. The user
+subsequently unplugged it and reported that it rebooted into os2. Read-only SSH
+acceptance then confirmed the exact root/system/kernel and healthy reader stack,
+and exposed the metadata-only unbound-driver finding recorded above.
+
+The maximal **offline-only** Linux-side contract is now production-linked and
+activation-hard-off. A
+host-compiled typed model captures donor `72127ca` probe ordering, GPIO records
+and terminator, three regulator-state lists, PM-prepare events, and the
+descriptive virtual-poweroff sequence. Donor and maximal DTS fixtures are
+compiled to DTBs, parsed with the exact `rockchip,power-ctrl` and
+`rockchip,regulator-*-in-*` property schema, and consumed by the same C tests.
+Production Kbuild links the strict parser, typed model, generic executor,
+exact-node regulator consumer API with locked wrappers, and narrow
+SIP/regulator/CPU/modern-PSCI backend. A separate activation object owns the
+active driver and its device-PM `.prepare`/executor edge; hidden exact-default-n
+config omits it, so the policy-free probe still performs zero actions.
+Production rejects mem-lite, mem-ultra, and virtual-poweroff policy; CPU/PSCI
+remain linked but dormant. Regulator identities are provider-deduplicated and
+exact prior settings are restored after failure, completion, and teardown;
+failed restores remain queued for retry, and any failed prepare poisons the
+activation instance until reboot. Kconfig requires `SUSPEND` for ARM64
+`CPU_PM`. Host tests use fakes only. The affected default-linked
+objects and the separately requested activation object compile under AArch64
+LLVM; host, mutation, suspend, actual source-tree, full-kernel, image, and QEMU
+gates pass. The superseded review-fix source booted with activation hard-off but
+rejected Linux OF's synthesized `name` metadata before binding; the corrected
+namefix dormant bind is recorded at the top of this document. Neither boot is
+evidence of firmware compatibility or permission to attempt suspend.
+
+Stock Debian os1 was confirmed as `/dev/mmcblk0p5`, os2 remained unmounted,
+and the remotely staged file at
+`/home/user/pinenote-reader-PNGuixRoot-20260725-bsp-sip-probe.ext4` matched the
+host size and SHA-256. Exactly 3,799,368 512-byte sectors were written to
+`/dev/mmcblk0p6` with `conv=fsync`; SHA-256 of an exact-range eMMC readback
+matched. No persistent boot-selection change or firmware write occurred.
 
 **2026-07-19 hardware verdict: final4 autorotation and touch normalization are
 deployed and fully accepted on glass.** The final image booted from os2 with the
@@ -78,8 +370,9 @@ observations; no suspend attempted.** The reader rootfs is
 `/tmp/opencode/pinenote-rootfs-artifacts-telemetry-current/pinenote-reader-PNGuixRoot-20260720.ext4`,
 SHA-256 `92837467ba2c0714bdef595d0a2f247536a82aa4dbcb80774902f4d0c1dac189`,
 1,945,272,320 bytes. Its full waveform/EBC/raster/input/orientation/optics/power/
-suspend host suites pass; the rootfs-extracted DTB passes the exact RK817
-battery profile/phandle gate and suspend gate; and QEMU rung 4 plus 4v pass.
+suspend host suites passed their then-current gates; the rootfs-extracted DTB
+passed the exact RK817 battery profile/phandle gate and then-current suspend
+gate; and QEMU rung 4 plus 4v passed.
 All local and NFS backup manifests verified. Stock os1 was verified as
 `/dev/mmcblk0p5`, os2 remained unmounted, and the file was staged at
 `/home/user/pinenote-reader-PNGuixRoot-20260720-telemetry.ext4`; its remote
@@ -152,9 +445,9 @@ log. `KOReaderBackend.prepare()` had ignored a bounded prior-reader stop
 failure. It now refuses to relaunch unless the PID/cmdline-verified reader exits,
 with a bounded identity-checked `KILL` fallback; offline optics and power suites
 pass, and the repeated hardware ABBA completed all four legs. The forward-port
-defconfig now selects `CONFIG_CPU_FREQ_DEFAULT_GOV_CONSERVATIVE=y` for the next
-reader image. Boot-time governor readback remains a deployment check; no
-suspend was attempted and suspend remains disabled. Owner-only raw reports are
+defconfig now selects `CONFIG_CPU_FREQ_DEFAULT_GOV_CONSERVATIVE=y`; the
+2026-07-25 probe-only reader boot read it back as `conservative`. No suspend was
+attempted and suspend remains disabled. Owner-only raw reports are
 under `/tmp/opencode/pinenote-reader-energy-ABBA-20260725-retry1/` and must not
 be committed or shared unsanitized.
 
@@ -170,19 +463,27 @@ the installer would write identical bytes. The FIT contains Rockchip
 and OP-TEE 3.13 built 2023-06-07. It is the downstream BSP-ATF contract, not
 upstream TF-A 2.12+.
 
-Source review resolved one misleading kernel artifact: the 7.0 patch carried
+Source review resolved one misleading earlier kernel artifact: the 7.0 patch carried
 `CONFIG_ROCKCHIP_SUSPEND_MODE=y` but neither the downstream Rockchip SIP suspend
 driver nor its `rockchip-suspend` DT policy; upstream 7.0.11 does not define the
-symbol, so the ignored stale line has been removed. This is not an active BSP
-suspend path. The installed stable BSP ATF requires that complete Linux-side
-SIP driver plus DT policy, so the present firmware/kernel contract mismatch is
-the leading deep-suspend blocker. **Architecture decision (2026-07-25):** retain
-the byte-verified stable boot firmware for the first qualification and port
-Samuel Holland's complete `rockchip_sip` + `rockchip_pm_config` +
-`rockchip-suspend` compatibility stack into the recoverable os2 kernel/DT.
-Suspend remains disabled; the first hardware boot of that stack is a
-non-suspending bind/probe check under UART. An upstream-TF-A migration is a
-separate later project because os1 cannot recover a damaged boot chain. Public
+symbol, so the ignored stale line was removed before the explicit compatibility
+patch was added. The current patch is not an active BSP suspend path: its
+production candidate contains the real backend, but exact-default-n Kconfig
+omits the only activation object, and the core accepts only the policy-free DT.
+At the 2026-07-25 decision point, the installed stable BSP ATF still required an
+execution-capable Linux-side SIP driver plus DT policy. The accepted direction
+was to retain the byte-verified stable boot firmware and port the required
+`rockchip_sip`/`rockchip_pm_config` contract into the recoverable os2 kernel/DT.
+The production-linked MEM-policy parser/model/executor/backend slice is now
+offline-proven behind exact-default-n activation; it is deliberately not the
+full PineNote ultra-suspend policy. Activation, an active reviewed DT policy,
+suspend-state selection, and PineNote resume dependencies remain leading
+deep-suspend blockers. Suspend remains disabled, and any first activated boot is
+a separate non-suspending bind/probe check under UART. No additional hardware
+boot is allocated merely to repeat the corrected zero-call dormant binding.
+An upstream-TF-A
+migration is a separate later project because os1 cannot recover a damaged boot
+chain. Public
 Kindle/Kobo/reMarkable/PocketBook integrations support the
 intended policy shape--save, paint and wait, disable light/radio, batch wakes,
 and use one platform owner--but provide no evidence that this PineNote's
@@ -551,13 +852,47 @@ Also staged 2026-07-03:
 
 ## Current os2 contents
 
-os2 currently holds the **2026-07-20 RK817 telemetry candidate**, SHA
-`92837467ba2c0714bdef595d0a2f247536a82aa4dbcb80774902f4d0c1dac189` —
-written from os1 with the full protocol and exact-range readback verification.
-The staged copy is
-`/home/user/pinenote-reader-PNGuixRoot-20260720-telemetry.ext4`.
-**First boot and RK817 telemetry acceptance confirmed 2026-07-24; no suspend
-attempted.** The previously installed and hardware-accepted final4
+os2 currently holds the **2026-07-28 signal-safe dormant EBC adapter
+candidate**, SHA
+`1777dde4c5febd7eaaf9d763b422b48ab7d24ca5c75a615bc966406cf973ae64` —
+written from stock os1 with exact-range readback verification. The staged copy
+is `/home/user/pinenote-reader-ebc-adapter-release-reviewed-20260727.ext4`.
+**This image has not booted. The next action is one UART-supervised boot and
+paint/barrier/restore diagnostic under `doc/hardware-deploy.md`; suspend remains
+disabled.** The previously installed 2026-07-27 EBC generation-barrier reader
+candidate had SHA
+`c15d023159e130633db87a0df742248ef5be2ac6e9aece9d4fc83f73c59cfd4d`
+and staged copy
+`/home/user/pinenote-reader-PNGuixRoot-20260727-ebc-barrier.ext4`. That exact
+image booted from os2 and passed the read-only reader/containment acceptance
+recorded above; production had no barrier UAPI caller. The previously installed
+2026-07-26 BSP PM OF-name
+fix reader candidate had SHA
+`0c67785ff434bac66e3652e940c1d088e2c242cf6dfd132fc66fd8e2b8f97f4f` and staged
+copy `/home/user/pinenote-reader-PNGuixRoot-20260726-bsp-pm-namefix.ext4`.
+That exact image booted from os2 and passed the activation-hard-off bind and
+reader-health acceptance recorded at the top of this document; no suspend was
+attempted. The previously installed 2026-07-26 BSP PM
+review-fix reader candidate had SHA
+`0d5c432d5db8291d023c8061d364745f820f8391d8264444a19882dc6330fef6` and staged
+copy `/home/user/pinenote-reader-PNGuixRoot-20260726-bsp-pm-reviewfix.ext4`. Its
+unplugged boot and read-only SSH acceptance confirmed the exact os2
+root/system/kernel and a healthy reader stack. The PM driver remained unbound
+only because the old parser rejected Linux OF's standard `name` metadata; no
+backend or suspend action occurred and no suspend was attempted. The previously
+installed 2026-07-25 BSP SIP probe-only reader
+candidate had SHA
+`e64bc5e495aa5b865354b2fe5afa30adc05e8182084887f3c42970daf7d13289` and staged
+copy `/home/user/pinenote-reader-PNGuixRoot-20260725-bsp-sip-probe.ext4`. It
+booted from os2 with the exact matched boot bundle and `conservative` governor;
+the reader stack was healthy, but the probe-only driver returned `-EOPNOTSUPP`
+from its ambiguous two-call legacy version gate and did not bind. No suspend was
+attempted. The previously installed 2026-07-20 RK817
+telemetry candidate had SHA
+`92837467ba2c0714bdef595d0a2f247536a82aa4dbcb80774902f4d0c1dac189`; its
+staged copy is `/home/user/pinenote-reader-PNGuixRoot-20260720-telemetry.ext4`.
+Its first boot and RK817 telemetry acceptance were confirmed 2026-07-24, with
+no suspend attempted. The previously installed and hardware-accepted final4
 2026-07-19 autorotation reader build had SHA
 `d64b1e820d37071108a361f97fd1383630bd36a97b536e4c157407fd4db8fbdc`; its
 staged copy is

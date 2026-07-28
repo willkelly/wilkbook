@@ -115,7 +115,7 @@ with descriptive messages. Keep `doc/status.md` in sync with reality after
 any hardware session. Don't commit the per-device waveform or anything
 under a tool's gitignored `build/`.
 
-## Where we are (2026-07-25)
+## Where we are (2026-07-27)
 
 7.0.x is the validated primary: e-ink display with temperature-compensated
 waveforms, Wi-Fi/BT, USB gadget console, and PREEMPT_RT are hardware-proven.
@@ -123,10 +123,41 @@ KOReader runs directly on fbdev with pen and finger input; final4 validated
 all four orientations, state replay, contact deferral, and normalized cyttsp5
 coordinates on glass. Wi-Fi association, DHCP, and key-only SSH are proven on
 the reader image. The optics pipeline has real device datasets plus an offline
-round-trip harness, and the awake-power program selected `conservative` after
-static and exact-reader-workload ABBAs; the next image must still verify the
-boot-time governor readback. Suspend remains deliberately disabled. Firmware
-inventory identified the downstream BSP-ATF contract, so the next suspend step
-is an offline compatibility port of the complete Rockchip SIP/PM stack followed
-by a non-suspending bind/probe boot under UART—not a firmware reflash. See
-`ROADMAP.md`, `doc/status.md`, and `doc/power-management.md` for specifics.
+ round-trip harness, and the awake-power program selected `conservative` after
+ static and exact-reader-workload ABBAs; the 2026-07-25 probe-only reader boot
+ verified the boot-time governor readback. Suspend remains deliberately disabled.
+ Firmware
+inventory identified the downstream BSP-ATF contract. The probe-only first
+compatibility slice booted on 2026-07-25, but its invalid private version-query
+gate returned `-EOPNOTSUPP` and left the driver unbound. It is now fail-closed:
+the first activation-hard-off image booted on 2026-07-26 but rejected Linux OF's
+standard synthesized `name` metadata before binding. The corrected adapter
+accepts only the metadata-only policy-free node and keeps firmware calls
+disabled; the corrected kernel booted and bound on 2026-07-26 with activation
+compiled out and no suspend attempt. The maximal offline dormant
+Linux-side contract now has donor-faithful typed events, compiled-DTB fixtures,
+and a production-linked, execution-capable MEM-policy stack behind an
+activation-hard-off boundary. Failed prepares poison activation until reboot,
+and regulator restoration is retryable. The EBC disable-tail caller/off-screen
+snapshots and generation-addressed barrier now pin a first setup/hardware failure
+as terminal poison for later starts. The exact image carrying that code booted
+cleanly on 2026-07-27 with no timeout/poison signature, but production has no
+barrier UAPI caller, so the barrier's hardware semantics remain unproven. A
+separately invoked, root-only paint/barrier/restore diagnostic and dormant
+LuaJIT adapter/provider were written to os2 with exact-range SHA verification
+on 2026-07-28 and await a UART-supervised boot/test. The diagnostic blocks
+INT/TERM/HUP outside an atomic `pselect` acknowledgement wait, blocks before
+installing handlers, refuses pending cancellation before framebuffer mutation,
+and preserves kernel barrier rejection codes, with startup, pending, and
+blocked-delivery host regressions; none is imported by
+the reader. Process inspection fails closed and is repeated immediately before
+framebuffer mutation; EUID root is only an operational gate under the image's
+existing maintenance sudo policy. The tree also provides a closed provider boundary plus pure
+injected-capability userspace coordinator model, and executes a separate
+synthetic active DT policy through fake Rockchip operations. The composite gate
+reruns production hard-off validation; none of this is production-wired or a
+suspend permission. Do not allocate another boot merely to repeat zero-call
+binding. Activation, an active reviewed DT policy, real coordinator providers
+and production sleep-frame wiring, and the PineNote-specific resume/ultra-suspend
+dependencies remain required before any suspend attempt—not a firmware reflash.
+See `ROADMAP.md`, `doc/status.md`, and `doc/power-management.md` for specifics.
