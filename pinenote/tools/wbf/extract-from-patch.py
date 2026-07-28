@@ -11,6 +11,7 @@ Each PATH must be a new-file diff (--- /dev/null) inside PATCH; it is
 written under OUTDIR with its basename-preserving relative path.
 """
 
+import re
 import sys
 from pathlib import Path
 
@@ -20,7 +21,11 @@ def extract(patch_text: str, path: str) -> str:
     start = patch_text.index(marker)
     body = patch_text[start:]
     body = body[body.index("@@"):]
-    body = body[body.index("\n") + 1:]
+    hunk_header, body = body.split("\n", 1)
+    match = re.fullmatch(r"@@ -0,0 \+1,(\d+) @@", hunk_header)
+    if match is None:
+        raise ValueError(f"{path}: unsupported new-file hunk: {hunk_header}")
+    expected_lines = int(match.group(1))
     lines = []
     for line in body.splitlines():
         if line.startswith("+"):
@@ -29,7 +34,22 @@ def extract(patch_text: str, path: str) -> str:
             # New-file diffs are one hunk of pure additions; anything else
             # ends the section.
             break
+    if len(lines) != expected_lines:
+        raise ValueError(
+            f"{path}: hunk advertises {expected_lines} added lines, "
+            f"but contains {len(lines)}"
+        )
     return "\n".join(lines) + "\n"
+
+
+def validate_new_file_hunks(patch_text: str) -> None:
+    for section in patch_text.split("\ndiff --git "):
+        if "\n--- /dev/null\n" not in section:
+            continue
+        match = re.search(r"^\+\+\+ b/(.+)$", section, re.MULTILINE)
+        if match is None:
+            raise ValueError("new-file diff lacks a b/ path")
+        extract(patch_text, match.group(1))
 
 
 def main() -> int:
@@ -37,6 +57,7 @@ def main() -> int:
         print(__doc__, file=sys.stderr)
         return 2
     patch = Path(sys.argv[1]).read_text()
+    validate_new_file_hunks(patch)
     outdir = Path(sys.argv[2])
     for path in sys.argv[3:]:
         out = outdir / path

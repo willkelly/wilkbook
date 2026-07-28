@@ -6,6 +6,8 @@ build time, so the tests always exercise exactly the code the kernel
 ships) against a ~100-line kernel-API shim, and inspects a PVI `.wbf`
 waveform file the way `rockchip_ebc` does on the device
 (`DRM_EPD_LUT_4BIT_PACKED`, 256 max phases).
+Extraction first validates every new-file hunk's advertised line count, so
+the host rung fails if the kernel patch would truncate or overrun a source.
 
 ```sh
 # from the repo root:

@@ -47,10 +47,14 @@ typedef int64_t s64;
 typedef uint16_t __le16;
 typedef uint32_t __le32;
 typedef uint64_t __u64;
+typedef uint32_t __u32;
+typedef int32_t __s32;
 typedef u64 dma_addr_t;
 typedef s64 ktime_t;
 typedef unsigned int gfp_t;
 typedef int spinlock_t;
+struct mutex { int held; };
+typedef struct { unsigned long wakes; } wait_queue_head_t;
 
 static inline u32 le32_to_cpu(__le32 v) { return v; }
 static inline u16 le16_to_cpu(__le16 v) { return v; }
@@ -76,6 +80,10 @@ static inline u16 le16_to_cpu(__le16 v) { return v; }
 #ifndef ENOTSUPP
 #define ENOTSUPP 524 /* kernel-internal errno */
 #endif
+#ifndef ERESTARTSYS
+#define ERESTARTSYS 512
+#endif
+#define U64_MAX UINT64_MAX
 
 #define S_IRUGO 0444
 #define S_IWUSR 0200
@@ -114,7 +122,13 @@ struct ebc_shim_dma_mapping {
  * are the shim's own honesty checks: a healthy driver run leaves all the
  * *_violations / completion_timeouts fields at 0. */
 struct ebc_shim_state {
-	/* completion (kernel counting semantics) */
+	/* completion (kernel counting semantics).  The operation counters let
+	 * refresh tests distinguish a clean one-END-per-wait session from a
+	 * stale or deferred END that merely happens to satisfy a later wait. */
+	unsigned long completion_calls;
+	unsigned long completion_reinits;
+	unsigned long completion_waits;
+	unsigned long completion_successful_waits;
 	unsigned long completion_timeouts;
 
 	/* devm_request_irq registration; a fake device raises the line by
@@ -129,6 +143,15 @@ struct ebc_shim_state {
 	void *thread_data;
 	bool thread_parked;
 	bool thread_stop;
+	unsigned int task_state;
+	unsigned long task_idle_transitions;
+	void (*task_state_hook)(unsigned int state);
+	unsigned long kthread_unpark_calls;
+	unsigned long wake_up_process_calls;
+	bool thread_woken;
+	unsigned long kthread_stop_calls;
+	void (*kthread_stop_hook)(void);
+	unsigned long schedule_calls;
 	void (*schedule_hook)(void);
 
 	/* pm_runtime: a refcount plus a suspended flag; the driver's real
@@ -138,10 +161,27 @@ struct ebc_shim_state {
 	int (*rt_suspend)(struct device *dev);
 	int pm_refcount;
 	bool pm_suspended;
+	int pm_get_error;
+	unsigned long pm_disable_calls;
+	unsigned long pm_force_suspend_calls;
+	unsigned long pm_force_resume_calls;
+
+	/* DRM teardown counters for timeout-vs-kthread_stop tests. */
+	unsigned long drm_unregister_calls;
+	unsigned long drm_shutdown_calls;
+	unsigned long drm_suspend_calls;
+	unsigned long drm_resume_calls;
+	int drm_suspend_error;
+	void (*drm_suspend_hook)(void);
+	void (*drm_resume_hook)(void);
 
 	/* clk / regulator bookkeeping (for power-discipline checks) */
 	int clks_on;
 	int regulators_on;
+	unsigned long clk_prepare_enable_calls;
+	unsigned long clk_disable_unprepare_calls;
+	unsigned long regulator_bulk_enable_calls;
+	unsigned long regulator_bulk_disable_calls;
 
 	/* regmap over one MMIO window: a RAM register file plus a write
 	 * hook (the fake device).  reg is a byte offset, stride 4. */
@@ -149,6 +189,10 @@ struct ebc_shim_state {
 	bool (*volatile_reg)(struct device *dev, unsigned int reg);
 	struct device *regmap_dev;
 	bool cache_only;
+	unsigned long regcache_cache_only_calls;
+	unsigned long regcache_mark_dirty_calls;
+	unsigned long regcache_sync_calls;
+	unsigned long regmap_write_calls;
 	void (*regmap_hook)(unsigned int reg, const u32 *vals, size_t count);
 	unsigned long regmap_volatile_cache_only_writes;
 	unsigned long regmap_oob;
@@ -158,6 +202,10 @@ struct ebc_shim_state {
 	struct ebc_shim_dma_mapping dma[EBC_SHIM_DMA_SLOTS];
 	u32 dma_next;
 	unsigned long dma_violations;
+	unsigned long dma_maps;
+	unsigned long dma_unmaps;
+	/* Fail exactly this dma_map_single call (one-based); zero disables it. */
+	unsigned long dma_fail_map_call;
 
 	/* iio: panel temperature in millicelsius.  Default (override unset)
 	 * is 25000, the value every pre-existing test was written against. */
@@ -171,6 +219,13 @@ struct ebc_shim_state {
 	 * middle of a multi-plane dump. */
 	unsigned int uaccess_fail_next;
 	void (*uaccess_hook)(void);
+
+	/* Negative wait result injected by barrier ABI tests. */
+	long wait_killable_result;
+	unsigned long module_pins;
+	unsigned long module_gets;
+	unsigned long module_puts;
+	bool module_get_fail;
 };
 
 static struct ebc_shim_state ebc_shim = { .dma_next = EBC_SHIM_DMA_BASE };
@@ -362,14 +417,28 @@ static inline void spin_lock_init(spinlock_t *l) { *l = 0; }
 static inline void spin_lock(spinlock_t *l) { (void)l; }
 static inline void spin_unlock(spinlock_t *l) { (void)l; }
 static inline int spin_trylock(spinlock_t *l) { (void)l; return 1; }
+static inline void mutex_init(struct mutex *m) { m->held = 0; }
+static inline void mutex_lock(struct mutex *m) { m->held++; }
+static inline void mutex_unlock(struct mutex *m) { m->held--; }
+static inline void init_waitqueue_head(wait_queue_head_t *w) { w->wakes = 0; }
+static inline void wake_up_all(wait_queue_head_t *w) { w->wakes++; }
 
 #define TASK_RUNNING 0u
 #define TASK_IDLE 0x402u
 #define TASK_DEAD 0x80u
-#define set_current_state(s) do { } while (0)
-#define __set_current_state(s) do { } while (0)
+static inline void ebc_shim_set_current_state(unsigned int state)
+{
+	ebc_shim.task_state = state;
+	if (state == TASK_IDLE)
+		ebc_shim.task_idle_transitions++;
+	if (ebc_shim.task_state_hook)
+		ebc_shim.task_state_hook(state);
+}
+#define set_current_state(s) ebc_shim_set_current_state(s)
+#define __set_current_state(s) ebc_shim_set_current_state(s)
 static inline void schedule(void)
 {
+	ebc_shim.schedule_calls++;
 	if (ebc_shim.schedule_hook)
 		ebc_shim.schedule_hook();
 }
@@ -386,22 +455,38 @@ struct completion {
 };
 
 static inline void init_completion(struct completion *c) { c->done = 0; }
-static inline void reinit_completion(struct completion *c) { c->done = 0; }
-static inline void complete(struct completion *c) { c->done++; }
-/* non-consuming probe (kernel semantics); used by the dspend-straggler
- * debug patch's instrumentation */
-static inline bool completion_done(struct completion *c) { return c->done > 0; }
+static inline void reinit_completion(struct completion *c)
+{
+	ebc_shim.completion_reinits++;
+	c->done = 0;
+}
+static inline void complete(struct completion *c)
+{
+	ebc_shim.completion_calls++;
+	c->done++;
+}
 static inline unsigned long wait_for_completion_timeout(struct completion *c,
 							unsigned long timeout)
 {
 	(void)timeout;
+	ebc_shim.completion_waits++;
 	if (c->done) {
 		c->done--;
+		ebc_shim.completion_successful_waits++;
 		return 1;
 	}
 	ebc_shim.completion_timeouts++;
 	return 0;
 }
+
+/* The harness is deliberately single-threaded.  A wait query observes the
+ * current predicate once; tests inject terminal state before calling it. */
+#define wait_event_killable_timeout(wq, condition, timeout) \
+	((void)(wq), (void)(timeout), ebc_shim.wait_killable_result ? \
+	 ebc_shim.wait_killable_result : ((condition) ? 1 : 0))
+#define wait_event_killable(wq, condition) \
+	((void)(wq), ebc_shim.wait_killable_result ? ebc_shim.wait_killable_result : \
+	 ((condition) ? 1 : -ERESTARTSYS))
 
 #define msecs_to_jiffies(ms) ((unsigned long)(ms))
 
@@ -427,11 +512,15 @@ static inline void kthread_park(struct task_struct *t)
 static inline void kthread_unpark(struct task_struct *t)
 {
 	(void)t;
+	ebc_shim.kthread_unpark_calls++;
 	ebc_shim.thread_parked = false;
 }
 static inline int kthread_stop(struct task_struct *t)
 {
 	(void)t;
+	ebc_shim.kthread_stop_calls++;
+	if (ebc_shim.kthread_stop_hook)
+		ebc_shim.kthread_stop_hook();
 	ebc_shim.thread_stop = true;
 	return 0;
 }
@@ -443,7 +532,12 @@ static inline struct task_struct *kthread_create(int (*fn)(void *), void *data,
 	ebc_shim.thread_data = data;
 	return &ebc_shim_task;
 }
-static inline void wake_up_process(struct task_struct *t) { (void)t; }
+static inline void wake_up_process(struct task_struct *t)
+{
+	(void)t;
+	ebc_shim.wake_up_process_calls++;
+	ebc_shim.thread_woken = true;
+}
 static inline void sched_set_fifo(struct task_struct *t) { (void)t; }
 
 /* --- device / driver model (INERT) -------------------------------------- */
@@ -517,11 +611,28 @@ struct platform_driver {
 		const char *name;
 		const struct of_device_id *of_match_table;
 		const struct dev_pm_ops *pm;
+		bool suppress_bind_attrs;
 	} driver;
 };
 
 #define module_platform_driver(drv) \
 	static const struct platform_driver *ebc_shim_pdrv __maybe_unused = &(drv)
+#define THIS_MODULE ((void *)1)
+static inline bool try_module_get(void *module)
+{
+	(void)module;
+	ebc_shim.module_gets++;
+	if (ebc_shim.module_get_fail)
+		return false;
+	ebc_shim.module_pins++;
+	return true;
+}
+static inline void module_put(void *module)
+{
+	(void)module;
+	ebc_shim.module_puts++;
+	ebc_shim.module_pins--;
+}
 
 /* --- module macros ------------------------------------------------------ */
 
@@ -570,12 +681,14 @@ static inline long clk_round_rate(struct clk *clk, unsigned long rate)
 static inline int clk_prepare_enable(struct clk *clk)
 {
 	(void)clk;
+	ebc_shim.clk_prepare_enable_calls++;
 	ebc_shim.clks_on++;
 	return 0;
 }
 static inline void clk_disable_unprepare(struct clk *clk)
 {
 	(void)clk;
+	ebc_shim.clk_disable_unprepare_calls++;
 	ebc_shim.clks_on--;
 }
 
@@ -592,12 +705,14 @@ static inline int devm_regulator_bulk_get(struct device *dev, int num,
 static inline int regulator_bulk_enable(int num, struct regulator_bulk_data *consumers)
 {
 	(void)consumers;
+	ebc_shim.regulator_bulk_enable_calls++;
 	ebc_shim.regulators_on += num;
 	return 0;
 }
 static inline int regulator_bulk_disable(int num, struct regulator_bulk_data *consumers)
 {
 	(void)consumers;
+	ebc_shim.regulator_bulk_disable_calls++;
 	ebc_shim.regulators_on -= num;
 	return 0;
 }
@@ -630,7 +745,12 @@ static inline int pm_runtime_get(struct device *dev)
 {
 	(void)dev;
 	ebc_shim.pm_refcount++;
-	return 0;
+	return ebc_shim.pm_get_error;
+}
+static inline void pm_runtime_put_noidle(struct device *dev)
+{
+	(void)dev;
+	ebc_shim.pm_refcount--;
 }
 static inline int pm_runtime_resume(struct device *dev)
 {
@@ -660,7 +780,11 @@ static inline void pm_runtime_set_autosuspend_delay(struct device *dev, int ms)
 }
 static inline void pm_runtime_use_autosuspend(struct device *dev) { (void)dev; }
 static inline void pm_runtime_enable(struct device *dev) { (void)dev; }
-static inline void pm_runtime_disable(struct device *dev) { (void)dev; }
+static inline void pm_runtime_disable(struct device *dev)
+{
+	(void)dev;
+	ebc_shim.pm_disable_calls++;
+}
 static inline bool pm_runtime_enabled(struct device *dev) { (void)dev; return true; }
 static inline bool pm_runtime_status_suspended(struct device *dev)
 {
@@ -669,6 +793,7 @@ static inline bool pm_runtime_status_suspended(struct device *dev)
 }
 static inline int pm_runtime_force_suspend(struct device *dev)
 {
+	ebc_shim.pm_force_suspend_calls++;
 	if (!ebc_shim.pm_suspended && ebc_shim.rt_suspend) {
 		int ret = ebc_shim.rt_suspend(dev);
 
@@ -680,6 +805,7 @@ static inline int pm_runtime_force_suspend(struct device *dev)
 }
 static inline int pm_runtime_force_resume(struct device *dev)
 {
+	ebc_shim.pm_force_resume_calls++;
 	return pm_runtime_resume(dev);
 }
 
@@ -719,6 +845,7 @@ static inline void ebc_shim_reg_store(unsigned int reg, const u32 *vals,
 		ebc_shim.regmap_oob++;
 		return;
 	}
+	ebc_shim.regmap_write_calls++;
 	if (ebc_shim.cache_only && ebc_shim.volatile_reg &&
 	    ebc_shim.volatile_reg(ebc_shim.regmap_dev, reg))
 		ebc_shim.regmap_volatile_cache_only_writes++;
@@ -777,10 +904,32 @@ static inline int regmap_bulk_write(struct regmap *map, unsigned int reg,
 static inline void regcache_cache_only(struct regmap *map, bool enable)
 {
 	(void)map;
+	ebc_shim.regcache_cache_only_calls++;
 	ebc_shim.cache_only = enable;
 }
-static inline void regcache_mark_dirty(struct regmap *map) { (void)map; }
-static inline int regcache_sync(struct regmap *map) { (void)map; return 0; }
+static inline void regcache_mark_dirty(struct regmap *map)
+{
+	(void)map;
+	ebc_shim.regcache_mark_dirty_calls++;
+}
+static inline int regcache_sync(struct regmap *map)
+{
+	(void)map;
+	ebc_shim.regcache_sync_calls++;
+	return 0;
+}
+
+static inline __attribute__((noreturn)) void panic(const char *fmt, ...)
+{
+	va_list ap;
+
+	fprintf(stderr, "kernel panic: ");
+	va_start(ap, fmt);
+	vfprintf(stderr, fmt, ap);
+	va_end(ap);
+	fputc('\n', stderr);
+	abort();
+}
 
 /* --- dma-mapping (HARNESS: 32-bit handle registry, non-coherent model) ----
  *
@@ -817,6 +966,9 @@ static inline dma_addr_t dma_map_single(struct device *dev, void *ptr,
 	int i;
 
 	(void)dev; (void)dir;
+	ebc_shim.dma_maps++;
+	if (ebc_shim.dma_fail_map_call == ebc_shim.dma_maps)
+		return 0;
 	for (i = 0; i < EBC_SHIM_DMA_SLOTS; i++) {
 		struct ebc_shim_dma_mapping *m = &ebc_shim.dma[i];
 
@@ -850,6 +1002,7 @@ static inline void dma_unmap_single(struct device *dev, dma_addr_t addr,
 		struct ebc_shim_dma_mapping *m = &ebc_shim.dma[i];
 
 		if (m->active && m->handle == addr && m->size == size) {
+			ebc_shim.dma_unmaps++;
 			free(m->shadow);
 			m->shadow = NULL;
 			m->active = false;
@@ -1430,7 +1583,11 @@ static inline int drm_dev_register(struct drm_device *dev, unsigned long flags)
 	(void)dev; (void)flags;
 	return 0;
 }
-static inline void drm_dev_unregister(struct drm_device *dev) { (void)dev; }
+static inline void drm_dev_unregister(struct drm_device *dev)
+{
+	(void)dev;
+	ebc_shim.drm_unregister_calls++;
+}
 static inline void drm_client_setup(struct drm_device *dev, const void *format)
 {
 	(void)dev; (void)format;
@@ -1438,13 +1595,23 @@ static inline void drm_client_setup(struct drm_device *dev, const void *format)
 static inline int drm_mode_config_helper_suspend(struct drm_device *dev)
 {
 	(void)dev;
-	return 0;
+	ebc_shim.drm_suspend_calls++;
+	if (ebc_shim.drm_suspend_hook)
+		ebc_shim.drm_suspend_hook();
+	return ebc_shim.drm_suspend_error;
 }
 static inline int drm_mode_config_helper_resume(struct drm_device *dev)
 {
 	(void)dev;
+	ebc_shim.drm_resume_calls++;
+	if (ebc_shim.drm_resume_hook)
+		ebc_shim.drm_resume_hook();
 	return 0;
 }
-static inline void drm_atomic_helper_shutdown(struct drm_device *dev) { (void)dev; }
+static inline void drm_atomic_helper_shutdown(struct drm_device *dev)
+{
+	(void)dev;
+	ebc_shim.drm_shutdown_calls++;
+}
 
 #endif /* EBC_LOGIC_KERNEL_SHIM_H */
