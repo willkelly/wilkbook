@@ -60,8 +60,13 @@ require_config CONFIG_PM_DEBUG=y
 require_config CONFIG_PM_SLEEP_DEBUG=y
 require_config CONFIG_PM_TEST_SUSPEND=y
 require_config CONFIG_ARM_PSCI_FW=y
+require_config CONFIG_ROCKCHIP_SUSPEND_MODE=y
+if grep -E -q '^CONFIG_ROCKCHIP_SUSPEND_MODE_ACTIVATE=(y|m)$' "$config"; then
+  fail "resolved kernel config enables hidden Rockchip suspend activation"
+fi
+pass "resolved kernel config leaves hidden Rockchip suspend activation disabled"
 
-python3 - "$policy_lua" <<'PY'
+python3 - "$policy_lua" "$device_lua" <<'PY'
 import sys
 from pathlib import Path
 
@@ -74,7 +79,18 @@ def fail(message):
 policy = Path(sys.argv[1]).read_bytes()
 if policy != b"return false\n":
     fail("suspend policy must contain exactly 'return false' followed by one newline")
+
+device = Path(sys.argv[2]).read_bytes()
+for module in (
+    b"device/pinenote/ebc_barrier",
+    b"device/pinenote/ebc_sleep_frame",
+    b"device/pinenote/power_capabilities",
+    b"device/pinenote/power_coordinator",
+):
+    if module in device:
+        fail(f"production device source references dormant module {module.decode()}")
 PY
+pass "production device source references no dormant power module"
 
 if ! timeout 5s luajit "$policy_harness" "$device_lua"; then
   fail "restricted PineNote suspend policy evaluation failed or timed out"
@@ -135,6 +151,10 @@ for line in open(sys.argv[1], encoding="utf-8"):
     if match and stack:
         stack[-1]["properties"][match.group(1)] = True
 
+for node in nodes:
+    if node["path"] != "/":
+        node["properties"].setdefault(
+            "name", f'"{node["path"].rsplit("/", 1)[-1].split("@", 1)[0]}"')
 
 def one(path):
     matches = [node for node in nodes if node["path"] == path]
@@ -181,12 +201,45 @@ if cells(cover["properties"].get("linux,code", "")) != [0]:
     fail("cover linux,code is not exactly SW_LID (0)")
 require_token(pmic, "compatible", "rockchip,rk817")
 
-idle_states = [node["path"] for node in nodes if node["path"] == "/cpus/idle-states"]
+idle_state_nodes = sorted(
+    node["path"] for node in nodes
+    if node["path"].rsplit("/", 1)[-1].split("@", 1)[0] == "idle-states"
+    or "arm,idle-state" in quoted_tokens(node["properties"].get("compatible", ""))
+)
+idle_state_references = sorted(
+    node["path"] for node in nodes if "cpu-idle-states" in node["properties"]
+)
+if idle_state_nodes or idle_state_references:
+    fail("CPU idle states are forbidden while BSP SIP activation is compiled out: "
+         f"nodes={idle_state_nodes}, references={idle_state_references}")
+
+suspend_nodes = [
+    node for node in nodes if node is not root and (
+        node["path"].rsplit("/", 1)[-1].split("@", 1)[0] == "rockchip-suspend"
+        or "rockchip,pm-rk3568" in quoted_tokens(node["properties"].get("compatible", ""))
+    )
+]
+if len(suspend_nodes) != 1 or suspend_nodes[0]["path"] != "/rockchip-suspend":
+    fail(f"expected only the exact root /rockchip-suspend node, found {[node['path'] for node in suspend_nodes]}")
+suspend = suspend_nodes[0]
+if not enabled(suspend):
+    fail("/rockchip-suspend is not effectively enabled")
+if quoted_tokens(suspend["properties"].get("compatible", "")) != ["rockchip,pm-rk3568"]:
+    fail("/rockchip-suspend compatible is not exactly rockchip,pm-rk3568")
+if quoted_tokens(suspend["properties"].get("name", "")) != ["rockchip-suspend"]:
+    fail("/rockchip-suspend name is not exactly rockchip-suspend")
+if quoted_tokens(suspend["properties"].get("status", "")) != ["okay"]:
+    fail("/rockchip-suspend status is not exactly okay")
+if set(suspend["properties"]) != {"compatible", "name", "status"}:
+    extra = sorted(set(suspend["properties"]) - {"compatible", "name", "status"})
+    fail(f"/rockchip-suspend carries forbidden dormant-policy properties {extra}")
+suspend_descendants = [
+    node["path"] for node in nodes if node["path"].startswith("/rockchip-suspend/")
+]
+if suspend_descendants:
+    fail(f"/rockchip-suspend must not carry policy child nodes: {suspend_descendants}")
 print("PASS: effective DT wake capability is exactly cover switch and RK817 PMIC with verified identities")
-if idle_states:
-    print("NOTE: CPU idle-state nodes are present; validate them separately from system suspend")
-else:
-    print("NOTE: CPU idle-state nodes are absent; awake-idle tuning remains separate from system suspend")
+print("PASS: dormant Rockchip suspend node is unique, enabled, and policy-free")
 PY
 
 pass "offline suspend qualification gates passed"

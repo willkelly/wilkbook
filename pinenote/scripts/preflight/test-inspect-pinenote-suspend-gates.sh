@@ -15,22 +15,45 @@ tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/test-inspect-pinenote-suspend-gates.XXXXXX")
 trap 'rm -rf "$tmpdir"' EXIT HUP INT TERM
 
 write_config() {
-  pm_test_line=$1
-  cat >"$2" <<EOF
+  cat >"$1" <<EOF
 CONFIG_SUSPEND=y
 CONFIG_SUSPEND_FREEZER=y
 CONFIG_PM_SLEEP=y
 CONFIG_PM_DEBUG=y
 CONFIG_PM_SLEEP_DEBUG=y
-$pm_test_line
+CONFIG_PM_TEST_SUSPEND=y
 CONFIG_ARM_PSCI_FW=y
+CONFIG_ROCKCHIP_SUSPEND_MODE=y
+# CONFIG_ROCKCHIP_SUSPEND_MODE_ACTIVATE is not set
 EOF
 }
 
-write_config 'CONFIG_PM_TEST_SUSPEND=y' "$tmpdir/good.config"
-write_config '' "$tmpdir/missing.config"
-write_config 'prefix_CONFIG_PM_TEST_SUSPEND=y' "$tmpdir/prefixed.config"
-write_config 'CONFIG_PM_TEST_SUSPEND=y_suffix' "$tmpdir/suffixed.config"
+write_config "$tmpdir/good.config"
+python3 - "$tmpdir/good.config" "$tmpdir" <<'PY'
+import sys
+from pathlib import Path
+
+good_path = Path(sys.argv[1])
+outdir = Path(sys.argv[2])
+good = good_path.read_text()
+symbols = (
+    "CONFIG_PM_TEST_SUSPEND",
+    "CONFIG_ROCKCHIP_SUSPEND_MODE",
+)
+for symbol in symbols:
+    exact = f"{symbol}=y"
+    fixtures = {
+        "missing": good.replace(exact + "\n", "", 1),
+        "prefixed": good.replace(exact, "prefix_" + exact, 1),
+        "suffixed": good.replace(exact, exact + "_suffix", 1),
+        "wrong": good.replace(exact, f"{symbol}=m", 1),
+    }
+    for kind, text in fixtures.items():
+        (outdir / f"{kind}-{symbol}.config").write_text(text)
+(outdir / "enabled-CONFIG_ROCKCHIP_SUSPEND_MODE_ACTIVATE.config").write_text(
+    good.replace("# CONFIG_ROCKCHIP_SUSPEND_MODE_ACTIVATE is not set",
+                 "CONFIG_ROCKCHIP_SUSPEND_MODE_ACTIVATE=y", 1))
+PY
 
 printf 'return true\n' >"$tmpdir/enabled-policy.lua"
 printf '%s\n' '-- return false' 'return false' >"$tmpdir/comment-policy.lua"
@@ -74,6 +97,11 @@ return Generic:extend{
 }
 EOF
 
+for module in ebc_barrier ebc_sleep_frame power_capabilities power_coordinator; do
+  cp "$repo_device" "$tmpdir/import-$module.lua"
+  printf '\n-- fail-closed import fixture\nlocal dormant = require("device/pinenote/%s")\n' "$module" >>"$tmpdir/import-$module.lua"
+done
+
 write_dts() {
   root_compatible=$1
   gpio_compatible=$2
@@ -92,6 +120,11 @@ write_dts() {
 	compatible = $root_compatible;
 	#address-cells = <1>;
 	#size-cells = <1>;
+	rockchip-suspend {
+		compatible = "rockchip,pm-rk3568";
+		name = "rockchip-suspend";
+		status = "okay";
+	};
 	gpio-keys {
 		compatible = $gpio_compatible;
 		switch-cover {
@@ -131,9 +164,140 @@ write_dts "$good_root" '"gpio-keys"' '"cover"' 1 0 '' '' '"rockchip,rk817"' 'wak
 write_dts "$good_root" '"gpio-keys"' '"cover"' 5 1 '' '' '"rockchip,rk817"' 'wakeup-source;' '' "$tmpdir/wrong-cover-code.dts"
 write_dts "$good_root" '"gpio-keys"' '"cover"' 5 0 '' '' '"rockchip,rk805"' 'wakeup-source;' '' "$tmpdir/wrong-pmic-compatible.dts"
 
-for fixture in good extra-wake missing-cover disabled-cover disabled-ancestor wrong-root wrong-gpio-compatible wrong-cover-label wrong-cover-type wrong-cover-code wrong-pmic-compatible; do
+python3 - "$tmpdir/good.dts" "$tmpdir" <<'PY'
+import sys
+from pathlib import Path
+
+good = Path(sys.argv[1]).read_text()
+outdir = Path(sys.argv[2])
+suspend = '''\trockchip-suspend {
+\t\tcompatible = "rockchip,pm-rk3568";
+\t\tname = "rockchip-suspend";
+\t\tstatus = "okay";
+\t};
+'''
+if good.count(suspend) != 1:
+    raise SystemExit("FAIL: test fixture could not locate exact suspend node")
+
+omitted_name = good.replace('\t\tname = "rockchip-suspend";\n', "", 1)
+if omitted_name == good:
+    raise SystemExit("FAIL: test fixture could not omit explicit suspend name")
+(outdir / "omitted-suspend-name.dts").write_text(omitted_name)
+
+fixtures = {
+    "missing-suspend": good.replace(suspend, "", 1),
+    "disabled-suspend": good.replace('\t\tstatus = "okay";', '\t\tstatus = "disabled";', 1),
+    "wrong-suspend-compatible": good.replace("rockchip,pm-rk3568", "vendor,other-pm", 1),
+    "duplicate-suspend-unit": good.replace(
+        suspend,
+        suspend + suspend.replace("rockchip-suspend {", "rockchip-suspend@0 {"),
+        1,
+    ),
+    "duplicate-suspend-renamed": good.replace(
+        suspend,
+        suspend + suspend.replace("rockchip-suspend {", "firmware-probe {")
+        .replace('name = "rockchip-suspend";', 'name = "firmware-probe";'),
+        1,
+    ),
+    "duplicate-suspend-nested": good.replace(
+        "\tgpio-keys {",
+        '\tprobe-bus {\n\t\tfirmware-probe {\n'
+        '\t\t\tcompatible = "rockchip,pm-rk3568";\n'
+        '\t\t\tstatus = "okay";\n\t\t};\n\t};\n\tgpio-keys {',
+        1,
+    ),
+    "suspend-child-policy": good.replace(
+        '\t\tstatus = "okay";',
+        '\t\tstatus = "okay";\n\t\tpolicy {\n\t\t\trockchip,sleep-mode-config;\n\t\t};',
+        1,
+    ),
+    "suspend-extra-property": good.replace(
+        '\t\tstatus = "okay";',
+        '\t\tstatus = "okay";\n\t\tprobe-only-extra;',
+        1,
+    ),
+    "suspend-name-lookalike": good.replace(
+        '\t\tname = "rockchip-suspend";',
+        '\t\tnames = "rockchip-suspend";',
+        1,
+    ),
+    "cpu-idle-states": good.replace(
+        suspend,
+        '\tcpus {\n\t\tidle-states@0 {\n\t\t};\n\t};\n' + suspend,
+        1,
+    ),
+    "cpu-idle-state-renamed": good.replace(
+        suspend,
+        '\tcpus {\n\t\t#address-cells = <1>;\n\t\t#size-cells = <0>;\n'
+        '\t\tcpu@0 {\n\t\t\tdevice_type = "cpu";\n\t\t\treg = <0>;\n'
+        '\t\t\tcpu-idle-states = <&idle_state>;\n\t\t};\n'
+        '\t\tidle_state: low-power {\n\t\t\tcompatible = "arm,idle-state";\n'
+        '\t\t\tstatus = "okay";\n\t\t};\n\t};\n' + suspend,
+        1,
+    ),
+    "arm-idle-state-compatible": good.replace(
+        suspend,
+        '\tlow-power {\n\t\tcompatible = "arm,idle-state";\n'
+        '\t\tstatus = "okay";\n\t};\n' + suspend,
+        1,
+    ),
+}
+
+policy_properties = (
+    "wakeup-source",
+    "rockchip,sleep-mode-config",
+    "rockchip,wakeup-config",
+    "rockchip,sleep-debug-en",
+    "rockchip,pwm-regulator-config",
+    "rockchip,power-ctrl",
+    "rockchip,gpio-power-config",
+    "rockchip,apios-suspend",
+    "rockchip,api-os-config",
+    "rockchip,suspend-wfi-time-ms",
+    "rockchip,wfi-config",
+    "rockchip,virtual-poweroff",
+    "rockchip,sleep-pin",
+    "rockchip,sleep-io",
+    "rockchip,retention",
+    "regulator-state-mem",
+    "regulator-state-mem-lite",
+    "regulator-state-mem-ultra",
+    "regulator-on-in-mem",
+    "regulator-off-in-mem",
+    "regulator-on-in-mem-lite",
+    "regulator-off-in-mem-lite",
+    "regulator-on-in-mem-ultra",
+    "regulator-off-in-mem-ultra",
+    "rockchip,regulator-on-in-mem",
+    "rockchip,regulator-off-in-mem",
+    "rockchip,regulator-on-in-mem-lite",
+    "rockchip,regulator-off-in-mem-lite",
+    "rockchip,regulator-on-in-mem-ultra",
+    "rockchip,regulator-off-in-mem-ultra",
+    "regulator-suspend-microvolt",
+    "regulator-suspend-mode",
+)
+for index, property_name in enumerate(policy_properties):
+    name = f"suspend-policy-{index:02d}"
+    fixtures[name] = good.replace(
+        '\t\tstatus = "okay";',
+        f'\t\tstatus = "okay";\n\t\t{property_name};',
+        1,
+    )
+
+manifest = []
+for name, text in fixtures.items():
+    (outdir / f"{name}.dts").write_text(text)
+    manifest.append(name)
+(outdir / "generated-dtb-fixtures.txt").write_text("\n".join(manifest) + "\n")
+PY
+
+for fixture in good omitted-suspend-name extra-wake missing-cover disabled-cover disabled-ancestor wrong-root wrong-gpio-compatible wrong-cover-label wrong-cover-type wrong-cover-code wrong-pmic-compatible; do
   dtc -I dts -O dtb -o "$tmpdir/$fixture.dtb" "$tmpdir/$fixture.dts"
 done
+while IFS= read -r fixture; do
+  dtc -I dts -O dtb -o "$tmpdir/$fixture.dtb" "$tmpdir/$fixture.dts"
+done <"$tmpdir/generated-dtb-fixtures.txt"
 
 expect_reject() {
   description=$1
@@ -145,10 +309,14 @@ expect_reject() {
 }
 
 sh "$inspector" "$tmpdir/good.config" "$tmpdir/good.dtb" "$repo_policy" "$repo_device"
+sh "$inspector" "$tmpdir/good.config" "$tmpdir/omitted-suspend-name.dtb" "$repo_policy" "$repo_device"
 
-expect_reject 'missing config' "$tmpdir/missing.config" "$tmpdir/good.dtb" "$repo_policy" "$repo_device"
-expect_reject 'prefixed config spoof' "$tmpdir/prefixed.config" "$tmpdir/good.dtb" "$repo_policy" "$repo_device"
-expect_reject 'suffixed config spoof' "$tmpdir/suffixed.config" "$tmpdir/good.dtb" "$repo_policy" "$repo_device"
+for symbol in CONFIG_PM_TEST_SUSPEND CONFIG_ROCKCHIP_SUSPEND_MODE; do
+  for kind in missing prefixed suffixed wrong; do
+    expect_reject "$kind $symbol config" "$tmpdir/$kind-$symbol.config" "$tmpdir/good.dtb" "$repo_policy" "$repo_device"
+  done
+done
+expect_reject 'enabled activation config' "$tmpdir/enabled-CONFIG_ROCKCHIP_SUSPEND_MODE_ACTIVATE.config" "$tmpdir/good.dtb" "$repo_policy" "$repo_device"
 expect_reject 'enabled policy' "$tmpdir/good.config" "$tmpdir/good.dtb" "$tmpdir/enabled-policy.lua" "$repo_device"
 expect_reject 'comment policy spoof' "$tmpdir/good.config" "$tmpdir/good.dtb" "$tmpdir/comment-policy.lua" "$repo_device"
 expect_reject 'string policy spoof' "$tmpdir/good.config" "$tmpdir/good.dtb" "$tmpdir/string-policy.lua" "$repo_device"
@@ -157,6 +325,9 @@ expect_reject 'comment-hidden expected lines with computed enablement' "$tmpdir/
 expect_reject 'string-hidden expected lines with computed enablement' "$tmpdir/good.config" "$tmpdir/good.dtb" "$repo_policy" "$tmpdir/string-computed-enable.lua"
 expect_reject 'later computed canSuspend override' "$tmpdir/good.config" "$tmpdir/good.dtb" "$repo_policy" "$tmpdir/later-computed-override.lua"
 expect_reject 'ignored suspend policy with hardcoded disabled value' "$tmpdir/good.config" "$tmpdir/good.dtb" "$repo_policy" "$tmpdir/ignored-policy.lua"
+for module in ebc_barrier ebc_sleep_frame power_capabilities power_coordinator; do
+  expect_reject "production device dormant $module reference" "$tmpdir/good.config" "$tmpdir/good.dtb" "$repo_policy" "$tmpdir/import-$module.lua"
+done
 expect_reject 'extra wake source' "$tmpdir/good.config" "$tmpdir/extra-wake.dtb" "$repo_policy" "$repo_device"
 expect_reject 'missing cover wake' "$tmpdir/good.config" "$tmpdir/missing-cover.dtb" "$repo_policy" "$repo_device"
 expect_reject 'disabled expected node' "$tmpdir/good.config" "$tmpdir/disabled-cover.dtb" "$repo_policy" "$repo_device"
@@ -167,5 +338,8 @@ expect_reject 'wrong cover label' "$tmpdir/good.config" "$tmpdir/wrong-cover-lab
 expect_reject 'wrong cover input type' "$tmpdir/good.config" "$tmpdir/wrong-cover-type.dtb" "$repo_policy" "$repo_device"
 expect_reject 'wrong cover code' "$tmpdir/good.config" "$tmpdir/wrong-cover-code.dtb" "$repo_policy" "$repo_device"
 expect_reject 'wrong PMIC compatible' "$tmpdir/good.config" "$tmpdir/wrong-pmic-compatible.dtb" "$repo_policy" "$repo_device"
+while IFS= read -r fixture; do
+  expect_reject "$fixture DT fixture" "$tmpdir/good.config" "$tmpdir/$fixture.dtb" "$repo_policy" "$repo_device"
+done <"$tmpdir/generated-dtb-fixtures.txt"
 
 printf '%s\n' 'PASS: suspend gates reject all reviewed config, Lua, and DT spoof fixtures'
