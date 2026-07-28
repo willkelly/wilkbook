@@ -66,7 +66,8 @@
         "CONFIG_VIRTIO_INPUT=m"))
 
 (define %linux-pinenote-patches
-  (list (local-file "../patches/linux-pinenote-7.0-forward-port.patch")))
+  (list (local-file "../patches/linux-pinenote-7.0-forward-port.patch")
+        (local-file "../patches/linux-pinenote-7.0-bsp-sip-probe.patch")))
 
 (define %linux-pinenote-source
   (origin
@@ -117,11 +118,7 @@ or mutate bootloader state.")
 ;; Currently carried (order matters; the ebc-logic harness's dbg variant
 ;; applies the same stack to the extracted driver and executes it, so no
 ;; debug hunk ships un-executed):
-;;   1. linux-pinenote-debug-dspend-straggler.patch — printk-only quirk F
-;;      instrumentation (doc/driver-findings-report.md, finding
-;;      2026-07-12): detects the straggler DSP_END credit at
-;;      global-refresh launch.
-;;   2. linux-pinenote-debug-extract-fbs.patch — implements the
+;;   1. linux-pinenote-debug-extract-fbs.patch — implements the
 ;;      EXTRACT_FBS ioctl (the primary kernel keeps the -EOPNOTSUPP
 ;;      stub): the belief-vs-glass dump for the corruption hunt and
 ;;      optics PLAN task 23 (doc/pageturn-program.md §5.2; grabber and
@@ -138,24 +135,15 @@ or mutate bootloader state.")
        (patches
         (append (origin-patches (package-source %linux-pinenote-base))
                 %linux-pinenote-patches
-                (list (local-file
-                       "../patches/linux-pinenote-debug-dspend-straggler.patch")
-                      (local-file
-                       "../patches/linux-pinenote-debug-extract-fbs.patch"))))))
-    (synopsis "PineNote kernel with EBC diagnostics (DSP_END + EXTRACT_FBS)")
+                 (list (local-file
+                        "../patches/linux-pinenote-debug-extract-fbs.patch"))))))
+    (synopsis "PineNote kernel with EBC EXTRACT_FBS diagnostics")
     (description
-     "The linux-pinenote kernel with additional debug patches.  The DSP_END
-straggler patch (printk-only) instruments the rockchip_ebc global-refresh
-completion handshake: it warns when an unconsumed DSP_END credit is present
-at global launch, logs every global wait's return value and elapsed time
-against the expected LUT playback duration with launch provenance
-(threshold vs ioctl vs init/reset/resume/offscreen), counts per-burst frame
-timeouts, and rate-limit-warns when a DSP_END interrupt arrives while a
-previous credit is still unconsumed.  The EXTRACT_FBS patch implements the
-already-shipped buffer-dump ioctl (stubbed -EOPNOTSUPP on the primary
+      "The linux-pinenote kernel with the EXTRACT_FBS diagnostic patch.  It
+ implements the already-shipped buffer-dump ioctl (stubbed -EOPNOTSUPP on the primary
 kernel), exposing the driver's belief buffers (prev/next/final and both
 phase planes) to the ebc-dump-grab tool for camera-vs-belief joins.
-Refresh-machine logic is unchanged by both; these are diagnostic artifacts
+Refresh-machine logic is unchanged; this is a diagnostic artifact
 for the panel-corruption investigations.")))
 
 (define-public linux-pinenote-6.6.30

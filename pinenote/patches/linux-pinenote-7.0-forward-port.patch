@@ -2831,7 +2831,7 @@ new file mode 100755
 index 000000000..8db4c36cc
 --- /dev/null
 +++ b/drivers/gpu/drm/rockchip/rockchip_ebc.c
-@@ -0,0 +1,2865 @@
+@@ -0,0 +1,3177 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/*
 + * Copyright (C) 2021-2022 Samuel Holland <samuel@sholland.org>
@@ -2987,6 +2987,8 @@ index 000000000..8db4c36cc
 +#define EBC_OFFCONTENT "rockchip/rockchip_ebc_default_screen.bin"
 +MODULE_FIRMWARE(EBC_OFFCONTENT);
 +
++struct rockchip_ebc_ctx;
++
 +struct rockchip_ebc {
 +	struct clk			*dclk;
 +	struct clk			*hclk;
@@ -3012,6 +3014,22 @@ index 000000000..8db4c36cc
 +	char suspend_prev[1314144];
 +	char suspend_next[1314144];
 +	spinlock_t			refresh_once_lock;
++	struct mutex			barrier_lock;
++	wait_queue_head_t		barrier_wait;
++	u64				requested_generation;
++	u64				active_generation;
++	u64				completed_generation;
++	u64				active_batch;
++	int				barrier_poison;
++	bool				legacy_pending;
++/* Protected by barrier_lock.  A terminal hardware timeout leaves DMA
++ * ownership unknown; never start or tear down hardware after that. */
++bool				worker_available;
++bool				hardware_uncertain;
++	bool				worker_stopped;
++	/* Held only after a physical timeout: this is the exact ctx whose DMA
++	 * buffers were programmed, and owns one kref until reboot. */
++	struct rockchip_ebc_ctx	*uncertain_ctx;
 +	// should this go into the ctx?
 +	bool do_one_full_refresh;
 +	int waveform_at_beggining_of_update;
@@ -3148,6 +3166,17 @@ index 000000000..8db4c36cc
 +
 +	if (args->trigger_global_refresh){
 +		/* printk(KERN_INFO "[rockchip_ebc] ioctl_trigger_global_refresh"); */
++		mutex_lock(&ebc->barrier_lock);
++		if (ebc->barrier_poison) {
++			mutex_unlock(&ebc->barrier_lock);
++			return ebc->barrier_poison;
++		}
++		if (!ebc->worker_available || ebc->hardware_uncertain) {
++			mutex_unlock(&ebc->barrier_lock);
++			return -ENODEV;
++		}
++		ebc->legacy_pending = true;
++		mutex_unlock(&ebc->barrier_lock);
 +		spin_lock(&ebc->refresh_once_lock);
 +		ebc->do_one_full_refresh = true;
 +		spin_unlock(&ebc->refresh_once_lock);
@@ -3155,6 +3184,72 @@ index 000000000..8db4c36cc
 +		wake_up_process(ebc->refresh_thread);
 +	}
 +
++	return 0;
++}
++
++static int ioctl_refresh_barrier(struct drm_device *dev, void *data,
++		struct drm_file *file_priv)
++{
++	struct drm_rockchip_ebc_refresh_barrier *args = data;
++	struct rockchip_ebc *ebc = dev_get_drvdata(dev->dev);
++	long waited;
++	int result = 0;
++
++	if (args->version != DRM_ROCKCHIP_EBC_REFRESH_BARRIER_VERSION ||
++	    args->reserved[0] || args->reserved[1] || args->reserved[2] ||
++	    args->reserved[3] ||
++	    args->result)
++		return -EINVAL;
++	mutex_lock(&ebc->barrier_lock);
++	if (args->op == DRM_ROCKCHIP_EBC_REFRESH_BARRIER_SUBMIT) {
++		if (args->request_id || args->timeout_ms) {
++			mutex_unlock(&ebc->barrier_lock);
++			return -EINVAL;
++		}
++		else if (ebc->requested_generation == U64_MAX)
++			result = -EOVERFLOW;
++		else if (ebc->barrier_poison)
++			result = ebc->barrier_poison;
++		else if (!ebc->worker_available || ebc->hardware_uncertain)
++			result = -ENODEV;
++		else {
++			args->request_id = ++ebc->requested_generation;
++			result = -EINPROGRESS;
++			spin_lock(&ebc->refresh_once_lock);
++			ebc->do_one_full_refresh = true;
++			spin_unlock(&ebc->refresh_once_lock);
++			wake_up_process(ebc->refresh_thread);
++		}
++		args->result = result;
++		mutex_unlock(&ebc->barrier_lock);
++		return 0;
++	}
++	if (args->op != DRM_ROCKCHIP_EBC_REFRESH_BARRIER_WAIT || !args->request_id ||
++	    args->request_id > ebc->requested_generation) {
++		mutex_unlock(&ebc->barrier_lock);
++		return -EINVAL;
++	}
++	mutex_unlock(&ebc->barrier_lock);
++	if (args->timeout_ms)
++		waited = wait_event_killable_timeout(ebc->barrier_wait,
++			READ_ONCE(ebc->barrier_poison) ||
++			READ_ONCE(ebc->completed_generation) >= args->request_id,
++			msecs_to_jiffies(args->timeout_ms));
++	else
++		waited = wait_event_killable(ebc->barrier_wait,
++			READ_ONCE(ebc->barrier_poison) ||
++			READ_ONCE(ebc->completed_generation) >= args->request_id);
++	mutex_lock(&ebc->barrier_lock);
++	if (waited < 0) {
++		mutex_unlock(&ebc->barrier_lock);
++		return waited;
++	}
++	else if (ebc->barrier_poison)
++		result = ebc->barrier_poison;
++	else if (ebc->completed_generation < args->request_id)
++		result = -EINPROGRESS;
++	args->result = result;
++	mutex_unlock(&ebc->barrier_lock);
 +	return 0;
 +}
 +
@@ -3242,6 +3337,8 @@ index 000000000..8db4c36cc
 +			  DRM_AUTH),
 +	DRM_IOCTL_DEF_DRV(ROCKCHIP_EBC_EXTRACT_FBS, ioctl_extract_fbs,
 +			  DRM_AUTH),
++	DRM_IOCTL_DEF_DRV(ROCKCHIP_EBC_REFRESH_BARRIER, ioctl_refresh_barrier,
++			  DRM_AUTH),
 +};
 +
 +static const struct drm_driver rockchip_ebc_drm_driver = {
@@ -3278,11 +3375,13 @@ index 000000000..8db4c36cc
 +
 +static void rockchip_ebc_ctx_free(struct rockchip_ebc_ctx *ctx)
 +{
-+	struct rockchip_ebc_area *area;
++	struct rockchip_ebc_area *area, *next;
 +	pr_info("EBC: rockchip_ebc_ctx_free");
 +
-+	list_for_each_entry(area, &ctx->queue, list)
++	list_for_each_entry_safe(area, next, &ctx->queue, list) {
++		list_del(&area->list);
 +		kfree(area);
++	}
 +
 +	kfree(ctx->prev);
 +	kfree(ctx->next);
@@ -3442,7 +3541,36 @@ index 000000000..8db4c36cc
 +	}
 +}
 +
-+static void rockchip_ebc_global_refresh(struct rockchip_ebc *ebc,
++static void rockchip_ebc_poison(struct rockchip_ebc *ebc, int error)
++{
++	mutex_lock(&ebc->barrier_lock);
++	if (!ebc->barrier_poison)
++		ebc->barrier_poison = error < 0 ? error : -EIO;
++	ebc->active_generation = 0;
++	mutex_unlock(&ebc->barrier_lock);
++	wake_up_all(&ebc->barrier_wait);
++}
++
++static void rockchip_ebc_hardware_uncertain(struct rockchip_ebc *ebc,
++					    struct rockchip_ebc_ctx *ctx)
++{
++	mutex_lock(&ebc->barrier_lock);
++	if (!ebc->hardware_uncertain) {
++		ebc->hardware_uncertain = true;
++		/* refresh() acquired this kref and module ref before setup/MMIO.  They
++		 * now become reboot-lifetime ownership because DMA may still run. */
++		ebc->uncertain_ctx = ctx;
++	}
++	mutex_unlock(&ebc->barrier_lock);
++}
++
++static void rockchip_ebc_refresh_release(struct rockchip_ebc_ctx *ctx)
++{
++	kref_put(&ctx->kref, rockchip_ebc_ctx_release);
++	module_put(THIS_MODULE);
++}
++
++static int rockchip_ebc_global_refresh(struct rockchip_ebc *ebc,
 +					struct rockchip_ebc_ctx *ctx,
 +					 dma_addr_t next_handle,
 +					 dma_addr_t prev_handle
@@ -3496,12 +3624,17 @@ index 000000000..8db4c36cc
 +	}
 +
 +	if (!wait_for_completion_timeout(&ebc->display_end,
-+					 EBC_REFRESH_TIMEOUT))
++					 EBC_REFRESH_TIMEOUT)) {
 +		drm_err(drm, "Refresh timed out!\n");
++		rockchip_ebc_hardware_uncertain(ebc, ctx);
++		rockchip_ebc_poison(ebc, -ETIMEDOUT);
++		return -ETIMEDOUT;
++	}
 +
 +	memcpy(ctx->prev, ctx->next, gray4_size);
 +	// this was the first global refresh after resume, reset the variable
 +	ebc->suspend_was_requested = 0;
++	return 0;
 +}
 +
 +/*
@@ -3932,7 +4065,7 @@ index 000000000..8db4c36cc
 +	}
 +}
 +
-+static void rockchip_ebc_partial_refresh(struct rockchip_ebc *ebc,
++static int rockchip_ebc_partial_refresh(struct rockchip_ebc *ebc,
 +					 struct rockchip_ebc_ctx *ctx,
 +					 dma_addr_t next_handle,
 +					 dma_addr_t prev_handle
@@ -3956,6 +4089,7 @@ index 000000000..8db4c36cc
 +	phase_handles[0] = dma_map_single(dev, ctx->phase[0], ctx->phase_size, DMA_TO_DEVICE);
 +	if (dma_mapping_error(dev, phase_handles[0])) {
 +		drm_err(drm, "phase_handles[0] dma mapping error");
++		return -EIO;
 +	}
 +	/* phase_handles[1] = dma_map_single(dev, ctx->phase[1], ctx->phase_size, DMA_TO_DEVICE); */
 +	/* if (dma_mapping_error(dev, phase_handles[1])) { */
@@ -4111,6 +4245,7 @@ index 000000000..8db4c36cc
 +			// TODO: should we try to splice the queue here before quitting?
 +			break;
 +		}
++		reinit_completion(&ebc->display_end);
 +
 +		regmap_write(ebc->regmap,
 +			     direct_mode ? EBC_WIN_MST0 : EBC_WIN_MST2,
@@ -4151,8 +4286,19 @@ index 000000000..8db4c36cc
 +		}
 +
 +		if (!wait_for_completion_timeout(&ebc->display_end,
-+						 EBC_FRAME_TIMEOUT))
++						 EBC_FRAME_TIMEOUT)) {
 +			drm_err(drm, "Frame %d timed out!\n", frame);
++			rockchip_ebc_hardware_uncertain(ebc, ctx);
++			rockchip_ebc_poison(ebc, -ETIMEDOUT);
++			/* Partial damage remains diagnostic state only: poison is terminal
++			 * and the only recovery boundary is reboot. */
++			spin_lock(&ctx->queue_lock);
++			list_splice_tail_init(&areas, &ctx->queue);
++			spin_unlock(&ctx->queue_lock);
++			/* Hardware may still be reading phase_handles[0].  Deliberately
++			 * retain every active mapping until reboot. */
++			return -ETIMEDOUT;
++		}
 +
 +		// record time after frame completed
 +		if (time_index <= 59){
@@ -4182,9 +4328,10 @@ index 000000000..8db4c36cc
 +	}
 +	pr_debug("ebc: min/max frame durations: %u/%u [ms]", min_frame_delay, max_frame_delay);
 +
++	return 0;
 +}
 +
-+static void rockchip_ebc_refresh(struct rockchip_ebc *ebc,
++static int rockchip_ebc_refresh(struct rockchip_ebc *ebc,
 +				 struct rockchip_ebc_ctx *ctx,
 +				 bool global_refresh,
 +				 enum drm_epd_waveform waveform)
@@ -4198,16 +4345,34 @@ index 000000000..8db4c36cc
 +	int one_screen_area = 1314144;
 +	/* printk(KERN_INFO "[rockchip_ebc] rockchip_ebc_refresh"); */
 +
++	mutex_lock(&ebc->barrier_lock);
++	if (ebc->barrier_poison) {
++		ret = ebc->barrier_poison;
++		mutex_unlock(&ebc->barrier_lock);
++		return ret;
++	}
++	mutex_unlock(&ebc->barrier_lock);
++	/* Pin both owners before any setup can reach a physical EBC start. */
++	if (!try_module_get(THIS_MODULE))
++		return -ENODEV;
++	kref_get(&ctx->kref);
++
 +	/* Resume asynchronously while preparing to refresh. */
 +	ret = pm_runtime_get(dev);
 +	if (ret < 0) {
 +		drm_err(drm, "Failed to request resume: %d\n", ret);
-+		return;
++		/* pm_runtime_get() owns a usage count even when resume reports an
++		 * error; drop it without touching EBC hardware. */
++		pm_runtime_put_noidle(dev);
++		goto out_put_refs;
 +	}
 +
 +	ret = iio_read_channel_processed(ebc->temperature_channel, &temperature);
 +	if (ret < 0) {
 +		drm_err(drm, "Failed to get temperature: %d\n", ret);
++		/* Existing fallback: retain the last successfully decoded temperature
++		 * bin when the optional sensor read fails.  LUT decode failures below
++		 * are never treated as a successful refresh. */
 +	} else {
 +		/* Convert from millicelsius to celsius. */
 +		temperature /= 1000;
@@ -4218,16 +4383,20 @@ index 000000000..8db4c36cc
 +        }
 +
 +		ret = drm_epd_lut_set_temperature(&ebc->lut, temperature);
-+		if (ret < 0)
++		if (ret < 0) {
 +			drm_err(drm, "Failed to set LUT temperature: %d\n", ret);
-+		else if (ret)
++			pm_runtime_put(dev);
++			goto out_put_refs;
++		} else if (ret)
 +			ebc->lut_changed = true;
 +	}
 +
 +	ret = drm_epd_lut_set_waveform(&ebc->lut, waveform);
-+	if (ret < 0)
++	if (ret < 0) {
 +		drm_err(drm, "Failed to set LUT waveform: %d\n", ret);
-+	else if (ret)
++		pm_runtime_put(dev);
++		goto out_put_refs;
++	} else if (ret)
 +		ebc->lut_changed = true;
 +
 +	/* if we change to A2 in bw mode, then make sure that the prev-buffer is
@@ -4266,7 +4435,7 @@ index 000000000..8db4c36cc
 +	if (ret < 0) {
 +		drm_err(drm, "Failed to resume: %d\n", ret);
 +		pm_runtime_put(dev);
-+		return;
++		goto out_put_refs;
 +	}
 +
 +	/* This flag may have been set above, or by the runtime PM callback. */
@@ -4303,10 +4472,17 @@ index 000000000..8db4c36cc
 +	next_handle = dma_map_single(dev, ctx->next, ctx->gray4_size, DMA_TO_DEVICE);
 +	if (dma_mapping_error(dev, next_handle)) {
 +		drm_err(drm, "next_handle dma mapping error");
++		pm_runtime_put_autosuspend(dev);
++		ret = -EIO;
++		goto out_put_refs;
 +	}
 +	prev_handle = dma_map_single(dev, ctx->prev, ctx->gray4_size, DMA_TO_DEVICE);
 +	if (dma_mapping_error(dev, prev_handle)) {
 +		drm_err(drm, "prev_handle dma mapping error");
++		dma_unmap_single(dev, next_handle, ctx->gray4_size, DMA_TO_DEVICE);
++		pm_runtime_put_autosuspend(dev);
++		ret = -EIO;
++		goto out_put_refs;
 +	}
 +
 +	regmap_write(ebc->regmap, EBC_WIN_MST1,
@@ -4316,9 +4492,20 @@ index 000000000..8db4c36cc
 +
 +	/* printk(KERN_INFO "[rockchip_ebc] ebc_refresh"); */
 +	if (global_refresh)
-+		rockchip_ebc_global_refresh(ebc, ctx, next_handle, prev_handle);
++		ret = rockchip_ebc_global_refresh(ebc, ctx, next_handle, prev_handle);
 +	else
-+		rockchip_ebc_partial_refresh(ebc, ctx, next_handle, prev_handle);
++		ret = rockchip_ebc_partial_refresh(ebc, ctx, next_handle, prev_handle);
++	if (ret) {
++		if (READ_ONCE(ebc->hardware_uncertain))
++			return ret; /* hardware may still own every active DMA mapping */
++		else {
++			dma_unmap_single(dev, next_handle, ctx->gray4_size, DMA_TO_DEVICE);
++			dma_unmap_single(dev, prev_handle, ctx->gray4_size, DMA_TO_DEVICE);
++			pm_runtime_mark_last_busy(dev);
++			pm_runtime_put_autosuspend(dev);
++			goto out_put_refs;
++		}
++	}
 +
 +	dma_unmap_single(dev, next_handle, ctx->gray4_size, DMA_TO_DEVICE);
 +	dma_unmap_single(dev, prev_handle, ctx->gray4_size, DMA_TO_DEVICE);
@@ -4343,6 +4530,10 @@ index 000000000..8db4c36cc
 +
 +	pm_runtime_mark_last_busy(dev);
 +	pm_runtime_put_autosuspend(dev);
++	ret = 0;
++out_put_refs:
++	rockchip_ebc_refresh_release(ctx);
++	return ret;
 +}
 +
 +static int rockchip_ebc_refresh_thread(void *data)
@@ -4350,6 +4541,8 @@ index 000000000..8db4c36cc
 +	struct rockchip_ebc *ebc = data;
 +	struct rockchip_ebc_ctx *ctx;
 +	bool one_full_refresh;
++	bool queue_empty;
++	int refresh_ret;
 +	/* printk(KERN_INFO "[rockchip_ebc] rockchip_ebc_refresh_thread"); */
 +
 +	while (!kthread_should_stop()) {
@@ -4415,7 +4608,9 @@ index 000000000..8db4c36cc
 +		 */
 +		if (!ebc->reset_complete) {
 +			ebc->reset_complete = true;
-+			rockchip_ebc_refresh(ebc, ctx, true, DRM_EPD_WF_RESET);
++			refresh_ret = rockchip_ebc_refresh(ebc, ctx, true, DRM_EPD_WF_RESET);
++			if (refresh_ret)
++				rockchip_ebc_poison(ebc, refresh_ret);
 +		}
 +
 +		while ((!kthread_should_park()) && (!kthread_should_stop())) {
@@ -4439,17 +4634,55 @@ index 000000000..8db4c36cc
 +/* 				 * @DRM_EPD_WF_GLD16: Less flashy 16-level grayscale, plus anti-ghosting */
 +				// Not sure why only the GC16 is able to clear the ghosts from A2
 +				// rockchip_ebc_refresh(ebc, ctx, true, DRM_EPD_WF_GC16);
-+				rockchip_ebc_refresh(ebc, ctx, true, refresh_waveform);
++				mutex_lock(&ebc->barrier_lock);
++				/* Snapshot before the physical global.  Submits while playback
++				 * runs have a larger requested_generation and require another
++				 * global; no IRQ identity is inferred from this bookkeeping. */
++				ebc->active_batch = ebc->requested_generation;
++				ebc->active_generation =
++					ebc->active_batch > ebc->completed_generation ?
++					ebc->active_batch : 0;
++				ebc->legacy_pending = false;
++				mutex_unlock(&ebc->barrier_lock);
++				refresh_ret = rockchip_ebc_refresh(ebc, ctx, true, refresh_waveform);
++				if (refresh_ret) {
++					rockchip_ebc_poison(ebc, refresh_ret);
++				} else {
++					mutex_lock(&ebc->barrier_lock);
++					if (ebc->active_batch > ebc->completed_generation)
++						ebc->completed_generation = ebc->active_batch;
++					ebc->active_generation = 0;
++					mutex_unlock(&ebc->barrier_lock);
++					wake_up_all(&ebc->barrier_wait);
++				}
 +				/* printk(KERN_INFO "[rockchip_ebc] got one full refresh done"); */
 +			} else {
-+				rockchip_ebc_refresh(ebc, ctx, false, default_waveform);
++				refresh_ret = rockchip_ebc_refresh(ebc, ctx, false, default_waveform);
++				if (refresh_ret)
++					rockchip_ebc_poison(ebc, refresh_ret);
 +			}
 +
-+			if (ebc->do_one_full_refresh)
++			if (refresh_ret) {
++				/* Poison is terminal: partial queued damage may be retained, but
++				 * global local areas may already be consumed. schedule()
++				 * sleeps until a stop/park/request wake; waking still cannot
++				 * start hardware because rockchip_ebc_refresh() checks poison. */
++				set_current_state(TASK_IDLE);
++				if (!kthread_should_stop() && !kthread_should_park())
++					schedule();
++				__set_current_state(TASK_RUNNING);
 +				continue;
++			}
 +
 +			set_current_state(TASK_IDLE);
-+			if (list_empty(&ctx->queue) && (!kthread_should_stop()) && (!kthread_should_park())){
++			spin_lock(&ebc->refresh_once_lock);
++			one_full_refresh = ebc->do_one_full_refresh;
++			spin_unlock(&ebc->refresh_once_lock);
++			spin_lock(&ctx->queue_lock);
++			queue_empty = list_empty(&ctx->queue);
++			spin_unlock(&ctx->queue_lock);
++			if (!one_full_refresh && queue_empty && !kthread_should_stop() &&
++			    !kthread_should_park()) {
 +				/* printk(KERN_INFO "[rockchip_ebc] scheduling"); */
 +				schedule();
 +				/* printk(KERN_INFO "[rockchip_ebc] scheduling done"); */
@@ -4478,7 +4711,9 @@ index 000000000..8db4c36cc
 +				memcpy(ctx->final, ebc->off_screen, ctx->gray4_size);
 +			}
 +			/* memcpy(ctx->final, ebc->off_screen, ctx->gray4_size); */
-+			rockchip_ebc_refresh(ebc, ctx, true, DRM_EPD_WF_GC16);
++			refresh_ret = rockchip_ebc_refresh(ebc, ctx, true, DRM_EPD_WF_GC16);
++			if (refresh_ret)
++				rockchip_ebc_poison(ebc, refresh_ret);
 +		}
 +		else{
 +			// no_off_screen = false;
@@ -4711,8 +4946,13 @@ index 000000000..8db4c36cc
 +	/* pr_info("ebc: %s", __func__); */
 +
 +	crtc_state = drm_atomic_get_new_crtc_state(state, crtc);
-+	if (crtc_state->mode_changed)
++	if (crtc_state->mode_changed) {
++		mutex_lock(&ebc->barrier_lock);
++		ebc->worker_available = !ebc->barrier_poison &&
++				!ebc->hardware_uncertain;
++		mutex_unlock(&ebc->barrier_lock);
 +			kthread_unpark(ebc->refresh_thread);
++	}
 +}
 +
 +static void rockchip_ebc_crtc_atomic_disable(struct drm_crtc *crtc,
@@ -4720,10 +4960,19 @@ index 000000000..8db4c36cc
 +{
 +	struct rockchip_ebc *ebc = crtc_to_ebc(crtc);
 +	struct drm_crtc_state *crtc_state;
++	bool pending;
 +	/* pr_info("ebc: %s", __func__); */
 +
 +	crtc_state = drm_atomic_get_new_crtc_state(state, crtc);
 +	if (crtc_state->mode_changed){
++		/* No accepted generation may be left behind a parked worker. */
++		mutex_lock(&ebc->barrier_lock);
++		ebc->worker_available = false;
++		pending = ebc->legacy_pending ||
++			ebc->requested_generation > ebc->completed_generation;
++		mutex_unlock(&ebc->barrier_lock);
++		if (pending)
++			rockchip_ebc_poison(ebc, -ENODEV);
 +		if (! ((ebc->refresh_thread->__state) & (TASK_DEAD))){
 +			kthread_park(ebc->refresh_thread);
 +		}
@@ -5417,18 +5666,36 @@ index 000000000..8db4c36cc
 +	int ret;
 +	pr_info("%s", __func__);
 +
-+	ebc->suspend_was_requested = 1;
++	if (READ_ONCE(ebc->hardware_uncertain))
++		return -EBUSY;
 +
 +	ret = drm_mode_config_helper_suspend(&ebc->drm);
 +	if (ret)
 +		return ret;
++	/* The helper can park/quiesce the worker; it may have timed out while
++	 * doing so. Restoring saved DRM state can invoke mode_set_nofb,
++	 * atomic_enable, bridge or panel MMIO; reboot is recovery. */
++	if (READ_ONCE(ebc->hardware_uncertain)) {
++		return -EBUSY;
++	}
++	/* A pre-start poison has no hardware owner, so it does not require power
++	 * retention; only uncertain DMA ownership blocks this transaction. */
++	ebc->suspend_was_requested = 1;
++	ret = pm_runtime_force_suspend(dev);
++	if (ret) {
++		ebc->suspend_was_requested = 0;
++		drm_mode_config_helper_resume(&ebc->drm);
++	}
 +
-+	return pm_runtime_force_suspend(dev);
++	return ret;
 +}
 +
 +static int __maybe_unused rockchip_ebc_resume(struct device *dev)
 +{
 +	struct rockchip_ebc *ebc = dev_get_drvdata(dev);
++
++	if (READ_ONCE(ebc->hardware_uncertain))
++		return -EBUSY;
 +
 +	pm_runtime_force_resume(dev);
 +
@@ -5438,6 +5705,9 @@ index 000000000..8db4c36cc
 +static int rockchip_ebc_runtime_suspend(struct device *dev)
 +{
 +	struct rockchip_ebc *ebc = dev_get_drvdata(dev);
++
++	if (READ_ONCE(ebc->hardware_uncertain))
++		return -EBUSY;
 +
 +	regcache_cache_only(ebc->regmap, true);
 +
@@ -5452,6 +5722,9 @@ index 000000000..8db4c36cc
 +{
 +	struct rockchip_ebc *ebc = dev_get_drvdata(dev);
 +	int ret;
++
++	if (READ_ONCE(ebc->hardware_uncertain))
++		return -EBUSY;
 +
 +	ret = regulator_bulk_enable(EBC_NUM_SUPPLIES, ebc->supplies);
 +	if (ret)
@@ -5565,6 +5838,8 @@ index 000000000..8db4c36cc
 +	ebc->suspend_was_requested = 0;
 +
 +	spin_lock_init(&ebc->refresh_once_lock);
++	mutex_init(&ebc->barrier_lock);
++	init_waitqueue_head(&ebc->barrier_wait);
 +
 +	if (IS_ERR(ebc))
 +		return PTR_ERR(ebc);
@@ -5648,14 +5923,39 @@ index 000000000..8db4c36cc
 +	return ret;
 +}
 +
++static void rockchip_ebc_stop_worker(struct rockchip_ebc *ebc)
++{
++	struct task_struct *thread = NULL;
++
++	mutex_lock(&ebc->barrier_lock);
++	if (!ebc->worker_stopped && ebc->refresh_thread &&
++	    !IS_ERR(ebc->refresh_thread)) {
++		ebc->worker_stopped = true;
++		thread = ebc->refresh_thread;
++	}
++	mutex_unlock(&ebc->barrier_lock);
++	if (thread)
++		kthread_stop(thread);
++}
++
 +static void rockchip_ebc_remove(struct platform_device *pdev)
 +{
 +	struct rockchip_ebc *ebc = platform_get_drvdata(pdev);
 +	struct device *dev = &pdev->dev;
 +	// pr_info("%s executing", __func__);
 +
++	mutex_lock(&ebc->barrier_lock);
++	ebc->worker_available = false;
++	mutex_unlock(&ebc->barrier_lock);
++	/* Stop even an already-uncertain worker before making
++	 * the final teardown decision. */
++	rockchip_ebc_stop_worker(ebc);
++	/* The worker can establish uncertainty while kthread_stop waits. */
++	if (READ_ONCE(ebc->hardware_uncertain))
++		panic("rockchip-ebc: remove with uncertain DMA ownership");
++	rockchip_ebc_poison(ebc, -ENODEV);
++
 +	drm_dev_unregister(&ebc->drm);
-+	kthread_stop(ebc->refresh_thread);
 +	drm_atomic_helper_shutdown(&ebc->drm);
 +
 +	pm_runtime_disable(dev);
@@ -5669,7 +5969,18 @@ index 000000000..8db4c36cc
 +	struct device *dev = &pdev->dev;
 +	// pr_info("%s executing", __func__);
 +
-+	kthread_stop(ebc->refresh_thread);
++	mutex_lock(&ebc->barrier_lock);
++	ebc->worker_available = false;
++	mutex_unlock(&ebc->barrier_lock);
++	/* Stop even an already-uncertain worker before making
++	 * the final teardown decision. */
++	rockchip_ebc_stop_worker(ebc);
++	/* The worker can establish uncertainty while kthread_stop waits. */
++	if (READ_ONCE(ebc->hardware_uncertain))
++		/* Reboot follows; retain every uncertain owner rather than tearing down. */
++		return;
++	rockchip_ebc_poison(ebc, -ENODEV);
++
 +	drm_atomic_helper_shutdown(&ebc->drm);
 +
 +	if (!pm_runtime_status_suspended(dev))
@@ -5688,6 +5999,7 @@ index 000000000..8db4c36cc
 +	.shutdown	= rockchip_ebc_shutdown,
 +	.driver		= {
 +		.name		= "rockchip-ebc",
++		.suppress_bind_attrs = true,
 +		.of_match_table	= rockchip_ebc_of_match,
 +		.pm		= &rockchip_ebc_dev_pm_ops,
 +	},
@@ -6744,7 +7056,7 @@ new file mode 100755
 index 000000000..5e8c87ae6
 --- /dev/null
 +++ b/include/uapi/drm/rockchip_ebc_drm.h
-@@ -0,0 +1,35 @@
+@@ -0,0 +1,63 @@
 +#ifndef __ROCKCHIP_EBC_DRM_H__
 +#define __ROCKCHIP_EBC_DRM_H__
 +
@@ -6772,11 +7084,39 @@ index 000000000..5e8c87ae6
 +	char * ptr_phase2;
 +};
 +
++/* Fixed-width, pointer-free refresh completion contract.  result is an
++ * output field; callers must zero it (and every reserved word) on input. */
++struct drm_rockchip_ebc_refresh_barrier {
++	__u32 version;
++	__u32 op;
++	__u64 request_id;
++	__u32 timeout_ms;
++	__s32 result;
++	__u32 reserved[4];
++};
 +
-+#define DRM_ROCKCHIP_EBC_NUM_IOCTLS		0x03
++#if defined(__cplusplus)
++static_assert(sizeof(struct drm_rockchip_ebc_refresh_barrier) == 40,
++	      "rockchip EBC refresh barrier ABI must remain 40 bytes");
++#else
++_Static_assert(sizeof(struct drm_rockchip_ebc_refresh_barrier) == 40,
++	       "rockchip EBC refresh barrier ABI must remain 40 bytes");
++#endif
++
++#define DRM_ROCKCHIP_EBC_REFRESH_BARRIER_VERSION	1
++#define DRM_ROCKCHIP_EBC_REFRESH_BARRIER_SUBMIT		1
++#define DRM_ROCKCHIP_EBC_REFRESH_BARRIER_WAIT		2
++
++
++#define DRM_ROCKCHIP_EBC_NUM_IOCTLS		0x04
 +
 +#define DRM_IOCTL_ROCKCHIP_EBC_GLOBAL_REFRESH	DRM_IOWR(DRM_COMMAND_BASE + 0x00, struct drm_rockchip_ebc_trigger_global_refresh)
 +#define DRM_IOCTL_ROCKCHIP_EBC_OFF_SCREEN	DRM_IOWR(DRM_COMMAND_BASE + 0x01, struct drm_rockchip_ebc_off_screen)
 +#define DRM_IOCTL_ROCKCHIP_EBC_EXTRACT_FBS	DRM_IOWR(DRM_COMMAND_BASE + 0x02, struct drm_rockchip_ebc_extract_fbs)
++#define DRM_IOCTL_ROCKCHIP_EBC_REFRESH_BARRIER DRM_IOWR(DRM_COMMAND_BASE + 0x03, struct drm_rockchip_ebc_refresh_barrier)
++
++#if defined(__cplusplus)
++}
++#endif
 +
 +#endif /* __ROCKCHIP_EBC_DRM_H__*/
