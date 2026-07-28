@@ -58,12 +58,15 @@ tests skip with a clear message rather than fail.
 | Tool | Ladder rung | What it validates | Run |
 | --- | --- | --- | --- |
 | `pinenote/tools/wbf` | 1 | PVI `.wbf` parsing/decode (header, modes, temperature bins, LUT decode) exactly as `rockchip_ebc` loads it; `--dump-lut` exports a decoded LUT for the simulator | `make wbf-check WBF=…` |
-| `pinenote/tools/ebc-logic` | 2 + 7a | Rung 2 (`ebc-logic-test`): the driver's pure logic — XRGB8888/R4→Y4 blitters, damage split/collision scheduling, threshold/dither paths — vs independent references.  Rung 7a (`ebc-refresh-test`): *executes* the refresh state machine (probe, global/partial orchestration, LUT upload, DMA windowing, IRQ/completion, buffer switching) against a behavioral device model under ASan — with non-coherent DMA (the device reads only synced shadows, so a missing `dma_sync` fails a test) — incl. a drive-sequence differential vs rastersim's independent waveform decode.  Phase B (`ebc-replay`): replays KOReader `[pn-refresh]` traces through the same machine under candidate refresh policies — the display-quality workbench, results in `doc/refresh-policy.md` | `make ebc-logic-check WBF=…` |
+| `pinenote/tools/ebc-logic` | 2 + 7a | Rung 2 (`ebc-logic-test`): the driver's pure logic — XRGB8888/R4→Y4 blitters, damage split/collision scheduling, threshold/dither paths — vs independent references.  Rung 7a (`ebc-refresh-test`): *executes* the refresh state machine (probe, global/partial orchestration, LUT upload, DMA windowing, IRQ/completion, buffer switching) against a behavioral device model under ASan — with non-coherent DMA (the device reads only synced shadows, so a missing `dma_sync` fails a test) — incl. a drive-sequence differential vs rastersim's independent waveform decode and WBF-gated disable-tail caller/off-screen retention plus exact completion accounting.  Phase B (`ebc-replay`): replays KOReader `[pn-refresh]` traces through the same machine under candidate refresh policies — the display-quality workbench, results in `doc/refresh-policy.md` | `make ebc-logic-check WBF=…` |
+| `pinenote/tools/ebc-barrier` | 1 | The separately invoked paint/barrier/restore diagnostic with fake framebuffer/DRM operations: strict fixed-width SUBMIT/WAIT ABI, high generation IDs, geometry/stride bounds, no-retry failure containment, exact restoration, cleanup precedence, double fail-closed reader ownership checks, and atomic pending/blocked signal acknowledgement. It never runs `--run` on the host | `make ebc-barrier-check` |
 | `pinenote/tools/rastersim` | 3 | A standalone Gray8→Y4 raster library + waveform *simulator* (state model + LUT playback), with golden-image and convergence tests | `make rastersim-check WBF=…` |
 | `pinenote/tools/koreader-input` | 2 | KOReader's *verbatim* `device/input.lua` + `gesturedetector.lua` (from the native `koreader-bin` bundle, under its own luajit) fed synthetic pen+touch evdev streams: reproduces the pen-hover tap-capture `quirk:` (finger tap → swipe), validates the `mixedrouter.lua` fix, checks exact `wilkbook-orientation` discovery plus source-gated MSC_RAW→MSC_GYRO translation, and pins cyttsp5 MT-axis normalization to five measured hardware targets | `make koreader-input-check` |
 | `pinenote/tools/orientation` | 2 | Pure SC7A20 orientation classification: calibrated four-edge mapping, flat/diagonal/magnitude rejection, hysteresis, stable-sample dwell debounce, and duplicate suppression | `make orientation-check` |
-| `pinenote/tools/power` | 1 | Read-only Guile snapshot/delta recorder against deterministic fake `/proc`/`/sys` roots: schema, unavailable values, malformed counter rows, ordering, resets, and mutation guard | `make power-check` |
+| `pinenote/tools/power` | 1 | Read-only Guile snapshot/delta recorder against deterministic fake `/proc`/`/sys` roots; plus a closed, unimported provider constructor and pure injected-capability Lua coordinator with exact transaction/rollback traces, durable records, poisoning, and no filesystem/sysfs authority. Neither Lua module is production-wired | `make power-check`; capability/coordinator gates are in `make activation-positive-check` |
+| `pinenote/tools/rockchip-pm` | 1 | Verbatim extracted BSP SIP/PM model and generic executor plus compiled-DTB donor/maximal fixtures: exact RK3568 bindings; standard OF metadata `compatible`, `name`, `status`; donor event ordering, GPIO/regulator limits, descriptive-only virtual-poweroff, fake-only unwind injection, strict source-tree validation, MEM-only production parsing, consumer-handle lifetime/locking, and proof that the real backend is linked while its active-driver `.prepare` edge is omitted | `make rockchip-pm-check` |
 | suspend preflight | 1 | Fail-closed config/DT/KOReader qualification fixtures: exact PM config lines, effectively enabled cover+RK817 wake identities, exact disabled policy bytes, and restricted two-value KOReader policy evaluation | `make suspend-check` |
+| activation-positive composite | 1 | Runs the closed capability constructor, pure Lua coordinator, a separate compiled-DTB synthetic active Rockchip PM scenario through fake ops, and the unchanged production hard-off preflight in one gate. It cannot select the real backend or write `/sys/power/state` | `make activation-positive-check` |
 
 Each tool's `README.md` documents what it does and does **not** cover.
 The recurring caveat: **none of this models electrophoretic optics.**
@@ -85,18 +88,27 @@ tests.  The refresh machine now *executes* offline — rung 7a, part of
 `make ebc-logic-check`, scoped in `doc/ebc-harness-spike.md`; the QEMU
 device model, 7b, remains future work.)
 
-1. **Host tool suites** — `make wbf-check ebc-logic-check rastersim-check`
-   (with `WBF=`). Fast; catches driver-logic and waveform regressions.
+1. **Host tool suites** — `make wbf-check ebc-logic-check ebc-barrier-check
+    rastersim-check koreader-input-check orientation-check optics-check
+    power-check rockchip-pm-check activation-positive-check suspend-check`
+    (with `WBF=`). The Rockchip gate statically proves a zero-SMC production
+    probe path while compiling the dormant typed model and parsing real DTBs
+    carrying the donor property schema. Fast; catches
+    driver-logic and waveform regressions.
 2. **Static Guix builds** — `make kernel-drv` (cheap derivation gate),
    then `make kernel` / `make <flavor>` / `make rootfs-<flavor>`.
 3. **Source + config inspection** —
-   `pinenote/scripts/preflight/inspect-kernel-source.sh SOURCE RESOLVED_CONFIG`,
+   `guix shell git python -- pinenote/scripts/preflight/inspect-kernel-source.sh
+   SOURCE RESOLVED_CONFIG` from the full checkout,
    followed by `inspect-pinenote-battery-dtb.sh` on the generated PineNote DTB.
    Run `make suspend-check`, then run
    `inspect-pinenote-suspend-gates.sh RESOLVED_CONFIG DTB SUSPEND_POLICY_LUA
    KOREADER_DEVICE_LUA` against the built artifacts. This verifies the exact
    disabled policy module and uses restricted false/true injection to prove the
-   returned device class follows it; it deliberately proves that suspend is
+    returned device class follows it. Its fixtures explicitly accept the three
+    standard metadata properties and reject any lookalike or policy property;
+    source/compiled DT coverage is distinct from Linux's live-OF `name`
+    normalization. It deliberately proves that suspend is
    still disabled, while firmware and physical sleep remain hardware-only.
 4. **QEMU smoke** (`make qemu-smoke`) for generic ARM64 userspace, and
    **QEMU virt** — interactive (`make qemu-virt ROOTFS=…`) or the
@@ -140,11 +152,25 @@ input suite. The final baked image passed os2 write/readback, first boot, all
 four poses, toggle/replay, contact deferral, and bridge-restart recovery in the
 same session; the exact hardware record is in `doc/status.md`.
 5. **Mock helper + boot-bundle inspection** — the preflight scripts.
+   `inspect-rootfs-image.sh` requires the exact ext4 to carry `/boot/config`
+   beside `/boot/Image`, proves Rockchip activation is compiled out in that
+   embedded config, resolves the packaged diagnostic and KOReader store
+   targets, requires all four dormant modules, hashes the exact disabled
+   policy, and rejects dormant imports in packaged `device.lua`. The
+   rootfs-matched bundle carries the same config and repeats the activation
+   check, so these facts share one rootfs identity rather than unrelated build
+   paths.
 6. **Hardware deployment** — `doc/hardware-deploy.md`, backups per
    `doc/device-runbook.md` verified first. Write os2 only; os1 is the
    rescue path. Harvest `/var/log/messages` from os2 afterwards
    regardless of outcome — an unobserved boot is still diagnosable that
-   way (that's how the 2026-06-11 findings were recovered).
+    way (that's how the 2026-06-11 findings were recovered).
+   The EBC barrier sub-rung is one supervised run only: stop the reader, prove
+   `reader.lua` absent, capture pre/post UART and `dmesg`, use only
+   `pinenote-ebc-sleep-frame-test --run` (never the older `--draw-smoke`), and
+   accept only two nonzero generations plus visible card/restoration, zero
+   exit, and normal reader repaint. First failure is terminal for that boot;
+   no suspend is requested.
 
 ## What only hardware can prove
 

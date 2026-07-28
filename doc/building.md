@@ -32,6 +32,7 @@ Substitute any other flavor entrypoint from `pinenote/systems/`. The
 
 ```sh
 guix build -L . pinenote-ebc-test --target=aarch64-linux-gnu
+guix build -L . pinenote-ebc-barrier-test --target=aarch64-linux-gnu
 guix build -L . pinenote-diagnostics --target=aarch64-linux-gnu
 guix build -L . pinenote-firmware-support --target=aarch64-linux-gnu
 guix build -L . pinenote-broadcom-wifi-firmware --target=aarch64-linux-gnu
@@ -171,19 +172,34 @@ Run before any hardware deployment, stopping at the first failure. The
 reasoning behind this ordering — and the host tools in rung 0 — is in
 `doc/testing.md`.
 
-0. Host tool suites (offline, no VM):
-   `make wbf-check ebc-logic-check rastersim-check WBF=/path/to/ebc.wbf`.
+0. Host tool suites (offline, no VM), all required for a reader candidate:
+   `make wbf-check ebc-logic-check ebc-barrier-check rastersim-check koreader-input-check
+   orientation-check optics-check power-check rockchip-pm-check activation-positive-check suspend-check
+   WBF=/path/to/ebc.wbf KOREADER_BUNDLE=/path/to/koreader-bundle`.
    These compile the verbatim EBC driver/waveform sources and catch
-   driver-logic and waveform regressions; run them whenever you touch the
-   forward-port patch.
+   driver-logic and waveform regressions. The Rockchip PM gate separately
+   compiles the verbatim typed model/executor, builds and parses donor/maximal
+    DTB fixtures (including standard OF `compatible`, `name`, and `status`
+    metadata), and proves the default production image links the executor but
+   omits its separate activation/PM-callback caller. Production parsing is
+    MEM-only and rejects virtual poweroff. The composite activation-positive
+    gate runs only the closed fake capability boundary, coordinator, and backend, then reruns the
+    production hard-off preflight so positive synthetic coverage cannot weaken
+    the shipped boundary. Run
+   the relevant gates whenever you touch either kernel patch.
 1. Static Guix build of the scaffold packages (commands above).
 2. QEMU `virt` smoke run for generic ARM64 userspace; `make qemu-virt` for
    an interactive boot of the real kernel/initrd/rootfs on a synthetic disk;
-   and `make qemu-virt-check` for the non-interactive assertion gate over
+   `make qemu-virt-check` for the non-interactive assertion gate over
    the same boot (kernel+RT, initrd waveform install, EBC module load,
-   PNGuixRoot pre-root visibility, root mount — through Shepherd start).
+   PNGuixRoot pre-root visibility, root mount — through Shepherd start); then
+   `make qemu-virt-visual ROOTFS=... [WAVEFORM=...]` for rung 4v KOReader
+   framebuffer paint and scripted-tap verification.
 3. Kernel source inspection:
-   `pinenote/scripts/preflight/inspect-kernel-source.sh /path/to/linux /path/to/build/.config`
+   `guix shell git python -- pinenote/scripts/preflight/inspect-kernel-source.sh
+   /path/to/linux /path/to/build/.config`
+   (run from the full checkout because this also validates the canonical BSP
+   SIP compatibility patch and its reviewed applied files),
    (read-only; checks `pinenote_defconfig`, PineNote DTS/DTSI, `rockchip_ebc`,
    the EBC/PMIC/Wi-Fi/pen defconfig markers, and battery prerequisites without
    executing the inspected source tree's Makefile). Then run
@@ -192,7 +208,9 @@ reasoning behind this ordering — and the host tools in rung 0 — is in
    KOREADER_DEVICE_LUA`. The suspend gate must pass while restricted false/true
    policy injection proves the returned KOReader class follows the exact
    disabled policy module; it is a qualification guard, not evidence that the
-   device can resume.
+    device can resume. The compiled-DTB fixture's explicit `name` coverage is a
+    parser gate; Linux synthesizes that standard property in live OF even when
+    the source DT does not spell it out.
 4. Boot-bundle inspection (commands above).
 5. Mock helper tests: `pinenote/scripts/preflight/mock-pinenote-services.sh`
    (inspects hardware-targeted helpers without executing them; fixtures live
@@ -217,6 +235,12 @@ The Shepherd services in the bring-up flavors are one-shot hooks:
 - `pinenote-diagnostics` records read-only boot diagnostics.
 - `pinenote-ebc-test` runs a read-only EBC report; its explicit
   `--draw-smoke` mode performs a reversible framebuffer smoke test manually.
+- `pinenote-ebc-barrier-test` is installed but never started by Shepherd.  Its
+  `pinenote-ebc-sleep-frame-test --help` is inert; supervised root-only
+  `--run` requires `herd stop reader-session` and an interactive tty, paints
+  then strictly waits for the EBC barrier, and restores the exact framebuffer
+  snapshot only after explicit Enter.  It is a test artifact, not a QEMU
+  action or production suspend wiring.
 - The usb-console flavors additionally start a CDC-ACM gadget (gated on the
   USB role switch) with an auto-login `reader` shell on `ttyGS0`, plus an
   auto-login getty on UART `ttyS2` at 1500000 baud.
