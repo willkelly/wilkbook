@@ -1,0 +1,48 @@
+/dts-v1/;
+
+/ {
+	compatible = "test,rockchip-pm-policy";
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	aliases {
+		gpio0 = &gpio0;
+	};
+
+	gpio0: gpio@fdd60000 {
+		reg = <0xfdd60000>;
+		gpio-controller;
+		#gpio-cells = <2>;
+		phandle = <1>;
+	};
+
+	reg_mem_on: regulator@10 { reg = <0x10>; phandle = <10>; };
+	reg_mem_off: regulator@11 { reg = <0x11>; phandle = <11>; };
+	reg_mem_on_extra: regulator@16 { reg = <0x16>; phandle = <16>; };
+	reg_lite_on: regulator@12 { reg = <0x12>; phandle = <12>; };
+	reg_lite_off: regulator@13 { reg = <0x13>; phandle = <13>; };
+	reg_ultra_on: regulator@14 { reg = <0x14>; phandle = <14>; };
+	reg_ultra_off: regulator@15 { reg = <0x15>; phandle = <15>; };
+
+	rockchip-suspend {
+		compatible = "rockchip,pm-rk3568";
+		name = "rockchip-suspend";
+		status = "okay";
+		rockchip,sleep-mode-config = <0x7ff>;
+		rockchip,wakeup-config = <0x1ffff>;
+		rockchip,pwm-regulator-config = <0x1ff>;
+		rockchip,sleep-debug-en = <8>;
+		rockchip,apios-suspend = <9>;
+		rockchip,virtual-poweroff = <1>;
+		rockchip,power-ctrl = <&gpio0 0 0xa0>, <&gpio0 1 0xa1>,
+			<&gpio0 2 0xa2>, <&gpio0 3 0xa3>, <&gpio0 4 0xa4>,
+			<&gpio0 5 0xa5>, <&gpio0 6 0xa6>, <&gpio0 7 0xa7>,
+			<&gpio0 8 0xa8>;
+		rockchip,regulator-on-in-mem = <&reg_mem_on>, <&reg_mem_on_extra>;
+		rockchip,regulator-off-in-mem = <&reg_mem_off>;
+		rockchip,regulator-on-in-mem-lite = <&reg_lite_on>;
+		rockchip,regulator-off-in-mem-lite = <&reg_lite_off>;
+		rockchip,regulator-on-in-mem-ultra = <&reg_ultra_on>;
+		rockchip,regulator-off-in-mem-ultra = <&reg_ultra_off>;
+	};
+};

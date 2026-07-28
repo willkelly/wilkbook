@@ -1,0 +1,14 @@
+/dts-v1/;
+
+/ {
+	compatible = "test,rockchip-pm-policy";
+
+	rockchip-suspend {
+		compatible = "rockchip,pm-rk3568";
+		name = "rockchip-suspend";
+		status = "okay";
+		rockchip,sleep-mode-config = <0x5ec>;
+		rockchip,wakeup-config = <0x10>;
+		rockchip,sleep-debug-en = <0>;
+	};
+};
