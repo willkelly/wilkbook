@@ -211,6 +211,7 @@ probe_round() {
     "if grep -q 'Service orientation-bridge has been started' /var/log/messages; then o=yes; else o=no; fi; echo VIRTCHK-ORI-SVC-\$o" \
     "if grep -q '^wilkbook-orientation\$' /sys/class/input/event*/device/name 2>/dev/null; then n=yes; else n=no; fi; echo VIRTCHK-ORI-NODE-\$n" \
     "if grep -q 'Service reader-session has been started' /var/log/messages; then r=yes; else r=no; fi; echo VIRTCHK-RDR-\$r" \
+    "if command -v pinenote-ebc-sleep-frame-test >/dev/null 2>&1 && pinenote-ebc-sleep-frame-test --help >/dev/null 2>&1; then b=yes; else b=no; fi; echo VIRTCHK-BARRIER-\$b" \
     "if [ \"\$r\" = yes ]; then timeout 20 herd stop reader-session > /dev/null 2>&1; fi" \
     2>/dev/null || true
 }
@@ -222,7 +223,8 @@ all_sentinels_present() {
   grep -aq 'VIRTCHK-WF-6'     "$log" && \
   grep -aq 'VIRTCHK-ORI-SVC-yes' "$log" && \
   grep -aq 'VIRTCHK-ORI-NODE-yes' "$log" && \
-  grep -aq 'VIRTCHK-RDR-yes'  "$log"
+  grep -aq 'VIRTCHK-RDR-yes'  "$log" && \
+  grep -aq 'VIRTCHK-BARRIER-yes' "$log"
 }
 
 # Phase 1: wait for the console login prompt (or early death/stall).
@@ -328,6 +330,7 @@ require 'live refresh_waveform is GL16' 'VIRTCHK-WF-6'
 require 'orientation service started'    'VIRTCHK-ORI-SVC-yes'
 require 'orientation evdev exists'       'VIRTCHK-ORI-NODE-yes'
 require 'reader-session started'       'VIRTCHK-RDR-yes'
+require 'inert EBC barrier command packaged' 'VIRTCHK-BARRIER-yes'
 require 'clean poweroff'               'reboot: Power down'
 
 printf '\nForbidden regressions:\n'
