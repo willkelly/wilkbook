@@ -1,5 +1,22 @@
 # power — read-only PineNote power evidence
 
+`test-power-capabilities.lua` proves the separate, unimported provider boundary
+accepts only the exact capability set and forwards state/results/errors without
+adding authority or no-op fallbacks. `test-power-coordinator.lua` exercises the isolated
+`power_coordinator.lua` transaction with fake capabilities only. The coordinator
+has no filesystem, FFI, subprocess, device-node, or sysfs authority and is not
+imported by the production PineNote device target. It captures each successful
+prepare provider's return state and passes it unchanged to its paired restore
+provider. The only accepted host mode is `mem`, which is passed exactly once to
+the requester; its prepare order is checkpoint, EBC, idlewasher, input,
+frontlight, Wi-Fi, storage. After return it captures exactly one wake-source
+attribution before restoring EBC, input, frontlight, idlewasher, and the final
+non-blocking Wi-Fi handoff, then notifies the reader with that attribution. It
+proves exact ordering, a durable prepared/failure-record boundary, permanent
+poisoning after any failed stage or restore, and remains dormant and unimported.
+Run both as part of `make activation-positive-check`; that composite
+target also reruns the production activation-hard-off suspend preflight.
+
 `power-snapshot.scm` records a versioned S-expression from an explicit root
 (default `/`) and compares saved snapshots.  It uses only base Guile, never
 executes external commands, and reads a bounded allowlist; waveform and VCOM
