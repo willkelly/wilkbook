@@ -86,17 +86,20 @@ bundle=$(resolve_directory "$bundle") || fail "cannot resolve boot bundle direct
 require_inside_opencode "$bundle"
 
 kernel_image=$system_directory/kernel/Image
+kernel_config=$system_directory/kernel/.config
 dtb=$system_directory/kernel/lib/dtbs/rockchip/rk3566-pinenote-v1.2.dtb
 initrd=$system_directory/initrd
 parameters=$system_directory/parameters
 
 require_file "$kernel_image" "uncompressed PineNote kernel Image"
+require_file "$kernel_config" "resolved PineNote kernel config"
 require_file "$dtb" "PineNote v1.2 DTB"
 require_file "$initrd" "Guix initrd"
 require_file "$parameters" "Guix boot parameters"
 
 mkdir -- "$bundle/extlinux"
 stage_link "$kernel_image" "$bundle/extlinux/Image"
+stage_link "$kernel_config" "$bundle/extlinux/config"
 stage_link "$dtb" "$bundle/extlinux/rk3566-pinenote-v1.2.dtb"
 stage_link "$initrd" "$bundle/extlinux/initrd.cpio.gz"
 
@@ -152,5 +155,5 @@ LABEL pinenote-guix-preflight
 EOF
 
 pass "staged boot bundle under $bundle"
-pass "linked Image, PineNote DTB, initrd, and generated extlinux.conf"
+pass "linked Image, matching config, PineNote DTB, initrd, and generated extlinux.conf"
 note "run: pinenote/scripts/preflight/inspect-boot-bundle.sh $bundle"

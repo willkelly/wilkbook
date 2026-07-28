@@ -177,6 +177,7 @@ mkdir -- "$bundle"
 mkdir -- "$bundle/extlinux"
 
 dump_rootfs_file "$kernel_path" "$bundle/extlinux/Image"
+dump_rootfs_file /boot/config "$bundle/extlinux/config"
 dump_rootfs_file "$initrd_path" "$bundle/extlinux/initrd.cpio.gz"
 dump_rootfs_file "$fdt_path" "$bundle/extlinux/rk3566-pinenote-v1.2.dtb"
 printf '%s\n' "$extlinux_config" > "$bundle/extlinux/source-extlinux.conf"
@@ -193,5 +194,5 @@ LABEL pinenote-guix-preflight
 EOF
 
 pass "staged rootfs-matched boot bundle under $bundle"
-pass "extracted Image, PineNote DTB, initrd, and generated extlinux.conf"
+pass "extracted Image, matching config, PineNote DTB, initrd, and generated extlinux.conf"
 note "run: pinenote/scripts/preflight/inspect-boot-bundle.sh $bundle"
