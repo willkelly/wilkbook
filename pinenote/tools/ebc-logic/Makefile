@@ -43,6 +43,7 @@ BUILD := build
 # compiler even inside `guix shell gcc-toolchain`, and the ASan runtime
 # must come from the same toolchain as the instrumented code.
 CC := gcc
+CXX := g++
 # -Wno-maybe-uninitialized: rockchip_ebc.c's blit_pixels assigns
 # first_odd/last_odd under the same conditions it reads them; the kernel
 # build does not enable this warning either.
@@ -56,16 +57,22 @@ EXTRACTED := $(BUILD)/drivers/gpu/drm/rockchip/rockchip_ebc.c \
              $(BUILD)/include/drm/drm_epd_helper.h \
              $(BUILD)/include/uapi/drm/rockchip_ebc_drm.h
 
-# The debug-driver variant: the same extraction with the stacked debug
-# patches applied, in the same order the linux-pinenote-debug package
-# applies them (sorted name order == the kernel.scm list order).
+# The debug-driver variant: the same extraction with the exact active
+# linux-pinenote-debug patch stack.  Keep this explicit: a wildcard plus a
+# tolerated failure can compile a partially patched driver.
 DBGDIR := $(BUILD)/dbg
-DBG_PATCHES := $(sort $(wildcard ../../patches/linux-pinenote-debug-*.patch))
+DBG_PATCHES := ../../patches/linux-pinenote-debug-extract-fbs.patch
 DBG_DRIVER := $(DBGDIR)/drivers/gpu/drm/rockchip/rockchip_ebc.c
 
-all: $(BUILD)/ebc-logic-test $(BUILD)/ebc-refresh-test \
+all: header-check $(BUILD)/ebc-logic-test $(BUILD)/ebc-refresh-test \
      $(BUILD)/ebc-refresh-test-dbg $(BUILD)/ebc-replay \
      $(BUILD)/ebc-dump $(BUILD)/ebc-dump-grab
+
+header-check: $(BUILD)/include/uapi/drm/rockchip_ebc_drm.h
+	$(CC) $(CFLAGS) -Ishim/uapi -x c -fsyntax-only \
+	  -include $(BUILD)/include/uapi/drm/rockchip_ebc_drm.h /dev/null
+	$(CXX) $(CFLAGS) -Ishim/uapi -x c++ -fsyntax-only \
+	  -include $(BUILD)/include/uapi/drm/rockchip_ebc_drm.h /dev/null
 
 $(EXTRACTED) &: $(PATCH) $(EXTRACT)
 	python3 $(EXTRACT) $(PATCH) $(BUILD) \
@@ -80,7 +87,10 @@ $(DBG_DRIVER): $(PATCH) $(EXTRACT) $(DBG_PATCHES)
 	python3 $(EXTRACT) $(PATCH) $(DBGDIR) \
 	  drivers/gpu/drm/rockchip/rockchip_ebc.c
 	set -e; for p in $(DBG_PATCHES); do \
-	  echo "applying $$p"; patch -p1 -d $(DBGDIR) < $$p; done
+	  echo "applying $$p"; \
+	  patch --dry-run -p1 -d $(DBGDIR) < $$p; \
+	  patch -p1 -d $(DBGDIR) < $$p; \
+	done
 
 $(BUILD)/ebc-logic-test: ebc-logic-test.c $(EXTRACTED) shim/kernel-shim.h
 	$(CC) $(CFLAGS) $(CPPFLAGS) -o $@ ebc-logic-test.c
@@ -94,16 +104,12 @@ $(BUILD)/ebc-refresh-test: ebc-refresh-test.c $(EXTRACTED) shim/kernel-shim.h \
 	  $(BUILD)/rastersim-asan.o
 
 # -I$(DBGDIR)/... first so `#include "rockchip_ebc.c"` resolves to the
-# debug-patched driver.  The extra -Wno-unused-*: the dspend-straggler
-# patch's printk-only instrumentation compiles its consumers away under
-# the quiet shim (pr_info/pr_warn are no-ops), leaving set-but-unused
-# locals and an unused name table — expected, not a defect.
+# debug-patched driver.
 $(BUILD)/ebc-refresh-test-dbg: ebc-refresh-test.c $(EXTRACTED) \
                                shim/kernel-shim.h shim/fake-ebc.h \
                                ebc-dump-format.h $(DBG_DRIVER) \
                                $(BUILD)/rastersim-asan.o
 	$(CC) $(CFLAGS) $(ASAN) -DEBC_HARNESS_DBG=1 \
-	  -Wno-unused-but-set-variable -Wno-unused-const-variable \
 	  -I$(DBGDIR)/drivers/gpu/drm/rockchip $(CPPFLAGS) \
 	  -o $@ ebc-refresh-test.c $(BUILD)/rastersim-asan.o
 
@@ -131,4 +137,4 @@ regen-goldens: $(BUILD)/ebc-refresh-test
 clean:
 	rm -rf $(BUILD)
 
-.PHONY: all check regen-goldens clean
+.PHONY: all check header-check regen-goldens clean

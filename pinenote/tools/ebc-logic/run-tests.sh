@@ -6,8 +6,8 @@
 # forward-port patch and unit-tests its pure logic; ebc-refresh-test
 # executes the refresh state machine against the fake device (under
 # ASan).  This wrapper checks their outcomes, that the waveform-gated
-# tests ran (or were skipped with a clear message), that the expected-
-# crash teardown-UAF reproducer really crashes, that the rendered
+# tests ran (or were skipped with a clear message), that queued-area teardown
+# is ASan-safe, that the rendered
 # refresh goldens match, and that output is deterministic across runs.
 set -eu
 
@@ -17,11 +17,10 @@ out=$(mktemp)
 out2=$(mktemp)
 rout=$(mktemp)
 rout2=$(mktemp)
-uout=$(mktemp)
 pout=$(mktemp)
 wout=$(mktemp)
 wout2=$(mktemp)
-trap 'rm -f -- "$out" "$out2" "$rout" "$rout2" "$uout" "$pout" "$wout" "$wout2"' EXIT HUP INT TERM
+trap 'rm -f -- "$out" "$out2" "$rout" "$rout2" "$pout" "$wout" "$wout2"' EXIT HUP INT TERM
 
 fail=0
 
@@ -125,19 +124,6 @@ if [ -n "$wbf" ]; then
   fi
 fi
 
-# --- the teardown UAF finding must reproduce under ASan ---
-if "$build/ebc-refresh-test" quirk-ctx-free-uaf > "$uout" 2>&1; then
-  echo "FAIL: quirk-ctx-free-uaf did not crash (expected ASan heap-use-after-free)" >&2
-  fail=1
-else
-  if grep -q 'heap-use-after-free' "$uout"; then
-    echo "PASS: quirk: ctx_free with queued areas is a heap-use-after-free (executed, ASan)"
-  else
-    echo "FAIL: quirk-ctx-free-uaf crashed but not as heap-use-after-free" >&2
-    fail=1
-  fi
-fi
-
 # --- waveform gating messages ---
 if [ -n "$wbf" ]; then
   if grep -q '^SKIP: waveform' "$out"; then
@@ -164,7 +150,7 @@ fi
 
 # --- determinism: identical output across runs (all three binaries) ---
 pout2=$(mktemp)
-trap 'rm -f -- "$out" "$out2" "$rout" "$rout2" "$uout" "$pout" "$pout2" "$wout" "$wout2"' EXIT HUP INT TERM
+trap 'rm -f -- "$out" "$out2" "$rout" "$rout2" "$pout" "$pout2" "$wout" "$wout2"' EXIT HUP INT TERM
 "$build/ebc-logic-test" "$wbf" > "$out2" || true
 "$build/ebc-refresh-test" "$fwdir" "$rsl" "$build" > "$rout2" || true
 "$build/ebc-replay" selftest "$fwdir" > "$pout2" || true

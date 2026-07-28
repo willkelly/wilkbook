@@ -26,9 +26,6 @@
  *       directory containing rockchip/ebc.wbf (enables the WBF-gated
  *       tests), GC16_RSL a `wbf-info --dump-lut GC16 25` export
  *       (enables the rastersim drive-sequence differential)
- *   ebc-refresh-test quirk-ctx-free-uaf     run only the teardown-UAF
- *       reproducer; under ASan this is EXPECTED to abort with
- *       heap-use-after-free (rung 2 finding 3, executed)
  */
 
 #include "drm_epd_helper.c"	/* verbatim, provides the LUT loader */
@@ -37,10 +34,16 @@
 
 #include "../rastersim/rastersim.h"
 
+#include <signal.h>
+#include <sys/wait.h>
+#include <unistd.h>
+
 /* ---------------------------------------------------------------------- */
 /* test plumbing (same conventions as ebc-logic-test.c)                    */
 
 static int failures;
+
+static_assert(sizeof(struct drm_rockchip_ebc_refresh_barrier) == 40);
 
 #define check(cond, ...) \
 	do { \
@@ -173,6 +176,13 @@ static void harness_mode_set(struct harness *h, int w, int hgt)
 	rockchip_ebc_crtc_mode_set_nofb(&h->ebc->crtc);
 }
 
+static void harness_enable_worker(struct harness *h)
+{
+	h->crtc_state.base.mode_changed = true;
+	rockchip_ebc_crtc_atomic_enable(&h->ebc->crtc, NULL);
+	h->crtc_state.base.mode_changed = false;
+}
+
 /* Probe-lite: the same acquisitions rockchip_ebc_probe makes, minus
  * rockchip_ebc_drm_init (which needs a parsed .wbf).  num_phases > 0
  * installs a synthetic LUT.  The device starts runtime-suspended with
@@ -196,6 +206,8 @@ static struct rockchip_ebc *harness_ebc(struct harness *h, int w, int hgt,
 
 	ebc->do_one_full_refresh = true;
 	spin_lock_init(&ebc->refresh_once_lock);
+	mutex_init(&ebc->barrier_lock);
+	init_waitqueue_head(&ebc->barrier_wait);
 	platform_set_drvdata(&h->pdev, ebc);
 	init_completion(&ebc->display_end);
 	ebc->reset_complete = skip_reset;
@@ -280,12 +292,13 @@ static void commit_damage(struct rockchip_ebc_ctx *ctx,
  * exercise the real function).  Register order matches the driver:
  * resume, LUT upload, DSP_START base, mode bits, window addresses,
  * dispatch, unmap, OUT_LOW. */
-static void run_refresh_synth(struct rockchip_ebc *ebc,
-			      struct rockchip_ebc_ctx *ctx, bool global)
+static int run_refresh_synth(struct rockchip_ebc *ebc,
+			     struct rockchip_ebc_ctx *ctx, bool global)
 {
 	struct device *dev = ebc->drm.dev;
 	u32 dsp_ctrl = 0, epd_ctrl = 0;
 	dma_addr_t next_handle, prev_handle;
+	int ret;
 
 	pm_runtime_get(dev);
 	pm_runtime_resume(dev);
@@ -317,9 +330,11 @@ static void run_refresh_synth(struct rockchip_ebc *ebc,
 	regmap_write(ebc->regmap, EBC_WIN_MST0, prev_handle);
 
 	if (global)
-		rockchip_ebc_global_refresh(ebc, ctx, next_handle, prev_handle);
+		ret = rockchip_ebc_global_refresh(ebc, ctx, next_handle, prev_handle);
 	else
-		rockchip_ebc_partial_refresh(ebc, ctx, next_handle, prev_handle);
+		ret = rockchip_ebc_partial_refresh(ebc, ctx, next_handle, prev_handle);
+	if (ret)
+		return ret; /* hardware may still own every active DMA mapping */
 
 	dma_unmap_single(dev, next_handle, ctx->gray4_size, DMA_TO_DEVICE);
 	dma_unmap_single(dev, prev_handle, ctx->gray4_size, DMA_TO_DEVICE);
@@ -348,6 +363,7 @@ static void run_refresh_synth(struct rockchip_ebc *ebc,
 
 	pm_runtime_mark_last_busy(dev);
 	pm_runtime_put_autosuspend(dev);
+	return 0;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -888,240 +904,78 @@ static void test_quirk_begin_together_conflict(void)
 
 /* Mirrors the thread loop's flag consumption (rockchip_ebc_refresh_thread,
  * the read/clear under refresh_once_lock). */
-static bool consume_full_refresh_flag(struct rockchip_ebc *ebc)
-{
-	bool one_full_refresh;
+/* Historical QUIRK F explanation is retained below in its fix guard and docs. */
+static void discard_test_queue(struct rockchip_ebc_ctx *ctx);
 
-	spin_lock(&ebc->refresh_once_lock);
-	one_full_refresh = ebc->do_one_full_refresh;
-	spin_unlock(&ebc->refresh_once_lock);
-	if (one_full_refresh) {
-		spin_lock(&ebc->refresh_once_lock);
-		ebc->do_one_full_refresh = false;
-		spin_unlock(&ebc->refresh_once_lock);
-	}
-	return one_full_refresh;
-}
-
-/* Deliver a pending (deferred) DSP_END from inside the device's refresh —
- * but only once the latched config is a LUT-mode (global) playback.  This
- * is the zero-gap hazard window: rockchip_ebc_global_refresh has already
- * run reinit_completion() (driver line ~651), so the straggler credits
- * display_end and the global's wait_for_completion returns while, on
- * hardware, the num_phases-frame playback would still be on the glass. */
-static void straggler_in_global_window(u32 hw_frame)
-{
-	(void)hw_frame;
-	if ((fake_ebc.latched[EBC_DSP_CTRL / 4] & EBC_DSP_CTRL_DSP_LUT_MODE) &&
-	    fake_ebc.pending_dsp_end)
-		fake_ebc_deliver_dsp_end();
-}
-
-/* Arm the IRQ-latency knob for the burst's FINAL frame.  The final
- * frame is the one whose END can still be outstanding when the partial
- * loop exits: any earlier late IRQ order-skews the per-frame handshake
- * (wait k satisfied by END k-1 — each wait then returns while its own
- * frame still plays) and the burst exits with the last END in flight
- * either way.  One area = NPH DSP_FRM_STARTs (frames 0..NPH-1). */
-static void arm_defer_at_last_partial_frame(u32 hw_frame)
+/* The old reproducer's decisive perturbation is retained as a fix guard:
+ * delay the final partial END.  The former code continued through the
+ * threshold epilogue and could launch a global into that late END. */
+static void arm_quirk_f_timeout(u32 hw_frame)
 {
 	if (hw_frame == NPH - 1)
 		fake_ebc.defer_dsp_end = 1;
 }
 
-/* One scripted session, identical in both scenarios:
- *   partial(D1, final frame's DSP_END IRQ delayed past EBC_FRAME_TIMEOUT)
- *   -> full refresh -> partial(D2) -> ioctl wash.
- * The only difference is the launch context of the first full refresh:
- *   threshold=1: the driver's own auto-refresh epilogue fires it
- *     back-to-back with the partial (zero gap), and the straggler IRQ
- *     lands inside the global's reinit->wait window;
- *   threshold=0 ("ioctl-like"): the wash is requested through the real
- *     GLOBAL_REFRESH ioctl while the thread is idle — the straggler
- *     landed during the idle gap, where the global's reinit_completion
- *     absorbs it.
- * Returns the residual display_end credit after the session; *next_out
- * (gray4_size bytes, caller-allocated) receives the final ctx->next. */
-static unsigned int quirk_zero_gap_session(bool threshold_fired, u8 *next_out,
-					   u32 *drive_count_out)
+static void test_quirk_threshold_zero_gap_global(void)
 {
 	struct harness h;
 	struct rockchip_ebc *ebc = harness_ebc(&h, GW, GH, NPH);
 	struct rockchip_ebc_ctx *ctx = harness_ctx(&h, GW, GH);
 	struct drm_rect rect = {8, 8, 24, 16};
+	struct drm_rockchip_ebc_trigger_global_refresh legacy = {
+		.trigger_global_refresh = true,
+	};
 	bool saved_auto = auto_refresh;
 	int saved_threshold = refresh_threshold;
 	bool saved_diff = diff_mode;
-	unsigned int residual;
-	int x, y;
+	u32 starts;
+	int x, y, ret;
 
 	diff_mode = false;
+	auto_refresh = true;
+	refresh_threshold = 1;
+	ebc->do_one_full_refresh = false;
 	memset(ctx->prev, 0x55, ctx->gray4_size);
 	memset(ctx->next, 0x55, ctx->gray4_size);
 	memcpy(ctx->final_atomic_update, ctx->prev, ctx->gray4_size);
-
-	/* D1: drive the toggle block dark */
 	for (y = rect.y1; y < rect.y2; y++)
 		for (x = rect.x1; x < rect.x2; x++)
 			set_px(ctx->final_atomic_update, ctx->gray4_pitch, x, y, 0x0);
 	commit_damage(ctx, &rect, 1);
-
-	/* auto_refresh=1 with refresh_threshold=0 makes the verbatim
-	 * epilogue fire on any nonzero (or zero) damage volume — the
-	 * deterministic stand-in for a burst crossing the threshold. */
-	auto_refresh = true;
-	refresh_threshold = 0;
-
-	/* The burst's final frame's DSP_END is delivered late (IRQ
-	 * latency past the 25 ms EBC_FRAME_TIMEOUT — two frame periods
-	 * at 85 Hz).  The driver logs "Frame %d timed out!" and carries
-	 * on with the last END still in flight; the shim counts the same
-	 * event in completion_timeouts. */
-	fake_ebc.on_frm_start = arm_defer_at_last_partial_frame;
+	fake_ebc.on_frm_start = arm_quirk_f_timeout;
 	run_refresh_synth(ebc, ctx, false);
 	fake_ebc.on_frm_start = NULL;
 
-	check(ebc->do_one_full_refresh,
-	      "quirk F(%s): threshold epilogue armed the full-refresh flag",
-	      threshold_fired ? "threshold" : "ioctl");
-	check(ebc_shim.completion_timeouts == 1 && fake_ebc.pending_dsp_end == 1,
-	      "quirk F(%s): one frame wait timed out, its DSP_END IRQ still pending",
-	      threshold_fired ? "threshold" : "ioctl");
+	check(ebc->barrier_poison == -ETIMEDOUT &&
+	      ebc_shim.completion_timeouts == 1 && fake_ebc.pending_dsp_end == 1,
+	      "fix QUIRK F: deferred final partial END immediately creates terminal poison");
+	check(!ebc->do_one_full_refresh,
+	      "fix QUIRK F: a failed partial cannot arm the threshold follow-up");
+	starts = fake_ebc.nev;
+	ret = ioctl_trigger_global_refresh(&ebc->drm, &legacy, NULL);
+	check(ret == -ETIMEDOUT && !ebc->do_one_full_refresh,
+	      "fix QUIRK F: an explicit post-poison global request is rejected before queueing");
+	ret = rockchip_ebc_refresh(ebc, ctx, true, DRM_EPD_WF_GC16);
+	check(ret == -ETIMEDOUT && fake_ebc.nev == starts,
+	      "fix QUIRK F: threshold/global follow-up cannot start after timeout");
+	fake_ebc_deliver_dsp_end();
+	ret = rockchip_ebc_refresh(ebc, ctx, true, DRM_EPD_WF_GC16);
+	check(ret == -ETIMEDOUT && fake_ebc.nev == starts &&
+	      ebc->barrier_poison == -ETIMEDOUT &&
+	      memcmp(ctx->prev, ctx->next, ctx->gray4_size),
+	      "fix QUIRK F: late END cannot heal poison or claim clean recovery");
 
-	/* stop the epilogue from re-arming during the rest of the script */
-	auto_refresh = false;
-
-	if (threshold_fired) {
-		/* Zero-gap launch: the thread loop re-checks the flag
-		 * right after rockchip_ebc_refresh returns (driver lines
-		 * ~1591/1567) and starts the global immediately.  The
-		 * straggler IRQ lands inside the global's own wait
-		 * window. */
-		consume_full_refresh_flag(ebc);
-		fake_ebc.on_frm_start = straggler_in_global_window;
-		run_refresh_synth(ebc, ctx, true);
-		fake_ebc.on_frm_start = NULL;
-	} else {
-		/* Idle-gap launch: the straggler lands while the thread
-		 * sleeps; the wash is then requested through the real
-		 * ioctl handler.  reinit_completion at the top of
-		 * rockchip_ebc_global_refresh absorbs the stale credit. */
-		struct drm_rockchip_ebc_trigger_global_refresh args = {
-			.trigger_global_refresh = true,
-		};
-
-		consume_full_refresh_flag(ebc);	/* drop the auto arm */
-		fake_ebc_deliver_dsp_end();	/* straggler, in the idle gap */
-		ioctl_trigger_global_refresh(&ebc->drm, &args, NULL);
-		check(consume_full_refresh_flag(ebc),
-		      "quirk F(ioctl): GLOBAL_REFRESH ioctl armed the flag");
-		run_refresh_synth(ebc, ctx, true);
-	}
-
-	/* D2: the stream continues — toggle the block back light */
-	for (y = rect.y1; y < rect.y2; y++)
-		for (x = rect.x1; x < rect.x2; x++)
-			set_px(ctx->final_atomic_update, ctx->gray4_pitch, x, y, 0xF);
-	commit_damage(ctx, &rect, 1);
-	run_refresh_synth(ebc, ctx, false);
-
-	/* the driver's own bookkeeping believes this session is clean */
-	check(!memcmp(ctx->prev, ctx->next, ctx->gray4_size) &&
-	      list_empty(&ctx->queue),
-	      "quirk F(%s): driver bookkeeping believes the session completed cleanly",
-	      threshold_fired ? "threshold" : "ioctl");
-
-	residual = ebc->display_end.done;
-
-	/* a final ioctl-path wash: reinit_completion re-arms the handshake
-	 * (this is why ioctl-heavy sessions self-heal on hardware) */
-	{
-		struct drm_rockchip_ebc_trigger_global_refresh args = {
-			.trigger_global_refresh = true,
-		};
-
-		ioctl_trigger_global_refresh(&ebc->drm, &args, NULL);
-		consume_full_refresh_flag(ebc);
-		run_refresh_synth(ebc, ctx, true);
-	}
-	check(ebc->display_end.done == 0,
-	      "quirk F(%s): a later global's reinit_completion re-arms the handshake",
-	      threshold_fired ? "threshold" : "ioctl");
-
-	memcpy(next_out, ctx->next, ctx->gray4_size);
-	memcpy(drive_count_out, fake_ebc.drive_count,
-	       (size_t)GW * GH * sizeof(u32));
-
+	discard_test_queue(ctx);
 	auto_refresh = saved_auto;
 	refresh_threshold = saved_threshold;
 	diff_mode = saved_diff;
 	harness_free(&h, ctx);
-	return residual;
-}
-
-static void test_quirk_threshold_zero_gap_global(void)
-{
-	/* The 2026-07-12 hardware finding: full refreshes fired by the
-	 * damage-threshold path progressively corrupt recently-updated
-	 * pixels, while GLOBAL_REFRESH-ioctl washes of the same waveform
-	 * never do.  Static analysis shows both paths run the identical
-	 * code from the do_one_full_refresh flag onward; the divergence
-	 * is the launch context.  The threshold path is the only
-	 * zero-gap producer: the flag is set in the epilogue of the very
-	 * partial refresh that crossed the threshold (driver line ~1479)
-	 * and consumed immediately (~1591/1567), so the global's
-	 * reinit_completion->wait window opens microseconds after a
-	 * partial burst — exactly where a straggling DSP_END (e.g. from
-	 * a frame whose wait already expired at the 25 ms
-	 * EBC_FRAME_TIMEOUT, two frame periods) lands.  The completion
-	 * is COUNTING and the partial path never reinits it, so the
-	 * straggler credits the global's wait: on hardware the wait
-	 * returns while the num_phases-frame LUT playback is still
-	 * driving glass, and the driver then commits prev <- next,
-	 * writes DSP_OUT_LOW, uploads the next waveform's LUT and
-	 * starts three-window frames against a panel mid-wash — for
-	 * exactly the prev != next (recently-updated) pixels, whose LUT
-	 * row switches mid-waveform.  The ioctl path launches from
-	 * idle (the wash beats the deferred-io flush), so stragglers
-	 * land in the gap and reinit_completion absorbs them.
-	 *
-	 * The fake device plays refreshes synchronously inside the
-	 * DSP_START write, so the mid-playback pixel corruption itself
-	 * cannot manifest here (README, "Limits").  What this test pins,
-	 * deterministically, is the protocol divergence that causes it:
-	 * the identical session with the identical late-IRQ perturbation
-	 * ends with a residual display_end credit if and only if the
-	 * global was threshold-fired — i.e. one of its waits returned
-	 * without a matching completed playback. */
-	u8 *next_t = malloc((size_t)GW / 2 * GH);
-	u8 *next_i = malloc((size_t)GW / 2 * GH);
-	u32 *drives_t = malloc((size_t)GW * GH * sizeof(u32));
-	u32 *drives_i = malloc((size_t)GW * GH * sizeof(u32));
-	unsigned int residual_t, residual_i;
-
-	residual_t = quirk_zero_gap_session(true, next_t, drives_t);
-	residual_i = quirk_zero_gap_session(false, next_i, drives_i);
-
-	check(residual_i == 0,
-	      "quirk F: ioctl-fired global absorbs the straggler DSP_END (idle gap + reinit_completion)");
-	check(residual_t == 1,
-	      "quirk F: threshold-fired global leaves a residual display_end credit "
-	      "(a wait was satisfied by the straggler mid-playback) — the corrupting path, device-invisible here");
-	check(!memcmp(next_t, next_i, (size_t)GW / 2 * GH) &&
-	      !memcmp(drives_t, drives_i, (size_t)GW * GH * sizeof(u32)),
-	      "quirk F: the synchronous device model shows identical pixels/drives for both paths "
-	      "(the mid-playback race is hardware-only; see README limits)");
-
-	free(next_t);
-	free(next_i);
-	free(drives_t);
-	free(drives_i);
 }
 
 /* ---------------------------------------------------------------------- */
-/* teardown UAF reproducer (run as a subprocess by run-tests.sh)           */
+/* queued-area teardown regression                                           */
 
-static int quirk_ctx_free_uaf(void)
+static void test_ctx_free_queued_area(void)
 {
 	struct rockchip_ebc_ctx *ctx = rockchip_ebc_ctx_alloc(NULL, 64, 16);
 	struct rockchip_ebc_area *a = kmalloc(sizeof(*a), GFP_KERNEL);
@@ -1130,13 +984,8 @@ static int quirk_ctx_free_uaf(void)
 	a->frame_begin = EBC_FRAME_PENDING;
 	list_add_tail(&a->list, &ctx->queue);
 
-	fprintf(stderr, "quirk-ctx-free-uaf: rockchip_ebc_ctx_free with a queued "
-			"area (rung 2 finding: list_for_each_entry + kfree)\n");
 	rockchip_ebc_ctx_free(ctx);
-	/* only reachable without ASan (the freed node's next pointer
-	 * happened to read as something list-terminating) */
-	printf("quirk-ctx-free-uaf: survived (build without ASan?)\n");
-	return 0;
+	check(true, "ctx_free: queued areas are unlinked before free (ASan regression)");
 }
 
 /* ---------------------------------------------------------------------- */
@@ -1300,6 +1149,59 @@ static void test_wbf_cold_temperature(void)
 /* thread-body scripting */
 static struct rockchip_ebc_ctx *thread_ctx;
 static int thread_step;
+static u8 *thread_caller_snapshot;
+
+/* Make the shutdown snapshots distinguishable at the byte and nibble level:
+ * a plain 0xff off-screen buffer would not catch an accidental source swap. */
+static void fill_y4_pattern(u8 *buf, u32 pitch, int w, int h, unsigned int salt)
+{
+	int x, y;
+
+	memset(buf, 0, (size_t)pitch * h);
+	for (y = 0; y < h; y++)
+		for (x = 0; x < w; x++)
+			set_px(buf, pitch, x, y, (u8)((3 * x + 5 * y + salt) & 0xf));
+}
+
+static void prepare_thread_caller(struct rockchip_ebc_ctx *ctx, u8 *caller)
+{
+	struct drm_rect rect = {8, 8, 24, 24};
+	int x, y;
+
+	fill_y4_pattern(caller, ctx->gray4_pitch, GW, GH, 1);
+	/* The scheduled partial's pixels are part of the caller image too, so
+	 * the expected suspend_next snapshot includes both caller paths. */
+	for (y = rect.y1; y < rect.y2; y++)
+		for (x = rect.x1; x < rect.x2; x++)
+			set_px(caller, ctx->gray4_pitch, x, y, 0x3);
+	memcpy(ctx->prev, caller, ctx->gray4_size);
+	memcpy(ctx->next, caller, ctx->gray4_size);
+	memcpy(ctx->final, caller, ctx->gray4_size);
+	memcpy(ctx->final_atomic_update, caller, ctx->gray4_size);
+}
+
+static unsigned int thread_global_events(void)
+{
+	unsigned int i, globals = 0;
+
+	for (i = 0; i < fake_ebc.nev; i++)
+		globals += fake_ebc.ev[i].lut_mode;
+	return globals;
+}
+
+static void check_thread_completion_accounting(const char *what,
+					       unsigned int globals,
+					       unsigned int stale_cleared)
+{
+	check(ebc_shim.completion_timeouts == 0 &&
+	      ebc_shim.completion_waits == ebc_shim.completion_successful_waits &&
+	      ebc_shim.completion_calls == ebc_shim.completion_successful_waits + stale_cleared &&
+	      ebc_shim.completion_reinits == ebc_shim.completion_waits,
+	      "%s: completion accounting (%lu complete, %lu starts/reinits, %lu/%lu waits, %u stale cleared)",
+	      what, ebc_shim.completion_calls, ebc_shim.completion_reinits,
+	      ebc_shim.completion_successful_waits, ebc_shim.completion_waits,
+	      stale_cleared);
+}
 
 static void thread_script(void)
 {
@@ -1313,6 +1215,9 @@ static void thread_script(void)
 				       thread_ctx->gray4_pitch, x, y, 0x3);
 		commit_damage(thread_ctx, &rect, 1);
 	} else {
+		if (thread_caller_snapshot)
+			memcpy(thread_caller_snapshot, thread_ctx->prev,
+			       thread_ctx->gray4_size);
 		ebc_shim.thread_stop = true;
 	}
 	thread_step++;
@@ -1323,19 +1228,24 @@ static void test_wbf_thread_body(void)
 	struct harness h;
 	struct rockchip_ebc *ebc = wbf_probe(&h);
 	struct rockchip_ebc_ctx *ctx;
+	u8 *caller, *off_screen;
 	unsigned int i, n_global = 0, n_partial = 0;
 	bool order_ok = true;
 	int ret;
-	size_t j;
-	bool white_ok = true;
 
 	if (!ebc)
 		return;
 	harness_mode_set(&h, GW, GH);
 	ctx = harness_ctx(&h, GW, GH);
+	caller = malloc(ctx->gray4_size);
+	off_screen = malloc(ctx->gray4_size);
+	prepare_thread_caller(ctx, caller);
+	fill_y4_pattern(off_screen, ctx->gray4_pitch, GW, GH, 9);
+	memcpy(ebc->off_screen, off_screen, ctx->gray4_size);
 
 	thread_ctx = ctx;
 	thread_step = 0;
+	thread_caller_snapshot = caller;
 	ebc_shim.schedule_hook = thread_script;
 	kthread_unpark(ebc->refresh_thread);	/* what atomic_enable does */
 
@@ -1362,12 +1272,106 @@ static void test_wbf_thread_body(void)
 	      n_partial);
 	check(ebc_shim.completion_timeouts == 0,
 	      "wbf thread: every hardware wait completed");
-	for (j = 0; j < ctx->gray4_size; j++)
-		white_ok &= ctx->next[j] == 0xff;
-	check(white_ok, "wbf thread: exit path painted the all-white off screen");
+	check(!memcmp(ebc->suspend_next, caller, ctx->gray4_size),
+	      "wbf thread: default disable saves the caller image in suspend_next");
+	check(!memcmp(ebc->suspend_prev, off_screen, ctx->gray4_size) &&
+	      !memcmp(ctx->prev, off_screen, ctx->gray4_size) &&
+	      !memcmp(ctx->next, off_screen, ctx->gray4_size) &&
+	      !memcmp(ctx->final, off_screen, ctx->gray4_size),
+	      "wbf thread: default disable saves off_screen in suspend_prev and ctx buffers");
+	check_thread_completion_accounting("wbf thread", n_global, 0);
 	check(harness_clean("wbf-thread"), "wbf thread: no harness violations");
+	free(caller);
+	free(off_screen);
+	thread_caller_snapshot = NULL;
 	wbf_teardown(&h, ctx);
 }
+
+static void test_wbf_thread_no_off_screen(void)
+{
+	struct harness h;
+	struct rockchip_ebc *ebc = wbf_probe(&h);
+	struct rockchip_ebc_ctx *ctx;
+	u8 *caller, *off_screen;
+	bool saved_no_off_screen = no_off_screen;
+	int ret;
+
+	if (!ebc)
+		return;
+	harness_mode_set(&h, GW, GH);
+	ctx = harness_ctx(&h, GW, GH);
+	caller = malloc(ctx->gray4_size);
+	off_screen = malloc(ctx->gray4_size);
+	prepare_thread_caller(ctx, caller);
+	fill_y4_pattern(off_screen, ctx->gray4_pitch, GW, GH, 9);
+	memcpy(ebc->off_screen, off_screen, ctx->gray4_size);
+
+	no_off_screen = true;
+	thread_ctx = ctx;
+	thread_step = 0;
+	thread_caller_snapshot = caller;
+	ebc_shim.schedule_hook = thread_script;
+	kthread_unpark(ebc->refresh_thread);
+	ret = ebc_shim.thread_fn(ebc_shim.thread_data);
+
+	check(ret == 0 && thread_global_events() == 2,
+	      "wbf thread: no_off_screen retains the caller and submits no off-screen global");
+	check(!memcmp(ebc->suspend_next, caller, ctx->gray4_size) &&
+	      !memcmp(ebc->suspend_prev, caller, ctx->gray4_size) &&
+	      !memcmp(ctx->prev, caller, ctx->gray4_size) &&
+	      !memcmp(ctx->next, caller, ctx->gray4_size) &&
+	      !memcmp(ctx->final, caller, ctx->gray4_size),
+	      "wbf thread: no_off_screen preserves caller in both suspend snapshots and ctx buffers");
+	check_thread_completion_accounting("wbf thread no_off_screen",
+					 thread_global_events(), 0);
+	check(harness_clean("wbf-thread-no-off-screen"),
+	      "wbf thread: no_off_screen has no harness violations");
+
+	no_off_screen = saved_no_off_screen;
+	free(caller);
+	free(off_screen);
+	thread_caller_snapshot = NULL;
+	wbf_teardown(&h, ctx);
+}
+
+static void test_wbf_thread_stale_completion_credit(void)
+{
+	struct harness h;
+	struct rockchip_ebc *ebc = wbf_probe(&h);
+	struct rockchip_ebc_ctx *ctx;
+	u8 *caller;
+	int ret;
+
+	if (!ebc)
+		return;
+	harness_mode_set(&h, GW, GH);
+	ctx = harness_ctx(&h, GW, GH);
+	caller = malloc(ctx->gray4_size);
+	prepare_thread_caller(ctx, caller);
+	complete(&ebc->display_end);
+	check(ebc->display_end.done == 1,
+	      "wbf thread: stale pre-credit is present before the first global reinit");
+
+	thread_ctx = ctx;
+	thread_step = 0;
+	thread_caller_snapshot = caller;
+	ebc_shim.schedule_hook = thread_script;
+	kthread_unpark(ebc->refresh_thread);
+	ret = ebc_shim.thread_fn(ebc_shim.thread_data);
+
+	check(ret == 0 && ebc->display_end.done == 0,
+	      "wbf thread: first global reinit clears stale pre-credit before waiting");
+	check_thread_completion_accounting("wbf thread stale credit",
+					 thread_global_events(), 1);
+	check(harness_clean("wbf-thread-stale-credit"),
+	      "wbf thread: stale-credit session is otherwise clean");
+
+	free(caller);
+	thread_caller_snapshot = NULL;
+	wbf_teardown(&h, ctx);
+}
+
+/* Historical WBF deferred-END reproducer is covered by the synthetic QUIRK F guard and fail-closed worker timeout tests. */
 
 static void test_wbf_lut_differential(const char *rsl_path)
 {
@@ -1691,16 +1695,750 @@ static void test_extract_fbs_stub(void)
 
 #endif /* EBC_HARNESS_DBG */
 
+enum barrier_worker_case {
+	BARRIER_BATCH,
+	BARRIER_DURING_PLAYBACK,
+	BARRIER_LEGACY_BEFORE,
+	BARRIER_LEGACY_DURING,
+};
+
+static struct rockchip_ebc *barrier_worker_ebc;
+static enum barrier_worker_case barrier_worker_case;
+static unsigned int barrier_worker_globals;
+static unsigned int barrier_worker_globals_before_stop;
+static bool barrier_worker_injected;
+static u64 barrier_worker_first_active;
+static u64 barrier_worker_first_completed;
+static int barrier_worker_prepublication_wait;
+static bool barrier_presleep_submit_injected;
+static int barrier_presleep_submit_result;
+static u64 barrier_presleep_submit_id;
+
+static int barrier_submit(struct rockchip_ebc *ebc, u64 *id)
+{
+	struct drm_rockchip_ebc_refresh_barrier args = {
+		.version = DRM_ROCKCHIP_EBC_REFRESH_BARRIER_VERSION,
+		.op = DRM_ROCKCHIP_EBC_REFRESH_BARRIER_SUBMIT,
+	};
+	int ret = ioctl_refresh_barrier(&ebc->drm, &args, NULL);
+
+	if (!ret)
+		*id = args.request_id;
+	return ret ? ret : args.result;
+}
+
+static int barrier_wait_result(struct rockchip_ebc *ebc, u64 id, u32 timeout_ms)
+{
+	struct drm_rockchip_ebc_refresh_barrier args = {
+		.version = DRM_ROCKCHIP_EBC_REFRESH_BARRIER_VERSION,
+		.op = DRM_ROCKCHIP_EBC_REFRESH_BARRIER_WAIT,
+		.request_id = id,
+		.timeout_ms = timeout_ms,
+	};
+	int ret = ioctl_refresh_barrier(&ebc->drm, &args, NULL);
+
+	return ret ? ret : args.result;
+}
+
+static void barrier_submit_at_idle(unsigned int state)
+{
+	if (state != TASK_IDLE || barrier_presleep_submit_injected)
+		return;
+	barrier_presleep_submit_injected = true;
+	barrier_presleep_submit_result =
+		barrier_submit(barrier_worker_ebc, &barrier_presleep_submit_id);
+}
+
+static void barrier_worker_event(const struct fake_ebc_event *ev,
+			 const u8 *prev, const u8 *next, const u8 *phase_buf)
+{
+	struct drm_rockchip_ebc_trigger_global_refresh legacy = {
+		.trigger_global_refresh = true,
+	};
+	u64 ignored;
+
+	(void)prev;
+	(void)next;
+	(void)phase_buf;
+	if (!ev->lut_mode)
+		return;
+	barrier_worker_globals++;
+	if (barrier_worker_globals != 1)
+		return;
+	barrier_worker_first_active = barrier_worker_ebc->active_generation;
+	barrier_worker_first_completed = barrier_worker_ebc->completed_generation;
+	if (barrier_worker_case == BARRIER_DURING_PLAYBACK) {
+		barrier_worker_injected = barrier_submit(barrier_worker_ebc, &ignored) ==
+			-EINPROGRESS;
+		barrier_worker_prepublication_wait =
+			barrier_wait_result(barrier_worker_ebc, 1, 1);
+	} else if (barrier_worker_case == BARRIER_LEGACY_DURING) {
+		ioctl_trigger_global_refresh(&barrier_worker_ebc->drm, &legacy, NULL);
+		ioctl_trigger_global_refresh(&barrier_worker_ebc->drm, &legacy, NULL);
+		barrier_worker_injected = barrier_worker_ebc->legacy_pending;
+	}
+}
+
+static void barrier_worker_stop(void)
+{
+	barrier_worker_globals_before_stop = barrier_worker_globals;
+	ebc_shim.thread_stop = true;
+}
+
+static void teardown_stop_runs_active_worker(void)
+{
+	/* kthread_stop waits for a refresh that was already accepted before
+	 * teardown. The worker's timeout path schedules once, where this hook
+	 * marks it stopped exactly as the real stop wakeup would. */
+	ebc_shim.kthread_stop_hook = NULL;
+	ebc_shim.schedule_hook = barrier_worker_stop;
+	ebc_shim.thread_fn(ebc_shim.thread_data);
+}
+
+static void suspend_helper_runs_active_worker(void)
+{
+	ebc_shim.drm_suspend_hook = NULL;
+	ebc_shim.schedule_hook = barrier_worker_stop;
+	ebc_shim.thread_fn(ebc_shim.thread_data);
+}
+
+static unsigned int forbidden_drm_resume_calls;
+
+static void forbidden_drm_resume(void)
+{
+	forbidden_drm_resume_calls++;
+}
+
+static int barrier_fail_resume(struct device *dev)
+{
+	(void)dev;
+	return -EIO;
+}
+
+static unsigned int active_dma_mappings(void)
+{
+	unsigned int i, active = 0;
+
+	for (i = 0; i < EBC_SHIM_DMA_SLOTS; i++)
+		active += ebc_shim.dma[i].active;
+	return active;
+}
+
+/* The production timeout path deliberately retains queued damage until
+ * reboot. This is harness teardown only: avoid the historical
+ * ctx_free UAF reproducer after this test has asserted that retention. */
+static void discard_test_queue(struct rockchip_ebc_ctx *ctx)
+{
+	struct rockchip_ebc_area *area, *next;
+
+	list_for_each_entry_safe(area, next, &ctx->queue, list) {
+		list_del(&area->list);
+		kfree(area);
+	}
+}
+
+/* Test-only reboot boundary. Production retains uncertain ownership until a
+ * real reboot; this releases it only after the assertions so ASan can check
+ * the rest of this process. `state_ref` is the CRTC state's ctx reference. */
+static void test_reboot_cleanup(struct rockchip_ebc *ebc,
+				struct rockchip_ebc_ctx *ctx, bool state_ref)
+{
+	ebc->uncertain_ctx = NULL;
+	kref_put(&ctx->kref, rockchip_ebc_ctx_release);
+	if (state_ref)
+		kref_put(&ctx->kref, rockchip_ebc_ctx_release);
+	module_put(THIS_MODULE);
+	ebc_shim_reset();
+}
+
+static void assert_uncertain_resumes_are_inert(struct harness *h,
+					       const char *kind)
+{
+	unsigned long pm_force_resume = ebc_shim.pm_force_resume_calls;
+	unsigned long drm_resume = ebc_shim.drm_resume_calls;
+	unsigned long cache_only = ebc_shim.regcache_cache_only_calls;
+	unsigned long mark_dirty = ebc_shim.regcache_mark_dirty_calls;
+	unsigned long sync = ebc_shim.regcache_sync_calls;
+	unsigned long regmap_writes = ebc_shim.regmap_write_calls;
+	unsigned long clk_enable = ebc_shim.clk_prepare_enable_calls;
+	unsigned long clk_disable = ebc_shim.clk_disable_unprepare_calls;
+	unsigned long regulator_enable = ebc_shim.regulator_bulk_enable_calls;
+	unsigned long regulator_disable = ebc_shim.regulator_bulk_disable_calls;
+	unsigned long worker_unpark = ebc_shim.kthread_unpark_calls;
+	int clks_on = ebc_shim.clks_on;
+	int regulators_on = ebc_shim.regulators_on;
+	int system_ret = rockchip_ebc_resume(&h->pdev.dev);
+	int runtime_ret = rockchip_ebc_runtime_resume(&h->pdev.dev);
+
+	check(system_ret == -EBUSY && runtime_ret == -EBUSY &&
+	      ebc_shim.pm_force_resume_calls == pm_force_resume &&
+	      ebc_shim.drm_resume_calls == drm_resume &&
+	      ebc_shim.regcache_cache_only_calls == cache_only &&
+	      ebc_shim.regcache_mark_dirty_calls == mark_dirty &&
+	      ebc_shim.regcache_sync_calls == sync &&
+	      ebc_shim.regmap_write_calls == regmap_writes &&
+	      ebc_shim.clk_prepare_enable_calls == clk_enable &&
+	      ebc_shim.clk_disable_unprepare_calls == clk_disable &&
+	      ebc_shim.regulator_bulk_enable_calls == regulator_enable &&
+	      ebc_shim.regulator_bulk_disable_calls == regulator_disable &&
+	      ebc_shim.kthread_unpark_calls == worker_unpark &&
+	      ebc_shim.clks_on == clks_on && ebc_shim.regulators_on == regulators_on,
+	      "resume containment: %s uncertainty performs no PM, DRM, power, regcache, MMIO or worker action",
+	      kind);
+}
+
+static void uncertain_remove_child(bool timeout_during_remove)
+{
+	struct harness h;
+	struct rockchip_ebc *ebc = wbf_probe(&h);
+	u64 id;
+
+	if (!ebc)
+		_exit(2);
+	harness_mode_set(&h, GW, GH);
+	(void)harness_ctx(&h, GW, GH);
+	harness_enable_worker(&h);
+	ebc->reset_complete = true;
+	ebc->do_one_full_refresh = false;
+	no_off_screen = true;
+	fake_ebc.defer_dsp_end = 1;
+	if (barrier_submit(ebc, &id) != -EINPROGRESS)
+		_exit(3);
+	if (timeout_during_remove) {
+		ebc_shim.kthread_stop_hook = teardown_stop_runs_active_worker;
+	} else {
+		ebc_shim.schedule_hook = barrier_worker_stop;
+		kthread_unpark(ebc->refresh_thread);
+		ebc_shim.thread_fn(ebc_shim.thread_data);
+		if (!ebc->hardware_uncertain)
+			_exit(4);
+	}
+	rockchip_ebc_remove(&h.pdev);
+	_exit(0);
+}
+
+static void test_wbf_uncertain_remove_panics(void)
+{
+	unsigned int i;
+
+	for (i = 0; i < 2; i++) {
+		pid_t pid = fork();
+		int status;
+
+		if (pid == 0)
+			uncertain_remove_child(i != 0);
+		if (pid < 0 || waitpid(pid, &status, 0) != pid) {
+			check(false, "uncertain remove death test: fork/waitpid succeeds");
+			continue;
+		}
+		check(WIFSIGNALED(status) && WTERMSIG(status) == SIGABRT,
+		      "uncertain remove death test: %s uncertainty emits panic and aborts before devres",
+		      i ? "stop-time timeout" : "already-established");
+	}
+}
+
+static void test_wbf_normal_remove(void)
+{
+	struct harness h;
+	struct rockchip_ebc *ebc = wbf_probe(&h);
+
+	if (!ebc)
+		return;
+	rockchip_ebc_remove(&h.pdev);
+	check(ebc_shim.kthread_stop_calls == 1 && ebc_shim.drm_unregister_calls == 1 &&
+	      ebc_shim.drm_shutdown_calls == 1 && ebc_shim.pm_disable_calls == 1,
+	      "normal remove: teardown remains available without uncertain DMA ownership");
+	wbf_teardown(&h, NULL);
+}
+
+static void test_barrier_uapi_and_lifecycle(void)
+{
+	struct harness h;
+	struct rockchip_ebc *ebc = harness_ebc(&h, GW, GH, NPH);
+	struct drm_rockchip_ebc_refresh_barrier args = {
+		.version = DRM_ROCKCHIP_EBC_REFRESH_BARRIER_VERSION,
+		.op = DRM_ROCKCHIP_EBC_REFRESH_BARRIER_SUBMIT,
+	};
+	u64 id;
+	int ret;
+
+	check(sizeof(args) == 40, "barrier UAPI: explicit 40-byte layout");
+	ret = ioctl_refresh_barrier(&ebc->drm, &args, NULL);
+	check(ret == 0 && args.result == -ENODEV && !args.request_id,
+	      "barrier lifecycle: SUBMIT fails closed before CRTC/worker enable");
+	harness_enable_worker(&h);
+	ebc->refresh_thread = &ebc_shim_task;
+	h.crtc_state.base.mode_changed = true;
+	rockchip_ebc_crtc_atomic_disable(&ebc->crtc, NULL);
+	check(!ebc->worker_available && !ebc->barrier_poison,
+	      "barrier lifecycle: idle disable does not permanently poison a later enable");
+	rockchip_ebc_crtc_atomic_enable(&ebc->crtc, NULL);
+	check(ebc->worker_available,
+	      "barrier lifecycle: worker is available after an idle disable/enable cycle");
+	memset(&args, 0, sizeof(args));
+	args.version = DRM_ROCKCHIP_EBC_REFRESH_BARRIER_VERSION;
+	args.op = DRM_ROCKCHIP_EBC_REFRESH_BARRIER_SUBMIT;
+	ret = ioctl_refresh_barrier(&ebc->drm, &args, NULL);
+	id = args.request_id;
+	check(ret == 0 && args.result == -EINPROGRESS && id == 1,
+	      "barrier lifecycle: enabled worker accepts a generation");
+
+	args.version++;
+	check(ioctl_refresh_barrier(&ebc->drm, &args, NULL) == -EINVAL,
+	      "barrier UAPI: malformed version is rejected");
+	args.version--;
+	args.op = 99;
+	check(ioctl_refresh_barrier(&ebc->drm, &args, NULL) == -EINVAL,
+	      "barrier UAPI: malformed operation is rejected");
+	args.op = DRM_ROCKCHIP_EBC_REFRESH_BARRIER_WAIT;
+	args.request_id = id + 1;
+	check(ioctl_refresh_barrier(&ebc->drm, &args, NULL) == -EINVAL,
+	      "barrier UAPI: future generation is rejected");
+	args.request_id = id;
+	args.reserved[3] = 1;
+	check(ioctl_refresh_barrier(&ebc->drm, &args, NULL) == -EINVAL,
+	      "barrier UAPI: every reserved word is validated");
+	args.reserved[3] = 0;
+	args.result = 1;
+	check(ioctl_refresh_barrier(&ebc->drm, &args, NULL) == -EINVAL,
+	      "barrier UAPI: nonzero result input is rejected");
+	args.result = 0;
+	ebc_shim.wait_killable_result = -ERESTARTSYS;
+	check(ioctl_refresh_barrier(&ebc->drm, &args, NULL) == -ERESTARTSYS &&
+	      args.result == 0,
+	      "barrier UAPI: signal interruption is the ioctl error, not payload");
+	ebc_shim.wait_killable_result = 0;
+	h.crtc_state.base.mode_changed = true;
+	rockchip_ebc_crtc_atomic_disable(&ebc->crtc, NULL);
+	h.crtc_state.base.mode_changed = false;
+	check(!ebc->worker_available && ebc->barrier_poison == -ENODEV &&
+	      barrier_wait_result(ebc, id, 1) == -ENODEV,
+	      "barrier lifecycle: disable poisons and wakes a pending generation before parking");
+	ebc->requested_generation = U64_MAX;
+	memset(&args, 0, sizeof(args));
+	args.version = DRM_ROCKCHIP_EBC_REFRESH_BARRIER_VERSION;
+	args.op = DRM_ROCKCHIP_EBC_REFRESH_BARRIER_SUBMIT;
+	check(ioctl_refresh_barrier(&ebc->drm, &args, NULL) == 0 &&
+	      args.result == -EOVERFLOW,
+	      "barrier UAPI: generation overflow is reported without wraparound");
+	harness_free(&h, NULL);
+}
+
+static void test_wbf_refresh_setup_failures(void)
+{
+	static const unsigned int map_stages[] = { 1, 2, 3 };
+	unsigned int i;
+
+	for (i = 0; i < ARRAY_SIZE(map_stages); i++) {
+		struct harness h;
+		struct rockchip_ebc *ebc = wbf_probe(&h);
+		struct rockchip_ebc_ctx *ctx;
+		unsigned long unmaps;
+
+		if (!ebc)
+			return;
+		harness_mode_set(&h, GW, GH);
+		ctx = harness_ctx(&h, GW, GH);
+		ebc_shim.dma_fail_map_call = ebc_shim.dma_maps + map_stages[i];
+		unmaps = ebc_shim.dma_unmaps;
+		check(rockchip_ebc_refresh(ebc, ctx, map_stages[i] != 3,
+					DRM_EPD_WF_GC16) == -EIO && !fake_ebc.nev &&
+		      !active_dma_mappings() && ebc_shim.dma_unmaps == unmaps +
+		      (map_stages[i] - 1) && !ebc_shim.module_pins &&
+		      ebc_shim.module_gets == ebc_shim.module_puts,
+		      "refresh setup: DMA map failure stage %u returns before MMIO start and unwinds owned maps",
+		      map_stages[i]);
+		wbf_teardown(&h, ctx);
+	}
+
+	{
+		struct harness h;
+		struct rockchip_ebc *ebc = wbf_probe(&h);
+		struct rockchip_ebc_ctx *ctx;
+
+		if (!ebc)
+			return;
+		harness_mode_set(&h, GW, GH);
+		ctx = harness_ctx(&h, GW, GH);
+		ebc_shim.iio_temp_override = true;
+		ebc_shim.iio_temp_mC = -100000;
+		check(rockchip_ebc_refresh(ebc, ctx, true, DRM_EPD_WF_GC16) == -ENOENT &&
+		      !fake_ebc.nev, "refresh setup: LUT temperature failure prevents start");
+		ebc_shim.iio_temp_override = false;
+		check(rockchip_ebc_refresh(ebc, ctx, true, DRM_EPD_WF_MAX) == -ENOENT &&
+		      !fake_ebc.nev, "refresh setup: LUT waveform failure prevents start");
+		ebc_shim.module_get_fail = true;
+		check(rockchip_ebc_refresh(ebc, ctx, true, DRM_EPD_WF_GC16) == -ENODEV &&
+		      !fake_ebc.nev && !ebc_shim.module_pins,
+		      "refresh setup: failed module pin prevents physical start");
+		ebc_shim.module_get_fail = false;
+		ebc_shim.pm_get_error = -EIO;
+		check(rockchip_ebc_refresh(ebc, ctx, true, DRM_EPD_WF_GC16) == -EIO &&
+		      !ebc_shim.pm_refcount && !ebc_shim.module_pins,
+		      "refresh setup: failed pm_runtime_get balances usage and owners");
+		wbf_teardown(&h, ctx);
+	}
+}
+
+static void test_wbf_barrier_worker(void)
+{
+	static const enum barrier_worker_case cases[] = {
+		BARRIER_BATCH, BARRIER_DURING_PLAYBACK,
+		BARRIER_LEGACY_BEFORE, BARRIER_LEGACY_DURING,
+	};
+	unsigned int n;
+
+	for (n = 0; n < ARRAY_SIZE(cases); n++) {
+		struct harness h;
+		struct rockchip_ebc *ebc = wbf_probe(&h);
+		struct rockchip_ebc_ctx *ctx;
+		u64 id1 = 0, id2 = 0;
+		struct drm_rockchip_ebc_trigger_global_refresh legacy = {
+			.trigger_global_refresh = true,
+		};
+		int ret;
+
+		if (!ebc)
+			return;
+		harness_mode_set(&h, GW, GH);
+		ctx = harness_ctx(&h, GW, GH);
+		harness_enable_worker(&h);
+		ebc->reset_complete = true;
+		ebc->do_one_full_refresh = false;
+		no_off_screen = true;
+		barrier_worker_ebc = ebc;
+		barrier_worker_case = cases[n];
+		barrier_worker_globals = 0;
+		barrier_worker_globals_before_stop = 0;
+		barrier_worker_injected = false;
+		barrier_worker_first_active = 0;
+		barrier_worker_first_completed = 0;
+		barrier_worker_prepublication_wait = 0;
+		if (cases[n] == BARRIER_LEGACY_BEFORE) {
+			ret = ioctl_trigger_global_refresh(&ebc->drm, &legacy, NULL);
+			check(ret == 0 && ebc->legacy_pending,
+			      "barrier worker: legacy request is pending before the worker snapshot");
+		} else {
+			check(barrier_submit(ebc, &id1) == -EINPROGRESS,
+			      "barrier worker: SUBMIT reports -EINPROGRESS before worker publication");
+			if (cases[n] == BARRIER_BATCH)
+				check(barrier_submit(ebc, &id2) == -EINPROGRESS,
+				      "barrier worker: second pre-snapshot SUBMIT also reports -EINPROGRESS");
+		}
+		ebc_shim.schedule_hook = barrier_worker_stop;
+		fake_ebc.on_event = barrier_worker_event;
+		kthread_unpark(ebc->refresh_thread);
+		ret = ebc_shim.thread_fn(ebc_shim.thread_data);
+		fake_ebc.on_event = NULL;
+		no_off_screen = false;
+
+		check(ret == 0, "barrier worker: scripted refresh thread returns cleanly");
+		if (cases[n] == BARRIER_BATCH) {
+			check(barrier_worker_globals_before_stop == 1 &&
+			      barrier_worker_first_active == 2 && barrier_worker_first_completed == 0 &&
+			      ebc->completed_generation == 2 && ebc->active_generation == 0,
+			      "barrier worker: two pre-snapshot submits use one global and publish only after return");
+			check(barrier_wait_result(ebc, id1, 1) == 0 &&
+			      barrier_wait_result(ebc, id2, 1) == 0,
+			      "barrier worker: both batched WAITs succeed after worker publication");
+		} else if (cases[n] == BARRIER_DURING_PLAYBACK) {
+			check(barrier_worker_globals_before_stop == 2 && barrier_worker_injected &&
+			      barrier_worker_first_active == 1 && barrier_worker_first_completed == 0 &&
+			      barrier_worker_prepublication_wait == -EINPROGRESS &&
+			      ebc->completed_generation == 2,
+			      "barrier worker: playback SUBMIT requires a second global and cannot publish early");
+			check(barrier_wait_result(ebc, id1, 1) == 0 &&
+			      barrier_wait_result(ebc, 2, 1) == 0,
+			      "barrier worker: both playback-separated generations complete in order");
+		} else if (cases[n] == BARRIER_LEGACY_BEFORE) {
+			check(barrier_worker_globals_before_stop == 1 && !ebc->legacy_pending &&
+			      ebc->requested_generation == 0 && ebc->completed_generation == 0,
+			      "barrier worker: pre-snapshot legacy request coalesces without a generation");
+		} else {
+			check(barrier_worker_globals_before_stop == 2 && barrier_worker_injected &&
+			      !ebc->legacy_pending && ebc->requested_generation == 1 &&
+			      ebc->completed_generation == 1 && ebc->active_generation == 0,
+			      "barrier worker: playback legacy requests coalesce into the next global only");
+		}
+		wbf_teardown(&h, ctx);
+	}
+}
+
+static void test_wbf_barrier_presleep_submit(void)
+{
+	struct harness h;
+	struct rockchip_ebc *ebc = wbf_probe(&h);
+	struct rockchip_ebc_ctx *ctx;
+	int ret;
+
+	if (!ebc)
+		return;
+	harness_mode_set(&h, GW, GH);
+	ctx = harness_ctx(&h, GW, GH);
+	harness_enable_worker(&h);
+	ebc->reset_complete = true;
+	ebc->do_one_full_refresh = false;
+	no_off_screen = true;
+	barrier_worker_ebc = ebc;
+	barrier_presleep_submit_injected = false;
+	barrier_presleep_submit_result = 0;
+	barrier_presleep_submit_id = 0;
+	ebc_shim.task_state_hook = barrier_submit_at_idle;
+	ebc_shim.schedule_hook = barrier_worker_stop;
+	kthread_unpark(ebc->refresh_thread);
+	ret = ebc_shim.thread_fn(ebc_shim.thread_data);
+	ebc_shim.task_state_hook = NULL;
+
+	check(ret == 0 && barrier_presleep_submit_injected &&
+	      barrier_presleep_submit_result == -EINPROGRESS &&
+	      barrier_presleep_submit_id == 1 && ebc_shim.wake_up_process_calls == 1,
+	      "barrier presleep: TASK_IDLE-window SUBMIT is accepted and wakes the worker");
+	check(ebc_shim.schedule_calls == 1 && fake_ebc.nev == 1 &&
+	      ebc->completed_generation == barrier_presleep_submit_id &&
+	      !ebc->active_generation &&
+	      barrier_wait_result(ebc, barrier_presleep_submit_id, 1) == 0,
+	      "barrier presleep: injected generation runs and publishes before the only idle schedule");
+	no_off_screen = false;
+	wbf_teardown(&h, ctx);
+}
+
+static void test_wbf_barrier_failures(void)
+{
+	struct harness h;
+	struct rockchip_ebc *ebc = wbf_probe(&h);
+	struct rockchip_ebc_ctx *ctx;
+	u64 id;
+	int (*saved_resume)(struct device *dev);
+	u32 starts;
+	struct drm_rect rect = {0, 0, 8, 8};
+
+	if (!ebc)
+		return;
+	harness_mode_set(&h, GW, GH);
+	ctx = harness_ctx(&h, GW, GH);
+	harness_enable_worker(&h);
+	ebc->reset_complete = true;
+	ebc->do_one_full_refresh = false;
+	no_off_screen = true;
+	saved_resume = ebc_shim.rt_resume;
+	ebc_shim.rt_resume = barrier_fail_resume;
+	check(barrier_submit(ebc, &id) == -EINPROGRESS,
+	      "barrier failure: setup-failure request is accepted then owned by the worker");
+	ebc_shim.schedule_hook = barrier_worker_stop;
+	kthread_unpark(ebc->refresh_thread);
+	ebc_shim.thread_fn(ebc_shim.thread_data);
+	check(ebc->barrier_poison == -EIO && barrier_wait_result(ebc, id, 1) == -EIO &&
+	      fake_ebc.nev == 0,
+	      "barrier failure: pre-start PM error poisons and wakes without an indefinite WAIT");
+	ebc_shim.rt_resume = saved_resume;
+	wbf_teardown(&h, ctx);
+
+	ebc = wbf_probe(&h);
+	if (!ebc)
+		return;
+	harness_mode_set(&h, GW, GH);
+	ctx = harness_ctx(&h, GW, GH);
+	harness_enable_worker(&h);
+	ebc->reset_complete = true;
+	ebc->do_one_full_refresh = false;
+	no_off_screen = true;
+	fake_ebc.defer_dsp_end = 1;
+	check(barrier_submit(ebc, &id) == -EINPROGRESS,
+	      "barrier failure: global-timeout request enters the real worker");
+	ebc_shim.schedule_hook = barrier_worker_stop;
+	kthread_unpark(ebc->refresh_thread);
+	ebc_shim.thread_fn(ebc_shim.thread_data);
+	starts = fake_ebc.nev;
+	check(ebc->barrier_poison == -ETIMEDOUT && active_dma_mappings() >= 2 &&
+	      barrier_wait_result(ebc, id, 1) == -ETIMEDOUT,
+	      "barrier failure: global timeout retains active DMA mappings and wakes waiters");
+	{
+		struct ebc_crtc_state *old = kzalloc(sizeof(*old), GFP_KERNEL);
+
+		old->base.crtc = &ebc->crtc;
+		old->base.mode_changed = true;
+		old->ctx = ctx; /* transfer the state-owned reference */
+		h.crtc_state.ctx = NULL;
+		ebc->crtc.state = &old->base;
+		check(ctx->kref.refcount == 2 && ebc->uncertain_ctx == ctx,
+		      "timeout retention: active ctx has state and uncertain ownership");
+		rockchip_ebc_crtc_atomic_disable(&ebc->crtc, NULL);
+		rockchip_ebc_crtc_destroy_state(&ebc->crtc, &old->base);
+		ebc->crtc.state = NULL;
+		rockchip_ebc_crtc_reset(&ebc->crtc);
+		check(ctx->kref.refcount == 1 && ebc->uncertain_ctx == ctx &&
+		      active_dma_mappings() >= 2 && ebc_shim.module_pins == 1 &&
+		      ebc->crtc.state && !to_ebc_crtc_state(ebc->crtc.state)->ctx,
+		      "timeout retention: disable plus CRTC destruction/replacement cannot free mapped ctx");
+	}
+	{
+		unsigned int maps = active_dma_mappings();
+		unsigned long unmaps = ebc_shim.dma_unmaps;
+		u32 teardown_starts = fake_ebc.nev;
+
+		rockchip_ebc_shutdown(&h.pdev);
+		check(active_dma_mappings() == maps && ebc_shim.dma_unmaps == unmaps &&
+		      fake_ebc.nev == teardown_starts && ebc_shim.clks_on == 2 &&
+		      ebc_shim.regulators_on == EBC_NUM_SUPPLIES && ebc_shim.module_pins == 1 &&
+		      ebc_shim.kthread_stop_calls == 1,
+		      "timeout shutdown: worker stops while retaining DMA, context power and prohibiting starts");
+	}
+	assert_uncertain_resumes_are_inert(&h, "global");
+	fake_ebc_deliver_dsp_end();
+	rockchip_ebc_refresh(ebc, ctx, true, DRM_EPD_WF_GC16);
+	check(fake_ebc.nev == starts,
+	      "barrier failure: late global END cannot heal poison or start hardware");
+	rockchip_ebc_crtc_destroy_state(&ebc->crtc, ebc->crtc.state);
+	ebc->crtc.state = NULL;
+	test_reboot_cleanup(ebc, ctx, false);
+	no_off_screen = false;
+	wbf_teardown(&h, NULL); /* timeout intentionally retains ctx until reboot */
+
+	ebc = wbf_probe(&h);
+	if (!ebc)
+		return;
+	harness_mode_set(&h, GW, GH);
+	ctx = harness_ctx(&h, GW, GH);
+	harness_enable_worker(&h);
+	ebc->reset_complete = true;
+	ebc->do_one_full_refresh = false;
+	no_off_screen = true;
+	commit_damage(ctx, &rect, 1);
+	fake_ebc.defer_dsp_end = 1;
+	ebc_shim.schedule_hook = barrier_worker_stop;
+	kthread_unpark(ebc->refresh_thread);
+	ebc_shim.thread_fn(ebc_shim.thread_data);
+	starts = fake_ebc.nev;
+	check(ebc->barrier_poison == -ETIMEDOUT && ebc->uncertain_ctx == ctx &&
+	      ctx->kref.refcount == 2 && active_dma_mappings() >= 3 &&
+	      ebc_shim.module_pins == 1 && ebc_shim.clks_on == 2 &&
+	      ebc_shim.regulators_on == EBC_NUM_SUPPLIES && !list_empty(&ctx->queue) &&
+	      ebc_shim.schedule_calls == 1,
+	      "barrier failure: partial timeout retains exact ctx, module, DMA and power until reboot");
+	assert_uncertain_resumes_are_inert(&h, "partial");
+	fake_ebc_deliver_dsp_end();
+	rockchip_ebc_refresh(ebc, ctx, false, DRM_EPD_WF_GC16);
+	check(fake_ebc.nev == starts,
+	      "barrier failure: late partial END cannot heal poison or start hardware");
+	no_off_screen = false;
+	h.crtc_state.ctx = NULL;
+	test_reboot_cleanup(ebc, ctx, true);
+	wbf_teardown(&h, NULL);
+}
+
+static void test_wbf_teardown_timeout_race(void)
+{
+	struct harness h;
+	struct rockchip_ebc *ebc = wbf_probe(&h);
+	struct rockchip_ebc_ctx *ctx;
+	u64 id;
+	u32 starts;
+
+	if (!ebc)
+		return;
+	harness_mode_set(&h, GW, GH);
+	ctx = harness_ctx(&h, GW, GH);
+	harness_enable_worker(&h);
+	ebc->reset_complete = true;
+	ebc->do_one_full_refresh = false;
+	no_off_screen = true;
+	fake_ebc.defer_dsp_end = 1;
+	check(barrier_submit(ebc, &id) == -EINPROGRESS,
+	      "teardown race: worker owns a global before shutdown");
+	ebc_shim.kthread_stop_hook = teardown_stop_runs_active_worker;
+	rockchip_ebc_shutdown(&h.pdev);
+	starts = fake_ebc.nev;
+	check(ebc->hardware_uncertain && ebc->uncertain_ctx == ctx &&
+	      ctx->kref.refcount == 2 && ebc_shim.kthread_stop_calls == 1 &&
+	      active_dma_mappings() >= 2 && ebc_shim.module_pins == 1 &&
+	      ebc_shim.pm_refcount == 1 && ebc_shim.clks_on == 2 &&
+	      ebc_shim.regulators_on == EBC_NUM_SUPPLIES &&
+	      !ebc_shim.drm_unregister_calls && !ebc_shim.drm_shutdown_calls &&
+	      !ebc_shim.pm_disable_calls,
+	      "teardown race: shutdown rechecks timeout after stop and retains every owner");
+	fake_ebc_deliver_dsp_end();
+	rockchip_ebc_refresh(ebc, ctx, true, DRM_EPD_WF_GC16);
+	check(fake_ebc.nev == starts,
+	      "teardown race: late END cannot restart EBC after stop-time timeout");
+	h.crtc_state.ctx = NULL;
+	test_reboot_cleanup(ebc, ctx, true);
+	no_off_screen = false;
+	wbf_teardown(&h, NULL);
+}
+
+static void test_wbf_suspend_uncertain(void)
+{
+	unsigned int i;
+
+	for (i = 0; i < 3; i++) {
+		struct harness h;
+		struct rockchip_ebc *ebc = wbf_probe(&h);
+		struct rockchip_ebc_ctx *ctx;
+		u64 id;
+		u32 starts;
+		int ret;
+
+		if (!ebc)
+			return;
+		harness_mode_set(&h, GW, GH);
+		ctx = harness_ctx(&h, GW, GH);
+		harness_enable_worker(&h);
+		ebc->reset_complete = true;
+		ebc->do_one_full_refresh = false;
+		no_off_screen = true;
+		fake_ebc.defer_dsp_end = 1;
+		check(barrier_submit(ebc, &id) == -EINPROGRESS,
+		      "suspend containment: worker owns a global");
+		if (i < 2) {
+			ebc_shim.schedule_hook = barrier_worker_stop;
+			kthread_unpark(ebc->refresh_thread);
+			ebc_shim.thread_fn(ebc_shim.thread_data);
+		} else {
+			ebc_shim.drm_suspend_hook = suspend_helper_runs_active_worker;
+			forbidden_drm_resume_calls = 0;
+			ebc_shim.drm_resume_hook = forbidden_drm_resume;
+		}
+		if (i == 0)
+			ret = rockchip_ebc_runtime_suspend(&h.pdev.dev);
+		else
+			ret = rockchip_ebc_suspend(&h.pdev.dev);
+		starts = fake_ebc.nev;
+		check(ret == -EBUSY && ebc->hardware_uncertain &&
+		      ebc->uncertain_ctx == ctx && ctx->kref.refcount == 2 &&
+		      active_dma_mappings() >= 2 && ebc_shim.module_pins == 1 &&
+		      ebc_shim.pm_refcount == 1 && ebc_shim.clks_on == 2 &&
+		      ebc_shim.regulators_on == EBC_NUM_SUPPLIES &&
+		      !ebc_shim.pm_force_suspend_calls,
+		      "suspend containment: %s retains exact uncertain ownership and power",
+		      i == 0 ? "runtime suspend" :
+		      i == 1 ? "already-uncertain system suspend" : "DRM-suspend timeout");
+		if (i == 1)
+			check(!ebc_shim.drm_suspend_calls,
+			      "suspend containment: already-uncertain system suspend skips DRM helper");
+		if (i == 2)
+			check(ebc_shim.drm_suspend_calls == 1 && !ebc_shim.drm_resume_calls &&
+			      !forbidden_drm_resume_calls,
+			      "suspend containment: timeout in DRM helper remains terminally suspended until reboot");
+		fake_ebc_deliver_dsp_end();
+		rockchip_ebc_refresh(ebc, ctx, true, DRM_EPD_WF_GC16);
+		check(fake_ebc.nev == starts,
+		      "suspend containment: late END cannot restart uncertain EBC");
+		h.crtc_state.ctx = NULL;
+		test_reboot_cleanup(ebc, ctx, true);
+		no_off_screen = false;
+		wbf_teardown(&h, NULL);
+	}
+}
+
 int main(int argc, char **argv)
 {
 	const char *fwdir = argc > 1 && argv[1][0] ? argv[1] : NULL;
 	const char *rsl = argc > 2 && argv[2][0] ? argv[2] : NULL;
 	const char *outdir = argc > 3 && argv[3][0] ? argv[3] : NULL;
 
-	if (fwdir && !strcmp(fwdir, "quirk-ctx-free-uaf"))
-		return quirk_ctx_free_uaf();
-
 	test_dma_shadow_model();
+	test_ctx_free_queued_area();
+	test_barrier_uapi_and_lifecycle();
 	test_mode_set_golden();
 	test_global_refresh();
 	test_partial_refresh_single_area(outdir);
@@ -1720,6 +2458,19 @@ int main(int argc, char **argv)
 		test_wbf_real_refresh();
 		test_wbf_cold_temperature();
 		test_wbf_thread_body();
+		test_wbf_thread_no_off_screen();
+		test_wbf_thread_stale_completion_credit();
+		test_wbf_refresh_setup_failures();
+		test_wbf_barrier_worker();
+		test_wbf_barrier_presleep_submit();
+		test_wbf_barrier_failures();
+		test_wbf_normal_remove();
+		test_wbf_uncertain_remove_panics();
+		test_wbf_teardown_timeout_race();
+		test_wbf_suspend_uncertain();
+		/* The former deferred-END reproducer is now the primary fixed-width
+		 * barrier guard above: a timeout poisons rather than permitting the
+		 * shutdown global to consume a stale completion. */
 		if (rsl)
 			test_wbf_lut_differential(rsl);
 		else
