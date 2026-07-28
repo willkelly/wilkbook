@@ -41,14 +41,56 @@ require_contains() {
   pass "$relative_path contains $description"
 }
 
+require_source_line() {
+  relative_path=$1
+  expected_text=$2
+  description=$3
+
+  if ! grep -F -x -q -- "$expected_text" "$source_dir/$relative_path"; then
+    fail "$relative_path does not contain exact $description: $expected_text"
+  fi
+  pass "$relative_path contains exact $description"
+}
+
 require_resolved_config() {
   expected_text=$1
   description=$2
 
-  if ! grep -F -q -- "$expected_text" "$config_file"; then
+  if ! grep -F -x -q -- "$expected_text" "$config_file"; then
     fail "resolved pinenote_defconfig does not contain expected $description: $expected_text"
   fi
   pass "resolved pinenote_defconfig contains $description"
+}
+
+reject_resolved_config_enabled() {
+  symbol=$1
+  description=$2
+
+  if grep -E -q "^${symbol}=(y|m)$" "$config_file"; then
+    fail "resolved pinenote_defconfig enables forbidden $description"
+  fi
+  pass "resolved pinenote_defconfig leaves $description disabled"
+}
+
+reject_contains() {
+  relative_path=$1
+  forbidden_text=$2
+  description=$3
+
+  if grep -F -q -- "$forbidden_text" "$source_dir/$relative_path"; then
+    fail "$relative_path contains forbidden $description: $forbidden_text"
+  fi
+  pass "$relative_path omits $description"
+}
+
+reject_file() {
+  relative_path=$1
+  description=$2
+
+  if [ -e "$source_dir/$relative_path" ]; then
+    fail "$relative_path retains forbidden $description"
+  fi
+  pass "$relative_path is absent as required for $description"
 }
 
 if [ "$#" -ne 2 ]; then
@@ -58,6 +100,10 @@ fi
 
 source_dir=$1
 config_file=$2
+script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+rockchip_pm_check="$script_dir/../../tools/rockchip-pm/check.py"
+rockchip_pm_patch="$script_dir/../../patches/linux-pinenote-7.0-bsp-sip-probe.patch"
+rockchip_pm_validator="$script_dir/validate-rockchip-pm-source.sh"
 
 if [ ! -d "$source_dir" ]; then
   fail "kernel source path is not a directory: $source_dir"
@@ -65,6 +111,9 @@ fi
 
 if [ ! -f "$config_file" ]; then
   fail "resolved kernel config is not a regular file: $config_file"
+fi
+if [ ! -f "$rockchip_pm_validator" ]; then
+  fail "missing Rockchip PM validation wrapper: $rockchip_pm_validator"
 fi
 
 if git -C "$source_dir" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
@@ -78,6 +127,26 @@ require_file arch/arm64/configs/pinenote_defconfig
 require_file arch/arm64/boot/dts/rockchip/rk3566-pinenote-v1.2.dts
 require_file arch/arm64/boot/dts/rockchip/rk3566-pinenote.dtsi
 require_file drivers/gpu/drm/rockchip/rockchip_ebc.c
+require_file include/soc/rockchip/rockchip_legacy_sip.h
+require_file include/dt-bindings/suspend/rockchip-rk3568.h
+require_file drivers/soc/rockchip/rockchip_suspend_model.h
+require_file drivers/soc/rockchip/rockchip_suspend_model.c
+require_file drivers/soc/rockchip/rockchip_suspend_of.h
+require_file drivers/soc/rockchip/rockchip_suspend_of.c
+require_file drivers/soc/rockchip/rockchip_suspend_executor.c
+require_file drivers/soc/rockchip/rockchip_suspend_backend.h
+require_file drivers/soc/rockchip/rockchip_suspend_backend.c
+require_file drivers/soc/rockchip/rockchip_suspend_activate.c
+require_file drivers/soc/rockchip/rockchip_suspend_mode.c
+require_file drivers/regulator/core.c
+require_file include/linux/regulator/consumer.h
+require_file include/linux/regulator/of_regulator.h
+require_file drivers/pmdomain/rockchip/pm-domains.c
+require_file include/soc/rockchip/rockchip_sip.h
+reject_file drivers/firmware/rockchip_legacy_sip.c 'legacy SIP query transport'
+reject_file drivers/soc/rockchip/rockchip_suspend_mode_core.c 'retired generic suspend model core'
+reject_file drivers/soc/rockchip/rockchip_suspend_mode.h 'retired generic suspend model header'
+reject_file drivers/soc/rockchip/rockchip_suspend_activate.h 'retired split activation declaration'
 
 require_contains arch/arm64/configs/pinenote_defconfig CONFIG_DRM_ROCKCHIP_EBC=m CONFIG_DRM_ROCKCHIP_EBC
 require_contains arch/arm64/configs/pinenote_defconfig CONFIG_REGULATOR_TPS65185=m CONFIG_REGULATOR_TPS65185
@@ -89,6 +158,9 @@ pass "using caller-supplied build-produced resolved config"
 require_resolved_config CONFIG_POWER_SUPPLY=y CONFIG_POWER_SUPPLY
 require_resolved_config CONFIG_CHARGER_RK817=y CONFIG_CHARGER_RK817
 require_resolved_config CONFIG_MFD_RK8XX_I2C=y CONFIG_MFD_RK8XX_I2C
+require_resolved_config CONFIG_ROCKCHIP_SUSPEND_MODE=y CONFIG_ROCKCHIP_SUSPEND_MODE
+require_source_line arch/arm64/configs/pinenote_defconfig '# CONFIG_ROCKCHIP_SUSPEND_MODE_ACTIVATE is not set' 'hard-off activation config'
+reject_resolved_config_enabled CONFIG_ROCKCHIP_SUSPEND_MODE_ACTIVATE CONFIG_ROCKCHIP_SUSPEND_MODE_ACTIVATE
 
 require_contains arch/arm64/boot/dts/rockchip/rk3566-pinenote-v1.2.dts 'model = "Pine64 PineNote v1.2"' 'PineNote v1.2 model'
 require_contains arch/arm64/boot/dts/rockchip/rk3566-pinenote-v1.2.dts 'compatible = "pine64,pinenote-v1.2", "pine64,pinenote", "rockchip,rk3566"' 'PineNote compatibility'
@@ -116,6 +188,14 @@ require_contains arch/arm64/boot/dts/rockchip/rk3566-pinenote.dtsi 'monitored-ba
 require_contains arch/arm64/boot/dts/rockchip/rk3566-pinenote.dtsi 'rockchip,resistor-sense-micro-ohms = <10000>' 'RK817 sense resistor'
 require_contains arch/arm64/boot/dts/rockchip/rk3566-pinenote.dtsi 'rockchip,sleep-enter-current-microamp = <150000>' 'RK817 sleep-enter current'
 require_contains arch/arm64/boot/dts/rockchip/rk3566-pinenote.dtsi 'rockchip,sleep-filter-current-microamp = <100000>' 'RK817 sleep-filter current'
+require_contains arch/arm64/boot/dts/rockchip/rk3566-pinenote.dtsi 'rockchip-suspend {' 'probe-only Rockchip suspend node'
+require_contains arch/arm64/boot/dts/rockchip/rk3566-pinenote.dtsi 'compatible = "rockchip,pm-rk3568"' 'probe-only Rockchip suspend compatible'
+if ! sh "$rockchip_pm_validator" "$rockchip_pm_check" "$rockchip_pm_patch" "$source_dir"; then
+  fail "authoritative Rockchip PM patch/source validation failed"
+fi
+pass "authoritative Rockchip PM patch/source validation passed"
+require_source_line include/soc/rockchip/rockchip_sip.h '#define ROCKCHIP_SLEEP_PD_CONFIG		0xff' 'modern 0xff power-domain control definition'
+require_contains drivers/pmdomain/rockchip/pm-domains.c 'ROCKCHIP_SLEEP_PD_CONFIG,' 'existing modern 0xff power-domain SIP path'
 
 warn "kernel source inspection does not build the kernel or prove PineNote hardware boot"
 pass "kernel source preflight inspection completed"
