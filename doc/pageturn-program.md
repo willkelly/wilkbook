@@ -174,8 +174,8 @@ close or explicitly descope.
 - **Camera** — *glass truth* (reflectance over time). Cannot attribute
   cause (finding 10's corrections were all attribution failures) and
   undersamples fast waveforms (§2.3).
-- **Debug kernel** — *driver action*. v1 (the dspend-straggler patch)
-  logs **globals only**: it is blind to the entire partial path —
+- **Historical v1 debug kernel** — *driver action*. The retired
+  dspend-straggler patch logged **globals only**: it was blind to the partial path —
   where every page turn lives — and cannot even distinguish GC16 from
   GL16 (both 38 phases; v1 logs `num_phases`, not the waveform id) nor
   report the temperature/LUT bin. v2 (§5.1) closes the partial path.
@@ -477,11 +477,11 @@ keep output ring-buffer-only under PREEMPT_RT (loglevel or
 **Precondition — BUILT (2026-07-12, with the EXTRACT_FBS port):** the
 ebc-logic Makefile now has the debug-patched build variant
 (`ebc-refresh-test-dbg`: the extraction with the full
-`linux-pinenote-debug-*.patch` stack applied, run by `make
-ebc-logic-check`'s dbg half).  It executes the v1 hooks and asserts the
-debug stack changes no refresh behavior (identical goldens); v2's
-counters get their offline assertions the same way before that patch
-ships.
+  configured `linux-pinenote-debug-*.patch` stack applied, run by `make
+  ebc-logic-check`'s dbg half).  The current stack contains only the
+  EXTRACT_FBS port and asserts that it changes no refresh behavior
+  (identical goldens); any future v2 counters get their offline assertions
+  the same way before that patch ships.
 
 ### 5.2 EXTRACT_FBS port (unblocks PLAN task 23) — LANDED 2026-07-12
 

@@ -243,9 +243,10 @@ the start of this track — no panel required. Policy background in
       ABBAs, and the realistic reader-energy ABBA are complete (2026-07-24/25).
       Static draw tied at about 180--181 mA for `powersave`/`conservative`; on
       the exact 45-turn reader workload, conservative averaged 13.072 mAh and
-      176.5 s versus powersave's 15.910 mAh and 209.0 s, with 45 fresh traces
-      per leg at 26 C. The forward-port defconfig now selects conservative as
-      the awake default; verify readback on the next ordinary reader-image boot.
+       176.5 s versus powersave's 15.910 mAh and 209.0 s, with 45 fresh traces
+       per leg at 26 C. The forward-port defconfig now selects conservative as
+       the awake default; the 2026-07-25 probe-only reader boot verified the
+       `conservative` readback.
       Measure Wi-Fi-down savings separately, then decide whether an awake-only
       activity policy on `idlewasher`'s timer seam adds value beyond the adaptive
       governor. Do not couple this to suspend qualification; see
@@ -257,16 +258,37 @@ the start of this track — no panel required. Policy background in
        RK817 telemetry boot are complete (2026-07-24). Firmware comparison on
        2026-07-25 proved the backup already byte-matches Pine64/PNDeb's stable
        1056-MHz idblock/FIT and identified its 2022 downstream BSP ATF; reflashing
-       it would change nothing. First retain that recovery-known firmware and
-       forward-port the complete Rockchip SIP/config/DT compatibility contract
-       into the os2 kernel, with mocked ABI/DT gates and a non-suspending UART
-       bind/probe boot before PM-test. Upstream TF-A is a separate later
-       recovery-qualified migration, never a hybrid. A future userspace contract needs
-       checkpointing, refresh-timer and
-       frontlight/Wi-Fi handling, explicit wake attribution, and display repair;
-       it cannot currently retain a static sleep cover because `rockchip_ebc`
-       overwrites the panel with `off_screen` during disable and supplies no
-       userspace completion contract. No cover-triggered or idle autosuspend
+       it would change nothing. The probe-only compatibility boot completed on
+       2026-07-25, but its private legacy version-query gate returned
+       `-EOPNOTSUPP`; call identity is ambiguous, the driver remained unbound,
+       and no suspend was requested. That gate is retired. The maximal offline
+       activation-hard-off Linux-side contract is complete: donor-faithful typed probe,
+       prepare, regulator, and descriptive virtual-poweroff events are built from
+       compiled DT fixtures. Production links the strict parser, model,
+       unwind-safe executor, consumer-handle regulator API, and narrow real
+       backend, but hidden exact-default-n Kconfig omits the active-driver
+       `.prepare`/executor object; the policy-free probe remains zero-action.
+       Production rejects mem-lite, mem-ultra, and virtual-poweroff policy, so
+       linked CPU/PSCI methods remain dormant. Regulator changes are
+       provider-deduplicated and transactionally restored; Kconfig closes the
+       `SUSPEND`/`CPU_PM` dependency. Do not allocate a second
+       hardware boot merely to prove zero-call binding. The next host slice is
+       complete: the verbatim EBC harness now proves caller/off-screen snapshots,
+       exact disable-tail completion accounting, and a fixed-width generation
+       barrier. A timeout or setup failure permanently poisons EBC until reboot,
+       retains potentially active DMA mappings, wakes every waiter with the same
+       error, and prevents late DSP_END from authorizing another hardware start.
+       A closed provider constructor and pure injected-capability coordinator prove checkpoint/restore/durable
+       poison behavior; and a separate synthetic active DT policy executes only
+       through fake Rockchip operations. `make activation-positive-check` ties
+       those positives to the unchanged production hard-off gate. A dormant
+       LuaJIT EBC UAPI adapter and injected sleep-frame provider are host-proven,
+       and a separate root-only diagnostic is packaged for the supervised
+       paint/barrier/restore hardware rung. None is wired into `device.lua`, and
+       activation remains disabled. Upstream TF-A is a separate later recovery-qualified
+       migration, never a hybrid. Production orchestration still needs reviewed
+       capability providers, production sleep-frame wiring, explicit wake
+       attribution, and display repair. No cover-triggered or idle autosuspend
        until an EBC contract and repeated deep cycles with unplugged energy
        measurements pass. See `doc/power-management.md`.
 - [ ] Reader polish, next: refresh-policy tuning (KOReader's

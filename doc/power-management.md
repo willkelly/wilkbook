@@ -48,12 +48,25 @@ current EBC path makes its static sleep-screen phase explicitly unavailable:
    requests. A held wake key must not become an immediate post-resume action.
 2. Ask KOReader to persist reading position, annotations, settings, and document
    sidecars through its normal save path; fail visibly if the checkpoint fails.
-3. A future EBC contract must retain caller-painted content or atomically accept
-   off-screen content and report refresh completion. The current `rockchip_ebc`
-   disable path overwrites the panel with `off_screen` (normally the
-   white/default buffer) and exposes no userspace refresh-completion contract;
-   therefore a static sleep cover is blocked and this transaction is not
-   currently implementable.
+3. The EBC driver now carries a fixed-width generation barrier: SUBMIT returns a
+   request ID with `-EINPROGRESS`, WAIT reports success only after the worker's
+   global refresh and post-refresh bookkeeping, and any hardware/setup failure
+   permanently poisons the instance until reboot. The verbatim host harness
+   proves batching, playback-time submissions, legacy coalescing, caller/off-screen
+   snapshots, and that late DSP_END cannot heal a timeout. A dormant LuaJIT ABI
+   adapter and injected sleep-frame provider now exercise this boundary with
+   fake operations, but `device.lua` imports neither and no production provider
+   calls them, so production sleep-cover orchestration remains blocked.
+
+   `pinenote-ebc-sleep-frame-test` is a separately packaged, supervised
+   diagnostic that exercises only this framebuffer-publication and barrier
+   boundary.  Root must first run `herd stop reader-session`; `--run` requires
+   an interactive tty, snapshots every `line_length * yres_virtual` byte,
+   paints a deterministic card, fsyncs and waits once, then restores only after
+   explicit Enter and a second strict barrier.  It never requests suspend or
+   writes `/sys/power/state`; it has no service, autostart, KOReader import, or
+   production coordinator wiring.  Initial failures deliberately receive no
+   implicit repair; a restore failure is reboot-terminal uncertainty.
 4. Park idlewasher/deep-clean timers and finish or cancel any pending waveform
    restoration. Save both frontlight channels and set both to zero.
 5. Save whether networking was enabled, stop reconnect activity, disable Wi-Fi,
@@ -136,35 +149,49 @@ guix shell dtc python luajit -- \
   pinenote/packages/koreader-device/frontend/device/pinenote/device.lua
 ```
 
-The gate requires exact suspend/freezer/debug config lines, exactly the approved
-two effectively enabled DT wake declarations with their verified identities, and
-the exact disabled policy module. A restricted LuaJIT harness evaluates
-`device.lua` with injected false and true policy values and requires its returned
-class to follow both. It reports CPU idle-state presence without conflating it
-with system suspend.
+The gate requires exact suspend/freezer/debug config, rejects enabled hidden activation,
+exactly the approved two effectively enabled DT wake declarations with their
+verified identities, and the exact disabled policy module. A restricted LuaJIT
+harness evaluates `device.lua` with injected false and true policy values and
+requires its returned class to follow both. It rejects CPU idle-state nodes and
+references, any additional matching probe node, and every property or child
+beneath the exact root probe node.
 Passing proves none of TF-A/U-Boot, DDR retention, runtime wake policy, physical
 wake routing, RK817/TPS65185 behavior, EBC rail state, resume, or current draw.
-The 2026-07-20 built 7.0.11 kernel and generated DTB pass this offline gate;
-suspend remains unsupported.
+The 2026-07-20 built 7.0.11 kernel and generated DTB passed the then-current
+gate. The current BSP compatibility build passes the expanded gate against its
+packaged config and DTB; suspend remains unsupported.
 
-Before adding a real coordinator, table-driven host tests must cover checkpoint
-failure, refresh-barrier failure, frontlight save/off/restore, Wi-Fi teardown
-failure, unsupported mode, aborted entry, duplicate resume, held-key
-quarantine, failed EBC refresh, bounded retry, and a durable failure record.
-QEMU may validate orchestration and service ordering with an injected fake
-backend, but the real `/sys/power/state` write must remain unavailable there.
+The closed `power_capabilities.lua` constructor rejects missing, malformed, and
+extra providers without inventing authority. The pure `power_coordinator.lua` host model accepts only the
+explicit initial-qualification mode `mem`, then prepares in checkpoint, EBC
+barrier, idlewasher, input quarantine, frontlight, Wi-Fi, and storage order.
+It passes that one selected mode to its injected requester, captures one
+unambiguous wake attribution while input is quarantined, and forwards each
+prepare state unchanged to best-effort restore in the safe EBC, input,
+frontlight, idlewasher, then final non-blocking Wi-Fi handoff order. The final
+reader notification receives the attributed wake source. It uses durable prepared
+and failure records, reentrancy, and permanent poisoning. Every capability is
+injected; the module contains no filesystem, FFI, subprocess, device-node, or
+sysfs authority and is not imported by the production device target. QEMU may
+later validate service adapters, but the real `/sys/power/state` write must
+remain unavailable there.
 
 Current blockers after that gate passes:
 
-- no userspace coordinator yet performs the transaction above, and it remains
-  blocked until EBC can retain caller-painted content or atomically accept
-  off-screen content with a completion report;
-- the deployed stable BSP-ATF/DDR/U-Boot contract is identified, but its
-  required Linux `rockchip_sip`/`rockchip_pm_config` driver and DT policy have
-  not yet been forward-ported or qualified;
-- the EBC driver has system/runtime PM callbacks and special post-suspend
-  refresh bookkeeping, but sleep-screen retention and a refresh-completion
-  barrier are not proven;
+- no production provider or userspace coordinator yet performs the host-proven
+  transaction; a dormant LuaJIT barrier adapter and injected sleep-frame
+  provider are host-proven and packaged with the recursively grafted PineNote
+  device sources, but remain intentionally unimported by `device.lua`;
+- the deployed stable BSP-ATF/DDR/U-Boot contract is identified, and its
+  execution-capable Linux parser/model/executor/backend stack is now
+  production-linked and offline-qualified. Activation and active DT policy
+  remain deliberately absent, so firmware compatibility, execution ordering,
+  wake, and resume still require the later supervised qualification ladder;
+- the EBC driver has system/runtime PM callbacks, special post-suspend refresh
+  bookkeeping, and a host-proven refresh-completion barrier. The separately
+  invoked C diagnostic can now paint, wait, and restore under supervision, but
+  production sleep-frame painting and coordinator wiring remain absent;
 - the known-working downstream stack also carries TPS65185 standby/resume
   register restoration and explicit RK817 regulator suspend states. Their
   necessity with the installed BSP ATF and current mainline regulator drivers
@@ -420,8 +447,8 @@ All legs had exactly 45 fresh trace events, with maximum issue-timing residual
 workload, not a universal battery-life estimate; the trace measures refresh
 issue pacing, not camera-verified glass settle. Combined with the static tie,
 it clears the awake-policy gate, and the forward-port defconfig now selects
-`conservative` for the next image. Hardware readback of that boot default is
-still required after deployment. Wi-Fi-down savings remain a separate ABBA.
+`conservative` for the next image. Hardware readback of that boot default was
+completed on 2026-07-25. Wi-Fi-down savings remain a separate ABBA.
 
 The first hardware attempt found a lifecycle defect rather than yielding a
 policy result: a failed prior-reader stop was ignored, so two KOReader processes
@@ -492,22 +519,141 @@ it was not a working BSP-SIP suspend path. The known downstream path explicitly 
 BSP TF-A and programs center/ARM power-off, PMIC low power, PLL/oscillator
 shutdown, 32-kHz clock, and GPIO wake through Rockchip private SIP calls. Decide
 the firmware contract first; the installed stable firmware selects the BSP SIP
-branch, whose Linux driver and DT policy are absent from wilkbook. Either port
-and qualify that complete contract or replace the boot firmware through a
-separately recovery-qualified upstream-TF-A project. Do not combine those
-alternatives, and do not flash the stable installer as a fix because its bytes
-are already installed.
+branch. At that point its execution-capable Linux driver and DT policy were
+absent from wilkbook; the activation-hard-off parser/model/executor/backend port
+described below now closes the offline implementation slice. Active policy and
+hardware qualification remain separate. Do not combine that BSP path with a
+recovery-qualified upstream-TF-A project, and do not flash the stable installer
+as a fix because its bytes are already installed.
 
 The accepted first branch is the recoverable one: keep the verified stable BSP
-firmware unchanged and forward-port Samuel Holland's complete `72127ca` Linux
+firmware unchanged and forward-port Samuel Holland's `72127ca` Linux
 SIP/config/DT contract to the os2 kernel as an explicit compatibility patch.
-Before any transition, add a side-effect-free SIP/PSCI feature probe, mocked ABI
-tests that pin every function ID and argument, compiled-DT policy assertions,
-and a UART-observed os2 boot that only verifies binding/probes. Keep
+The production-linked, activation-hard-off MEM-policy stage is now complete
+offline. It
+pins every represented function ID and argument, validates policy through
+compiled DT fixtures, and links the strict parser, typed model, generic
+executor, and real narrow backend. A separate hidden activation object owns the
+active platform driver and the only device-PM `.prepare`/executor edge;
+exact-default-n Kconfig omits it from the PineNote candidate. This is an
+execution-capable fail-closed subset, not the full Rockchip BSP or PineNote
+ultra-suspend policy surface. Keep
 `suspend_policy.lua` disabled throughout. Upstream TF-A remains the preferred
 long-term direction only after maskrom/boot-ROM recovery and byte-exact
 boot-firmware restoration are independently rehearsed; it is not mixed with
 the BSP policy.
+
+### BSP SIP compatibility milestone
+
+The compatibility patch remains deliberately narrower than donor commit
+`72127ca`. It preserves upstream's `0xff` power-domain subcommand unchanged.
+Production links a composite parser/model/executor/backend core, but its only activation
+object is gated by hidden `ROCKCHIP_SUSPEND_MODE_ACTIVATE`, which defaults to `n`
+and is explicitly unset in the PineNote defconfig. The kernel source and
+compiled DTB use only `compatible = "rockchip,pm-rk3568"` and `status =
+"okay"`; host fixtures spell `name = "rockchip-suspend"` explicitly, then
+reconstruct it after `dtc` strips that deprecated property, matching Linux OF's
+live-node normalization. All three are metadata, not policy. The original parser
+omitted `name`, so the 2026-07-26 activation-hard-off boot rejected it with
+`-EINVAL` before binding; the corrected code was then host-validated and later
+booted and bound in dormant activation-hard-off mode as recorded below.
+With the correction, the policy-free node remains DORMANT with no firmware,
+regulator, CPU, PSCI, MMIO, PM-callback, or runtime enablement action.
+
+Production parsing is intentionally limited to MEM regulator lists. It rejects
+mem-lite, mem-ultra, and virtual-poweroff properties because Linux 7.0 has no
+real selector for the former and its regulator prepare/finish hooks provide no
+transaction for the latter. Regulator phandles are retained as standard
+consumer handles, deduplicated by provider identity, and changed only through
+locked regulator-core wrappers. Exact prior suspend settings are restored in
+reverse order on local failure, PM `.complete`, and unbind. The Kconfig core
+requires `SUSPEND`, which supplies ARM64's `CPU_PM` dependency. The
+CPU and modern PSCI methods stay candidate-linked for compile/link proof but
+have no production caller while activation is off; even an internally fabricated
+virtual-poweroff event list fails at regulator prepare before CPU/SIP/PSCI.
+
+The separately extracted host harness represents the donor's typed contract:
+exact RK3568 sleep/wake/PWM bits; controls `0x01..0x07` and `0x09`; repeated
+GPIO-power records plus the `0xffff` terminator; three ordered regulator-state
+lists; and the regulator-prepare, secondary-CPU-disable, `0x07(0,1)`, PSCI
+system-suspend virtual-poweroff description. Control `0x08` is pinned but no
+builder emits it. The donor treats any nonzero virtual-poweroff value as true;
+the dormant model intentionally narrows that to `0` or `1` and rejects other
+values. This is host-model fidelity, not an executable production policy.
+Parsing and short-capacity failures leave caller-owned output unchanged.
+
+`make rockchip-pm-check` compiles the verbatim model and injected-ops executor
+under ASan/UBSan, builds
+donor and maximal DTBs, parses the exact `rockchip,power-ctrl` and
+`rockchip,regulator-*-in-*` schema, and feeds generated policy inputs into the C
+tests. The compiled-DTB fixtures explicitly cover standard `compatible`,
+`name`, and `status` metadata, while rejecting a `names` lookalike and every
+policy property when activation is unavailable. Positive cases cover both an
+explicit source `name` and source that omits it before host normalization
+synthesizes the live-OF shape. It also validates the canonical full-index patch
+and reads the supplied
+applied source tree; mandatory negative mutations cover provider lifetime,
+parser cleanup, unwind, status mapping, link ownership, and config. Adversarial
+DT and source mutations prove fail-closed limits and the hard-off production boundary before `make suspend-check` and
+`make kernel-drv`. This does not prove firmware compatibility, suspend, DDR
+retention, wake, resume, EBC repair, or energy savings.
+
+`make activation-positive-check` is the separate positive offline gate. It
+runs the pure Lua coordinator suite, parses the compiled maximal synthetic DTB,
+builds exact probe and MEM-prepare events, executes them through `fake_ops`, and
+fails each MEM regulator action. Only successful fake mutations enter that same
+transaction, pinning failure stop order, the exact reverse restore set and prior
+values, permanent poison, and zero-action retry. The same composite command then reruns the unchanged
+production suspend preflight, which requires activation unset, policy-free DT,
+and `suspend_policy.lua` exactly false. Passing is fake-only implementation
+evidence, not permission to enable activation or request suspend.
+
+The corrected 2026-07-26 reader candidate completes the artifact half of this
+milestone. Its ext4 image is
+`/tmp/opencode/pinenote-rootfs-artifacts-bsp-pm-namefix-20260726/pinenote-reader-PNGuixRoot-20260726.ext4`,
+SHA-256 `0c67785ff434bac66e3652e940c1d088e2c242cf6dfd132fc66fd8e2b8f97f4f`,
+1,945,280,512 bytes (3,799,376 sectors), with rootfs-matched bundle
+`/tmp/opencode/pinenote-reader-boot-bundle-bsp-pm-namefix-20260726`. The full
+host/build/source/config/DT/package/rootfs/mock-helper ladder, generic ARM64
+login smoke, QEMU rung 4, and visual rung 4v pass. Config, `System.map`, and both
+PineNote Lua policy files were dumped from the ext4 image and revalidated: the
+executor is linked, activation is omitted, and suspend remains exactly disabled.
+At artifact-production time this was deployment evidence for a later manual os2
+write from stock os1, not hardware compatibility, binding, or suspend evidence.
+It was subsequently deployed and its metadata-only dormant bind is recorded
+below. The replayable artifact-bound manifest is
+`doc/artifacts/pinenote-reader-bsp-pm-namefix-20260726.md`.
+
+**2026-07-25 hardware result:** the exact os2 image booted with the intended
+7.0.11 PREEMPT_RT kernel, policy-free DT node, and `conservative` governor, but
+the adapter logged `legacy SIP version probe failed` with `-EOPNOTSUPP` and did
+not bind. No suspend state or suspend control was requested. The transport maps
+raw signed firmware statuses `-1` and `-2` to that error, and the generic probe
+message cannot identify whether `0x82000001` failed or whether it succeeded and
+`0x8200000a` failed. Public Rockchip sources also show that these are private,
+non-universal legacy IDs; in particular, historical AArch32 code used
+`0x8200000a` to select a protocol with nonzero arguments, not as a universal
+zero-argument AArch64 version query. The result therefore rejects the current
+two-query discovery premise rather than proving the installed firmware lacks
+the later suspend controls. The otherwise healthy boot is recorded in
+`doc/status.md`. The maximal offline dormant Linux-side milestone described
+above was complete at that point. The review-fix boot then exposed Linux OF's
+synthesized `name` handling gap, making the corrected `namefix` bind boot below
+necessary. Any later image that enables activation or adds policy must
+separately reconcile the PineNote suspend-state/resume surface, pass the same
+fail-closed offline gates, and remain non-suspending until the full qualification
+ladder permits a supervised test.
+
+**2026-07-26 live-OF correction:** the later activation-hard-off candidate
+booted healthily but did not bind: Linux OF synthesized `name =
+"rockchip-suspend"` beside the source/compiled-DTB metadata `compatible` and
+`status`; the parser accepted only the latter two and returned `-EINVAL`. No
+backend, firmware, regulator, CPU, or suspend operation occurred. This corrects
+an implementation gap, not firmware compatibility. The exact `namefix` artifact
+above subsequently booted from os2 and logged `DORMANT policy core bound;
+activation compiled out`; sysfs confirmed the driver link and no suspend was
+attempted. This proves metadata-only dormant binding, not active policy,
+firmware compatibility, suspend, wake, resume, display repair, or energy use.
 
 ## External context to verify on hardware
 
