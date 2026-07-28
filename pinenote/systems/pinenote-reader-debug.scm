@@ -6,8 +6,7 @@
   #:export (pinenote-reader-debug-operating-system))
 
 ;; The reader flavor with the diagnostic kernel (linux-pinenote-debug:
-;; printk-only DSP_END straggler instrumentation for quirk F, plus the
-;; EXTRACT_FBS belief-dump ioctl; doc/driver-findings-report.md and
+;; the EXTRACT_FBS belief-dump ioctl; doc/driver-findings-report.md and
 ;; doc/pageturn-program.md §5.2).  Deltas from pinenote-reader: the
 ;; kernel, the host name (makes the flashed slot identifiable at the
 ;; login prompt), and one inert CLI tool (ebc-dump-grab, the EXTRACT_FBS

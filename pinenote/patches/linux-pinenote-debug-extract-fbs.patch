@@ -8,8 +8,7 @@ returning -EOPNOTSUPP.  The UAPI struct and ioctl number were always
 present in our include/uapi/drm/rockchip_ebc_drm.h, so a userspace
 built today works on both the stub (primary) and this (debug) kernel.
 
-Applied AFTER linux-pinenote-7.0-forward-port.patch (and alongside
-linux-pinenote-debug-dspend-straggler.patch), ONLY by the
+Applied AFTER linux-pinenote-7.0-forward-port.patch, ONLY by the
 linux-pinenote-debug package variant (pinenote/packages/kernel.scm);
 the primary linux-pinenote kernel keeps the stub.  The same hunks are
 applied to the extracted driver source by the ebc-logic harness's
