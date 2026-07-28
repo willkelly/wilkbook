@@ -7,12 +7,12 @@ TARGET = aarch64-linux-gnu
 GUIX_FLAGS = -L . --target=$(TARGET)
 ARTIFACTS ?= /tmp/opencode/pinenote-rootfs-artifacts
 
-# reader-debug = reader with the quirk F diagnostic kernel
+# reader-debug = reader with the EXTRACT_FBS diagnostic kernel
 # (linux-pinenote-debug); remove with the debug patch when done.
 FLAVORS = minimal slim networked dev usb-console usb-console-linux-6-6 reader reader-debug
 
 .PHONY: help packages kernel kernel-drv qemu-smoke qemu-virt qemu-virt-check \
-        wbf-check ebc-logic-check rastersim-check koreader-input-check orientation-check optics-check power-check suspend-check \
+         wbf-check ebc-logic-check ebc-barrier-check rastersim-check koreader-input-check orientation-check optics-check power-check rockchip-pm-check activation-positive-check suspend-check \
         $(FLAVORS) $(addprefix image-,$(FLAVORS)) $(addprefix rootfs-,$(FLAVORS))
 
 help:
@@ -27,11 +27,14 @@ help:
 	@echo "  qemu-virt-check   mechanized virt boot assertions (ROOTFS=.. [WAVEFORM=..])"
 	@echo "  wbf-check         waveform parser checks (WBF=..; never committed)"
 	@echo "  ebc-logic-check   extracted EBC driver logic checks ([WBF=..])"
+	@echo "  ebc-barrier-check supervised EBC sleep-frame command host tests"
 	@echo "  rastersim-check   raster/waveform simulation checks ([WBF=..])"
 	@echo "  koreader-input-check  KOReader input, touch, and virtual-node lifecycle tests"
 	@echo "  orientation-check SC7A20 classifier and uinput bridge tests"
 	@echo "  optics-check      deterministic recorder/bundle/analysis tests"
 	@echo "  power-check       fake-root tests for the read-only Guile power recorder"
+	@echo "  rockchip-pm-check dormant BSP SIP/PM model, DTB, and zero-call checks"
+	@echo "  activation-positive-check  fake capabilities/coordinator + active PM scenario; production hard-off"
 	@echo "  suspend-check     offline fail-closed e-reader suspend qualification gates"
 	@echo
 	@echo "Deployment is manual by design: see doc/hardware-deploy.md."
@@ -60,7 +63,7 @@ kernel:
 	  -e '(@ (pinenote packages kernel) linux-pinenote)'
 
 packages:
-	$(GUIX) build $(GUIX_FLAGS) pinenote-ebc-test pinenote-diagnostics \
+	$(GUIX) build $(GUIX_FLAGS) pinenote-ebc-test pinenote-ebc-barrier-test pinenote-diagnostics \
 	  pinenote-firmware-support pinenote-broadcom-wifi-firmware \
 	  pinenote-broadcom-bt-firmware
 
@@ -128,6 +131,12 @@ wbf-check:
 ebc-logic-check:
 	guix shell gcc-toolchain python -- $(MAKE) -C pinenote/tools/ebc-logic check WBF=$(WBF)
 
+# Host-only fake-operation coverage for the separately invoked sleep-frame
+# diagnostic.  It extracts the barrier UAPI from the permanent kernel patch;
+# this target never invokes --run or opens device nodes.
+ebc-barrier-check:
+	guix shell gcc-toolchain python -- $(MAKE) -C pinenote/tools/ebc-barrier check
+
 # Gray8->Y4 raster library + waveform simulator tests (offline ladder
 # rung 3). WBF optional; without it the waveform-dependent tests are
 # skipped: make rastersim-check [WBF=/path/to/ebc.wbf]
@@ -155,6 +164,19 @@ optics-check:
 # final4 system profile and the tool uses only base Guile modules.
 power-check:
 	guix shell guile python -- $(MAKE) -C pinenote/tools/power check
+
+rockchip-pm-check:
+	guix shell dtc gcc-toolchain git python -- $(MAKE) -C pinenote/tools/rockchip-pm check
+
+# Deliberately composite: the positive fake scenarios may pass only alongside
+# the unchanged production hard-off gate. Nothing here can write power state.
+activation-positive-check:
+	guix shell dtc gcc-toolchain git python luajit -- sh -c 'set -e; \
+	  $(MAKE) -C pinenote/tools/power power-capabilities-check; \
+	  $(MAKE) -C pinenote/tools/power ebc-sleep-frame-check; \
+	  luajit pinenote/tools/power/test-power-coordinator.lua; \
+	  $(MAKE) -C pinenote/tools/rockchip-pm activation-positive-check; \
+	  sh pinenote/scripts/preflight/test-inspect-pinenote-suspend-gates.sh'
 
 # Fail-closed suspend qualification checks. These prove only static config,
 # approved DT wake capability, and restricted KOReader policy evaluation.

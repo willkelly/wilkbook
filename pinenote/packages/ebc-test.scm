@@ -1,9 +1,64 @@
 (define-module (pinenote packages ebc-test)
   #:use-module (gnu packages guile)
+  #:use-module (gnu packages python)
+  #:use-module (guix build-system gnu)
   #:use-module (guix build-system trivial)
   #:use-module (guix gexp)
   #:use-module (guix licenses)
-  #:use-module (guix packages))
+  #:use-module (guix packages)
+  #:use-module (guix utils))
+
+(define-public pinenote-ebc-barrier-test
+  (package
+    (name "pinenote-ebc-barrier-test")
+    (version "0.1.0")
+    (source
+     (file-union "pinenote-ebc-barrier-test-source"
+                  `(("Makefile" ,(local-file "../tools/ebc-barrier/Makefile"))
+                    ("ack-wait.c" ,(local-file "../tools/ebc-barrier/ack-wait.c"))
+                     ("ack-wait.h" ,(local-file "../tools/ebc-barrier/ack-wait.h"))
+                    ("signal-guard.c" ,(local-file "../tools/ebc-barrier/signal-guard.c"))
+                    ("signal-guard.h" ,(local-file "../tools/ebc-barrier/signal-guard.h"))
+                    ("reader-scan.c" ,(local-file "../tools/ebc-barrier/reader-scan.c"))
+                    ("reader-scan.h" ,(local-file "../tools/ebc-barrier/reader-scan.h"))
+                    ("ebc-barrier.c" ,(local-file "../tools/ebc-barrier/ebc-barrier.c"))
+                   ("ebc-barrier.h" ,(local-file "../tools/ebc-barrier/ebc-barrier.h"))
+                   ("pinenote-ebc-sleep-frame-test.c"
+                    ,(local-file "../tools/ebc-barrier/pinenote-ebc-sleep-frame-test.c"))
+                   ("shim/drm.h" ,(local-file "../tools/ebc-barrier/shim/drm.h"))
+                   ("extract-from-patch.py" ,(local-file "../tools/wbf/extract-from-patch.py"))
+                   ("linux-pinenote-7.0-forward-port.patch"
+                    ,(local-file "../patches/linux-pinenote-7.0-forward-port.patch")))))
+    (build-system gnu-build-system)
+    (native-inputs (list python))
+    (arguments
+     (list
+      #:tests? #f
+      #:phases
+      #~(modify-phases %standard-phases
+          (delete 'configure)
+          (replace 'build
+            (lambda _
+              (invoke "make"
+                      (string-append "CC=" #$(cc-for-target))
+                      "PATCH=linux-pinenote-7.0-forward-port.patch"
+                      "EXTRACT=extract-from-patch.py"
+                      "build/pinenote-ebc-sleep-frame-test")))
+          (replace 'install
+            (lambda _
+              (invoke "make" "PREFIX=" (string-append "DESTDIR=" #$output)
+                      "PATCH=linux-pinenote-7.0-forward-port.patch"
+                      "EXTRACT=extract-from-patch.py"
+                      "install"))))))
+    (home-page "https://codeberg.org/wilkbook")
+    (synopsis "Supervised reversible PineNote EBC sleep-frame test")
+    (description
+     "Install pinenote-ebc-sleep-frame-test, a root-only, separately invoked
+PineNote framebuffer sleep-frame and EBC generation-barrier test.  It is not a
+service and does not request suspend: an operator must stop reader-session and
+acknowledge restoration on an interactive tty.  The package extracts the exact
+barrier UAPI header from the carried kernel patch while building.")
+    (license gpl3+)))
 
 (define-public pinenote-ebc-test
   (package

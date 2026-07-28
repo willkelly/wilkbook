@@ -28,9 +28,10 @@
 
 (define %pinenote-local-packages
   (list pinenote-firmware-support
-        pinenote-diagnostics
-        pinenote-ebc-test
-        pinenote-extlinux-reference))
+         pinenote-diagnostics
+         pinenote-ebc-test
+         pinenote-ebc-barrier-test
+         pinenote-extlinux-reference))
 
 (define %pinenote-firmware
   (list pinenote-broadcom-wifi-firmware
