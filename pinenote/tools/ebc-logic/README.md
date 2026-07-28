@@ -19,9 +19,9 @@ exactly the code the kernel ships — against a kernel-API shim
   washes, the black-flash census, settle latency and scrub staleness.
 - **`ebc-refresh-test-dbg`** (2026-07-12): the same rung-7a TU compiled
   against the **debug driver** — the extraction with the
-  `pinenote/patches/linux-pinenote-debug-*.patch` stack applied, exactly
+  explicit active debug-patch stack applied, exactly
   what the `linux-pinenote-debug` kernel carries.  `run-tests-dbg.sh`
-  (the second half of `make check`) proves the debug patches change no
+  (the second half of `make check`) proves the active debug patch changes no
   refresh behavior (identical goldens) and executes the EXTRACT_FBS
   ioctl: pre-modeset `-ENODEV`, a fake-device roundtrip, exact plane
   sizes under ASan (the reference's 1313144 size-typo class), NULL-able
@@ -131,6 +131,28 @@ fixed-seed xorshift32; output is byte-identical across runs (asserted by
 
 ## The refresh harness (`ebc-refresh-test`, rung 7a)
 
+### Fail-closed refresh barrier
+
+The permanent driver also exposes a fixed-width, pointer-free
+`REFRESH_BARRIER` ioctl at DRM command `+0x03`.  `SUBMIT` returns a new
+generation in `request_id` and `result=-EINPROGRESS`; `WAIT` returns `0`
+only after that generation's physical global plus output/PM bookkeeping has
+completed.  A finite `WAIT` that has not completed returns
+`result=-EINPROGRESS` and does not cancel or poison the request.  Malformed
+requests are ioctl errors.  Any worker failure (including setup failures) or
+partial/global hardware timeout records its first negative error permanently,
+wakes every waiter, and permits no later EBC hardware start. Timeout paths
+intentionally retain the active DMA mappings, exact context kref, and module
+reference until reboot because the controller may still be reading them.
+
+The WBF-gated worker tests execute this through the real extracted refresh
+thread: pre-playback submissions batch into one global; a submission or
+legacy request injected by the fake device during playback becomes the next
+global; publication is absent at the playback hook and present only after
+the worker returns; PM setup errors and partial/global timeout paths poison
+and wake.  The shim remains single-threaded and does not claim native IRQ or
+kthread concurrency.
+
 `shim/fake-ebc.h` implements the EBC block's behavior as enumerated in
 `doc/ebc-harness-spike.md` §2: config registers latch on `CONFIG_DONE`; a
 `DSP_START` write with `DSP_FRM_START` plays `DSP_FRM_TOTAL+1` LUT phases
@@ -182,19 +204,13 @@ What it executes and asserts (`quirk:`-policy applies as in rung 2):
   mid-sequence (conflicting drive data on real hardware); since the
   2026-07-12 `59b2113e8b9c` translation the same scenario must produce
   zero per-pixel phase conflicts, and the test asserts exactly that.
-- **QUIRK F (the 2026-07-12 threshold-global finding), executed**: the
-  fake device gained an IRQ-latency knob (`defer_dsp_end` +
-  `fake_ebc_deliver_dsp_end()`), and one scripted session — partial
-  burst with its final frame's DSP_END delivered late, then a full
-  refresh, then more partial damage — runs through both launch
-  contexts: the driver's own threshold epilogue (zero-gap) vs the real
-  `GLOBAL_REFRESH` ioctl from idle.  Identical stream, identical
-  perturbation; only the threshold-fired variant ends with a residual
-  `display_end` credit (a wait satisfied by the straggler — on hardware,
-  mid-playback).  See Findings 8.
-- **The rung-2 teardown UAF, executed**: `run-tests.sh` runs
-  `ebc-refresh-test quirk-ctx-free-uaf` as a subprocess and asserts it
-  dies with an ASan heap-use-after-free.
+- **Timeout containment (including the historical QUIRK F stimulus)**:
+  the fake device delays a DSP_END after partial or global work. The driver
+  reinitializes completion before every physical start and terminally poisons
+  the instance on either timeout; a late END cannot heal poison or start EBC.
+  See Findings 8 for the historical hardware observation.
+- **Queued-area teardown**: an ASan regression frees a context with queued
+  damage and proves each area is unlinked before it is freed.
 - **With `WBF=`**: the real `rockchip_ebc_probe()` (the shim's firmware
   loader honors `EBC_SHIM_FW_DIR`, so the driver's own
   `rockchip/ebc.wbf` request resolves), the real
@@ -208,6 +224,14 @@ What it executes and asserts (`quirk:`-policy applies as in rung 2):
   (`wbf-info --dump-lut`).  That closes the loop driver-blit → scheduler →
   LUT-upload → device-LUT-readback vs an independent derivation of the
   waveform format.
+- **Disable-tail retention and completion, with `WBF=`**: distinct caller and
+  `off_screen` Y4 patterns prove the default path saves caller content in
+  `suspend_next`, lands the off-screen image in `suspend_prev` and the live
+  context, and consumes exactly one completion per RESET/full/partial/shutdown
+  refresh. `no_off_screen=1` preserves the caller and skips the shutdown
+  global. Completion is reinitialized before every physical start; deferred
+  END cases terminally poison rather than leaving a usable residual credit.
+  This is internal driver evidence, not a userspace refresh-completion API.
 - **Cold-bin selection (`wbf cold:`)**: the stub IIO is settable
   (`ebc_shim.iio_temp_override`); at 0 °C the driver must select this
   waveform's 131-phase GC16 cold bin and orchestrate it cleanly.  This
@@ -359,14 +383,13 @@ line numbers below describe the *pre-fix* text and are kept for history.
    device-visible test now pin the fix (zero per-pixel phase conflicts),
    and the rung-2 soak asserts pairwise no-conflict outright.
 
-6. **`rockchip_ebc_ctx_free` iterates while freeing** (patch 3206):
+6. **`rockchip_ebc_ctx_free` iterated while freeing** (patch 3206):
    `list_for_each_entry(area, &ctx->queue, list) kfree(area);` reads
    `area->list.next` after `kfree(area)`.  Only reachable when a context
    is torn down with damage still queued (mode-set/teardown races); the
-   fix is the `_safe` iterator.  **Executed, no longer just read**: the
-   rung-7a reproducer (`ebc-refresh-test quirk-ctx-free-uaf`) frees a
-   context with one queued area and dies with an ASan
-   heap-use-after-free; `run-tests.sh` asserts exactly that.
+   fix is the `_safe` iterator.  **Fixed and executed**: the rung-7a
+   regression frees a context with queued damage under ASan and asserts safe
+   unlink-before-free teardown.
 
 7. **Manual global washes do not reset the auto-refresh accumulator**
    (patch: `rockchip_ebc_refresh`'s epilogue).  `ctx->area_count` only
@@ -382,49 +405,26 @@ line numbers below describe the *pre-fix* text and are kept for history.
    inefficiency, not memory unsafety; an upstream fix would zero the
    accumulator in `rockchip_ebc_global_refresh`.
 
-8. **The threshold-fired auto-global launches zero-gap and lets a
-   straggling DSP_END satisfy its wait (QUIRK F; the 2026-07-12 hardware
-   finding's root-cause candidate).**  Both full-refresh paths run the
-   identical code from `do_one_full_refresh` onward, and the harness
-   confirms the CPU-side content bookkeeping (double-buffered `final`,
-   queue splice/delete, `prev`/`next` discipline) is coherent for both —
-   so the hardware divergence (threshold-path globals progressively
-   corrupt recently-updated pixels at 0.6–0.8 reflectance; ioctl-path
-   globals never do) has to come from launch context, and the code gives
-   the threshold path exactly one unique property: **zero-gap chaining**.
-   The flag is set in the epilogue of the very partial refresh that
-   crossed the threshold (patch 4271–4280) and consumed immediately
-   (4386–4387 skips the sleep, 4361–4369 consumes), so the global runs
-   microseconds after a partial burst.  Meanwhile the per-frame handshake
-   is fragile there: `display_end` is a *counting* completion that the
-   partial path never reinits, `EBC_FRAME_TIMEOUT` is only 25 ms (2.1
-   frame periods at 85 Hz, patch 2942), and a timed-out frame is logged
-   but never resynchronized — one late IRQ order-skews every following
-   wait (satisfied by the previous frame's END while its own frame still
-   plays) and the burst exits with its final END in flight.  In the
-   threshold path that straggler lands inside the global's
-   `reinit_completion`→wait window (patch 3446→3459) and the global's
-   wait returns while the num_phases-frame LUT playback is still driving
-   glass — after which the driver commits `prev <- next` (3463), writes
-   `DSP_OUT_LOW` (4265), uploads the next waveform's LUT (4211) and
-   starts three-window frames against a panel mid-wash.  Pixels with
-   `prev != next` (exactly the recently-updated ones) switch LUT rows
-   mid-waveform and land at intermediate reflectance; the bookkeeping
-   believes the wash landed, so the error compounds.  Ioctl washes
-   launch from thread-idle (the wash beats the deferred-io flush), so
-   stragglers land in the gap and the reinit absorbs them.  Executed as
-   `quirk F` in `ebc-refresh-test` using the fake device's IRQ-latency
-   knob (`defer_dsp_end`/`fake_ebc_deliver_dsp_end`): the identical
-   session with the identical late-IRQ perturbation ends with a residual
-   `display_end` credit **iff** the global was threshold-fired, and the
-   test also pins the model's limit — the synchronous playback shows
-   identical pixels for both paths, so the mid-playback corruption
-   itself stays hardware-only.  Which straggler source dominates on
-   silicon (late threaded-IRQ delivery, handler-vs-END coalescing losing
-   an END, or an unmodeled `DSP_OUT_LOW` completion) is an on-device
-   question; the zero-gap structure is what makes all of them land in
-   the global's wait window.  Full mechanism, fix sketch and upstream
-   draft in `doc/driver-findings-report.md` (2026-07-12 entry).
+8. **Historical/latent QUIRK F (2026-07-12).** Source review made zero-gap
+   chaining after an `auto_refresh=1` threshold crossing a plausible way for a
+   late DSP_END to truncate a global playback. The harness can create that
+   synthetic late-IRQ ordering with `defer_dsp_end` /
+   `fake_ebc_deliver_dsp_end`, but it does not reproduce the optical
+   corruption: synchronous threshold and ioctl playback produce identical
+   pixels. More importantly, the instrumented hardware run exercised
+   corrupting-class workloads across 37 threshold and 33 ioctl globals with
+   **zero straggler-credit warnings, early waits, or frame timeouts**. That
+   refutes straggler truncation as the observed corruption mechanism on this
+   silicon; the earlier 0.6–0.8 causal narrative and claims of inherent ioctl
+   immunity are superseded. The remaining campaign correlation is stochastic
+   evidence, and the corruption hunt is back at content bookkeeping.
+
+   `quirk F` is retained as latent handshake hardening. Its fake-device case
+   now proves that a deliberately delayed END terminally poisons the device
+   before any later physical start; current code reinitializes completion
+   before every physical start and rejects later work after timeout. The full
+   historical hypothesis, instrumented refutation, and current evidence are in
+   `doc/driver-findings-report.md` (2026-07-12 entry).
 
 The rung-7a WBF drive-sequence differential also re-confirmed the
 rastersim finding that **`blit_direct` reads the LUT transposed** from
