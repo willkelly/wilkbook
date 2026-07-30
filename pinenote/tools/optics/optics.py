@@ -96,7 +96,18 @@ class Transition:
     white_patch_mask: np.ndarray = None  # gray-step white reference patch
     black_patch_mask: np.ndarray = None  # gray-step black reference patch
     bg_mask: np.ndarray = None           # a should-be-uniform background region
-    expected_settle_s: float = 0.447    # GC16/GL16 at >=24C decode from refresh-policy.md
+    # 38 GC16/GL16 phases at >=24 C (wbf decode) x the DRIVER's 15.688 ms
+    # frame period -- 200 MHz dclk / 8 px-per-sdck / (276 x 1421), see
+    # doc/refresh-policy.md.  NOT the .wbf header's 85 Hz frame_rate field:
+    # the driver never reads it.  This is a mode duration, not a frame
+    # period; it is compared against settle_s (measured on the CAMERA clock)
+    # times SETTLE_ONTIME_FACTOR.
+    #
+    # Scoped: valid only for the >=24 C bin.  The committed corpus contains
+    # transitions recorded at 23.0 C where GC16 is 46 phases (0.722 s) -- a
+    # flat scalar mis-scores those regardless of this correction.  The real
+    # fix is per-temperature and is PLAN task 14.
+    expected_settle_s: float = 0.596
     window_s: float = 1.5               # how long after t0 to analyze; ingest sets
                                         # min(2.5 s, segment gap - 2 frames) so the
                                         # window never reaches the next page's wash

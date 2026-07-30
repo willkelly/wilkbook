@@ -36,8 +36,10 @@ investment. Priority adjustments over the tables below:
   homography/photometry once per session and reuse; average repeats harder;
   the subtle-ghost noise floor drops for free. (Self-calibration itself stays:
   it is what makes the webcam quantitative at all.)
-- **Camera choice is a device decision**: the panel's waveform runs at 85 Hz
-  (A2 ≈ 118 ms, DU ≈ 224 ms). If the boxed webcam does 120 fps at reduced
+- **Camera choice is a device decision**: the `.wbf` declares 85 Hz but the
+  driver never reads that field — it clocks the panel at 200 MHz / (2208 ×
+  1421) = 15.688 ms/frame ≈ 63.744 Hz (Correction 2026-07-30; doc/status.md).
+  In this document's ≥24 °C bin: A2 ≈ 157 ms, DU ≈ 298 ms. If the boxed webcam does 120 fps at reduced
   resolution, prefer that for fast-mode sessions; 30 fps is fine for
   GC16/GL16-only. Pin the actual webcam model in the bundle metadata.
 - **New option unlocked**: a *driver-side* wash trace (what the EBC actually
@@ -151,7 +153,7 @@ Regenerate all synthetic-clip/golden fixtures after 1–2 (CC1 note). Card grows
 - **Segment truncation**: slice `warped[onset:next_onset]`; `window_s = min(configured ~2.0–2.5s, gap − 2 frames)`; `settled_frame` = last QUIET frame (reuse detect_settle's scan), temporally averaged over the last quiet frames (~√3 noise win). (ME7, ME2)
 - **Panel-state reset + counterbalancing**: before candidate params, apply baseline params and issue N≥3 GC16 deep cleans via the transport (`refresh_waveform=4` + `pinenote-ebc-refresh` ×N — works under both backends), logged as a new `'clean'` event; then flip candidate params, then sync. Run candidates in ABBA order; analyze asserts same-session and reports panel-temp delta. (ME3)
 - **Timebase**: return per-frame PTS from ffprobe (`best_effort_timestamp_time`, `-fps_mode passthrough` for decode alignment); detect VFR (std(diff)>5% median), record `capture.vfr`/`fps_measured`; convert all `*_s` metrics and `SETTLE_QUIET_FRAMES` to duration-over-dt; jittered-PTS regression test. (ME8)
-- **Temperature**: sample panel temp at run **start and end**; compute `expected_settle_s` from `gc16_phases_by_temp` (greatest bin ≤ temp) / `frame_rate_hz`; refuse/downweight comparisons straddling a temp bin. (ME6)
+- **Temperature**: sample panel temp at run **start and end**; compute `expected_settle_s` from `gc16_phases_by_temp` (greatest bin ≤ temp) × `DRIVER_FRAME_PERIOD_S` (15.688 ms — derived from dclk/sdck, **never** the `.wbf` `frame_rate_hz` field, which the driver does not read); refuse/downweight comparisons straddling a temp bin. (ME6)
 
 **Photometry**
 - **Guarded fit**: endpoint-linear fit first, mid-patch residual check, fallback + `strip_crushed: true` flag; route `decode_pageid`'s per-frame fit through the same guard (crushed strips also break segmentation). The residual test doubles as a free "1-bit mode engaged" detector. (CC9)

@@ -57,6 +57,20 @@ def main():
           f"corr={rep.ghost_corr:.2f}")
     check("ghost run has no flash", rep.flash_severity == "none")
 
+    print("case: settle inside the recalibrated band -- expect ON TIME")
+    # Regression guard for the 2026-07-30 frame-clock recalibration.  The
+    # on-time cut is expected_settle_s * SETTLE_ONTIME_FACTOR: it was
+    # 0.447 * 1.3 = 0.581 s under the wrong 85 Hz basis and is 0.596 * 1.3 =
+    # 0.775 s under the driver's real 63.744 Hz clock.  Nothing else in this
+    # suite lands between those two cuts (the cases above measure ~0.2 s and
+    # ~0.97 s), so without this a silent revert to the 85 Hz figure would
+    # reclassify real on-time turns as "slow" and no test would notice.
+    frames_700ms = int(round(0.700 * FPS))
+    rep, _ = transition_for(text, img, wash="gc16", settle_frames=frames_700ms)
+    check("settle ~0.70s is on time at the 63.744 Hz basis",
+          rep.settle_severity == "none",
+          f"settle={rep.settle_s:.3f}s cut={optics.Transition.expected_settle_s * optics.SETTLE_ONTIME_FACTOR:.3f}s")
+
     print("case: slow settle (gc16, long wash) -- expect SLOW settle")
     rep, _ = transition_for(text, img, wash="gc16", settle_frames=30)
     check("settle flagged slow", rep.settle_severity == "slow",

@@ -45,7 +45,7 @@ Grounded in the waveform decode in `doc/refresh-policy.md`:
 | --- | --- | --- |
 | **black flash** | should-be-white pixels driven dark during a wash (GC16's negative) | min-luminance dip × duration in the white region — temporal |
 | **ghost / residue** | prior page still correlated in a should-be-clean region | RMS of the settled residual *and* its correlation with the previous page — spatial |
-| **slow / incomplete settle** | panel still changing past the ~447 ms window | luminance-derivative decay time; never-quiescent = incomplete — temporal |
+| **slow / incomplete settle** | panel still changing past the ~596 ms window | luminance-derivative decay time; never-quiescent = incomplete — temporal |
 | **double-flash** | one page turn → two washes (the ioctl-races-deferred-io two-pass) | count of distinct dip events per transition — temporal |
 | **grayscale corruption** | DU/A2 crushing antialiased grays to binary | fraction of intended mid-grays that settled at the extremes (0/1) — spatial |
 | **contrast / uniformity** | black not black, white not white, blotchy background | white-patch minus black-patch reflectance + background σ — photometric |
