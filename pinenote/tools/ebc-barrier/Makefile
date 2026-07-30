@@ -6,7 +6,7 @@ CFLAGS ?= -O2 -Wall -Wextra -Werror -g
 CPPFLAGS := -I$(BUILD)/include/uapi
 HEADER := $(BUILD)/include/uapi/drm/rockchip_ebc_drm.h
 
-all: $(BUILD)/pinenote-ebc-sleep-frame-test $(BUILD)/ebc-barrier-test $(BUILD)/ack-wait-test $(BUILD)/signal-guard-test $(BUILD)/reader-scan-test
+all: $(BUILD)/pinenote-ebc-sleep-frame-test $(BUILD)/ebc-barrier-test $(BUILD)/ack-wait-test $(BUILD)/signal-guard-test $(BUILD)/reader-scan-test $(BUILD)/ebc-card-reference
 
 $(HEADER): $(PATCH) $(EXTRACT) shim/drm.h
 	python3 $(EXTRACT) $(PATCH) $(BUILD) include/uapi/drm/rockchip_ebc_drm.h
@@ -35,6 +35,10 @@ $(BUILD)/reader-scan-test: reader-scan-test.c reader-scan.c reader-scan.h
 	mkdir -p $(BUILD)
 	$(CC) $(CFLAGS) -o $@ reader-scan-test.c reader-scan.c
 
+$(BUILD)/ebc-card-reference: ebc-card-reference.c ebc-barrier.c ebc-barrier.h
+	mkdir -p $(BUILD)
+	$(CC) $(CFLAGS) -o $@ ebc-card-reference.c ebc-barrier.c
+
 check: all
 	./$(BUILD)/ebc-barrier-test
 	timeout 5s ./$(BUILD)/ack-wait-test
@@ -45,6 +49,16 @@ check: all
 	@! grep -Eq '/sys/power|/dev/(input|mmc|ttyS)|/boot/|/lib/firmware|/sys/class' pinenote-ebc-sleep-frame-test.c ebc-barrier.c
 	@! grep -q 'pinenote-ebc-barrier-test-service' ../../services/*.scm
 	@echo "ebc-barrier: static safety checks passed"
+#	The card the device paints is also the value the supervised procedure
+#	compares /dev/fb0 against (doc/hardware-deploy.md), so its identity is
+#	part of the contract, not an implementation detail.  If paint_card or
+#	the panel geometry ever changes, this golden AND the hash quoted in the
+#	runbook must be regenerated together -- otherwise the on-device
+#	comparison silently starts proving nothing.
+	@test "$$(./$(BUILD)/ebc-card-reference | sha256sum | cut -d' ' -f1)" \
+	    = "7d94be719f99c6684485f9f073d46c1a68fbdbe8b3461f62b7ad389bcf6acd97" \
+	  || { echo "ebc-barrier: card reference drifted from the golden identity" >&2; exit 1; }
+	@echo "ebc-barrier: card reference matches the golden identity (1872x1404, 9377 black px)"
 
 install: $(BUILD)/pinenote-ebc-sleep-frame-test
 	install -Dm755 $(BUILD)/pinenote-ebc-sleep-frame-test $(DESTDIR)$(PREFIX)/bin/pinenote-ebc-sleep-frame-test
