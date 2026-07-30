@@ -17,8 +17,9 @@ unless noted.
 A partial page turn today is: KOReader paints → fbdev deferred-io flush
 (~50 ms) → the driver's `atomic_update` sleeps `delay_b` = **100 ms**
 before waking the refresh thread (:2345–2347, :2386–2389; every page
-turn exceeds the 100 000 px cutoff) → 38-phase GC16 partial, 447 ms.
-Felt turn ≈ **600 ms**, of which the waveform is only 447 ms. The
+turn exceeds the 100 000 px cutoff) → 38-phase GC16 partial, 596 ms.
+Felt turn ≈ **750 ms** (50 + 100 + 596 — a model sum, not a measurement),
+of which the waveform is 596 ms, i.e. ~80 %. The
 median turn is *fine* — the felt cost concentrates in specific
 transition families, in the latency tail, and in the two-pass structure
 of promoted fulls. §1 quantifies where; §3 ranks what to do about it.
@@ -56,12 +57,17 @@ injector pacing. One cross-run confound to carry: the GC16-fulls run
 decimation roughly halves measured depth on short dips — no cross-run
 depth comparison below survives unless it is an order-of-magnitude
 difference. Thresholds: flash severe ≥ 0.15 reflectance dip; settle
-on-time ≤ 0.581 s; blank-reveal ghost floor 0.121 ± 0.009.
+on-time ≤ 0.581 s (**stale** — that cut is `expected_settle_s` 0.447 × 1.3;
+the corrected 0.596 s moves it to 0.775 s, so every on-time/slow count in
+this section was scored at the old cut and is pending regeneration);
+blank-reveal ghost floor 0.121 ± 0.009.
 
 **Headline partial-turn profile (n=110):** 34/110 clean on all axes.
 Flash: 63 none / 30 mild / 17 severe. Settle: 48 on-time / 52 slow /
 10 incomplete; 22/110 exceed 1.0 s. Median settle 0.4–0.6 s ≈ the
-447 ms GC16 decode + frame quantization — **baseline partial speed is
+596 ms GC16 decode — the measured median now sits at or slightly below the
+drive time, so the panel reaches optical quiescence before the waveform ends;
+the old "+ frame quantization" gloss no longer applies. **Baseline partial speed is
 waveform-bound and fine; the felt cost is the tail and the families.**
 
 | to-class | n | flash depth p50 / p90 (severe) | settle p50 | ghost note |
@@ -110,7 +116,8 @@ partial settles pooled: 0.7 / 0.9 / 2.5 / 2.5 s (4/4 slow or
 incomplete; the graphic→novel *full* also hit 2.5 s incomplete);
 graphic→textbook 7/8 slow (p50 0.90 s); textbook→novel p50 0.97 s.
 Versus text→graphic 0.60 s and blank→text 0.30–0.40 s. Clearing dense
-pixels costs ~2× the waveform time; flash stays mild (≤ 0.098). This
+pixels costs ~1.5× the waveform time (0.90 s p50 vs the 596 ms GC16 drive);
+flash stays mild (≤ 0.098). This
 is drive-cost, not flash — the DU/DU4 speed policies (§3) attack it
 directly.
 
@@ -221,13 +228,13 @@ end-state quality, and the settle tail stay camera-only forever.
 ### 2.3 Camera limits for fast waveforms
 
 Calibrated point: 30 fps / exposure 312 (31.2 ms) / gain 32 → whites
-214/255 (recorder.py). At 30 fps: A2 (118 ms) = 3.5 samples, each
+214/255 (recorder.py). At 30 fps: A2 (157 ms) = 4.7 samples, each
 integrating ~94% of the frame period — a single-phase (11.8 ms)
 excursion reads at ~38% of true depth and the envelope shape is
-unrecoverable; DU (224 ms) = 6.7 samples, depth OK for multi-frame
-excursions, shape crude; GC16/GL16's 165 ms dark push = 5 frames,
+unrecoverable; DU (298 ms) = 8.9 samples, depth OK for multi-frame
+excursions, shape crude; GC16's 220 ms dark push = 6.6 frames,
 which is why 30 fps has sufficed. Latency anchors carry ±1 frame at
-both ends → ±67 ms — unusable for ranking 118–236 ms policies.
+both ends → ±67 ms — unusable for ranking 157–314 ms policies.
 
 60 fps halves both problems and costs exactly one photometric stop
 (exposure caps at ~156). **CORRECTION: the proposed "gain 64 restores
@@ -330,16 +337,16 @@ v2; injector proven; params one-shot carries the candidate config.
 
 ### 3.2 The ranked table
 
-| rank | Policy | Mechanism | Layer | Expected gain (vs ~600 ms felt / 447 ms drive) | Quality risk | Prerequisites |
+| rank | Policy | Mechanism | Layer | Expected gain (vs ~750 ms felt / 596 ms drive) | Quality risk | Prerequisites |
 |---|---|---|---|---|---|---|
 | 1 | **d1: `delay_b` 100 ms → 2 ms** | Kill the pre-wake sleep (ground truth 3) | One runtime param write | ~−100 ms felt on **every** turn, waveform untouched | **Low, verify coalescing**: delay_b is also a damage-coalescing window — with 2 ms, a paint spread over multiple defio flushes starts driving on the first band with later bands joining mid-call (visibly staggered start the 100 ms currently hides). Replay + rig A/B catch it | `delay_b` in paramspace; wake-delay term in ebc-replay (see ladder rung 0 for the corrected prediction) |
-| 2 | **d2: post-flush wash alignment** | Delay the promoted-full/bundled-wash ioctl one defio period (~60 ms) so the wash paints the NEW page: single 447 ms pass instead of wash-stale + repaint (ground truths 3/5; corpus finding 1.1d) | Plugin timing (idle-washer skeleton) | −447 ms on every promoted/bundled turn; kills the residual "draws then redraws" | ~zero — mis-timing degrades to status quo | defio-settle heuristic in device.lua/idlewasher; workbench-provable now |
-| 3 | **a: DU turn + delayed GC16-quality repaint** (hrdl's fast-now-clean-later, in userspace) | Reading profile: `default_waveform=2` + `bw_mode=2` (binarize → `next` reachable, avoids ground-truth-4 desync); turn drives DU 224 ms; after 0.5–2.4 s idle, restore `bw_mode=0`+GC16 and re-flush — post-quantization diff repaints only lost-fidelity pixels. Idle-washer debt/timer machinery is the skeleton | KOReader plugin + 2 param flips; zero driver changes | drive 447→224 ms; felt ~600→~375 ms; stacks with d1 | Binarized text during interaction; visible deferred repaint; flip races (see c-risks) can leave DU sticky or land a turn on GC16; needs an images-page escape hatch | paramspace `ko`/`ebc`; flip-verify discipline; E2+E3 replay extensions; 60 fps recalibration for the optical verdict |
-| 4 | **b: DU4 + dither, resident profile** | `default_waveform=3` + `bw_mode=3` set once per session (no per-turn flips → no races); `globre_convert_before=1` as wash-exit bracket (already in the patch — §5.3); task 26 adds dither (fourtone is pure thresholding today) | Param set + task-26 dither | drive 447→282 ms; felt ~600→~435 ms | Antialiasing crushed to 4 tones; images banded without dither; DU4 ghosting "moderate" (eink-research §2); whole-UI 4-tone | task 25 residue (paramspace + rung asserts); task 26; grayramp card kind |
-| 5 | **e2: `dclk_select=1` (250 MHz)** | Higher pixel clock; field-stable per PNDeb dev branch. Boot param (ground truth 6) | Boot param | **Inferred ×1.25 only, unverified**: nothing in-repo documents frame rate scaling linearly with dclk (hrdl runs 60–85 Hz on more variables). *If* linear: GC16 ~447→~358 ms | ~20% less drive integral per phase if frames shorten → undershoot/ghost risk; PNDeb field evidence mitigates | rung-4 live-value assert; cheap piggyback A/B on any session |
+| 2 | **d2: post-flush wash alignment** | Delay the promoted-full/bundled-wash ioctl one defio period (~60 ms) so the wash paints the NEW page: single 596 ms pass instead of wash-stale + repaint (ground truths 3/5; corpus finding 1.1d) | Plugin timing (idle-washer skeleton) | −596 ms on every promoted/bundled turn; kills the residual "draws then redraws" | ~zero — mis-timing degrades to status quo | defio-settle heuristic in device.lua/idlewasher; workbench-provable now |
+| 3 | **a: DU turn + delayed GC16-quality repaint** (hrdl's fast-now-clean-later, in userspace) | Reading profile: `default_waveform=2` + `bw_mode=2` (binarize → `next` reachable, avoids ground-truth-4 desync); turn drives DU 298 ms; after 0.5–2.4 s idle, restore `bw_mode=0`+GC16 and re-flush — post-quantization diff repaints only lost-fidelity pixels. Idle-washer debt/timer machinery is the skeleton | KOReader plugin + 2 param flips; zero driver changes | drive 596→298 ms; felt ~750→~452 ms; stacks with d1 | Binarized text during interaction; visible deferred repaint; flip races (see c-risks) can leave DU sticky or land a turn on GC16; needs an images-page escape hatch | paramspace `ko`/`ebc`; flip-verify discipline; E2+E3 replay extensions; 60 fps recalibration for the optical verdict |
+| 4 | **b: DU4 + dither, resident profile** | `default_waveform=3` + `bw_mode=3` set once per session (no per-turn flips → no races); `globre_convert_before=1` as wash-exit bracket (already in the patch — §5.3); task 26 adds dither (fourtone is pure thresholding today) | Param set + task-26 dither | drive 596→377 ms; felt ~750→~531 ms | Antialiasing crushed to 4 tones; images banded without dither; DU4 ghosting "moderate" (eink-research §2); whole-UI 4-tone | task 25 residue (paramspace + rung asserts); task 26; grayramp card kind |
+| 5 | **e2: `dclk_select=1` (250 MHz)** | Higher pixel clock; field-stable per PNDeb dev branch. Boot param (ground truth 6) | Boot param | **REJECTED — no-op on our kernel.** `DCLK_EBC` is a divider-less 3-way mux over {gpll_400m, cpll_333m, gpll_200m} (`clk-rk3568.c:1129`, `:286`) and Linux picks the fastest parent ≤ request (`clk.c:729`, `:626`), so a 250 MHz request lands back on 200 MHz. The *scaling* is now derived exactly (frame = htotal×vtotal/dclk) — 250 MHz would give 79.68 Hz and GC16 ~477 ms — but that rate is unreachable without CRU/DT work (hrdl reach 60–85 Hz by supplying a mode whose `.clock` is honoured) | ~20% less drive integral per phase if frames shorten → undershoot/ghost risk; PNDeb field evidence mitigates | rung-4 live-value assert; cheap piggyback A/B on any session |
 | — | **c: per-update waveform via flip-around-the-turn** | Race analysis (source-exact): no per-frame hazard, but (i) an in-flight call absorbs the new turn's damage under the OLD LUT — the flip silently loses exactly when turns arrive fast (the case it targets); (ii) flip/restore pairs can be consumed whole by a long call; (iii) sticky-DU if the restorer dies | Plugin (sanctioned workaround) | Same as a/b when the flip wins; **zero when it loses** | All of (a)'s plus nondeterminism and attribution pain | Quiesce-before-flip discipline; E3; per-turn waveform confirmation from dbg v2. Treat as (a)'s degraded fallback, not a rank of its own |
 | — | **e1: turn = GL16 full wash** | Context-conditional (nav-heavy usage only) | Plugin | Always one predictable pass | Finding 3 measured full-every-1 as pure cost — **likely reject for linear reading** | none new; half-answered already |
-| — | **e3: A2 anything** | — | — | 118 ms drive | hrdl dropped A2 entirely; PNDeb ships a trimmer accepting gray blacks | **Eliminate-candidate, not tune** (PLAN §1b). Revisit only if DU measures insufficient |
+| — | **e3: A2 anything** | — | — | 157 ms drive | hrdl dropped A2 entirely; PNDeb ships a trimmer accepting gray blacks | **Eliminate-candidate, not tune** (PLAN §1b). Revisit only if DU measures insufficient |
 | — | **e4: early cancellation / per-pixel scheduling (hrdl port)** | Fixes turn serialization (ground truth 9) for rapid flipping | Driver redesign, community-owned | The only fix for "flip 5 pages fast" | Rebase-scale; violates report-don't-fork economics today | Not now — §5.4 |
 
 ### 3.3 Sequencing (evidence density per hardware-session-minute)
@@ -361,7 +368,7 @@ rung's go/no-go is written before the rung runs.
 
 **What runs today, verified live:** ebc-replay executes the verbatim
 refresh thread on real + synth traces. DU on the page-turn-dominated
-cadence.r01 trace: settle med 22 frames/259 ms vs 38/447 ms GC16;
+cadence.r01 trace: settle med 22 frames/345 ms vs 38/596 ms GC16;
 partial px-phases 91.6 M vs 300.6 M (3.3× drive spread). DU4: 55.4 M
 px-phases, settle min 24, on the a2 trace. Runtime 1.6–5.2 s/run at
 scale 2; the full ~280-run matrix (7 traces × ~40 pruned configs) is
@@ -471,7 +478,7 @@ late-splice px, timeouts, temp idx, accumulator.
 
 Cautions from review: use `pr_info_ratelimited` on the burst line (a
 redundant-damage storm can drain at frame 0, beating the
-num_phases+1-frame floor); never printk inside the 85 Hz frame loop;
+num_phases+1-frame floor); never printk inside the 63.744 Hz frame loop;
 keep output ring-buffer-only under PREEMPT_RT (loglevel or
 `printk_deferred`) so console TX can't jitter frame timing.
 **Precondition — BUILT (2026-07-12, with the EXTRACT_FBS port):** the

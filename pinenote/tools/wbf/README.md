@@ -28,8 +28,12 @@ backup ledger in `doc/device-runbook.md` or pull
   0 °C vs 38 at ≥24 °C** — cold panels take ~3.4× longer per refresh,
   which is why the EBC driver re-reads the TPS65185 temperature on every
   refresh.
-- Phase counts at 28 °C: A2=10 (~118 ms), DU=19, DU4=24, GC16/GL16=38
-  (~450 ms) — matching E Ink's published mode timings.
+- Phase counts at 28 °C: A2=10, DU=19, DU4=24, GC16/GL16=38. Those match
+  E Ink's published mode timings (~120 / ~260 / ~450 ms) **at the 85 Hz the
+  waveform declares** — independent confirmation of its design point. But the
+  driver never reads that field and clocks the panel at 63.744 Hz
+  (`doc/refresh-policy.md`), so the delivered durations are 1.33× longer:
+  A2 ~157 ms, DU ~298 ms, DU4 ~377 ms, GC16/GL16 ~596 ms.
 - Temperatures below the first bin map to index −1 → the driver's
   `set_temperature` returns `-ENOENT` and keeps the previous LUT (the
   edge hrdl's tree clamps at ≥19 °C).

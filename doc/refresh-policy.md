@@ -29,13 +29,33 @@ Notation: per-phase drive — `D` darken, `L` lighten, `.` neutral.
 > not ~450 ms; DU ~298 ms, not ~224; A2 ~157 ms, not ~118. At the 23 °C bin
 > (46 phases) GC16/GL16 is ~722 ms.
 >
-> The constants have deliberately **not** been changed yet —
-> `ebc-replay.c`'s `PANEL_FPS 85.0` and `optics.py`'s
-> `expected_settle_s = 0.447` feed conclusions already recorded in this
-> document and in `doc/optics-dataset-2026-07.md`, so re-basing them is its
-> own reviewed pass with the affected findings re-derived, not a silent edit.
-> Ratios and A/B comparisons in this document are unaffected; only absolute
-> milliseconds are.
+> **Recalibration completed 2026-07-30.** `ebc-replay.c` now derives
+> `PANEL_FPS` from the driver's own inputs (dclk / px-per-sdck / htotal×vtotal)
+> rather than hardcoding a rate, and `optics.py`'s `expected_settle_s` is
+> 0.596. The replay tables below were **re-measured**, not rescaled — and the
+> `PANEL_FPS` change moved simulation results, not just units: the auto-wash
+> count and the scrub-staleness figures both shifted, because the constant is
+> a simulation input (it converts trace wall-clock into frame indices), not a
+> display label. Ratios and A/B comparisons were unaffected throughout, and
+> the policy decisions in this document all survive.
+>
+> Two things this pass established that were not previously known. **The rate
+> is mode-independent but config-dependent**: all eight panel modes share
+> htotal/vtotal and differ only in `.clock`, which `dclk_select=0` discards
+> and overwrites — so mode selection is irrelevant, and the frame clock is set
+> entirely by `dclk`. And **`dclk_select=1` is a no-op on this kernel**:
+> `DCLK_EBC` is a divider-less mux over {400, 333, 200} MHz, so a 250 MHz
+> request rounds back to 200 MHz. That retires the "250 MHz = ×1.25 speed
+> lever" idea in `doc/pageturn-program.md`; reaching 79.68 Hz would need CRU/DT
+> work, not a boot parameter.
+>
+> The waveform's authored 85 Hz is not meaningless, though: E Ink's published
+> mode timings reproduce `phases / 85 Hz`, which independently corroborates
+> that design point. We play those LUTs at 75 % of the rate they were
+> characterised for, so every phase is held 1.33× longer than designed. That
+> is a *uniform* dilation, so it does not disturb DC balance — but whether it
+> costs optical quality is an open question this pass raises and does not
+> answer.
 
 ```
 GC16  white->white (15,15): DDDDDDDDDDDDDDLLLLLLL........LLLLLLL..
@@ -50,34 +70,34 @@ GL16  everything else     : byte-identical to GC16
 the full LUT sequence — and GC16 drives all 256 (from,to) pairs
 including the 16 already-at-target diagonals. A white pixel staying
 white is driven **toward black for the first 14 of 38 phases
-(~165 ms)** while black pixels are simultaneously lightened: the panel
+(~220 ms)** while black pixels are simultaneously lightened: the panel
 literally displays a negative of the page, then scrubs to target.
 That is the flash. It is waveform-driven, not a software double-draw.
 
 **GL16 is the fix the waveform itself offers.** In this .wbf, GL16 is
 byte-for-byte GC16 *except* the (15,15) sequence is fully neutral —
 the white page background is simply not driven. Same 38 phases, same
-447 ms, same scrubbing of text/grays/blacks (gray8→gray8 still gets
+596 ms, same scrubbing of text/grays/blacks (gray8→gray8 still gets
 its 10D+10L excursion). What GL16 gives up: ghost residue sitting in
 pixels the driver *believes* are white→white is never scrubbed — that
 is precisely GC16's white wash. GCC16/GLR16/GLD16 in this file are
 sha-identical to GL16, so the real menu is: GC16 (deep clean, flashy)
 or GL16 (background-preserving wash).
 
-Mode inventory at 28 °C (phases → wall time at 85 Hz; driver clocks
-one extra neutral frame, +~12 ms):
+Mode inventory at 28 °C (phases → wall time at the driver's 63.744 Hz
+frame clock; driver clocks one extra neutral frame, +~15.7 ms):
 
 | mode | phases | duration | drives | grayscale-safe? |
 | --- | --- | --- | --- | --- |
-| A2   | 10 | 118 ms | only 0↔15 | no (b/w only) |
-| DU   | 19 | 224 ms | any → {0,15} | no (b/w targets only) |
-| DU4  | 24 | 282 ms | targets in 4-tone set | 4-tone only |
-| GC16 | 38 | 447 ms | all 256 pairs | yes |
-| GL16 | 38 | 447 ms | 255 pairs — (15,15) neutral | yes |
-| RESET | 87 | 1024 ms | init wash | — |
+| A2   | 10 | 157 ms | only 0↔15 | no (b/w only) |
+| DU   | 19 | 298 ms | any → {0,15} | no (b/w targets only) |
+| DU4  | 24 | 377 ms | targets in 4-tone set | 4-tone only |
+| GC16 | 38 | 596 ms | all 256 pairs | yes |
+| GL16 | 38 | 596 ms | 255 pairs — (15,15) neutral | yes |
+| RESET | 87 | 1365 ms | init wash | — |
 
 Temperature matters: GC16/GL16 are 38 phases in every bin ≥ 24 °C but
-grow to **131 phases (1.54 s) at 0 °C**. GL16's no-flash property is
+grow to **131 phases (2.06 s) at 0 °C**. GL16's no-flash property is
 verified at the 28 °C bin; re-dump colder bins before relying on it
 outdoors (`wbf-info <wbf> <temp>`).
 
@@ -159,7 +179,7 @@ exactly for this; leave DU/A2 to the phase B workbench.
 `pinenote/tools/ebc-logic/ebc-replay` replays `[pn-refresh]` traces
 (real ones from `/var/log/reader-session.log`, or `synth`-generated
 sessions) through the **verbatim driver's refresh thread** against the
-rung-7a fake device, on an 85 Hz frame-clock model.  It re-decides every
+rung-7a fake device, on the driver's 63.744 Hz frame clock.  It re-decides every
 intent under a candidate policy (flash fraction, waveforms, driver
 params), models the two layers the trace does not record — deferred-io
 page-band damage and the driver's own auto-refresh accumulator — and
@@ -175,15 +195,15 @@ where stated.
 
 | run | washes (ioctl+auto) | white px driven dark | wash px-phases | staleness p50/p90 |
 | --- | --- | --- | --- | --- |
-| GC16 fulls (phase A)   | 26+3 | **12.0 M** | 509 M | 3 / 3 frames |
-| GL16 fulls (phase A.2) | 26+3 | **0**      | 222 M | 28 212 / 28 212 (whole session) |
-| GL16, full-every 12    | 16+3 | 0          | 145 M | 28 212 / 28 212 |
-| GL16, no promoted fulls, thr 60 | 6+4 | 0 | 72 M  | 28 212 / 28 212 |
-| GL16, no promoted fulls, thr 20 (hrdl) | 6+12 | 0 | 122 M | 28 212 / 28 212 |
-| GL16 + real ~50 ms deferred-io lag | 25+4 | 0 | 187 M | 28 250 / 28 250 |
+| GC16 fulls (phase A)   | 26+1 | **11.0 M** | 473 M | 3 / 3 frames |
+| GL16 fulls (phase A.2) | 26+1 | **0**      | 209 M | 13 526 / 13 526 (whole session) |
+| GL16, full-every 12    | 16+3 | 0          | 141 M | 13 526 / 13 526 |
+| GL16, no promoted fulls, thr 60 | 6+4 | 0 | 68 M  | 13 526 / 13 526 |
+| GL16, no promoted fulls, thr 20 (hrdl) | 6+12 | 0 | 121 M | 13 526 / 13 526 |
+| GL16 + real ~50 ms deferred-io lag | 25+4 | 0 | 187 M | 13 564 / 13 564 |
 
 (Counts at scale 2 = ¼ of native pixel counts.  Settle latency was
-38 frames / 447 ms median in every delay-0 run — the GC16 partial page
+38 frames / 596 ms median in every delay-0 run — the GC16 partial page
 turn, matching the waveform decode exactly; the scheduler adds zero
 frames.)
 
@@ -203,7 +223,7 @@ policy A/B on real usage:
 
 The synthetic study's 2.3× wash-cost ratio and the zero-vs-millions
 dark-drive split reproduce exactly on real usage, and settle stays
-38 frames / 447 ms.  One new observation the synthetic sessions did not
+38 frames / 596 ms.  One new observation the synthetic sessions did not
 predict: the real session fired **22 ioctl washes in 153 s** (~every
 7 s — quickstart page jumps + promoted flashes), so under GC16 the felt
 experience was a black flash every few seconds.  That wash *rate* is a
@@ -225,7 +245,7 @@ with linear reading).
    scrubbing accumulated residue — but a GL16 wash does not drive the
    white background either, so staleness is *identical* at full-every
    6, 12, or never.  What frequent fulls still buy is ghost-scrub of
-   recently-driven (text) regions; what they cost is a 447 ms
+   recently-driven (text) regions; what they cost is a 596 ms
    interruption and ~8 M px-phases each.  Consequence: with GL16
    globals, raising `full_refresh_count` (KOReader menu, default 6) is
    nearly free, and the **only mechanism that re-scrubs whites is a

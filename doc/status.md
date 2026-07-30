@@ -1346,7 +1346,9 @@ bites every wacom_protocol + multitouch device).
 `/var/log/reader-session.log` recovered — the first **real device
 `[pn-refresh]` trace** (59 events / 153 s), committed as
 `pinenote/tools/ebc-logic/traces/2026-07-05-a2-first-boot.trace`.
-Replayed on the phase B workbench: settle med 38 frames / 447 ms —
+Replayed on the phase B workbench: settle med 38 frames / 447 ms —  *(Frame-clock recalibration 2026-07-30: the frame counts are correct and
+invariant; the millisecond figure was on the wrong 85 Hz basis and is ~596 ms
+at the driver's real 63.744 Hz. Left as recorded — see doc/refresh-policy.md.)*
 matching the synthetic study exactly; and the GC16-as-run vs GL16
 comparison on real usage reproduces the synthetic 2.3× ratio (385M vs
 165M wash px-phases; 9.19M believed-white px driven dark per wash cycle
@@ -1509,7 +1511,8 @@ believed-white pixels driven dark per session under GC16 fulls, zero
 under GL16, at 2.3× fewer wash pixel-phases); **full_refresh_count's
 scrub value collapses under GL16** (staleness identical at full-every
 6/12/never — a GC16 "deep clean" action is now the load-bearing residue
-answer); settle = 38 frames/447 ms per GC16 partial page turn, scheduler
+answer); settle = 38 frames/447 ms [see 2026-07-30 frame-clock recalibration:
+~596 ms at the real 63.744 Hz] per GC16 partial page turn, scheduler
 overhead zero; modeling the device's real ~50 ms deferred-io lag
 (`defio-delay-ms=50`) reproduces the "draws black then redraws" verdict
 mechanically — the wash ioctl beats the flush, inverts the *old* page,

@@ -298,7 +298,7 @@ comparison (--verify) and partial dumps (--planes).")
                 ;; (doc/refresh-policy.md), GL16 is GC16 minus the
                 ;; white->white drive — the page background stays white
                 ;; through a full wash instead of flashing to a negative
-                ;; for ~165 ms, at identical duration and ghost-clearing
+                ;; for ~220 ms, at identical duration and ghost-clearing
                 ;; everywhere else.  Residue in believed-white pixels is
                 ;; the one thing GL16 never scrubs; the reader-session
                 ;; boot blank runs one deliberate GC16 deep clean to

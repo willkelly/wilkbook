@@ -246,7 +246,7 @@ diagonal entries zeroed — a convergent diagonal-neutral structure
 (EPDiy additionally zeros black→black, where our .wbf's GL16 neutralizes
 only (15,15)). Their grayscale axis is **per-frame duration modulation**
 (phase times 0.3–120 ms per panel-specific tables) rather than a fixed
-frame clock — an axis our fixed-85 Hz EBC cannot exercise. Folklore,
+frame clock — an axis our fixed-63.744 Hz EBC cannot exercise. Folklore,
 marked as such: the EPDiy community has driven panels for years on
 hand-made, not-necessarily-DC-balanced waveforms without reported mass
 film degradation — informal counterevidence to strict
@@ -580,7 +580,7 @@ median (drawing 21–82 ms, writing 32–87 ms, overall median 53 ms), vs
 the paper attributes higher inking thresholds to cognitive/attentional
 task demands — a visible stylus actually *improves* latency
 discrimination). rM2's famous ~21 ms is past diminishing returns; our
-A2's 118 ms playback overshoots the budget but ink is visible from the
+A2's 157 ms playback overshoots the budget but ink is visible from the
 first darkening phases, well before completion (inference — measurable
 on the rig). Prediction is optional garnish, not required. The portable
 pen pattern (from Onyx/Microsoft/rM2, §1.3.20): wet strokes as small

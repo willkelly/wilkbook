@@ -75,7 +75,7 @@ local IdleWasher = WidgetContainer:extend{
     WAVEFORM_SYSFS = "/sys/module/rockchip_ebc/parameters/refresh_waveform",
     GC16 = "4",
     -- Restore margin after the deep-clean wash: GC16 is 38 phases /
-    -- ~447 ms at room bins but 1.54 s at the 0 C bin -- 3 s is the same
+    -- ~596 ms at room bins but 2.06 s at the 0 C bin -- 3 s is the same
     -- settle wait %panel-blank-lua uses.
     RESTORE_DELAY_S = 3,
 }

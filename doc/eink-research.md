@@ -12,8 +12,10 @@ are folded into `ROADMAP.md`.
 - Electrophoretic panels are bistable and have no intrinsic grayscale.
   Every optical transition is a *waveform*: a per-(from-gray, to-gray)
   sequence of 2-bit drive codes (neutral / drive-black / drive-white /
-  no-op) played over ~20–40 scan frames at the panel's frame rate (85 Hz
-  for the PineNote's ED103TC2, 1872×1404 Carta glass).
+  no-op) played over ~20–40 scan frames at the rate the controller clocks the
+  panel — **63.744 Hz** for the PineNote's ED103TC2 (1872×1404 Carta glass) as
+  our driver configures it. The `.wbf` header's authored 85 Hz is metadata the
+  driver never reads; see `doc/refresh-policy.md`.
 - Particle mobility varies with temperature, so waveform LUTs are
   temperature-indexed. This is why `rockchip_ebc` reads the TPS65185
   temperature on *every* refresh to pick the LUT bin — and why its probe
@@ -43,7 +45,7 @@ are folded into `ROADMAP.md`.
 Official E Ink modes (AF waveform, mode-version 0x19 layout — the
 PineNote's; dmesg `Loaded 4-bit PVI waveform version 0x19` confirms):
 
-| Mode | What | Time @25°C | Ghosting | Use for |
+| Mode | What | Time @25°C (85 Hz basis — see note) | Ghosting | Use for |
 | --- | --- | --- | --- | --- |
 | INIT | full erase, flashes, ends white | ~2000 ms | resets | cold boot, corruption recovery |
 | DU | any gray → B/W only | ~260 ms | low | menus, touch feedback |
@@ -52,6 +54,15 @@ PineNote's; dmesg `Loaded 4-bit PVI waveform version 0x19` confirms):
 | GL16 | 16-gray for text on white, less flash | ~450 ms | medium | reading-flow page turns |
 | GLR16/GLD16 | = GL16 unless E Ink's licensed REGAL preprocessor injects hint states | ~450 ms | low | treat as GL16 (no REGAL license) |
 | A2 | fastest, B/W only, no flash | ~120 ms | medium | scrolling, pen strokes |
+
+**Frame-clock note (2026-07-30).** The times above are E Ink's published
+figures, and they reproduce `phases / 85 Hz` against our panel's own decoded
+phase counts — independent corroboration that 85 Hz is the waveform's design
+point, which is why they are kept unrescaled here. But **our driver clocks the
+panel at 63.744 Hz**, not 85 Hz (`doc/refresh-policy.md`), so the durations we
+actually deliver are 1.33× longer: A2 ~157 ms, DU ~298 ms, DU4 ~377 ms,
+GC16/GL16 ~596 ms. Use those for anything about *this* device. The INIT row is
+not on the same basis at all — our RESET is 87 phases (~1.37 s at 28 °C).
 
 E Ink's own bracketing rule: enter A2 through a DU-to-white transition,
 exit A2 through white → GC16. The driver's `prepare_prev_before_a2`

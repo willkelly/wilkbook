@@ -223,8 +223,9 @@ the start of this track — no panel required. Policy background in
 - [ ] **Refresh-policy program (started 2026-07-05).** Root causes of
       the first-light rough edges are known (see `doc/status.md`):
       menu flashing was flashui/flashpartial cascading into the
-      whole-panel GLOBAL_REFRESH; partial updates run at GC16 (~450 ms;
-      DU is ~224 ms, A2 ~118 ms per the panel wbf); boot text lingered
+      whole-panel GLOBAL_REFRESH; partial updates run at GC16 (~596 ms;
+      DU is ~298 ms, A2 ~157 ms per the panel wbf at the driver's
+      63.744 Hz frame clock); boot text lingered
       because nothing cleared the retained panel. Phase A (landed,
       hardware-validated): area-thresholded flash policy +
       `[pn-refresh]` intent tracing in the device target, panel

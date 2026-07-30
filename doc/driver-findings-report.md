@@ -662,7 +662,9 @@ same-pair toggles (60 @0.7 s) in one session: **37 threshold-fired
 globals, 33 ioctl globals — zero straggler-credit warnings, zero early
 wait returns, zero frame timeouts.** Threshold- and ioctl-launched
 globals are metronomically identical at the handshake (596 ms actual vs
-447 ms nominal, full completion, both paths). The zero-gap launch race
+447 ms nominal [2026-07-30 recalibration: ~596 ms at the driver's real
+63.744 Hz frame clock; the phase count is unchanged], full completion, both
+paths). The zero-gap launch race
 exists in source (quirk F stands as a latent-robustness finding) but
 does NOT manifest as wash truncation here. The surviving corruption
 evidence (never-a/b ghost-paints and graying, armC per-event graying,

@@ -46,7 +46,7 @@ test-idlewasher-logic.lua "resumed reading pulls a far deadline in").
 Policy grounding (doc/refresh-policy.md, findings 6-10 + Decisions):
 ioctl-path washes have never corrupted anything (finding 10) and GL16
 fulls are optically ~free (finding 6), but each wash still interrupts
-for ~447 ms -- so washes are steered onto natural pauses (idle) with a
+for ~596 ms -- so washes are steered onto natural pauses (idle) with a
 hard debt ceiling as backstop (cadence <= 20 measured free, 48 diverse
 washless turns stayed clean with autos off; 60 is far past any measured
 need).  Only a GC16 deep clean re-scrubs believed-white residue under
