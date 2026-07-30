@@ -295,7 +295,12 @@ global exposes:
   ever re-zeroes it (`reinit_completion`, 3446). The partial path pairs
   each `DSP_START` (4058–4060) with one wait (4091–4093) and trusts the
   count.
-- `EBC_FRAME_TIMEOUT` is 25 ms (2942) — 2.1 frame periods at 85 Hz. A
+- `EBC_FRAME_TIMEOUT` is 25 ms (2942) — **1.59** frame periods at the panel's
+  actual 63.744 Hz, not 2.1 at 85 Hz (corrected 2026-07-29: the 85 Hz in the
+  `.wbf` header is authored metadata the driver never reads; the driver clocks
+  the panel itself at 200 MHz / (2208 × 1421 sdck) = 15.688 ms/frame, and a
+  live measurement during a stuck refresh gave 63.4 Hz). The margin is
+  therefore thinner than previously stated. A
   DSP_END interrupt delayed past it (threaded IRQ under PREEMPT_RT with
   gadget/Wi-Fi load; or an END lost to the handler's read-clear
   coalescing, 5468–5480) is *logged* ("Frame %d timed out!") but the
@@ -800,3 +805,125 @@ a dump-protocol property) are in the debug patch header.  These four
 items extend the standing upstream ask — they are bugs in *his* branch's
 implementation, reported here rather than silently diverged from: our
 in-tree function is a fresh implementation of the same ABI.
+
+## Finding (2026-07-29, live): a sustained damage source starves the global-refresh path indefinitely, with no log and no timeout
+
+Hardware-observed on a PineNote v1.2 running our 7.0.11 forward-port. This is
+the highest-impact finding in this document for anyone building a
+*synchronous* client on top of `rockchip_ebc`, and it is present in the
+inherited community code, not only in our tree.
+
+**Symptom.** A client asked for a global refresh and waited 10 s for
+completion. The request was accepted, the generation was allocated, and the
+refresh never happened. The wait expired. Across the whole episode the kernel
+logged **nothing at all** — no `Refresh timed out!`, no `Frame N timed out!`,
+no `*ERROR*`, no warning. Meanwhile the EBC interrupt ran at a sustained
+**63.4 Hz** and the `ebc-refresh` kthread sat in `D` state for minutes.
+
+**Mechanism.** `rockchip_ebc_partial_refresh` is an unbounded frame loop:
+
+```c
+for (frame = 0;; frame++) {
+        ...
+        if (list_empty(&areas))
+                break;                    /* the ONLY exit */
+        ...
+        for (int i = 0; i <= 5; i++)      /* every frame */
+                if (spin_trylock(&ctx->queue_lock)) {
+                        list_splice_tail_init(&ctx->queue, &areas);
+                        ...
+                }
+        wait_for_completion_timeout(&ebc->display_end, EBC_FRAME_TIMEOUT);
+}
+```
+
+It exits only when the area list drains, but it re-splices `ctx->queue` into
+that list on every frame. `rockchip_ebc_refresh_thread` reads
+`do_one_full_refresh` only at the top of the *outer* loop. So while damage
+keeps arriving faster than areas retire, a global refresh request can be
+starved for an unbounded time. The per-frame wait is `EBC_FRAME_TIMEOUT` =
+**25 ms** (patch:2981, used at patch:4289); at the observed ~63 Hz each frame
+lands in ~16 ms, comfortably inside it, so the timeout never fires and nothing
+is ever logged — the failure is completely silent from the kernel's side. (The
+3 s `EBC_REFRESH_TIMEOUT` at patch:2982 bounds only a *global* refresh, which
+is how we know the thread was never in one: a global would have had to either
+complete or log and poison within 3 s.)
+
+Areas retire at `frame_delta > last_phase`, i.e. `num_phases + 1` frames. On
+this panel's own waveform at 23 °C that is 46 phases → ~47 frames ≈ **746 ms**
+at the observed 63 Hz frame rate. Any damage source with a period shorter than
+that lifetime makes the list monotonically non-empty.
+
+**The trigger in practice is fbcon's blinking cursor.** With `console=tty0`
+and no cursor override, the console cursor repaints every ~200 ms — five times
+faster than an area retires. Stock Debian on this device ships
+`vt.global_cursor_default=0` on its kernel command line and keeps
+`/sys/class/graphics/fbcon/cursor_blink` at `0`; its refresh thread idles in
+`I` at ~3 Hz. Our reader image did not carry that argument, and its thread was
+pinned in `D` at 63 Hz. That the specific repaint source is the cursor (rather
+than some other fbcon activity) is inference from the two configurations plus
+the timing arithmetic; the loop-starvation mechanism itself is confirmed from
+the source and the live thread/IRQ state.
+
+**Why it matters beyond our barrier.** The legacy `ioctl_trigger_global_refresh`
+uses the same `do_one_full_refresh` handshake, so *any* userspace client asking
+for a global refresh — including the `org.pinenote.ebc` ecosystem's — can be
+starved the same way, and gets no diagnostic. It is invisible in normal reading
+use only because KOReader stops producing damage when idle.
+
+**This is inherited, not a wilkbook regression.** Every load-bearing line is
+present verbatim in our original import of the driver (`dd99c3f`): the
+`for (frame = 0;; frame++)` loop (dd99c3f:3619), both
+`list_splice_tail_init(&ctx->queue, &areas)` sites (dd99c3f:3633, dd99c3f:3762),
+the sole `list_empty(&areas)` exit (dd99c3f:3736),
+`EBC_FRAME_TIMEOUT msecs_to_jiffies(25)` (dd99c3f:2656), and the
+`one_full_refresh = ebc->do_one_full_refresh` read at the outer-loop head
+(dd99c3f:4050). Our edits in that region (a per-frame `reinit_completion`, the
+shrunken DMA syncs, the `-ETIMEDOUT`/poison return) change none of it.
+
+**Reproduced offline against the verbatim driver.**
+`pinenote/tools/ebc-logic/ebc-refresh-starvation-test.c` `#include`s the
+extracted `rockchip_ebc.c`, runs the real probe and refresh-thread body, and
+issues real barrier ioctls against the behavioural fake EBC. It reproduces the
+entire kernel-side signature — WAIT still `-EINPROGRESS` with
+`completed_generation=0` and `poison=0` after 149 further frames;
+`do_one_full_refresh` set but unread; zero completion timeouts; the worker
+never re-entering `TASK_IDLE`; DSP_END raised throughout — and, as a control,
+credits the generation after 39 frames once the damage supply stops.
+
+The decisive part is a **period sweep** that holds every timeout constant fixed
+and varies only the damage rate:
+
+```
+supply every 38 frames -> BARRIER STARVED for the whole supply
+supply every 39 frames -> barrier serviced during the supply
+```
+
+The boundary is exactly the waveform's phase count (38 at the harness
+temperature), not any timeout value — which rules out the timeout-constant
+explanations and pins the cause to damage rate versus area lifetime. On the
+device's own waveform at 23 °C (46 phases) that converts to a real-world
+threshold of roughly **1.36 Hz**.
+
+A useful diagnostic the driver lacks: a `dev_warn_once` when a partial refresh
+exceeds some large frame count would have turned a silent multi-minute stall
+into a one-line diagnosis.
+
+**Suggested disposition.** Two independent changes, either of which removes the
+starvation:
+
+1. Check `do_one_full_refresh` inside the frame loop and break out of the
+   partial refresh to service it (a pending global supersedes queued partial
+   damage anyway — the global will repaint the whole panel).
+2. Bound the re-splice: stop absorbing newly queued areas into the *current*
+   partial refresh after some frame count, so the loop is guaranteed to drain
+   and re-enter the outer loop.
+
+A `dev_warn_once` when a partial refresh exceeds some large frame count would
+also have turned a silent multi-minute stall into a one-line diagnosis.
+
+Per this repo's policy we have **not** patched the driver for this. The
+configuration-level mitigations we did make are ours, not the driver's:
+`vt.global_cursor_default=0` on the reader image's cmdline, and an explicit
+fbcon unbind in the supervised-campaign procedure
+(`doc/hardware-deploy.md`).
