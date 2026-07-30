@@ -65,7 +65,8 @@ DBG_PATCHES := ../../patches/linux-pinenote-debug-extract-fbs.patch
 DBG_DRIVER := $(DBGDIR)/drivers/gpu/drm/rockchip/rockchip_ebc.c
 
 all: header-check $(BUILD)/ebc-logic-test $(BUILD)/ebc-refresh-test \
-     $(BUILD)/ebc-refresh-test-dbg $(BUILD)/ebc-replay \
+     $(BUILD)/ebc-refresh-test-dbg $(BUILD)/ebc-refresh-starvation-test \
+     $(BUILD)/ebc-replay \
      $(BUILD)/ebc-dump $(BUILD)/ebc-dump-grab
 
 header-check: $(BUILD)/include/uapi/drm/rockchip_ebc_drm.h
@@ -112,6 +113,15 @@ $(BUILD)/ebc-refresh-test-dbg: ebc-refresh-test.c $(EXTRACTED) \
 	$(CC) $(CFLAGS) $(ASAN) -DEBC_HARNESS_DBG=1 \
 	  -I$(DBGDIR)/drivers/gpu/drm/rockchip $(CPPFLAGS) \
 	  -o $@ ebc-refresh-test.c $(BUILD)/rastersim-asan.o
+
+# Liveness, not correctness: pins that a sustained damage supply starves the
+# global-refresh / REFRESH_BARRIER path (the 2026-07-29 hardware failure).
+# Waveform-gated, because the starvation boundary IS the waveform's phase
+# count -- it skips cleanly without a WBF.
+$(BUILD)/ebc-refresh-starvation-test: ebc-refresh-starvation-test.c \
+                                      $(EXTRACTED) shim/kernel-shim.h \
+                                      shim/fake-ebc.h
+	$(CC) $(CFLAGS) $(ASAN) $(CPPFLAGS) -o $@ ebc-refresh-starvation-test.c
 
 $(BUILD)/ebc-replay: ebc-replay.c $(EXTRACTED) shim/kernel-shim.h \
                      shim/fake-ebc.h

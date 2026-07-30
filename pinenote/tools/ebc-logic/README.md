@@ -426,6 +426,30 @@ line numbers below describe the *pre-fix* text and are kept for history.
    historical hypothesis, instrumented refutation, and current evidence are in
    `doc/driver-findings-report.md` (2026-07-12 entry).
 
+9. **A sustained damage supply starves the global-refresh / `REFRESH_BARRIER`
+   path indefinitely, silently** (patch 4101, 4244-4247, 4269-4286, 4619;
+   found on hardware 2026-07-29, reproduced here the same day).
+   `rockchip_ebc_partial_refresh`'s `for (frame = 0;; frame++)` loop exits only
+   when its area list drains, but re-splices `ctx->queue` into that list every
+   frame.  While damage arrives faster than one area lifetime the call never
+   returns, so `rockchip_ebc_refresh_thread` never reaches the
+   `do_one_full_refresh` read at the top of the outer loop and a barrier
+   generation is never credited.  Nothing times out (the in-loop wait is
+   `EBC_FRAME_TIMEOUT` = 25 ms and every frame lands in ~15.7 ms) and nothing
+   is logged, so on the device this presented as a 10 s barrier WAIT returning
+   `-110` with a completely silent kernel log, a `D`-state kthread, and the EBC
+   interrupt pinned at 63.4 Hz for minutes.
+   `ebc-refresh-starvation-test` (waveform-gated) pins it against the verbatim
+   driver, and its period sweep shows the boundary is the waveform's phase
+   count, not any timeout: starved at a commit every <=38 frames, serviced at
+   39, with `num_phases` = 38 at the harness temperature.
+   **This is inherited code, not ours** -- every load-bearing line is verbatim
+   in the `dd99c3f` import (dd99c3f:3619, 3633, 3736, 3762, 4050, 2656) -- so
+   it is reported in `doc/driver-findings-report.md` rather than patched.
+   The lesson for this suite: it was *correctness*-complete and still missed a
+   multi-minute hang, because nothing asserted that `rockchip_ebc_refresh` ever
+   **returns**.  Liveness now needs asserting too.
+
 The rung-7a WBF drive-sequence differential also re-confirmed the
 rastersim finding that **`blit_direct` reads the LUT transposed** from
 the hardware side: the device model only matches the independent

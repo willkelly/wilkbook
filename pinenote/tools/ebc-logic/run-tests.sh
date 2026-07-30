@@ -80,6 +80,30 @@ if ! grep -q '^RESULT: ok$' "$rout"; then
   fail=1
 fi
 
+# --- rung 7a liveness: barrier starvation under sustained damage ---
+# Reproduces the 2026-07-29 hardware failure offline: while damage arrives
+# faster than one area lifetime, rockchip_ebc_partial_refresh never returns,
+# so the refresh thread never reads do_one_full_refresh and a REFRESH_BARRIER
+# generation is never credited -- with no timeout and no log.  Waveform-gated:
+# the starvation boundary is the waveform's own phase count.
+sout=$build/starvation.out
+if "$build/ebc-refresh-starvation-test" "$fwdir" > "$sout"; then
+  :
+else
+  echo "FAIL: ebc-refresh-starvation-test exited nonzero" >&2
+  fail=1
+fi
+
+cat "$sout"
+
+if grep -q '^FAIL' "$sout"; then
+  fail=1
+fi
+if ! grep -qE '^RESULT: (ok|skipped)$' "$sout"; then
+  echo "FAIL: ebc-refresh-starvation-test missing RESULT" >&2
+  fail=1
+fi
+
 # --- refresh goldens (synthetic LUT, deterministic, committed) ---
 if (cd "$build" && sha256sum -c ../testdata/refresh-goldens.sha256 > /dev/null 2>&1); then
   echo "PASS: refresh harness golden images (sha256)"
