@@ -115,7 +115,7 @@ with descriptive messages. Keep `doc/status.md` in sync with reality after
 any hardware session. Don't commit the per-device waveform or anything
 under a tool's gitignored `build/`.
 
-## Where we are (2026-07-29)
+## Where we are (2026-07-30)
 
 7.0.x is the validated primary: e-ink display with temperature-compensated
 waveforms, Wi-Fi/BT, USB gadget console, and PREEMPT_RT are hardware-proven.
@@ -146,22 +146,31 @@ barrier UAPI caller, so the barrier's hardware semantics remain unproven. A
 separately invoked, root-only paint/barrier/restore diagnostic and dormant
 LuaJIT adapter/provider were written to os2 with exact-range SHA verification
 on 2026-07-28. **That image booted on 2026-07-29 and its one supervised run
-failed with `-110` — but the defect is not in the barrier, and it was
-root-caused the same session without a second boot.**
+failed with `-110`; the corrected run on 2026-07-30 PASSED all five acceptance
+criteria and the generation barrier is now hardware-proven** (generations 1 and
+2, exact restore, exit 0, clean reader repaint, four benign dmesg lines all
+session). **The 2026-07-29 defect was never in the barrier**, and it was
+root-caused the same session without a second boot.
 `rockchip_ebc_partial_refresh` never returns while damage keeps arriving
 (unbounded frame loop, exits only on a drained area list, re-splices the queue
 every frame), so `rockchip_ebc_refresh_thread` never gets back to the top where
 `do_one_full_refresh` is read. The barrier's SUBMIT allocated its generation
-correctly; nothing was ever there to consume it. Every frame completed, so the
-3 s timeout never fired and the kernel logged **nothing**. The damage source is
-fbcon, which `herd stop reader-session` — step 1 of the campaign — re-binds;
-stock os1 ships `vt.global_cursor_default=0` and the reader image did not.
-`barrier_poison` was provably never set, and the waveform hypothesis was
-measured out (GC16 and GL16 are both 46 phases at 23 °C). Mitigations are in:
-the cmdline argument for the next build, and an explicit fbcon unbind plus an
-EBC-idle precondition in the campaign procedure. The re-run needs **no
-rebuild** — the deployed image is unchanged. The barrier's hardware semantics
-are still unproven. The diagnostic blocks
+correctly; nothing was ever there to consume it. Every frame completed inside
+the 25 ms `EBC_FRAME_TIMEOUT`, so nothing timed out and the kernel logged
+**nothing** (the 3 s bound belongs only to the *global* path, which is how we
+know the thread was never in one). The damage source is fbcon, which `herd stop
+reader-session` — step 1 of the campaign — re-binds; stock os1 ships
+`vt.global_cursor_default=0` and the reader image did not. That was **measured**
+on 2026-07-30: `cursor_blink=1` and 63 Hz with fbcon bound, **exactly 0 Hz**
+and the thread `D`→`I` with it unbound. `barrier_poison` was provably never
+set, and the waveform hypothesis was measured out (GC16 and GL16 are both 46
+phases at 23 °C). Mitigations are in: the cmdline argument for the next build,
+and an explicit fbcon unbind plus an EBC-idle precondition in the campaign
+procedure. Also closed: the blank-panel anomaly (fb0 matched the offline card
+golden byte-for-byte, so the paint was always correct) and the missing 1-px
+border (the bezel occludes the outermost 4–10 px, measured with a
+concentric-ring probe — this is the reader UI's usable-area inset). The
+diagnostic blocks
 INT/TERM/HUP outside an atomic `pselect` acknowledgement wait, blocks before
 installing handlers, refuses pending cancellation before framebuffer mutation,
 and preserves kernel barrier rejection codes, with startup, pending, and

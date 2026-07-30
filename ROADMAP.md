@@ -300,8 +300,10 @@ the start of this track — no panel required. Policy background in
        and a separate root-only diagnostic is packaged for the supervised
        paint/barrier/restore hardware rung. None is wired into `device.lua`, and
        activation remains disabled.
-       **The 2026-07-29 supervised run failed and the barrier is still
-       hardware-unproven, but the cause is known and is not in the barrier.**
+       **The barrier is hardware-proven as of 2026-07-30.** The corrected run
+       passed all five acceptance criteria (generations 1 and 2, exact restore,
+       exit 0, clean reader repaint) on the unchanged deployed image, with no
+       rebuild. The 2026-07-29 failure was never in the barrier:
        `rockchip_ebc_partial_refresh` never returns while damage keeps arriving,
        so `do_one_full_refresh` — the handshake both the barrier and the legacy
        global-refresh ioctl depend on — was starved; the run reported `-110`
@@ -310,10 +312,12 @@ the start of this track — no panel required. Policy background in
        lacked stock os1's `vt.global_cursor_default=0`. Both mitigations are in
        (cmdline argument for the next build, explicit fbcon unbind in the
        campaign procedure) and the waveform hypothesis was measured out — GC16
-       and GL16 are both 46 phases at 23 °C. The re-run needs no rebuild: the
-       deployed image is unchanged and the correction is a runtime sequence.
-       Next hardware rung is that corrected campaign; see `doc/status.md` and
-       `doc/driver-findings-report.md`.
+       and GL16 are both 46 phases at 23 °C. The producer was then *measured*
+       on 2026-07-30 (fbcon bound: cursor_blink=1, 63 Hz, thread `D`; unbound:
+       exactly 0 Hz, thread `I`), and both remaining 2026-07-29 open items
+       closed — fb0 matched the offline card golden byte-for-byte, and the
+       "missing" 1-px border is occluded by a bezel that covers the outermost
+       4–10 px. See `doc/status.md` and `doc/driver-findings-report.md`.
        Upstream TF-A is a separate later recovery-qualified
        migration, never a hybrid. Production orchestration still needs reviewed
        capability providers, production sleep-frame wiring, explicit wake

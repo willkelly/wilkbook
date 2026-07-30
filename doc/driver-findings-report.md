@@ -860,10 +860,17 @@ faster than an area retires. Stock Debian on this device ships
 `vt.global_cursor_default=0` on its kernel command line and keeps
 `/sys/class/graphics/fbcon/cursor_blink` at `0`; its refresh thread idles in
 `I` at ~3 Hz. Our reader image did not carry that argument, and its thread was
-pinned in `D` at 63 Hz. That the specific repaint source is the cursor (rather
-than some other fbcon activity) is inference from the two configurations plus
-the timing arithmetic; the loop-starvation mechanism itself is confirmed from
-the source and the live thread/IRQ state.
+pinned in `D` at 63 Hz.
+
+**Confirmed by direct A/B on the device (2026-07-30), not inferred.** With the
+reader stopped so fbcon owned the panel, `/sys/class/graphics/fbcon/cursor_blink`
+read `1` and the EBC interrupt ran at 63 Hz with the kthread in `D`. Unbinding
+fbcon (`echo 0 > /sys/class/vtconsole/vtcon1/bind`) — changing nothing else —
+took the interrupt to **exactly 0 Hz** and the thread to `I`. Re-binding
+restores the stall. The blinking console cursor is the entire damage source,
+and a client that quiesces it can then complete a global refresh: under the
+same conditions a `REFRESH_BARRIER` SUBMIT/WAIT pair that had previously
+expired at 10 s completed in about a second and credited its generation.
 
 **Why it matters beyond our barrier.** The legacy `ioctl_trigger_global_refresh`
 uses the same `do_one_full_refresh` handshake, so *any* userspace client asking
