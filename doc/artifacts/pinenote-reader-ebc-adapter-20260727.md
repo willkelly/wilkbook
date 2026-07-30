@@ -168,3 +168,21 @@ the corrected procedure are in `doc/status.md`,
 campaign is a runtime sequence (unbind fbcon, verify the EBC is idle) and
 needs no rebuild, so the re-run can use exactly these identities. Suspend
 was never requested and remains disabled.
+
+## Campaign outcome, second run (2026-07-30): PASSED
+
+The same image, unchanged and un-rewritten, passed all five acceptance
+criteria under the corrected procedure: `sleep frame is visible … (generation
+1)`, `exact snapshot restored (generation 2)`, exit 0, with the reader
+restarting and settling to a quiescent EBC. Across the session `dmesg` gained
+four lines, all benign fbcon bind/unbind transitions, and every failure grep
+was zero.
+
+**The generation barrier is hardware-proven.** The SUBMIT/WAIT pair that
+expired at 10 s on 2026-07-29 completed in about a second once fbcon was off
+the panel. While the run was parked at its acknowledgement prompt, `/dev/fb0`
+hashed `7d94be71…cd97` — byte-for-byte the offline reference from
+`ebc-card-reference` — proving the paint path was always correct and that last
+session's blank panel was the starved refresh never driving it. The card's
+1-px border is occluded by the bezel (measured: the outermost 4–10 px), not
+missing. Suspend remains disabled; this is still not suspend permission.

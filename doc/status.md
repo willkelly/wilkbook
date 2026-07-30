@@ -1,6 +1,63 @@
 # Hardware status
 
-Last updated: 2026-07-29.
+Last updated: 2026-07-30.
+
+**2026-07-30 EBC barrier campaign: PASSED. The generation barrier is
+hardware-proven, and the starvation cause is now measured rather than
+inferred.** Same unchanged 2026-07-28 image on os2 (system generation
+`jswc6b1vhx07z7c7llgrns86wnqkkdgb-system`, root on `/dev/mmcblk0p6`); no
+rebuild and no write. Run under the corrected procedure in
+`doc/hardware-deploy.md`:
+
+```
+pinenote-ebc-sleep-frame-test: sleep frame is visible; press Enter on /dev/tty to restore (generation 1)
+pinenote-ebc-sleep-frame-test: exact snapshot restored (generation 2)
+EXIT=0
+```
+
+*Acceptance, all five criteria.* (1) The card rendered — the X was plainly
+visible on the glass, and its 1-px border is occluded by the bezel, not
+missing (see the bezel measurement below); framebuffer content was
+independently proven byte-exact. (2) Two nonzero generations, 1 and 2.
+(3) `exact snapshot restored` with the second barrier completing; note this
+was confirmed by the tool's own report and the subsequent normal repaint —
+a separate naked-eye confirmation of the restored pre-run image was not
+taken. (4) Exit 0. (5) The reader restarted and repainted normally, settling
+to a quiescent EBC (thread `I`, 0 IRQ across consecutive 5 s windows).
+Across the whole session `dmesg` gained four lines, all benign fbcon
+bind/unbind transitions, and every failure grep was zero.
+
+*The damage producer is now measured, not hypothesised.* A clean A/B taken
+before the run, with the reader stopped:
+
+| | fbcon bound | fbcon unbound |
+| --- | --- | --- |
+| `/sys/class/graphics/fbcon/cursor_blink` | **1** | n/a (`-1`) |
+| EBC IRQ | **63 Hz** | **0 Hz** |
+| `ebc-refresh` thread | **`D`** | **`I`** |
+
+`herd stop reader-session` alone reproduces the wedged state — 63 Hz and a
+`D` thread, matching 2026-07-29 exactly — and unbinding fbcon collapses it to
+*exactly zero*. The blinking console cursor was the entire damage source.
+This supersedes the 2026-07-29 entry's hedge that the producer was only a
+leading hypothesis.
+
+*The 2026-07-29 panel anomaly is closed.* While the diagnostic was parked at
+its acknowledgement prompt, `/dev/fb0` hashed
+`7d94be719f99c6684485f9f073d46c1a68fbdbe8b3461f62b7ad389bcf6acd97` — byte-for-byte
+the offline reference emitted by `pinenote/tools/ebc-barrier/ebc-card-reference`
+from the same `ebc_barrier_paint_card()` the device runs. The paint reaches the
+framebuffer correctly; last session's blank panel was the starved refresh never
+driving it, not a paint or damage defect.
+
+*Measured: the bezel occludes the outermost 4–10 px (~0.5–1.1 mm) on all
+sides.* A probe card of concentric 4-px rings at insets 0, 10, 25, 50, 100 and
+200 px showed five rings with bare glass outside the outermost visible one:
+the inset-0 ring (pixels 0–3) is hidden, the inset-10 ring is not. So the
+campaign card's 1-px border at pixel 0 renders and is simply not visible.
+Useful beyond this campaign — it is the reader UI's usable-area inset.
+
+Suspend remains disabled; none of this is suspend permission.
 
 **2026-07-29 EBC barrier campaign: the image booted, the barrier returned
 `-110`, and the cause is a starved refresh thread — root-caused the same
@@ -87,6 +144,10 @@ damage source faster than ~1.36 Hz starves the loop; fbcon's cursor blinks
 every 200 ms (`fbcon.c:781`, `cur_blink_jiffies = HZ / 5`, verified against the
 7.0.11 source).
 
+**[Superseded 2026-07-30: the producer was measured — `cursor_blink=1`, and
+unbinding fbcon took the EBC from 63 Hz to exactly 0 Hz with the thread going
+`D`→`I`. The paragraph below records what was known at the time.]**
+
 **The producer is the leading hypothesis, not a measurement.** `herd stop
 reader-session` does re-bind fbcon — the service unbinds it while the reader
 owns the panel and re-binds on stop
@@ -103,6 +164,10 @@ driver drives the black features too under exactly this starvation, and the
 contrast-boosted crop shows no border, diagonals, or centre block. Either the
 hairlines were driven and lost photographically, or the card's damage never
 reached `ctx->final`. Unresolved; it does not affect the verdict.
+**[Closed 2026-07-30: neither. The paint reaches the framebuffer byte-exactly
+(fb0 matched the offline golden), and once the refresh thread was not starved
+the card rendered on the glass. The 2026-07-29 panel was blank because the
+starved loop never drove it.]**
 
 *Ruled out on measurement, not argument.* The `refresh_waveform` difference
 (os2 = 6/GL16, os1 = 4/GC16) does **not** explain it: `wbf-info` against the
