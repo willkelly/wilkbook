@@ -10,9 +10,32 @@ black", stylus+touch UX "feels wrong".
 ## The flash, decoded from our own waveform
 
 All numbers decoded from this device's `ebc.wbf` (never committed) with
-`pinenote/tools/wbf` at the 28 °C temperature bin (index 9 of 13), 85 Hz
-frame clock. Notation: per-phase drive — `D` darken, `L` lighten,
-`.` neutral.
+`pinenote/tools/wbf` at the 28 °C temperature bin (index 9 of 13).
+Notation: per-phase drive — `D` darken, `L` lighten, `.` neutral.
+
+> **Timing-calibration correction (2026-07-29). Every phases→milliseconds
+> figure in this document, and in `doc/eink-research.md`, `ROADMAP.md`,
+> `pinenote/tools/wbf/README.md` and `pinenote/tools/optics/PLAN.md`, is low
+> by a factor of 1.33.** They were computed against an 85 Hz frame clock taken
+> from the `.wbf` header, but **the driver never reads that field** — it
+> appears only as an unused struct member (`frame_rate_bcd`/`frame_rate_hex`,
+> patch:1933-1934). The driver clocks the panel itself: `dclk` at 200 MHz
+> (patch:4807), 8 pixels per sdck (patch:4774), `sdck.htotal = 2208/8 = 276`
+> (patch:4778), vtotal 1421 — i.e. 276 × 1421 / 25 MHz = 15.688 ms/frame =
+> **63.744 Hz**. This was confirmed live on 2026-07-29: during a stuck refresh
+> the EBC interrupt ran at a measured 63.4 Hz (0.5 % from prediction).
+>
+> So the real durations are 1.33× longer: GC16/GL16 at 38 phases is ~596 ms,
+> not ~450 ms; DU ~298 ms, not ~224; A2 ~157 ms, not ~118. At the 23 °C bin
+> (46 phases) GC16/GL16 is ~722 ms.
+>
+> The constants have deliberately **not** been changed yet —
+> `ebc-replay.c`'s `PANEL_FPS 85.0` and `optics.py`'s
+> `expected_settle_s = 0.447` feed conclusions already recorded in this
+> document and in `doc/optics-dataset-2026-07.md`, so re-basing them is its
+> own reviewed pass with the affected findings re-derived, not a silent edit.
+> Ratios and A/B comparisons in this document are unaffected; only absolute
+> milliseconds are.
 
 ```
 GC16  white->white (15,15): DDDDDDDDDDDDDDLLLLLLL........LLLLLLL..
