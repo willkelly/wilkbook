@@ -162,6 +162,17 @@ independently useful, and 1–3 start roadmap track 4 without hardware:
          (not just read): the rung-2 teardown UAF (ASan-verified
          reproducer) and scheduler QUIRK E made device-visible as
          phase-index regressions.  Two PGM goldens committed.
+   - [x] **(a.2) Liveness is a first-class harness obligation** (added
+         2026-07-29 after the barrier campaign):
+         `ebc-logic/ebc-refresh-starvation-test` pins that a sustained damage
+         supply starves the global-refresh/`REFRESH_BARRIER` path, and its
+         period sweep shows the boundary is the waveform's phase count (starves
+         at ≤38-frame supply, drains at 39) rather than any timeout. The rung-2
+         and 7a suites had been *correctness*-complete and still missed a
+         multi-minute hardware hang, because nothing asserted that
+         `rockchip_ebc_refresh` ever **returns**. Still to do: a hard frame cap
+         in `shim/fake-ebc.h` so a non-terminating driver fails the gate
+         instead of hanging `make check`.
    - [ ] **(b) QEMU EBC device model** (~1–2 weeks; build when the
          reader track needs a UAPI-true offline target): ~300–500 line
          sysbus device carried as a Guix QEMU patch, bespoke ~100-line
@@ -285,7 +296,22 @@ the start of this track — no panel required. Policy background in
        LuaJIT EBC UAPI adapter and injected sleep-frame provider are host-proven,
        and a separate root-only diagnostic is packaged for the supervised
        paint/barrier/restore hardware rung. None is wired into `device.lua`, and
-       activation remains disabled. Upstream TF-A is a separate later recovery-qualified
+       activation remains disabled.
+       **The 2026-07-29 supervised run failed and the barrier is still
+       hardware-unproven, but the cause is known and is not in the barrier.**
+       `rockchip_ebc_partial_refresh` never returns while damage keeps arriving,
+       so `do_one_full_refresh` — the handshake both the barrier and the legacy
+       global-refresh ioctl depend on — was starved; the run reported `-110`
+       with an entirely silent kernel log. `herd stop reader-session` re-binds
+       fbcon, whose blinking cursor is the damage source, and the reader image
+       lacked stock os1's `vt.global_cursor_default=0`. Both mitigations are in
+       (cmdline argument for the next build, explicit fbcon unbind in the
+       campaign procedure) and the waveform hypothesis was measured out — GC16
+       and GL16 are both 46 phases at 23 °C. The re-run needs no rebuild: the
+       deployed image is unchanged and the correction is a runtime sequence.
+       Next hardware rung is that corrected campaign; see `doc/status.md` and
+       `doc/driver-findings-report.md`.
+       Upstream TF-A is a separate later recovery-qualified
        migration, never a hybrid. Production orchestration still needs reviewed
        capability providers, production sleep-frame wiring, explicit wake
        attribution, and display repair. No cover-triggered or idle autosuspend
