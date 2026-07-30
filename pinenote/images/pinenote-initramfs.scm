@@ -232,6 +232,20 @@ partition and loading PineNote display modules from the initrd.")
      ;; it the radio associates but the 4-way never completes
      ;; (hardware-confirmed 2026-07-10; doc/status.md, doc/networking.md).
      "brcmfmac.feature_disable=0x82000"
+     ;; Kill the fbcon cursor.  With console=tty0 the blinking cursor is a
+     ;; *periodic damage source* on the panel, and rockchip_ebc's partial
+     ;; refresh only exits when its area list drains while re-splicing the
+     ;; queue every frame (patch:4244-4247, 4269-4286).  A blink every
+     ;; ~200 ms against an area lifetime of ~47 frames (~746 ms at 63 Hz)
+     ;; means the list never empties, the refresh thread never returns to
+     ;; the top of its loop, and anything waiting on do_one_full_refresh --
+     ;; the generation barrier and the legacy global-refresh ioctl alike --
+     ;; is starved silently.  That starved the 2026-07-29 barrier campaign
+     ;; to -110 with a completely silent kernel log (doc/status.md).
+     ;; reader-session unbinds fbcon while it owns the panel, but re-binds
+     ;; it on stop, so the hazard is live for every maintenance window.
+     ;; Stock Debian on os1 ships exactly this argument.
+     "vt.global_cursor_default=0"
      "fw_devlink=off"))
 
 ;; Do NOT put rockchip_ebc.* parameters on the kernel command line: they

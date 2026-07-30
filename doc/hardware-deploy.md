@@ -67,9 +67,14 @@ identity. After boot, capture pre-run `dmesg`, then run only:
 
 ```sh
 sudo herd stop reader-session
-pgrep -af reader.lua                 # must print nothing
+# fbcon MUST be unbound before the diagnostic — see "Why fbcon must be
+# unbound" below.  reader-session re-binds it on stop, which starves the
+# refresh thread and makes the barrier unserviceable.
+echo 0 | sudo tee /sys/class/vtconsole/vtcon1/bind
+pgrep -af 'reader[.]lua'             # must print nothing (escape the dot!)
 sudo pinenote-ebc-sleep-frame-test --run
 # after visible card, Enter restoration, and zero exit:
+echo 1 | sudo tee /sys/class/vtconsole/vtcon1/bind
 sudo herd start reader-session
 ```
 
@@ -78,6 +83,33 @@ card, two nonzero generation IDs, exact visible restoration, zero exit, and a
 normal reader repaint. Any initial failure ends the campaign without retry;
 any restore failure or EBC timeout/poison/uncertain-ownership signature requires
 a reboot before further display work. This is not suspend permission.
+
+Before starting, confirm the EBC is actually idle:
+`ps -o stat= -C ebc-refresh` (or by name) must show **`I`**, not `D`, and the
+EBC IRQ line in `/proc/interrupts` must be roughly static. A `D` thread or a
+tens-of-Hz interrupt rate means a refresh is already in flight and the barrier
+cannot be serviced — fix that before spending the run.
+
+**Why fbcon must be unbound.** `rockchip_ebc_partial_refresh` loops
+`for (frame = 0;; frame++)` and exits only when its area list drains
+(patch:4244-4247), while re-splicing `ctx->queue` into that list every frame
+(patch:4269-4286). `rockchip_ebc_refresh_thread` reads `do_one_full_refresh`
+only at the top of that outer loop (patch:4616-4626), so any sustained damage
+source starves the global refresh the barrier depends on — silently, because
+each individual frame completes and the 3 s `EBC_REFRESH_TIMEOUT` never fires.
+`reader-session` unbinds fbcon precisely to avoid this and **re-binds it on
+stop** (`pinenote/services/reader-session.scm:20`), so `herd stop` alone hands
+the panel back to a blinking console cursor. This is what failed the
+2026-07-29 campaign with `-110` and an entirely silent kernel log; see
+`doc/status.md` and `doc/driver-findings-report.md`. Re-running under the
+corrected sequence is a *new* campaign against a known cause, not the
+forbidden blind retry of an unexplained failure.
+
+**Optics-box sessions.** KOReader owns both frontlight channels and zeroes
+them on exit, so after `herd stop reader-session` set
+`backlight_cool`/`backlight_warm` to 153 again or the box is pitch black. Let
+the camera's auto-exposure settle — grab a burst and keep the last frame; a
+single grab after an idle period comes back black.
 
 ## Stop conditions
 
