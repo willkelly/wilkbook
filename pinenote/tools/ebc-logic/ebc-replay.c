@@ -11,7 +11,9 @@
  * and reports what the panel would have been asked to do: washes by
  * cause, the black-flash census (believed-white pixels driven dark),
  * pixel-phases of drive, settle latency per event, and end-of-trace
- * scrub staleness.  Time is modeled as an 85 Hz frame clock; wall-clock
+ * scrub staleness.  Time is modeled as a 63.744 Hz frame clock (the
+ * driver's own dclk-derived rate -- NOT the .wbf header's 85 Hz, which
+ * the driver never reads); wall-clock
  * gaps in the trace become idle frames that pass without device work.
  *
  * Replicas of device-side callers, deliberately minimal and documented
@@ -126,7 +128,34 @@ static u64 xr_next(u64 *s)
 
 #define PANEL_W		1872
 #define PANEL_H		1404
-#define PANEL_FPS	85.0
+/* The panel frame clock is set by the DRIVER, not by the waveform.  The
+ * .wbf header carries a frame_rate field (85 on this device) but the
+ * driver never reads it -- it exists only as an unused struct member
+ * (patch:1933-1934).  Do NOT take the frame rate from a .wbf again.
+ *
+ * Shipped config is dclk_select=0 (pinenote/services/ebc.scm:18, and the
+ * compiled-in default at patch:3143), so:
+ *   dclk            = 200 MHz                       (patch:4806-4807)
+ *   pixels_per_sdck = 8, from DRM_MODE_FLAG_CLKDIV2 (patch:4773-4774),
+ *                     programmed as SDCLK_DIV(7)    (patch:4838)
+ *   sdck.htotal     = mode.htotal / 8 = 2208/8 = 276 (patch:2591, :4778)
+ *   vtotal          = 1421, used raw                (patch:2596, :4849-4850)
+ * => 276 * 1421 / 25 MHz = 15.68784 ms = 63.7436 Hz.
+ * Mode-independent: all 8 modes share htotal/vtotal/CLKDIV2 and differ
+ * only in .clock, which dclk_select=0 discards and overwrites
+ * (patch:2774, :4918).  Cross-checked on hardware 2026-07-29: the EBC
+ * interrupt ran at 63.4 Hz during a stuck partial refresh (0.5 % low --
+ * a software-paced lower bound; doc/status.md).
+ *
+ * Do NOT derive this from replay_mode_set(): that mode is synthetic and
+ * arbitrary at every scale except 1.
+ */
+#define PANEL_DCLK_HZ		200000000.0
+#define PANEL_PX_PER_SDCK	8
+#define PANEL_HTOTAL_SDCK	276
+#define PANEL_VTOTAL		1421
+#define PANEL_FPS		(PANEL_DCLK_HZ / PANEL_PX_PER_SDCK / \
+				 ((double)PANEL_HTOTAL_SDCK * PANEL_VTOTAL))
 #define FB_STRIDE	(PANEL_W * 4)	/* XR24, the deferred-io space */
 #define PAGE_SIZE_FB	4096
 /* the driver's hardcoded auto-refresh unit (gray4_size of the panel) */
@@ -705,7 +734,7 @@ struct replay {
 	const struct trace *tr;
 	double t0;
 
-	/* the 85 Hz timeline: effective frame = hw frame + idle offset */
+	/* the 63.744 Hz timeline: effective frame = hw frame + idle offset */
 	u64 idle_offset;
 	struct { u64 hw; u64 off; } *off_hist;
 	unsigned int off_hist_n;

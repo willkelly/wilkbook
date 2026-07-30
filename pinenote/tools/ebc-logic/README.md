@@ -259,7 +259,8 @@ policy — the KOReader-side layer our device target implements: the
 area-thresholded flash policy, waveform choices, and the driver params
 (`auto_refresh`, `refresh_threshold`, `split_area_limit`) — and drives
 the damage and global-refresh requests through the **real refresh-thread
-body** against the fake device, on a modeled 85 Hz frame clock (trace
+body** against the fake device, on the driver's own 63.744 Hz frame
+clock -- not the `.wbf` header's 85 Hz, which the driver never reads (trace
 wall-clock gaps become idle frames; events landing mid-refresh inject
 from the device's frame hook, exactly like a concurrent atomic update).
 
