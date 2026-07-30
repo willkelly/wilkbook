@@ -1,6 +1,120 @@
 # Hardware status
 
-Last updated: 2026-07-28.
+Last updated: 2026-07-29.
+
+**2026-07-29 EBC barrier campaign: the image booted, the barrier returned
+`-110`, and the cause is a starved refresh thread — root-caused the same
+session, offline, with no second boot.** The 2026-07-28 candidate booted from
+os2 and passed full identity confirmation. The one permitted supervised run of
+`pinenote-ebc-sleep-frame-test --run` then failed:
+
+```
+pinenote-ebc-sleep-frame-test: initial operation failed (-110; cleanup error 0); no restore or further EBC start was attempted
+```
+
+exit 1, **zero generation lines**, so acceptance failed on every criterion and
+the campaign ended without retry per `doc/hardware-deploy.md`.
+
+*Identity (all confirmed before the run):* system generation
+`jswc6b1vhx07z7c7llgrns86wnqkkdgb-system`; diagnostic
+`iacbgbk8dl5gj4dl0cwmcqwawbx2f4i3-pinenote-ebc-barrier-test-0.1.0`; KOReader
+`p3x3wfkl6pd82i1cn6szhkzrab2y6w3z-koreader-bin-2026.03`; `/boot/Image`
+`1302cd62…f611f3` and `/boot/config` `31095857…d609c` matching the matched
+bundle; ext4 UUID `70c4c247-0bbd-3a2e-f332-95ba70c4c247`, label `PNGuixRoot`,
+PARTLABEL `os2`; all six PineNote Lua targets matching the artifact manifest;
+`suspend_policy.lua` exactly `return false`; no dormant imports in
+`device.lua`; `CONFIG_ROCKCHIP_SUSPEND_MODE=y` with
+`CONFIG_ROCKCHIP_SUSPEND_MODE_ACTIVATE` absent. All four backup manifests
+verified immediately beforehand.
+
+*Recorded deviations from the written protocol.* No UART: the CH340 was not
+attached, so the session ran over Wi-Fi SSH as `root@os2` with operator
+approval; the kernel ring buffer supplied the whole boot log and the failure
+mode kept SSH alive, so nothing was lost. The binary was invoked directly
+rather than through `sudo` (already euid 0; this removed any chance of a sudo
+prompt consuming the acknowledgement byte). Read-only identity checks were run
+before `herd stop reader-session`. The frontlight had to be re-enabled after
+stopping the reader — KOReader owns both channels and zeroes them on exit.
+
+*What the kernel said.* Nothing. Across the entire run `dmesg` gained exactly
+one line, `Console: switching to colour frame buffer device 234x87` — fbcon
+rebinding when the reader stopped. No `Refresh timed out!`, no `Frame N timed
+out!`, no `*ERROR*`, no poison or uncertain-ownership line. `barrier_poison`
+was **provably 0**: `ioctl_refresh_barrier`'s WAIT path can only report
+`-EINPROGRESS` when `waited == 0` and no poison is set, because the wait
+condition is `(poison || completed_generation >= request_id)`. The `-110` is
+userspace's mapping of that expiry (`ebc-barrier.c:45-46`), not a kernel
+`-ETIMEDOUT`.
+
+*What the hardware was doing.* The `ebc-refresh/fdec0000.ebc` kthread sat in
+**`D`** (uninterruptible), not `I`, and was the only such task;
+`voluntary_ctxt_switches` climbed ~68/s; EBC IRQ 66 ran at a sustained
+**63.4 Hz** (634 interrupts / 10 s) for minutes *after* the tool exited. The
+panel washed to uniform white — the pre-run console text vanished — and the
+painted card never appeared. That is optically confirmed, not assumed: a 3×
+crop with contrast boost shows a featureless field, while the same crop of the
+pre-run frame resolves individual console glyphs, so the camera can resolve
+detail far finer than a full-screen diagonal.
+
+*Root cause.* `rockchip_ebc_partial_refresh` runs an unbounded
+`for (frame = 0;; frame++)` loop (patch:4101) whose only exit is the area list
+draining (patch:4244-4247) — and it re-splices `ctx->queue` into that list on
+**every frame** (patch:4269-4286). Under a sustained damage source the loop
+never returns, so `rockchip_ebc_refresh_thread` never gets back to the top
+where `do_one_full_refresh` is read (patch:4619). The barrier's SUBMIT had
+correctly allocated a generation and set the flag (patch:3216-3221); nothing
+was ever there to consume it, so the credit at patch:4653 never ran and WAIT
+correctly reported `-EINPROGRESS` (patch:3250). The in-loop wait is
+`EBC_FRAME_TIMEOUT` = **25 ms** (patch:2981, used at patch:4288), not the 3 s
+`EBC_REFRESH_TIMEOUT` (patch:2982) — every frame landed in ~15.7 ms, so no
+timeout fired and nothing was logged. That the 3 s global bound never fired
+either is precisely how we know the thread was never inside
+`rockchip_ebc_global_refresh` at all. Note the partial path refreshes with
+`default_waveform` (patch:4660), so `refresh_waveform` is not even on this
+code path.
+
+*The frame rate is a cross-check, not a coincidence.* `dclk_select=0` gives a
+200 MHz dclk; with `CLKDIV2` → 8 pixels/sdck, `sdck.htotal = 2208/8 = 276` and
+vtotal 1421, so 276 × 1421 / 25 MHz = 15.688 ms = **63.744 Hz** predicted
+against 63.4 Hz measured (0.5 %).
+
+*The os1 differential.* Stock Debian 6.12 on os1 keeps its refresh thread in
+`I` at ~3 Hz idle. Its kernel cmdline carries **`vt.global_cursor_default=0`**
+(`doc/device-runbook.md:29`) and `/sys/class/graphics/fbcon/cursor_blink` is
+`0`; the reader image's cmdline has no cursor setting. An area retires at
+`frame_delta > last_phase` (patch:4199), i.e. ~47 frames ≈ **737 ms**, so any
+damage source faster than ~1.36 Hz starves the loop; fbcon's cursor blinks
+every 200 ms (`fbcon.c:781`, `cur_blink_jiffies = HZ / 5`, verified against the
+7.0.11 source).
+
+**The producer is the leading hypothesis, not a measurement.** `herd stop
+reader-session` does re-bind fbcon — the service unbinds it while the reader
+owns the panel and re-binds on stop
+(`pinenote/services/reader-session.scm:20`), re-creating the "fbcon stomping"
+hazard it exists to prevent (`doc/koreader-spike.md:59-67`) — and the cursor
+fits every constraint. But nobody read `/sys/class/graphics/fbcon/cursor_blink`
+on os2 or captured a damage trace, and *any* source above ~1.36 Hz produces an
+identical signature. Reading that file is a next-boot item.
+
+*Open, and not to be written down as explained:* the painted card is 99.64 %
+white (9,377 black pixels of 2,628,288), so a washed panel is consistent with
+its background having been driven — but the offline probe against the verbatim
+driver drives the black features too under exactly this starvation, and the
+contrast-boosted crop shows no border, diagonals, or centre block. Either the
+hairlines were driven and lost photographically, or the card's damage never
+reached `ctx->final`. Unresolved; it does not affect the verdict.
+
+*Ruled out on measurement, not argument.* The `refresh_waveform` difference
+(os2 = 6/GL16, os1 = 4/GC16) does **not** explain it: `wbf-info` against the
+device's own waveform at the measured 23 °C gives GC16 = 46 phases and
+GL16 = 46 phases — identical area lifetimes.
+
+The EBC was never poisoned and no reboot was required for recovery; the device
+was returned to os1 normally. os2's `/var/log/messages` was harvested
+post-mortem through a `ro,noload` mount of p6 from os1, and p6 was confirmed
+unmounted afterwards. **The barrier's hardware semantics remain unproven** —
+this run never reached a global refresh. Suspend remains disabled and this was
+not suspend permission.
 
 **2026-07-28 signal-safe dormant EBC adapter candidate: written to os2 with
 exact readback verification; not booted.** A fresh reader artifact packages

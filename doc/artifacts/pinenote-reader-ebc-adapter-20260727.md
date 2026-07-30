@@ -138,8 +138,33 @@ flushed p6. A `bs=512 count=3799968 iflag=fullblock` readback over the exact
 written range produced matching SHA-256
 `1777dde4c5febd7eaaf9d763b422b48ab7d24ca5c75a615bc966406cf973ae64`.
 The final read-only check found root still on p5, p6 unmounted, and p6 labeled
-`PNGuixRoot` with ext4 UUID `70c4c247-0bbd-3a2e-f332-95ba70c4c247`. os2 has
-not been booted and the diagnostic has not run. No boot-selection or other
-partition write occurred. The next action is the separate UART-supervised boot
-and single test under the authoritative **EBC barrier campaign (one supervised
-run)** section in `doc/hardware-deploy.md`. This is not suspend permission.
+`PNGuixRoot` with ext4 UUID `70c4c247-0bbd-3a2e-f332-95ba70c4c247`. No
+boot-selection or other partition write occurred. This is not suspend
+permission.
+
+## Boot and campaign outcome (2026-07-29)
+
+This image booted from os2 on 2026-07-29 and passed full identity confirmation
+against the manifest above: system generation, diagnostic and KOReader store
+paths, `/boot/Image` and `/boot/config`, ext4 UUID and label, all six PineNote
+Lua target hashes, `suspend_policy.lua` exactly `return false`, no dormant
+imports in `device.lua`, and activation compiled out.
+
+**The single permitted supervised run failed.** `--run` reported
+`initial operation failed (-110; cleanup error 0); no restore or further EBC
+start was attempted`, exit 1, with zero generation lines, so acceptance failed
+and the campaign ended without retry. The framebuffer was painted and never
+restored; the panel was left washed white and the card never reached the glass.
+
+The cause is **not** in this artifact's code. `rockchip_ebc_partial_refresh`
+never returned while fbcon damage kept arriving, so the refresh thread never
+reached the `do_one_full_refresh` check the barrier depends on; `-110` is
+userspace's mapping of the WAIT expiry. `barrier_poison` was provably never
+set and the kernel logged nothing. Full evidence, the os1 differential, and
+the corrected procedure are in `doc/status.md`,
+`doc/driver-findings-report.md`, and `doc/hardware-deploy.md`.
+
+**This artifact is unchanged and remains deployed on os2.** The corrected
+campaign is a runtime sequence (unbind fbcon, verify the EBC is idle) and
+needs no rebuild, so the re-run can use exactly these identities. Suspend
+was never requested and remains disabled.
