@@ -1064,6 +1064,12 @@ static int replay_run(const char *fwdir, const struct trace *tr,
 		exit(1);
 	}
 	rp.max_hw_frames = 10u * 1000 * 1000;
+	/* Replay legitimately runs far past the shim's liveness cap: a long
+	 * trace is many thousands of real refreshes, and rp.max_hw_frames
+	 * above is already this tool's own bound.  Opt out explicitly rather
+	 * than raising the shared default, which exists to catch a
+	 * non-terminating refresh loop in the rung-7a tests. */
+	fake_ebc.hw_frame_cap = 0xffffffffu;
 	rp.defio_delay = (u64)llround((double)pol->defio_delay_ms *
 				      PANEL_FPS / 1000.0);
 	{

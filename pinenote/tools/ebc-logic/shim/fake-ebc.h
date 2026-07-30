@@ -36,6 +36,14 @@
 
 #define FAKE_EBC_MAX_EVENTS 4096
 
+/* Liveness backstop, see struct fake_ebc::hw_frame_cap.  Comfortably above
+ * every legitimate refresh-thread test (the starvation sweep's longest probe
+ * is ~761 frames) and far below "hangs forever".  Overridable at build time
+ * so the backstop itself can be exercised without a multi-minute run. */
+#ifndef FAKE_EBC_DEFAULT_FRAME_CAP
+#define FAKE_EBC_DEFAULT_FRAME_CAP 200000u
+#endif
+
 /* One record per DSP_FRM_START write (one per hardware frame in
  * three-window mode; one per whole refresh in LUT mode). */
 struct fake_ebc_event {
@@ -80,6 +88,17 @@ struct fake_ebc {
 	 * hw_frames / dsp_end_irqs / lut_uploads / config_done_writes /
 	 * out_low_writes) */
 	u32 hw_frames;			/* planes processed */
+
+	/* Liveness backstop.  rockchip_ebc_partial_refresh's frame loop
+	 * exits only when its area list drains while re-splicing ctx->queue
+	 * every frame, so a driver (or a test) that keeps damage arriving
+	 * faster than areas retire never returns -- the 2026-07-29 hardware
+	 * failure, see doc/driver-findings-report.md.  Without a bound that
+	 * presents as `make check` hanging forever rather than failing.
+	 * 0 selects FAKE_EBC_DEFAULT_FRAME_CAP; set UINT32_MAX to opt out
+	 * (ebc-replay does -- it replays long traces under its own
+	 * max_hw_frames bound). */
+	u32 hw_frame_cap;
 	u32 dsp_end_irqs;
 	u32 lut_uploads;		/* bulk writes to EBC_LUT_DATA */
 	u32 config_done_writes;
@@ -223,6 +242,25 @@ static void fake_ebc_plane(const u8 *prev, const u8 *next, const u8 *phase_buf,
 		}
 	}
 	fake_ebc.hw_frames++;
+
+	{
+		u32 cap = fake_ebc.hw_frame_cap ? fake_ebc.hw_frame_cap
+						: FAKE_EBC_DEFAULT_FRAME_CAP;
+
+		if (fake_ebc.hw_frames >= cap) {
+			fflush(stdout);
+			fprintf(stderr,
+"FAIL: fake-ebc liveness cap: the driver has run %u hardware frames without\n"
+"      the refresh call returning.  This is what a non-terminating\n"
+"      rockchip_ebc_partial_refresh looks like offline (see finding 9 in\n"
+"      pinenote/tools/ebc-logic/README.md); the loop exits only when its area\n"
+"      list drains and it re-splices ctx->queue every frame.  Aborting so the\n"
+"      gate fails instead of hanging.  If this run is legitimately this long,\n"
+"      raise fake_ebc.hw_frame_cap (UINT32_MAX opts out).\n",
+				fake_ebc.hw_frames);
+			abort();
+		}
+	}
 }
 
 static void fake_ebc_raise_dsp_end(void)

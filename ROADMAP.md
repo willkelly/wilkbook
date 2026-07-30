@@ -170,9 +170,12 @@ independently useful, and 1–3 start roadmap track 4 without hardware:
          at ≤38-frame supply, drains at 39) rather than any timeout. The rung-2
          and 7a suites had been *correctness*-complete and still missed a
          multi-minute hardware hang, because nothing asserted that
-         `rockchip_ebc_refresh` ever **returns**. Still to do: a hard frame cap
-         in `shim/fake-ebc.h` so a non-terminating driver fails the gate
-         instead of hanging `make check`.
+         `rockchip_ebc_refresh` ever **returns**. The backstop landed
+         2026-07-30: `shim/fake-ebc.h`'s `FAKE_EBC_DEFAULT_FRAME_CAP` aborts
+         with an actionable diagnostic instead of letting `make check` hang,
+         verified by building the starvation test against an artificially low
+         cap. `ebc-replay` opts out explicitly — it replays long traces under
+         its own `max_hw_frames` bound.
    - [ ] **(b) QEMU EBC device model** (~1–2 weeks; build when the
          reader track needs a UAPI-true offline target): ~300–500 line
          sysbus device carried as a Guix QEMU patch, bespoke ~100-line
