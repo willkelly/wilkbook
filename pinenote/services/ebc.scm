@@ -14,8 +14,15 @@
 ;; (pinenote packages firmware) — that one-shot is the mechanism that
 ;; actually applies parameters on the device (the initrd raw-loads the
 ;; module, so neither modprobe.d nor kernel-cmdline tokens reach it).
+;; The panfrost softdep is a module-ordering guard both postmarketOS
+;; (device-pine64-pinenote panfrost.conf) and PNDeb ship independently:
+;; load the EBC driver before the GPU so panfrost never claims the DRM
+;; device slot ahead of the display.  Our reader image doesn't load
+;; panfrost today (CONFIG_DRM_PANFROST=m, nothing modprobes it), so this
+;; is inert until something does — at which point the hazard is real.
 (define pinenote-ebc-modprobe-options
-  "options rockchip_ebc direct_mode=0 auto_refresh=0 refresh_threshold=60 split_area_limit=0 panel_reflection=1 prepare_prev_before_a2=0 dclk_select=0 refresh_waveform=6\n")
+  "options rockchip_ebc direct_mode=0 auto_refresh=0 refresh_threshold=60 split_area_limit=0 panel_reflection=1 prepare_prev_before_a2=0 dclk_select=0 refresh_waveform=6
+softdep panfrost pre: rockchip_ebc\n")
 
 (define (pinenote-waveform-shepherd-service _config)
   (list

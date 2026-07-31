@@ -249,7 +249,7 @@ new file mode 100755
 index 000000000..c65b19441
 --- /dev/null
 +++ b/arch/arm64/configs/pinenote_defconfig
-@@ -0,0 +1,1576 @@
+@@ -0,0 +1,1575 @@
 +CONFIG_DEFAULT_HOSTNAME="pinenote"
 +# CONFIG_SWAP is not set
 +CONFIG_SYSVIPC=y
@@ -731,7 +731,6 @@ index 000000000..c65b19441
 +CONFIG_ARM_SDE_INTERFACE=y
 +CONFIG_FIRMWARE_MEMMAP=y
 +CONFIG_DMI_SYSFS=y
-+CONFIG_ROCKCHIP_SIP=y
 +
 +##
 +## file: drivers/firmware/arm_scmi/Kconfig
