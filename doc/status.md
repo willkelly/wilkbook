@@ -91,17 +91,21 @@ count moved 38 → 46 exactly as the `.wbf` decode predicts while the pass count
 held at two. The method thus detected a temperature-bin crossing on its own.
 With 23 of 23 portrait turns at exactly 2.0 passes across two sessions and two
 temperature bins, the doubling is **deterministic, not a timing race**; the
-mechanism is a 50 ms deferred-io period (`drm_fbdev_shmem.c:184`,
-`fbdefio.delay = HZ / 20`) against a repaint that exceeds it in **either**
-orientation. Both orientations flush twice; only the overlap differs. Landscape
-writes contiguously, so the two flushes are disjoint row bands that begin
-together and advance concurrently in one frame loop (~46 frames, reads as one
-pass); portrait's rotated write dirties every page on its first logical row, so
-both flushes emit the whole screen, overlap totally, and must be serialised
-(2 × 46 = 92). The reported visual confirms it — `[old] → [new | old] →
-[new]`, i.e. the first pass carries correct new content only as far as the
-repaint had reached, so the visible boundary is the repaint's progress marker
-rather than a damage edge. The same capture also shows damage rects
+defect is repaint duration versus the deferred-io window, and **rotation is
+only a way of being slow**. Established by controlled on-device probes
+(`pinenote/tools/ebc-damage-probe/`) that write chosen patterns straight to the
+framebuffer with no KOReader involved: each deferred-io flush costs one whole
+refresh pass and passes do not pipeline, with **disjoint** damages costing
+exactly what overlapping ones do (76 frames either way) — which refuted the
+overlap explanation. With no transpose at all and duration as the only
+variable, one contiguous full-screen write costs 38 frames at 0 ms spread and
+76 at 40 ms and beyond, saturating there. The window is 50 ms, set by DRM core
+(`drm_fbdev_shmem.c:184`, `fbdefio.delay = HZ / 20`), and a contiguous
+full-screen fill alone costs ~29 ms of it. Landscape lands inside; portrait
+does not. That accounts for the exact 2.0×, its independence from content and
+temperature, the saturation at two, and the reported `[old] → [new | old] →
+[new]`. Three earlier explanations recorded here — late damage, a timing race,
+and overlap serialisation — were each killed by measurement. The same capture also shows damage rects
 inflated 28 px per side and escaping the screen bounds (1460 wide on a
 1404-wide screen, 1928 on 1872, one line with `x=-28`). Both findings, the
 method, and the replayable trace are in `doc/refresh-policy.md` and

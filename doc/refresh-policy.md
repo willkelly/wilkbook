@@ -383,48 +383,69 @@ two sessions. **A timing race does not produce results that clean** — so the
 "repaint happens to span two flush periods" framing is wrong too, and the
 behaviour is deterministic.
 
-*Mechanism (settled by the reported visual).* The observed sequence is
-`[old] -> [new | old] -> [new]`: the first pass paints **correct new content on
-part of the page** while the rest still shows the old page, and the second pass
-brings the remainder up to date. That is the signature of a **whole-screen
-damage flushed mid-repaint** — the damage covers everything, so the EBC
-refreshes everything, but the framebuffer only *holds* new content where the
-repaint has reached; the rest refreshes to the old content it still contains.
-The visible boundary is therefore the repaint's progress marker at flush time,
-not a damage edge. (An earlier phrasing here, that the first pass paints
-"largely stale" content, was wrong in degree: a substantial portion is
-correctly new.)
+*Mechanism (settled 2026-07-30 by controlled on-device probes).* Three
+successive explanations here were wrong — a slow blit delivering the second
+damage ~600 ms late, then a timing race, then overlapping areas being
+serialised — and each was killed by measurement rather than argument. The
+probes in `pinenote/tools/ebc-damage-probe/` settle it by writing chosen
+patterns straight into the framebuffer with no KOReader, no rotation and no
+input involved.
 
-The deferred-io period is **50 ms**, set by DRM core, not by this driver:
-`drm_fbdev_shmem.c:184`, `fb_helper->fbdefio.delay = HZ / 20`. A full-screen
-repaint exceeds it in either orientation, so **both orientations flush twice**.
-The asymmetry is not how many flushes happen — it is whether the two resulting
-damage areas *overlap*:
+**Each deferred-io flush costs one whole refresh pass, and passes do not
+pipeline.** Spatial arrangement is irrelevant:
 
-- **Landscape** writes contiguously, so flush 1 is a band of rows and flush 2
-  is the rest. The two areas are **disjoint**, `rockchip_ebc_schedule_area`
-  lets them begin together, and they advance concurrently inside one frame
-  loop: ~46 frames total, indistinguishable from a single pass.
-- **Portrait** draws through a rotated view, so each logical row touches one
-  pixel in every framebuffer row and the first row alone dirties every page.
-  Both flushes therefore emit the **whole screen**, the two areas overlap
-  totally, and the scheduler must serialise the second past the first's active
-  window: 2 x 46 = 92 frames.
+| pattern | frames |
+| --- | --- |
+| 1 full-screen write | 38 (1 pass) |
+| 2 full-screen writes, 250 ms apart | 76 (2 passes) |
+| 2 **disjoint** half writes, 250 ms apart | 76 (2 passes) |
+| 2 full-screen writes, 10 ms apart | 0 — coalesced, then `diff_mode`-masked |
+| 3 full-screen writes, 250 ms apart | 76 — saturates; redundant areas dropped |
 
-That accounts for the exact 2.0x with no timing coincidence, for its
-independence from page content and temperature, and for the reported visual —
-all from one 50 ms timer and one page-dirtying geometry.
+Disjoint damages cost exactly what overlapping ones do, which is what refuted
+the overlap explanation.
 
-*Consequences for a fix.* Three levers, none yet evaluated: make a full-screen
-repaint land in one flush (raise the defio period — a DRM-core value, and it
-trades against latency); make portrait's damage contiguous like landscape's by
-rendering offscreen and copying in framebuffer order; or accept the cost and
-default the reader to landscape. Still unconfirmed kernel-side: a direct count
-of deferred-io flushes per repaint, which would nail the two-flush claim in
-both orientations rather than inferring it.
+**And rotation is not the defect at all — it is only a way of being slow.**
+With no transpose anywhere, identical contiguous access order, and elapsed
+duration as the single variable:
 
-Replayable evidence:
-`pinenote/tools/ebc-logic/traces/2026-07-30-portrait-vs-landscape.trace`.
+| write spread over | frames | passes |
+| --- | --- | --- |
+| 0 ms | 38 | 1.0 |
+| 40 ms | 76 | 2.0 |
+| 80 / 150 / 250 / 400 ms | 76 | 2.0 |
+
+The pass count doubles as soon as a repaint spans ~40 ms and then saturates.
+The whole defect is therefore: **does a repaint finish inside the deferred-io
+window?** That window is 50 ms, set by DRM core, not by this driver —
+`drm_fbdev_shmem.c:184`, `fb_helper->fbdefio.delay = HZ / 20`. A contiguous
+full-screen fill alone costs ~29 ms of it, so the slack is only ~20 ms.
+
+Landscape repaints land inside the window and cost one pass; portrait repaints
+(rotated, and therefore slower) miss it and cost two. That is the entire
+mechanism, and it explains every measurement: the exact 2.0x, its independence
+from page content and from temperature, the saturation at two rather than
+three, and the reported `[old] -> [new | old] -> [new]` visual — the first pass
+publishes whatever the repaint had written when the timer fired.
+
+*Fix options, with their real costs.* None is free, and the choice is a
+judgement call rather than a technical one:
+
+1. **Default the reader to landscape.** Free and immediate, and the framebuffer
+   is landscape-native (1872x1404). Avoids the cost rather than removing it.
+2. **Raise the deferred-io period** so a slow repaint still lands in one flush.
+   The driver could override `info->fbdefio->delay` after `drm_fbdev_shmem_setup`,
+   so it is small and driver-local. But the period is also the floor on how
+   quickly *any* update reaches the panel, so raising it to cover a ~250 ms
+   portrait repaint would add that latency to pen strokes and typing. Bad trade
+   for a reading device unless made adaptive.
+3. **Make the portrait repaint fit in ~20 ms of slack.** This is upstream
+   KOReader's blitter, and our probe cannot say whether it is achievable: the
+   transpose figures above are LuaJIT loops and are loop-bound, not
+   memory-bound. A C or NEON transpose could be far cheaper. Measuring
+   KOReader's *actual* repaint cost is the prerequisite, and has not been done.
+
+Recommendation: (1) now, (3) investigated before (2) is considered.
 
 ## Damage rects are inflated 28 px per side and escape the screen (2026-07-30)
 
