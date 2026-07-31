@@ -64,6 +64,11 @@ code review — before a single reboot. That's the standard.
   globals, input architecture), and the replay-workbench plan.
 - `doc/driver-findings-report.md` — the community-facing writeup of driver
   bugs the host tools found.
+- `doc/upstream-register.md` — the standing list of what we owe the
+  community, where it would go, and what has to be true first. Nothing
+  ships upstream until the baseline reader/note-taking image is done and
+  the finding is proven in a system that actually works. Add rows as you
+  find things; don't send.
 - `doc/pinenote-flavors.md` — the system flavors.
 
 ## How to develop here
