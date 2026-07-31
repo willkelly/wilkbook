@@ -196,7 +196,8 @@ Current blockers after that gate passes:
   register restoration and explicit RK817 regulator suspend states. Their
   necessity with the installed BSP ATF and current mainline regulator drivers
   must be resolved by source comparison and UART evidence before `deep`, not
-  copied blindly;
+  copied blindly (the downstream half of that comparison is now located —
+  see "Community ultra-suspend series" below);
 - cover and RK817 wake properties are compiled in, but physical wake routing
   and PMIC child-event attribution are unproven.
 
@@ -671,3 +672,73 @@ a separately recovery-qualified upstream-TF-A migration. The attempt must be
 human-observed on UART with `os1` available, and acceptance requires a forced
 full EBC refresh after resume in addition to wake-source and service-health
 evidence.
+
+## Community ultra-suspend series (read 2026-07-31): the priced policy surface
+
+hrdl's `v6.19_ultra_suspend` branch (three commits on top of
+`v6.19_pinenote`: `af0f33629a`, `693fee1933`, `ee2c553f78`) is the first
+community answer to PineNote deep suspend, and it lands squarely on the
+BSP-ATF contract the 2026-07-24 firmware inventory identified. Read from
+fetched source, not summarized from hearsay:
+
+- **Mechanism** (`drivers/soc/rockchip/rockchip_pm_config.c`, fetched from
+  the branch): the probe reads a new `rockchip,suspend-state-override` DT
+  property (`:195`). In `pm_config_prepare()` the real
+  `state = suspend_state - PM_SUSPEND_MEM` is computed first (`:254`);
+  only then is `suspend_state` overridden (`:258`) and handed to
+  `sip_smc_set_suspend_mode(LINUX_PM_STATE, …)` (`:261`). The regulator
+  on/off list selection (`:272`/`:275`) still runs off real
+  `PM_SUSPEND_MEM`. So the override is **purely a firmware-handshake
+  change** — Rockchip `suspend_state=5` ("ultra") is requested from bl31
+  while Linux-side suspend semantics stay `mem`.
+- **DT policy payload**: three RK817 PMU rails flipped from on-in-suspend
+  to off-in-suspend — `vcca_1v8_pmu` (LDO_REG1), `vdda_0v9_pmu`
+  (LDO_REG3), `vcc_3v3_pmu` (LDO_REG6) — plus `sdmmc1` changed from
+  `keep-power-in-suspend` to `cap-power-off-card`.
+- **Claimed prize**: ~60 mW → ~11 mW suspend draw (~1 week → ~1.5 months
+  of standby). **This is hrdl's own commit-message figure, unreplicated by
+  anyone in our tree, and the branch is not known to be in daily use.**
+  PNDeb's `pn_record_power_usage.py` (a systemd-sleep hook diffing
+  `rk817-battery` `charge_now` across suspend) is the ecosystem's
+  measurement protocol for exactly this claim, and is the natural
+  verification method once a suspend exists to measure.
+
+What this changes for our program — and what it does not:
+
+- It does **not** remove a blocker. Activation, an active reviewed DT
+  policy, real coordinator providers, production sleep-frame wiring, and
+  the resume dependencies all still stand.
+- It **re-prices** the program: the prize was previously unquantified;
+  a claimed 5.5× standby extension is reader-defining if it replicates.
+- It makes "PineNote-specific ultra-suspend dependencies" **concrete**:
+  the whole policy surface is ~40 lines of DT we can model offline
+  against the compiled-DTB fixtures, with activation hard-off, before any
+  boot is spent.
+- It **confirms peripheral resume is the unsolved part** — hrdl included.
+  `693fee1933` carries an admitted `[HACK]` for cyttsp5 resume (on
+  `!device_may_wakeup`, power-control the touch controller; on failure,
+  toggle reset_gpio and swallow the error; the `cyttsp5_startup()` call is
+  commented out).
+- It **adds a blocker we did not have listed**: SC7A20 accelerometer
+  resume. hrdl's `v6.19_iio_accel` attempt is visibly unfinished (the
+  author's own "Still not enough…" comment). Our final4 autorotation
+  state-replay validation covered service disable/re-enable, not a real
+  system suspend.
+- **TPS65185 resume gap, now confirmed on both sides**: the mainline
+  7.0.11 `drivers/regulator/tps65185.c` we build (528 lines, checked
+  2026-07-31) has **no PM ops at all** — no suspend/resume callbacks —
+  and our patch only adds the IIO temperature provider. The downstream
+  half is hrdl's `~hrdl/pinenote-shared`
+  `patches/linux/0001-Rudimentary-attempt-to-keep-PMIC-usable-after-suspen.patch`,
+  which adds a resume callback re-running `tps65185_set_config` because
+  the PMIC's config registers do not survive suspend. This resolves the
+  "source comparison" TODO above: the gap is real, the fix shape is
+  known, and it must be evaluated (not copied) before any `deep` attempt.
+
+Before adopting even the offline model, one free check first: diff hrdl's
+`rockchip_pm_config.c`/`rockchip_sip.c` against our bsp-sip-probe donor
+(Samuel Holland's `72127ca`). Same filenames and lineage, but "our model
+can receive the override cheaply" is inferred until that diff is read.
+
+No hardware session is allocated or implied by any of this. The standing
+rule holds: nothing suspends until the qualification ladder says so.
