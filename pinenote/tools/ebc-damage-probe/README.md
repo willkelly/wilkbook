@@ -128,4 +128,17 @@ period. Under the shipped `conservative` governor the same code measures
 catches the governor mid-ramp. Pin the governor when benchmarking, and restore
 it afterwards.
 
+`parbench.c` — parallel NEON transpose, with optional core pinning, reporting
+best/median/worst plus the CPU frequency seen mid-run. Build as for
+`neonbench.c` but add `-pthread` and the cross kernel headers
+(`-I .../linux-libre-headers-cross-.../include`), which `_GNU_SOURCE` needs.
+Run `pb fb conservative` with the reader stopped and fbcon unbound.
+
+Result 2026-07-31, shipped `conservative` governor, 28 samples per variant:
+**three threads unpinned never exceeded 43.1 ms**, against 123.6 ms worst for
+single-threaded. ×3 beats ×4 (leave a core free), and pinning *hurts* at low
+thread counts because idle cores drag the load average below the governor's
+`up_threshold=80`. All four cores share one cpufreq policy, so pinning cannot
+raise the clock regardless.
+
 See `doc/refresh-policy.md`, "Portrait page turns cost two refresh passes".

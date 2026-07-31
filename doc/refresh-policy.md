@@ -566,15 +566,41 @@ NEON 4x4, tile 128         -> fb :  45.7, 46.0 ms
 *does* fit — the transpose was never the wall; available CPU frequency is. The
 governor was restored to `conservative` immediately afterwards.
 
-*Practical reading.* The shadow buffer plus a NEON transpose fits 50 ms at full
-clock with ~10 % margin, and misses it under `conservative`'s lazy ramp. Three
-ways to close that, none yet tried: raise the defio period modestly (50 → 80 ms
-covers even the slow-clock case, and is far softer than the ~150 ms needed to
-contain today's diffuse 116-145 ms repaint); boost the clock for the duration
-of a repaint; or use a faster-ramping governor for the reader. This is a real
-interaction between the awake-power policy and display latency, and it is
-newly documented — `doc/power-management.md`'s conservative selection was made
-on energy grounds without this cost in view.
+*Parallel NEON fits the budget on the shipped governor (2026-07-31,
+`parbench.c`).* The governor interaction has a cause: `policy0` covers **all
+four cores** (one clock domain), and `conservative` has `up_threshold=80` with
+`freq_step=5` over a 408-1800 MHz range. A single-threaded burst is ~25 % system
+load on four cores — far under the 80 % up-threshold — so the governor barely
+ramps. Parallelising therefore helps twice: N× the compute, *and* enough load to
+pull the clock up.
+
+Worst case over four independent runs (7 samples each), `conservative`, into
+the framebuffer:
+
+| variant | best | median | **worst** | MHz seen |
+| --- | --- | --- | --- | --- |
+| NEON ×1 | 54.6 | 97.2 | **123.6** | 816 |
+| NEON ×2 | 37.4 | 45.8 | 74.5 | 816-1104 |
+| **NEON ×3** | 31.0 | 38.4 | **43.1** | 816-1416 |
+| NEON ×4 | 38.1 | 44.5 | 58.7 | 1104 |
+| NEON ×3 pinned | 28.5 | 37.2 | 46.4 | 816-1104 |
+| NEON ×2 pinned | 36.6 | 57.4 | 88.3 | 408-1608 |
+
+**Three threads, unpinned, never exceeded 43.1 ms across 28 samples on the
+shipped low-power governor** — inside the 50 ms period with margin, and with no
+governor change at all.
+
+Two results worth keeping. **×3 beats ×4**: leaving a core free avoids
+contending with the EBC refresh kthread and system work. And **pinning hurts**
+at low thread counts — ×2 pinned degraded to 88 ms worst, because pinning two
+threads to two cores leaves the other two idle, which drags the load average
+*down* and gives `conservative` even less reason to ramp. Core pinning cannot
+raise the clock here anyway: all four cores share one policy.
+
+This is still a real interaction between the awake-power policy and display
+latency, newly documented — `doc/power-management.md`'s `conservative`
+selection was made on energy grounds without this cost in view — but
+parallelism absorbs it rather than requiring the policy to change.
 
 Either way the correctness work on `screen.bb` aliasing still stands between
 here and a working patch.
