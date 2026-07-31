@@ -439,13 +439,39 @@ judgement call rather than a technical one:
    quickly *any* update reaches the panel, so raising it to cover a ~250 ms
    portrait repaint would add that latency to pen strokes and typing. Bad trade
    for a reading device unless made adaptive.
-3. **Make the portrait repaint fit in ~20 ms of slack.** This is upstream
-   KOReader's blitter, and our probe cannot say whether it is achievable: the
-   transpose figures above are LuaJIT loops and are loop-bound, not
-   memory-bound. A C or NEON transpose could be far cheaper. Measuring
-   KOReader's *actual* repaint cost is the prerequisite, and has not been done.
+3. **Make the portrait repaint fit inside the window.**
 
-Recommendation: (1) now, (3) investigated before (2) is considered.
+*Repaint cost, measured 2026-07-30 (`repaint-window.lua`).* KOReader's
+page-dirtying window for a full-screen portrait repaint is **37-50 ms, median
+~44 ms**, measured via `min_flt` on the reader process — the only way to see
+what deferred-io sees, since most of a page is written-but-unchanged and
+invisible to value sampling. Two consequences:
+
+- KOReader rewrites **all 2567 framebuffer pages** on every full-screen
+  repaint, *even when the result is identical* (the measured repaints faulted
+  every page yet produced zero EBC frames, `diff_mode` having masked them).
+  That is the direct explanation for the cost being invariant to page content.
+- The window sits **right on the 50 ms boundary**, not far beyond it. The
+  earlier LuaJIT transpose figures in this document (125-255 ms) are
+  loop-bound, not memory-bound, and badly overstate the real cost; they should
+  not be used to judge feasibility.
+
+So option 3 is a marginal change rather than a hopeless one: shaving ~10-20 ms
+would drop portrait to a single pass. Equally, option 2 becomes more
+attractive than first assessed — raising the period 50 -> 100 ms would
+comfortably contain a ~44 ms repaint, at a bounded worst-case latency cost
+rather than the ~300 ms the earlier 250 ms estimate implied.
+
+*Still unmeasured:* the repaint window for a real page turn **inside a
+document**. The figures above are a file-manager full-screen repaint, because
+the reader would not auto-open a book during the session; a text page adds
+layout and glyph rasterisation and is likely slower. That measurement is the
+remaining prerequisite for choosing between (2) and (3).
+
+Not recommended: **(1) as a default**. The reader is deliberately locked to
+portrait (`lock_rotation = true`), so defaulting to landscape would mean asking
+the user to hold the device differently to work around a software cost. It
+remains a valid *workaround* for anyone who reads in landscape anyway.
 
 ## Damage rects are inflated 28 px per side and escape the screen (2026-07-30)
 
