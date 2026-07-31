@@ -54,15 +54,23 @@ then-current "overlapping areas get serialised" explanation.
 `repaint-duration.lua` — with **no transpose at all**, identical contiguous
 access order, and duration as the only variable:
 
-| write spread over | frames | passes |
+| write spread over (nominal) | frames | passes |
 | --- | --- | --- |
 | 0 ms | 38 | 1.0 |
 | 40 ms | 76 | 2.0 |
 | 80 / 150 / 250 / 400 ms | 76 | 2.0 |
 
+**Caveat (2026-07-31):** those row labels were the probe's *sleep budget*;
+the sleeps stacked on top of the ~29 ms fill, so "40 ms" really spanned
+~64 ms and nothing between 29 and 64 ms was ever measured. The probe now
+times itself, prints the measured span per row, and pre-shrinks the sleep
+budget by the measured fill cost. Re-run it before quoting thresholds.
+
 So rotation is not the defect; it is merely a way of being slow. What matters
 is whether a repaint finishes inside the deferred-io window
-(`drm_fbdev_shmem.c:184`, `fbdefio.delay = HZ / 20` = 50 ms).
+(`drm_fbdev_shmem.c:184`, `fbdefio.delay = HZ / 20` = 50 ms — now a
+`defio_delay_ms` module parameter on our driver; see
+`doc/refresh-policy.md`, publish-on-call).
 
 `write-cost.lua` — full-screen write cost by access order: contiguous ~29 ms,
 column-order ~255 ms. **Caveat:** these are LuaJIT per-element loops and are
