@@ -516,12 +516,38 @@ framebuffer exposure — rather than the symptom.
 And it has a second, less obvious virtue: it **creates** the bulk transpose
 that does not currently exist, converting a cost smeared across every drawing
 primitive into one operation that can actually be optimised (tiled, or NEON).
-The open question then narrows to a single measurable number: **how fast is a
-cache-blocked transpose of the 10.5 MB framebuffer in C on this SoC?** The
-LuaJIT figures in this document (125-207 ms) are loop-bound and say nothing
-about it; the contiguous `memcpy` bound is 43 ms. That measurement — a small
-cross-compiled aarch64 benchmark — is the prerequisite for committing to this
-route, and has not been done.
+The open question then narrowed to a single measurable number: **how fast is a
+cache-blocked transpose of the 10.5 MB framebuffer in C on this SoC?**
+
+*Measured 2026-07-31* (`pinenote/tools/ebc-damage-probe/transbench.c`,
+cross-compiled aarch64, static):
+
+| operation | RAM → RAM | RAM → fb |
+| --- | --- | --- |
+| `memcpy` | **4.8 ms** | 35.3 ms |
+| naive gather transpose | 236.3 ms | 175.5 ms |
+| tiled 16×16 | 80.5 ms | 88.0 ms |
+| tiled 32×32 | 75.2 ms | 95.1 ms |
+| **tiled 64×64** | 68.8 ms | **67.8 ms** |
+
+**A bulk C transpose into the framebuffer is ~68 ms, so the shadow route does
+not fit the 50 ms period on its own** — but the gap is 1.36×, not the 2.3× of
+the current architecture, and two details suggest the remaining distance is
+incidental rather than fundamental. RAM→RAM and RAM→fb transposes cost the
+*same* (68.8 vs 67.8 ms), so the operation is cache-bound, not
+framebuffer-write-bound; and 68 ms is **14×** the 4.8 ms streaming floor for
+moving the same bytes. Tile size alone bought 3.5× over naive, and NEON 4×4
+block transposes are untried.
+
+The LuaJIT figures elsewhere in this document (125-207 ms) overstated this by
+~2×, exactly as their loop-bound caveat warned.
+
+*Practical reading.* Shadow buffer alone: no. Shadow buffer **plus a modest
+defio increase (50 → 80 ms)** comfortably contains a bounded, deterministic
+68 ms blit — and 80 ms is a far softer latency cost than the ~150 ms that
+containing today's diffuse 116-145 ms repaint would demand. Shadow buffer plus
+a NEON transpose might fit 50 ms unaided. Either is a real route; neither is
+free, and both need the correctness work on `screen.bb` aliasing.
 
 *Not measurable remotely:* the landscape half of the repaint A/B. Unlocking
 `lock_rotation` makes KOReader follow the gyro, i.e. the device's physical

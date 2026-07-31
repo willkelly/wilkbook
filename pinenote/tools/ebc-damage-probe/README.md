@@ -98,4 +98,24 @@ rather than measuring a file-manager repaint. Note the faults occur even on repa
 zero EBC frames because `diff_mode` masks the unchanged result — which is the
 direct explanation for the cost being invariant to page content.
 
+`transbench.c` — how fast is a **bulk** framebuffer transpose in compiled C?
+KOReader has no such operation today (rotation is per-access re-addressing,
+`ffi/blitbuffer.lua:673-674`), so this measures the shadow-buffer proposal's
+central cost. Build static and run with the reader stopped and fbcon unbound:
+
+```sh
+GCC=/gnu/store/...-gcc-cross-aarch64-linux-gnu-14.3.0/bin/aarch64-linux-gnu-gcc
+ST=$(ls -d /gnu/store/*glibc-cross-aarch64-linux-gnu-*-static | head -1)
+$GCC -O2 -static -o tb transbench.c -L$ST/lib
+```
+
+**Static matters:** a dynamically linked cross build embeds the *host's*
+cross-glibc store path as its ELF interpreter, which does not exist on the
+device — it dies before `main`.
+
+Result 2026-07-31: `memcpy` 4.8 ms RAM→RAM and 35.3 ms RAM→fb; best tiled
+(64×64) transpose **67.8 ms** into the framebuffer, against the 50 ms period.
+RAM→RAM and RAM→fb transposes cost the same, so it is cache-bound rather than
+write-bound, and 68 ms is 14× the streaming floor — NEON is untried headroom.
+
 See `doc/refresh-policy.md`, "Portrait page turns cost two refresh passes".
