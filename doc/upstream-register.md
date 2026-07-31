@@ -21,7 +21,7 @@ two things, on hardware, in daily use.
 
 The reason is credibility, and it's specific to our position. We are the
 only public 7.0.x PineNote tree (verified 2026-07-31: hrdl tops out at
-v6.19 with no 7.0 branch; postmarketOS ships 6.3.10). Everything we report
+v6.19 with no 7.0 branch; postmarketOS ships 6.19.3). Everything we report
 therefore arrives from a tree nobody else runs. A finding from a working
 daily-driver reader is a contribution; the same finding from a tree that
 has never been lived on is a code review from a stranger. We only get to
@@ -53,7 +53,10 @@ Seven latent driver issues found by the host tool suites, written up in
 `doc/driver-findings-report.md` (draft dated 2026-07-04, already addressed
 to the community).
 
-**For:** hrdl (`git.sr.ht/~hrdl/linux`), primarily.
+**For:** hrdl (`git.sr.ht/~hrdl/linux`) primarily, and ayakael as the
+postmarketOS kernel maintainer — the defect ships to users through
+pmaports `device/community`, so the report has a real audience downstream
+as well as upstream.
 **Why it's the top item:** it's already written, it's machine-verified
 against driver source rather than read, and it applies to code hrdl ships
 *today* — not just to our fork.
@@ -136,7 +139,7 @@ all assertions in the community and numbers here.
 ### 6. The 7.0.x forward-port itself — **parked**
 
 Genuinely scarce (we're the only public 7.0.x) but there is **no
-consumer**: hrdl hasn't branched past v6.19, postmarketOS ships 6.3.10.
+consumer**: hrdl hasn't branched past v6.19, postmarketOS ships 6.19.3.
 The EBC driver delta from `v6.19_ebc` to ours is only ~231 diff lines, so
 the porting value isn't in the driver anyway — it's in DTS, defconfig,
 tps65185 and PREEMPT_RT integration.
@@ -151,8 +154,8 @@ tps65185 and PREEMPT_RT integration.
 |---|---|---|---|
 | hrdl | `git.sr.ht/~hrdl/linux` — the live upstream, 69 heads, tops at v6.19 | sourcehut; likely `git send-email` to a list | **address not confirmed — look up before sending** |
 | m-weigand | `github.com/m-weigand/linux` — the root we forked | GitHub issues/PRs | dormant since ~Feb 2025 |
-| postmarketOS | pmaports `device/testing/{device,linux}-pine64-pinenote` | GitLab MR | kernel pinned to m-weigand `616dc3b` at 6.3.10; APKBUILD last touched 2024-07-30 |
-| ayakael | Forgejo fork feeding pmOS | — | `ayakael.net/forge/linux-pinenote` **404s** as of 2026-07-31; find current home before relying on it |
+| postmarketOS | pmaports `device/community/{device,linux}-pine64-pinenote` | GitLab MR on **`gitlab.postmarketos.org`** | **live** — kernel 6.19.3, device pkgver 11, maintainer Antoine Martin (ayakael) `<dev@ayakael.net>`. Builds vanilla kernel.org tarball + one big patch, same shape as us. Device package sources hrdl's `pinenote-dist` @ `28d2c05` |
+| ayakael | the Forgejo fork pmOS's kernel patch is generated from | via the pmOS maintainer address above | host `ayakael.net` is up (200) but `/forge/linux-pinenote` **404s**, including the exact `…/compare/526524233b…..v6.19.patch` URL pmaports fetches. Verified 2026-07-31. May be transient or a move — re-probe before relying on it |
 | dri-devel | mainline DRM | `git send-email` | only relevant if the driver is ever resubmitted; no EPD infrastructure in mainline and none pending |
 
 ## Standing caveats
@@ -162,6 +165,13 @@ tps65185 and PREEMPT_RT integration.
   re-verify before sending — the method that worked on 2026-07-31 is
   `https://git.sr.ht/~hrdl/linux/blob/<branch>/<path>`, which returns the
   raw file, plus `git ls-remote --heads` for tips.
+- **pmaports has a stale mirror on `gitlab.com` — do not read it.** It
+  still shows the PineNote kernel at 6.3.10 in `device/testing`, pinned to
+  a 2023-era m-weigand commit, APKBUILD last touched 2024-07-30. The
+  canonical instance is **`gitlab.postmarketos.org`**, where the same
+  package is 6.19.3 in `device/community` and actively maintained. This
+  cost an incorrect "postmarketOS is dead" conclusion on 2026-07-31;
+  don't repeat it.
 - **`doc/hrdl-evaluation.md` §3.3 is the standing strategy**: stay on the
   m-weigand lineage at 7.0.x, track `v6.19_ebc` as our rebase reference
   and `v6.19_ebc_custom` as the UAPI-direction reference.
