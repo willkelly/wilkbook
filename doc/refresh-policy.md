@@ -409,17 +409,27 @@ the overlap explanation.
 With no transpose anywhere, identical contiguous access order, and elapsed
 duration as the single variable:
 
-| write spread over | frames | passes |
+| write spread over (nominal) | frames | passes |
 | --- | --- | --- |
 | 0 ms | 38 | 1.0 |
 | 40 ms | 76 | 2.0 |
 | 80 / 150 / 250 / 400 ms | 76 | 2.0 |
 
-The pass count doubles as soon as a repaint spans ~40 ms and then saturates.
-The whole defect is therefore: **does a repaint finish inside the deferred-io
-window?** That window is 50 ms, set by DRM core, not by this driver —
-`drm_fbdev_shmem.c:184`, `fb_helper->fbdefio.delay = HZ / 20`. A contiguous
-full-screen fill alone costs ~29 ms of it, so the slack is only ~20 ms.
+*(Correction 2026-07-31: the "40 ms" row's label was the probe's sleep
+budget, not its span — the sleeps stacked on top of the ~29 ms fill, so
+that row really spanned ~64 ms. The measured ladder is therefore {~29 ms
+→ 1 pass, ~64 ms → 2 passes} with nothing measured in between; the exact
+threshold inside that gap was never established, and the shadow-route
+figures of 35–43 ms below sit inside it. `repaint-duration.lua` now
+times itself and reports measured spans. Under publish-on-call the gap
+is moot rather than resolved.)*
+
+The pass count doubles once a repaint's span crosses the deferred-io
+window and then saturates. The whole defect is therefore: **does a
+repaint finish inside the deferred-io window?** That window is 50 ms —
+`drm_fbdev_shmem.c:184`, `fb_helper->fbdefio.delay = HZ / 20` — but it is
+a plain writable per-helper field, not a DRM-core constant; see the
+publish-on-call section below.
 
 Landscape repaints land inside the window and cost one pass; portrait repaints
 (rotated, and therefore slower) miss it and cost two. That is the entire
@@ -438,7 +448,9 @@ judgement call rather than a technical one:
    so it is small and driver-local. But the period is also the floor on how
    quickly *any* update reaches the panel, so raising it to cover a ~250 ms
    portrait repaint would add that latency to pen strokes and typing. Bad trade
-   for a reading device unless made adaptive.
+   for a reading device unless made adaptive. *(The adaptive form is what was
+   ultimately built: raise the period AND publish explicitly at each refresh
+   call — see "publish-on-call" below.)*
 3. **Make the portrait repaint fit inside the window.**
 
 *Repaint cost, measured 2026-07-30 (`repaint-window.lua`).* KOReader's
@@ -602,13 +614,80 @@ latency, newly documented — `doc/power-management.md`'s `conservative`
 selection was made on energy grounds without this cost in view — but
 parallelism absorbs it rather than requiring the policy to change.
 
-Either way the correctness work on `screen.bb` aliasing still stands between
-here and a working patch.
+~~Either way the correctness work on `screen.bb` aliasing still stands between
+here and a working patch.~~ *(Superseded 2026-07-31: publish-on-call, below,
+needs no shadow buffer and therefore no aliasing audit.)*
 
 *Not measurable remotely:* the landscape half of the repaint A/B. Unlocking
 `lock_rotation` makes KOReader follow the gyro, i.e. the device's physical
 orientation, so isolating the rotation cost by comparing orientations needs
 someone to turn the tablet.
+
+### The adopted fix: publish-on-call (implemented 2026-07-31, offline-proven)
+
+The shadow-buffer route above solves the problem by making the repaint *fast
+enough to win a race*. The adopted fix removes the race. The 50 ms window is
+not a DRM-core constant: `drm_fbdev_shmem_driver_fbdev_probe()` writes
+`fb_helper->fbdefio.delay = HZ / 20` into a per-helper field
+(`drm_fbdev_shmem.c:184`), is `EXPORT_SYMBOL` (`:203`), and the fb core
+re-reads `fbdefio->delay` on **every** mkwrite fault (`fb_defio.c:297`) — it is
+never cached. Both sides of the seam are ours, so:
+
+1. **Driver** (`linux-pinenote-7.0-forward-port.patch`): a
+   `rockchip_ebc_fbdev_probe()` wrapper replaces `DRM_FBDEV_SHMEM_DRIVER_OPS`
+   — it calls the exported vanilla probe, then applies a new
+   **`defio_delay_ms`** module parameter (default 50 = bit-identical vanilla
+   behavior). Because the initrd raw-loads the module, the parameter is only
+   reachable via sysfs after probe, so its setter retargets the live helper's
+   `fbdefio.delay` — same idiom as `pinenote-apply-ebc-params` uses for every
+   other parameter.
+2. **KOReader device target** (`device.lua`): a `publish()` helper —
+   `fsync(screen.fd)` — at every `refresh*Imp`. `fb_deferred_io_fsync` is
+   `flush_delayed_work(&info->deferred_work)`: it runs the pending flush *now*
+   and returns without waiting for the e-ink pass (the flush ends at a
+   `schedule_work`); with nothing pending, the empty-pagereflist guard makes
+   it a free syscall, so the code biases toward calling it and carries no
+   per-tick latch. In `refreshFullImp` and both `flash_policy` branches the
+   publish precedes the global-refresh ioctl, turning "the wash paints the new
+   page" from a timing accident into an ordering guarantee
+   (`doc/pageturn-program.md`'s d2, upgraded).
+
+Neither half fixes portrait alone. The fsync publishes at the *refresh call*,
+which comes after painting — but the deferred-io timer starts at the first
+fault, so at 50 ms it still fires mid-repaint and pays the first pass. Raising
+`defio_delay_ms` past the repaint duration is what stops that; the fsync is
+what keeps latency from growing when the timer is raised. Together: exactly one
+damage event per repaint, by construction, in either orientation.
+
+What falls out for free: pen strokes stop waiting out the timer
+(`refreshFastImp`/`refreshA2Imp` were trace-only no-ops; they now publish on
+call — the shadow-buffer designs would have *regressed* the pen instead), and
+out-of-band framebuffer writers (probes, diagnostics) keep working, published
+by the raised timer as a fallback.
+
+What this retires: the shadow buffer, the `screen.bb` aliasing audit, and the
+NEON transpose as *fix components*. The transpose measurements above stand as
+the record of what the SoC can do and what the governor interaction costs.
+
+Offline validation (all green 2026-07-31): full aarch64 cross-build with the
+wrapper; `defio_delay_ms` confirmed in the built `.ko` (`parm=` metadata);
+`wbf`/`ebc-logic`/`rastersim` suites unchanged against the edited patch;
+`koreader-bin` builds with a new fail-loud grep assertion that the device
+probe survived `substitute*`; and `test-refresh-seam.lua` in the
+koreader-input harness loads the bundle's verbatim `ffi/framebuffer.lua` and
+asserts every overridden `refresh*Imp` still exists there, that all seven
+overrides call `publish()`, and that publish precedes wash — verified to fail
+on a renamed Imp and on a dropped publish call.
+
+Still hardware-gated: the choice of shipped `defio_delay_ms` value. The next
+probe session should sweep {50, 250, 1000} against the corrected
+`repaint-duration.lua` (which now reports measured spans) and confirm a
+~145 ms spread costs one pass at the raised values; the winner then gets
+pinned in `pinenote-apply-ebc-params` next to the other parameters. Until
+then the deployed behavior is bit-identical to today's. The single-pass
+portrait page turn itself is likewise unproven on glass until that session
+runs the uinput page-turn measurement with the raised value and fsync wiring
+together.
 
 Not recommended: **(1) as a default**. The reader is deliberately locked to
 portrait (`lock_rotation = true`), so defaulting to landscape would mean asking

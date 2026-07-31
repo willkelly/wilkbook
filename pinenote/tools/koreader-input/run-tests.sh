@@ -18,6 +18,13 @@
 #                               finding 10's userspace-wash policy).
 #   * test-touch-normalization.lua -- cyttsp5 source-gated MT-axis mirror
 #                               against measured TOP-mode calibration points.
+#   * test-refresh-seam.lua  -- publish-on-call seam: every refresh*Imp
+#                               the REPO device.lua overrides must still
+#                               exist on the bundle's verbatim
+#                               ffi/framebuffer.lua (loaded, not
+#                               grepped), and every override must call
+#                               publish() with publish-before-wash
+#                               ordering (doc/refresh-policy.md).
 #
 # Usage: run-tests.sh [/gnu/store/...-koreader-bin-...]
 #
@@ -102,6 +109,8 @@ run_case test-optics-inject.lua "$tool_dir/test-optics-inject.lua" \
 run_case test-idlewasher-logic.lua "$tool_dir/test-idlewasher-logic.lua" \
   "$koreader" "$idlewasher"
 run_case test-touch-normalization.lua "$tool_dir/test-touch-normalization.lua" \
+  "$koreader" "$device_lua"
+run_case test-refresh-seam.lua "$tool_dir/test-refresh-seam.lua" \
   "$koreader" "$device_lua"
 
 # Required-device loss is a poll/HUP contract, independent of input-event

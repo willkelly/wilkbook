@@ -2830,7 +2830,7 @@ new file mode 100755
 index 000000000..8db4c36cc
 --- /dev/null
 +++ b/drivers/gpu/drm/rockchip/rockchip_ebc.c
-@@ -0,0 +1,3177 @@
+@@ -0,0 +1,3241 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/*
 + * Copyright (C) 2021-2022 Samuel Holland <samuel@sholland.org>
@@ -3340,9 +3340,73 @@ index 000000000..8db4c36cc
 +			  DRM_AUTH),
 +};
 +
++/*
++ * Deferred-io flush period, in milliseconds.
++ *
++ * Vanilla drm_fbdev_shmem hardcodes fb_helper->fbdefio.delay = HZ / 20
++ * (50 ms).  Every flush that reaches this driver costs one full refresh
++ * pass (no pipelining, no coalescing across flushes), so a userspace
++ * repaint whose writes span the period is cut into two passes -- the
++ * measured cause of the portrait double-refresh.  The vanilla probe is
++ * exported and the fb core re-reads fbdefio.delay on every mkwrite
++ * fault, so wrapping the probe and (re)assigning the delay is the
++ * entire change; the default of 50 keeps vanilla behavior
++ * bit-identical until the parameter is deliberately changed.
++ *
++ * The setter also retargets the live helper: on the PineNote the
++ * module is raw-loaded from the initrd, so after boot this parameter
++ * is only reachable through sysfs, long after fbdev probe has run.
++ * The helper pointer is a single-device static in the same spirit as
++ * the rest of the driver's parameters; the fbdev client is never torn
++ * down in production.
++ */
++#ifdef CONFIG_DRM_FBDEV_EMULATION
++static struct drm_fb_helper *rockchip_ebc_defio_helper;
++
++static int defio_delay_ms = 50;
++
++static int defio_delay_ms_set(const char *val, const struct kernel_param *kp)
++{
++	int ms, ret;
++
++	ret = kstrtoint(val, 0, &ms);
++	if (ret)
++		return ret;
++	if (ms < 1 || ms > 10000)
++		return -EINVAL;
++	*(int *)kp->arg = ms;
++	if (rockchip_ebc_defio_helper)
++		rockchip_ebc_defio_helper->fbdefio.delay = msecs_to_jiffies(ms);
++	return 0;
++}
++
++static const struct kernel_param_ops defio_delay_ms_ops = {
++	.set = defio_delay_ms_set,
++	.get = param_get_int,
++};
++module_param_cb(defio_delay_ms, &defio_delay_ms_ops, &defio_delay_ms,
++		S_IRUGO|S_IWUSR);
++MODULE_PARM_DESC(defio_delay_ms,
++		 "deferred-io flush period in ms (50 = vanilla HZ/20)");
++
++static int rockchip_ebc_fbdev_probe(struct drm_fb_helper *fb_helper,
++				    struct drm_fb_helper_surface_size *sizes)
++{
++	int ret = drm_fbdev_shmem_driver_fbdev_probe(fb_helper, sizes);
++
++	if (ret)
++		return ret;
++	fb_helper->fbdefio.delay = msecs_to_jiffies(defio_delay_ms);
++	rockchip_ebc_defio_helper = fb_helper;
++	return 0;
++}
++#endif
++
 +static const struct drm_driver rockchip_ebc_drm_driver = {
 +	DRM_GEM_SHMEM_DRIVER_OPS,
-+	DRM_FBDEV_SHMEM_DRIVER_OPS,
++#ifdef CONFIG_DRM_FBDEV_EMULATION
++	.fbdev_probe		= rockchip_ebc_fbdev_probe,
++#endif
 +	.major			= 0,
 +	.minor			= 3,
 +	.name			= "rockchip-ebc",

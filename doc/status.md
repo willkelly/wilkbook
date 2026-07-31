@@ -112,6 +112,21 @@ method, and the replayable trace are in `doc/refresh-policy.md` and
 `pinenote/tools/ebc-logic/traces/2026-07-30-portrait-vs-landscape.trace`.
 No device state was changed to obtain either.
 
+*Fix implemented offline 2026-07-31 (publish-on-call), not yet
+hardware-proven.* The driver gained a `defio_delay_ms` module parameter (a
+`.fbdev_probe` wrapper over the exported vanilla probe; default 50 =
+bit-identical behavior; sysfs setter retargets the live helper because the
+initrd raw-loads the module), and the KOReader device target now fsyncs the
+fb fd at every `refresh*Imp` — publish-before-wash ordering included. Full
+aarch64 cross-build, `parm=` metadata in the `.ko`, all host suites, a
+fail-loud `substitute*` assertion in `koreader.scm`, and a new
+`test-refresh-seam.lua` (bundle-verbatim Imp seam + publish coverage,
+negative-tested both ways) are green. Hardware-gated remainder: sweep
+`defio_delay_ms` {50, 250, 1000} with the corrected `repaint-duration.lua`,
+pin the winner in `pinenote-apply-ebc-params`, and prove the single-pass
+portrait turn on glass. Until a value is applied, deployed behavior is
+unchanged. Details: `doc/refresh-policy.md`, "publish-on-call".
+
 **2026-07-29 EBC barrier campaign: the image booted, the barrier returned
 `-110`, and the cause is a starved refresh thread — root-caused the same
 session, offline, with no second boot.** The 2026-07-28 candidate booted from

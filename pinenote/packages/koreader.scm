@@ -143,7 +143,14 @@
                     "            return require(\"device/pinenote/device\")\n"
                     "        end\n"
                     "    end\n\n"
-                    line))))))
+                    line)))
+                ;; substitute* is silent when its pattern doesn't match:
+                ;; an upstream reindent of device.lua would drop the
+                ;; PineNote probe and ship the SDL fallback, diagnosable
+                ;; only on hardware.  Fail the build instead (grep exits
+                ;; non-zero => invoke raises).
+                (invoke "grep" "-q" "device/pinenote/device"
+                        (string-append kor "/frontend/device.lua")))))
           ;; The bundle's C++ pieces (crengine, k2pdfopt) and luajit
           ;; need libstdc++.so.6/libgcc_s.so.1, which upstream does not
           ;; ship.  Copy them from the toolchain into the bundle's own

@@ -4,8 +4,9 @@ Device abstraction for the Pine64 PineNote running wilkbook
 
 Runs directly on the fbdev emulation (/dev/fb0, 32bpp XR24) with evdev
 input — no compositor, no SDL. Partial screen updates reach the e-ink
-panel through the fbdev deferred-io path automatically; full refreshes
-use the driver's global-refresh ioctl.
+panel through the fbdev deferred-io path, published explicitly at each
+refresh call via fsync on the fb fd (publish-on-call) with the deferred-io
+timer as fallback; full refreshes use the driver's global-refresh ioctl.
 --]]
 
 local Generic = require("device/generic/device")
@@ -263,6 +264,24 @@ function PineNote:init()
             C.ioctl(drm_fd, DRM_GLOBAL_REFRESH, refresh_arg)
         end
     end
+    -- Publish-on-call (doc/refresh-policy.md): fsync on the fbdev fd is
+    -- fb_deferred_io_fsync -> flush_delayed_work, i.e. "run the pending
+    -- deferred-io flush now".  It does not wait for the e-ink pass (the
+    -- flush ends at a schedule_work), and with nothing pending the
+    -- empty-pagereflist guard makes it a no-op syscall -- so we bias
+    -- toward calling it and skip any per-tick latch.  Every refresh
+    -- intent below publishes its damage at the moment of the call
+    -- instead of waiting out the deferred-io timer: repaint duration
+    -- stops racing the flush period (the measured cause of the portrait
+    -- double-refresh), and pen strokes stop waiting 0-50 ms for the
+    -- timer.  In refreshFullImp/flash_policy the publish runs *before*
+    -- the global-refresh ioctl, making "the wash paints the new page"
+    -- an ordering guarantee rather than a timing accident.
+    local function publish()
+        if self.screen and self.screen.fd and self.screen.fd ~= -1 then
+            C.fsync(self.screen.fd)
+        end
+    end
     -- Flash intents wash the panel only when they cover at least this
     -- fraction of it.  Tunable via the G_reader_settings key
     -- "pinenote_flash_area_fraction" so the optics harness can sweep it
@@ -291,28 +310,35 @@ function PineNote:init()
             local rect_area = (tonumber(w) or 0) * (tonumber(h) or 0)
             if rect_area >= flash_area_fraction * screen_area then
                 trace(intent, "global", x, y, w, h, d)
+                publish()
                 global_refresh()
             else
                 trace(intent, "partial", x, y, w, h, d)
+                publish()
             end
         end
     end
     self.screen.refreshPartialImp = function(_, x, y, w, h, d)
         trace("partial", "partial", x, y, w, h, d)
+        publish()
     end
     self.screen.refreshUIImp = function(_, x, y, w, h, d)
         trace("ui", "partial", x, y, w, h, d)
+        publish()
     end
     self.screen.refreshFastImp = function(_, x, y, w, h, d)
         trace("fast", "partial", x, y, w, h, d)
+        publish()
     end
     self.screen.refreshA2Imp = function(_, x, y, w, h, d)
         trace("a2", "partial", x, y, w, h, d)
+        publish()
     end
     self.screen.refreshFlashUIImp = flash_policy("flashui")
     self.screen.refreshFlashPartialImp = flash_policy("flashpartial")
     self.screen.refreshFullImp = function(_, x, y, w, h, d)
         trace("full", "global", x, y, w, h, d)
+        publish()
         global_refresh()
     end
 
