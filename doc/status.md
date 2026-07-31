@@ -71,12 +71,18 @@ exceptions. Single-pass bursts ran 0.67–0.76 s against the recalibrated
 frame-clock work.
 
 KOReader issues exactly one intent per turn in both orientations, so the
-doubling is generated below it; and a clean 2 × 38 back-to-back means the
-driver's frame loop drained fully between the two passes, so it is not
-deferred-io splitting one damage into two concurrent bands. Leading
-explanation — untimed, so not yet confirmed — is that the portrait blit
-transposes a 1404×1872 logical buffer into the row-major 1872×1404 framebuffer
-and is still writing ~600 ms in. The same capture also shows damage rects
+doubling is generated below it. The doubled bursts are **continuous** — across
+all 13 multi-pass bursts the longest internal idle is 0 ms in eleven and one
+sample period in two — so both damage areas were already queued and the driver
+is correctly *serialising* them: `rockchip_ebc_schedule_area` defers an
+overlapping area past the active window, and two full-screen damages overlap
+totally, giving 76 continuous frames. Portrait yields two full-screen damages
+because KOReader draws through a rotated view of the row-major framebuffer, so
+each logical row touches every framebuffer row and dirties all pages at once;
+the repaint then spans two deferred-io flush periods. (An earlier reading of
+this capture — that a slow blit delivered the second damage ~600 ms late — is
+refuted by the absence of any such gap.) The repaint has still not been timed
+directly; it is upstream KOReader code. The same capture also shows damage rects
 inflated 28 px per side and escaping the screen bounds (1460 wide on a
 1404-wide screen, 1928 on 1872, one line with `x=-28`). Both findings, the
 method, and the replayable trace are in `doc/refresh-policy.md` and

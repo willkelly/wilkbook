@@ -331,23 +331,44 @@ portrait page turn. That is latency the reader feels and energy it spends.
 *What the evidence rules out.* KOReader issues exactly **one** intent per page
 turn in both orientations (4 turns -> 4 lines, both ways), so this is not the
 reader asking for two updates; it is generated below KOReader, where the intent
-trace has no visibility. It is also **not** deferred-io merely splitting the
-damage into two bands: two areas queued together ride the same frame loop
-concurrently and would cost ~38 frames total, not 76. A clean 2 x 38 back to
-back means the loop *drained completely between them* — the second damage
-arrived only after the first refresh had already retired, ~600 ms later.
+trace has no visibility.
 
-*Leading explanation, not yet confirmed.* The framebuffer is row-major
-1872x1404. In landscape KOReader's buffer already matches that layout, so a
-full-screen blit is a linear sweep. In portrait its 1404x1872 logical buffer
-must be **transposed** into the framebuffer — cache-hostile over 10.5 MB — and
-if that blit is still writing ~600 ms in, the driver refreshes what landed
-first, finishes, and then refreshes the remainder. Consistent with everything
-measured, but the blit duration itself has not been timed.
+*Mechanism (corrected 2026-07-30 from the same capture).* The doubled bursts
+are **continuous**: across all 13 multi-pass bursts the longest idle gap inside
+a burst is 0 ms in eleven and one sample period (~80 ms) in two. The two
+38-frame passes therefore run back to back, which means **both damage areas
+were already queued** — an earlier reading of this data, that the second damage
+arrived ~600 ms late while a slow blit finished, is refuted by the absence of
+any such gap.
 
-*To settle it:* time KOReader's blit in each orientation, and determine whether
-the two passes cover the whole screen or two halves. Neither needs a hardware
-campaign. Replayable evidence:
+What is actually happening is the driver correctly *serialising* two
+overlapping areas. `rockchip_ebc_schedule_area` sets `do_not_start_before_frame`
+so an overlapping area cannot begin inside another's active refresh window
+(`doc/driver-findings-report.md` finding 2, made to honour it in-tree
+2026-07-12). Two **full-screen** damage areas overlap totally, so the second is
+deferred to start at frame ~38: 76 continuous frames, exactly as measured.
+
+So the question is why portrait yields two full-screen damages where landscape
+yields one, and the answer is page-dirtying geometry rather than blit slowness.
+The framebuffer is row-major 1872x1404. KOReader draws straight into the
+mmapped framebuffer; in landscape its buffer matches that layout, so a repaint
+dirties pages contiguously and one deferred-io flush covers it. In portrait it
+draws through a **rotated** view, so each logical row maps to a framebuffer
+*column* and touches one pixel in every framebuffer row — dirtying essentially
+every page almost immediately. Flush 1 emits the whole screen, the repaint
+continues, flush 2 emits the whole screen again. The 114 and 152 bursts are
+repaints spanning three and four flush periods.
+
+The revised prediction is therefore much weaker than "600 ms": the portrait
+repaint need only span **two deferred-io flush periods (~50 ms each)**, not a
+full refresh. That has still not been timed directly — KOReader's repaint is
+upstream code, and our `refresh*Imp` hooks fire after it.
+
+*Cheap discriminator that needs no code:* if repaint duration is the variable,
+then a sparse page (little text) should fall back to a single pass in portrait
+while a dense page stays doubled. Same IRQ-sampling method, no instrumentation.
+
+Replayable evidence:
 `pinenote/tools/ebc-logic/traces/2026-07-30-portrait-vs-landscape.trace`.
 
 ## Damage rects are inflated 28 px per side and escape the screen (2026-07-30)
