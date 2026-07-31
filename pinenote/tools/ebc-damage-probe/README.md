@@ -83,9 +83,18 @@ white-on-white, so it is written but unchanged. An earlier attempt that way
 reported an 11-20 ms "write window" from 57 of 936 sample points, which was
 measuring content change, not writing.
 
-Measured 2026-07-30 on a full-screen portrait repaint: **~2570 faults over
-37-50 ms** (the framebuffer is 2567 pages, so KOReader rewrites *all* of it),
-against the 50 ms period. Note the faults occur even on repaints that produce
+Measured 2026-07-30, portrait, 24 C:
+
+| | window | faults | cost |
+| --- | --- | --- | --- |
+| file-manager repaint | 37-50 ms | ~2570 | content unchanged |
+| **document page turn** | **98-145 ms** | **4827-6361** | **76 frames = 2 passes** |
+
+The framebuffer is 2567 pages, so KOReader rewrites *all* of it; a document
+turn faults roughly twice that, which is two flush cycles (deferred-io
+re-protects after flushing and the still-running repaint faults them again).
+Only the document figure is representative — drive turns with the injector
+rather than measuring a file-manager repaint. Note the faults occur even on repaints that produce
 zero EBC frames because `diff_mode` masks the unchanged result — which is the
 direct explanation for the cost being invariant to page content.
 

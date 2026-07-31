@@ -462,11 +462,44 @@ attractive than first assessed — raising the period 50 -> 100 ms would
 comfortably contain a ~44 ms repaint, at a bounded worst-case latency cost
 rather than the ~300 ms the earlier 250 ms estimate implied.
 
-*Still unmeasured:* the repaint window for a real page turn **inside a
-document**. The figures above are a file-manager full-screen repaint, because
-the reader would not auto-open a book during the session; a text page adds
-layout and glyph rasterisation and is likely slower. That measurement is the
-remaining prerequisite for choosing between (2) and (3).
+*Document page turns measured (2026-07-30, portrait, 24 C).* Driving real
+turns with the uinput injector and sampling `min_flt`:
+
+| | page-dirtying window | faults | cost |
+| --- | --- | --- | --- |
+| file-manager full-screen repaint | 37-50 ms | ~2570 | (content unchanged) |
+| **document page turn** | **98-145 ms, median ~116** | **4827-6361** | **76 frames = 2.0 passes** |
+
+A real page turn is ~2.6x the file-manager repaint — layout and glyph
+rasterisation, as expected — and **2.3x over the 50 ms budget**. The fault
+count is roughly *twice* the framebuffer's 2567 pages, which is direct evidence
+of two flush cycles: deferred-io re-protects the pages after flushing, and the
+still-running repaint faults them all again.
+
+(Both earlier estimates were wrong in opposite directions: the LuaJIT
+transposes overstated it at 125-255 ms, the file-manager repaint understated it
+at ~44 ms. Only the injected document turn is representative.)
+
+*What that means for each option.* Closing a 2.3x gap by making KOReader's
+rotation blitter faster is a large ask of upstream code. Raising the period to
+~150 ms would contain a 145 ms repaint, but it is also the floor on how quickly
+*any* update reaches the panel, so it would put ~100 ms of extra lag on pen
+strokes — the wrong trade on a device with a stylus.
+
+**The more promising route is architectural, and it is in code we own.**
+KOReader's BlitBuffer *is* the mmapped framebuffer
+(`ffi/framebuffer_linux.lua:139`), so every glyph, every rotation, and every
+intermediate draw faults framebuffer pages and feeds deferred-io for the whole
+~116 ms. If drawing happened in a RAM shadow and only the finished frame were
+copied out, the deferred-io-visible window would shrink to that single copy —
+measured at **~29 ms** (`ffi.fill`) to **~43 ms** (`memcpy` from RAM), both
+inside 50 ms. Our device target already overrides the `refresh*Imp` entry
+points, which is where such a blit would go.
+
+Not free of risk: KOReader elsewhere assumes `screen.bb` aliases the
+framebuffer, so a shadow needs care, and ~43 ms leaves only ~7 ms of margin.
+But it is the one option that attacks the actual cause — the *duration* of
+framebuffer exposure — rather than the symptom.
 
 Not recommended: **(1) as a default**. The reader is deliberately locked to
 portrait (`lock_rotation = true`), so defaulting to landscape would mean asking
