@@ -383,18 +383,45 @@ two sessions. **A timing race does not produce results that clean** — so the
 "repaint happens to span two flush periods" framing is wrong too, and the
 behaviour is deterministic.
 
-The best remaining explanation is a deterministic consequence of the rotated
-write pattern rather than of its duration: because each logical row maps to a
-framebuffer column, the *very first* logical row already touches one pixel in
-every framebuffer row and therefore dirties every page. Deferred-io flushes the
-whole screen at that point — with the repaint barely started — re-protects the
-pages, and the remainder of the repaint dirties them all again, producing a
-second whole-screen flush when it completes. Two, always, regardless of how
-much ink is on the page. Landscape writes contiguously and needs one flush.
+*Mechanism (settled by the reported visual).* The observed sequence is
+`[old] -> [new | old] -> [new]`: the first pass paints **correct new content on
+part of the page** while the rest still shows the old page, and the second pass
+brings the remainder up to date. That is the signature of a **whole-screen
+damage flushed mid-repaint** — the damage covers everything, so the EBC
+refreshes everything, but the framebuffer only *holds* new content where the
+repaint has reached; the rest refreshes to the old content it still contains.
+The visible boundary is therefore the repaint's progress marker at flush time,
+not a damage edge. (An earlier phrasing here, that the first pass paints
+"largely stale" content, was wrong in degree: a substantial portion is
+correctly new.)
 
-That predicts the *first* pass paints largely stale content, which is optically
-checkable in the boxed rig, and it is directly confirmable kernel-side by
-counting deferred-io flushes per repaint. Neither is done yet.
+The deferred-io period is **50 ms**, set by DRM core, not by this driver:
+`drm_fbdev_shmem.c:184`, `fb_helper->fbdefio.delay = HZ / 20`. A full-screen
+repaint exceeds it in either orientation, so **both orientations flush twice**.
+The asymmetry is not how many flushes happen — it is whether the two resulting
+damage areas *overlap*:
+
+- **Landscape** writes contiguously, so flush 1 is a band of rows and flush 2
+  is the rest. The two areas are **disjoint**, `rockchip_ebc_schedule_area`
+  lets them begin together, and they advance concurrently inside one frame
+  loop: ~46 frames total, indistinguishable from a single pass.
+- **Portrait** draws through a rotated view, so each logical row touches one
+  pixel in every framebuffer row and the first row alone dirties every page.
+  Both flushes therefore emit the **whole screen**, the two areas overlap
+  totally, and the scheduler must serialise the second past the first's active
+  window: 2 x 46 = 92 frames.
+
+That accounts for the exact 2.0x with no timing coincidence, for its
+independence from page content and temperature, and for the reported visual —
+all from one 50 ms timer and one page-dirtying geometry.
+
+*Consequences for a fix.* Three levers, none yet evaluated: make a full-screen
+repaint land in one flush (raise the defio period — a DRM-core value, and it
+trades against latency); make portrait's damage contiguous like landscape's by
+rendering offscreen and copying in framebuffer order; or accept the cost and
+default the reader to landscape. Still unconfirmed kernel-side: a direct count
+of deferred-io flushes per repaint, which would nail the two-flush claim in
+both orientations rather than inferring it.
 
 Replayable evidence:
 `pinenote/tools/ebc-logic/traces/2026-07-30-portrait-vs-landscape.trace`.
