@@ -1,0 +1,50 @@
+# Real device trace: portrait-vs-landscape page-turn comparison, 2026-07-30.
+# os2 reader (2026-07-28 image), KOReader v2026.03, live over Wi-Fi SSH.
+# Captured while an EBC-interrupt sampler ran concurrently at ~11 Hz, so every
+# intent below is correlated with the exact number of hardware refresh passes
+# it cost (doc/refresh-policy.md, "Portrait page turns cost two refresh passes").
+#
+# Result: 8 full-screen portrait 'partial' turns cost 76 IRQs each (2 x 38-phase
+# passes); 8 landscape ones cost 38 (1 pass). Zero exceptions.
+#
+# Also visible here: damage rects inflated 28 px per side and escaping the
+# screen bounds -- 1460x... on a 1404-wide portrait screen, 1928x... on an
+# 1872-wide landscape one, and one line with x=-28.
+# Session ran with refresh_waveform=6 (GL16) globals, default_waveform=4 (GC16).
+[pn-refresh] full global rect=-28,0,1460,1872 dither=nil t=1785454592.175801
+[pn-refresh] partial partial rect=-28,1424,1460,448 dither=nil t=1785454596.299652
+[pn-refresh] ui partial rect=0,0,75,75 dither=nil t=1785454600.261416
+[pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1785454601.154616
+[pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1785454603.023768
+[pn-refresh] ui partial rect=0,0,75,75 dither=nil t=1785454603.527400
+[pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1785454604.854207
+[pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1785454606.423657
+[pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1785454609.705408
+[pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1785454611.777156
+[pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1785454613.552139
+[pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1785454618.523364
+[pn-refresh] ui partial rect=-28,1424,1460,448 dither=nil t=1785454621.502836
+[pn-refresh] fast partial rect=689,1491,188,86 dither=nil t=1785454624.004751
+[pn-refresh] full global rect=-28,0,1928,1404 dither=nil t=1785454624.004889
+[pn-refresh] partial partial rect=-28,956,1928,448 dither=nil t=1785454627.490587
+[pn-refresh] ui partial rect=0,0,75,75 dither=nil t=1785454630.996347
+[pn-refresh] partial partial rect=0,0,1872,1404 dither=nil t=1785454631.986371
+[pn-refresh] ui partial rect=0,0,75,75 dither=nil t=1785454632.071464
+[pn-refresh] partial partial rect=0,0,1872,1404 dither=nil t=1785454634.336697
+[pn-refresh] partial partial rect=0,0,1872,1404 dither=nil t=1785454636.312610
+[pn-refresh] partial partial rect=0,0,1872,1404 dither=nil t=1785454638.318984
+[pn-refresh] ui partial rect=0,0,75,75 dither=nil t=1785454644.253753
+[pn-refresh] ui partial rect=0,0,1872,1404 dither=nil t=1785454645.327352
+[pn-refresh] partial partial rect=0,0,1872,1404 dither=nil t=1785454645.652512
+[pn-refresh] partial partial rect=0,0,1872,1404 dither=nil t=1785454659.113694
+[pn-refresh] partial partial rect=0,0,1872,1404 dither=nil t=1785454660.325334
+[pn-refresh] partial partial rect=0,0,1872,1404 dither=nil t=1785454661.396875
+[pn-refresh] partial partial rect=0,0,1872,1404 dither=nil t=1785454662.779085
+[pn-refresh] ui partial rect=-28,956,1928,448 dither=nil t=1785454670.674860
+[pn-refresh] full global rect=-28,0,1460,1872 dither=nil t=1785454672.289721
+[pn-refresh] partial partial rect=-28,1424,1460,448 dither=nil t=1785454676.289414
+[pn-refresh] ui partial rect=0,0,75,75 dither=nil t=1785454680.382622
+[pn-refresh] ui partial rect=0,0,75,75 dither=nil t=1785454683.341882
+[pn-refresh] ui partial rect=0,0,75,75 dither=nil t=1785454684.396104
+[pn-refresh] ui partial rect=0,0,1404,1872 dither=nil t=1785454685.591822
+[pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1785454685.967968

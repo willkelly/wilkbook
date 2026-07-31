@@ -59,6 +59,30 @@ Useful beyond this campaign — it is the reader UI's usable-area inset.
 
 Suspend remains disabled; none of this is suspend permission.
 
+**2026-07-30 refresh accounting, same os2 session: portrait page turns cost
+exactly two refresh passes, landscape exactly one.** Measured by sampling the
+EBC interrupt counter at ~11 Hz while turning pages and correlating each burst
+against the device target's `[pn-refresh]` intent lines on shared epoch
+timestamps — one DSP_END per hardware frame, so a burst's interrupt count is
+its frame count. Eight full-screen portrait `partial` turns cost **76 IRQs**
+each (2 × the 38-phase GC16 partial); eight landscape turns cost **38**. Zero
+exceptions. Single-pass bursts ran 0.67–0.76 s against the recalibrated
+38 × 15.688 ms = 596 ms, incidentally cross-checking the same day's
+frame-clock work.
+
+KOReader issues exactly one intent per turn in both orientations, so the
+doubling is generated below it; and a clean 2 × 38 back-to-back means the
+driver's frame loop drained fully between the two passes, so it is not
+deferred-io splitting one damage into two concurrent bands. Leading
+explanation — untimed, so not yet confirmed — is that the portrait blit
+transposes a 1404×1872 logical buffer into the row-major 1872×1404 framebuffer
+and is still writing ~600 ms in. The same capture also shows damage rects
+inflated 28 px per side and escaping the screen bounds (1460 wide on a
+1404-wide screen, 1928 on 1872, one line with `x=-28`). Both findings, the
+method, and the replayable trace are in `doc/refresh-policy.md` and
+`pinenote/tools/ebc-logic/traces/2026-07-30-portrait-vs-landscape.trace`.
+No device state was changed to obtain either.
+
 **2026-07-29 EBC barrier campaign: the image booted, the barrier returned
 `-110`, and the cause is a starved refresh thread — root-caused the same
 session, offline, with no second boot.** The 2026-07-28 candidate booted from

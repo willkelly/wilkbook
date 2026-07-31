@@ -298,6 +298,82 @@ with linear reading).
   evtest captures of a pinch, a palm-while-writing trace, gpio-keys
   contents.
 
+## Portrait page turns cost two refresh passes (2026-07-30, measured on device)
+
+**A full-screen page turn in portrait drives the panel exactly twice; in
+landscape, exactly once.** Reported first as an eyeball observation — "it will
+notably refresh the upper part, then I see the lower part refresh shortly
+after", portrait only — and then quantified.
+
+*Method (cheap, reusable, no instrumentation).* Sample the EBC interrupt
+counter from `/proc/interrupts` at ~11 Hz over SSH while turning pages, group
+the samples into bursts separated by >=0.3 s of silence, and correlate each
+burst against the device target's own `[pn-refresh]` intent lines on shared
+epoch timestamps. One DSP_END fires per hardware frame, so a burst's interrupt
+count *is* its frame count, and a full-screen GC16 partial is 38 phases. This
+counts refresh passes directly rather than inferring them, and it needs no
+driver debug options, no `drm.debug` (which stomps fbcon), and no camera.
+
+| orientation | full-screen `partial` turns | IRQs each | passes |
+| --- | --- | --- | --- |
+| portrait (1404x1872 logical) | 8 | **76** | **2.0** |
+| landscape (1872x1404 logical) | 8 | **38** | **1.0** |
+
+Zero exceptions in either direction. Every burst in the capture was an exact
+multiple of 38 (single 38/39, doubled 76, and a few 114/152 during menu
+interaction). Single-pass bursts lasted 0.67-0.76 s against the 38 x 15.688 ms
+= 596 ms drive time — an incidental independent check on the same day's
+frame-clock recalibration.
+
+Cost: ~596 ms of extra panel drive and double the pixel-phases on every
+portrait page turn. That is latency the reader feels and energy it spends.
+
+*What the evidence rules out.* KOReader issues exactly **one** intent per page
+turn in both orientations (4 turns -> 4 lines, both ways), so this is not the
+reader asking for two updates; it is generated below KOReader, where the intent
+trace has no visibility. It is also **not** deferred-io merely splitting the
+damage into two bands: two areas queued together ride the same frame loop
+concurrently and would cost ~38 frames total, not 76. A clean 2 x 38 back to
+back means the loop *drained completely between them* — the second damage
+arrived only after the first refresh had already retired, ~600 ms later.
+
+*Leading explanation, not yet confirmed.* The framebuffer is row-major
+1872x1404. In landscape KOReader's buffer already matches that layout, so a
+full-screen blit is a linear sweep. In portrait its 1404x1872 logical buffer
+must be **transposed** into the framebuffer — cache-hostile over 10.5 MB — and
+if that blit is still writing ~600 ms in, the driver refreshes what landed
+first, finishes, and then refreshes the remainder. Consistent with everything
+measured, but the blit duration itself has not been timed.
+
+*To settle it:* time KOReader's blit in each orientation, and determine whether
+the two passes cover the whole screen or two halves. Neither needs a hardware
+campaign. Replayable evidence:
+`pinenote/tools/ebc-logic/traces/2026-07-30-portrait-vs-landscape.trace`.
+
+## Damage rects are inflated 28 px per side and escape the screen (2026-07-30)
+
+The same capture shows KOReader intents whose rects exceed the screen by
+exactly 56 px in width, in both orientations:
+
+```
+[pn-refresh] flashui global rect=-28,0,1460,1872     # portrait screen is 1404 wide
+[pn-refresh] ui      partial rect=-28,1424,1460,448
+[pn-refresh] full    global rect=0,0,1928,1404       # landscape screen is 1872 wide
+[pn-refresh] ui      partial rect=...,1928,448
+```
+
+1404 + 56 = 1460 and 1872 + 56 = 1928, with one line showing `x=-28`
+explicitly — i.e. 28 px added on each side, symmetric, orientation-independent.
+These are out-of-bounds damage rects handed to a driver that has a documented
+one-byte heap overrun on odd-`x2` edges and two blit edge-quirks
+(`doc/driver-findings-report.md` findings 1 and 5-7). The driver very likely
+clips them, but that has not been verified, and the inflation is ours to
+explain: it appears in KOReader's intent *before* it reaches the driver.
+
+Not yet investigated: where the 28 px comes from (a dither/AA margin, a
+rounding in KOReader's refresh-region expansion, or our device target's own
+area accounting), and whether the driver clips or blits out of range.
+
 ## First measured results (2026-07-11, the calibrated boxed rig)
 
 The full dataset behind this section — bundle catalog, per-claim evidence
