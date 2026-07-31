@@ -364,9 +364,37 @@ repaint need only span **two deferred-io flush periods (~50 ms each)**, not a
 full refresh. That has still not been timed directly — KOReader's repaint is
 upstream code, and our `refresh*Imp` hooks fire after it.
 
-*Cheap discriminator that needs no code:* if repaint duration is the variable,
-then a sparse page (little text) should fall back to a single pass in portrait
-while a dense page stays doubled. Same IRQ-sampling method, no instrumentation.
+*Density tested and refuted (2026-07-30, second capture).* Fifteen portrait
+page turns over deliberately mixed dense and sparse pages cost **exactly 92
+interrupts each — all fifteen, no spread at all**. Page content does not
+change the pass count.
+
+That second capture also cross-checked the waveform model for free. 92 is not
+2 x 38; it is **2 x 46**, and 46 is GC16's phase count in the cooler bin. The
+panel had drifted to 23.0 C (`tps65185 in_temp_input=23000`, `temp_index 7`)
+from the >=24 C bin of the first capture, so the per-pass phase count moved
+38 -> 46 exactly as the `.wbf` decode predicts while the pass count stayed at
+two. The method detected a waveform temperature-bin crossing without anyone
+consulting a thermometer.
+
+*What that leaves.* The doubling is invariant to page content, invariant to
+temperature, and exactly 2.0 in every one of 23 measured portrait turns across
+two sessions. **A timing race does not produce results that clean** — so the
+"repaint happens to span two flush periods" framing is wrong too, and the
+behaviour is deterministic.
+
+The best remaining explanation is a deterministic consequence of the rotated
+write pattern rather than of its duration: because each logical row maps to a
+framebuffer column, the *very first* logical row already touches one pixel in
+every framebuffer row and therefore dirties every page. Deferred-io flushes the
+whole screen at that point — with the repaint barely started — re-protects the
+pages, and the remainder of the repaint dirties them all again, producing a
+second whole-screen flush when it completes. Two, always, regardless of how
+much ink is on the page. Landscape writes contiguously and needs one flush.
+
+That predicts the *first* pass paints largely stale content, which is optically
+checkable in the boxed rig, and it is directly confirmable kernel-side by
+counting deferred-io flushes per repaint. Neither is done yet.
 
 Replayable evidence:
 `pinenote/tools/ebc-logic/traces/2026-07-30-portrait-vs-landscape.trace`.

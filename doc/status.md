@@ -81,8 +81,19 @@ because KOReader draws through a rotated view of the row-major framebuffer, so
 each logical row touches every framebuffer row and dirties all pages at once;
 the repaint then spans two deferred-io flush periods. (An earlier reading of
 this capture — that a slow blit delivered the second damage ~600 ms late — is
-refuted by the absence of any such gap.) The repaint has still not been timed
-directly; it is upstream KOReader code. The same capture also shows damage rects
+refuted by the absence of any such gap.)
+
+A second capture the same day settled the follow-up: fifteen portrait turns
+over mixed dense and sparse pages cost **exactly 92 interrupts each**, so page
+content does not change the pass count. 92 is 2 × 46, not 2 × 38 — the panel
+had drifted to 23.0 °C into the cooler waveform bin, so the per-pass phase
+count moved 38 → 46 exactly as the `.wbf` decode predicts while the pass count
+held at two. The method thus detected a temperature-bin crossing on its own.
+With 23 of 23 portrait turns at exactly 2.0 passes across two sessions and two
+temperature bins, the doubling is **deterministic, not a timing race**; the
+leading explanation is that the rotated write's first logical row already
+dirties every page, forcing one whole-screen flush before the repaint has
+meaningfully started and a second when it finishes. The same capture also shows damage rects
 inflated 28 px per side and escaping the screen bounds (1460 wide on a
 1404-wide screen, 1928 on 1872, one line with `x=-28`). Both findings, the
 method, and the replayable trace are in `doc/refresh-policy.md` and
