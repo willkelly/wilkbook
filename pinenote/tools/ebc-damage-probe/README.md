@@ -118,4 +118,14 @@ Result 2026-07-31: `memcpy` 4.8 ms RAM→RAM and 35.3 ms RAM→fb; best tiled
 RAM→RAM and RAM→fb transposes cost the same, so it is cache-bound rather than
 write-bound, and 68 ms is 14× the streaming floor — NEON is untried headroom.
 
+`neonbench.c` — the same question with NEON, and with a correctness check on
+every variant (a fast wrong transpose is worse than a slow right one). Build as
+for `transbench.c` but with `-O3`. Result 2026-07-31: NEON 4x4 block transpose
+reaches **48.1 ms RAM→RAM**, and **44.5-46.0 ms into the framebuffer when the
+CPU governor is pinned to `performance`** — inside the 50 ms deferred-io
+period. Under the shipped `conservative` governor the same code measures
+58-75 ms with ±25 % run-to-run spread, because a repaint is a burst that
+catches the governor mid-ramp. Pin the governor when benchmarking, and restore
+it afterwards.
+
 See `doc/refresh-policy.md`, "Portrait page turns cost two refresh passes".

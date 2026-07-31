@@ -542,12 +542,42 @@ block transposes are untried.
 The LuaJIT figures elsewhere in this document (125-207 ms) overstated this by
 ~2×, exactly as their loop-bound caveat warned.
 
-*Practical reading.* Shadow buffer alone: no. Shadow buffer **plus a modest
-defio increase (50 → 80 ms)** comfortably contains a bounded, deterministic
-68 ms blit — and 80 ms is a far softer latency cost than the ~150 ms that
-containing today's diffuse 116-145 ms repaint would demand. Shadow buffer plus
-a NEON transpose might fit 50 ms unaided. Either is a real route; neither is
-free, and both need the correctness work on `screen.bb` aliasing.
+*NEON measured 2026-07-31* (`neonbench.c`; every variant checked against a
+scalar reference before timing, all `ok`). A 4x4 NEON block transpose
+(`vtrnq_u32` + `vcombine`) beats scalar in every paired run:
+
+| | RAM → RAM | RAM → fb |
+| --- | --- | --- |
+| scalar tiled 64x64 | 68.2 ms | 74-97 ms |
+| **NEON 4x4, tile 64** | **48.1 ms** | — |
+| NEON 4x4 + prefetch, tile 64 | 56.3 ms | **58-75 ms** |
+
+**But the framebuffer figures are governor-bound, not algorithm-bound.** They
+vary ±25 % run to run because the shipped CPU governor is `conservative` (the
+awake-power program's choice) and a page-turn repaint is a *burst* that catches
+the governor mid-ramp. Pinning `performance` for the measurement:
+
+```
+NEON 4x4 + prefetch, tile 64 -> fb :  44.6, 44.5 ms
+NEON 4x4, tile 128         -> fb :  45.7, 46.0 ms
+```
+
+**44.5-46.0 ms, stable, and inside the 50 ms period.** So the shadow route
+*does* fit — the transpose was never the wall; available CPU frequency is. The
+governor was restored to `conservative` immediately afterwards.
+
+*Practical reading.* The shadow buffer plus a NEON transpose fits 50 ms at full
+clock with ~10 % margin, and misses it under `conservative`'s lazy ramp. Three
+ways to close that, none yet tried: raise the defio period modestly (50 → 80 ms
+covers even the slow-clock case, and is far softer than the ~150 ms needed to
+contain today's diffuse 116-145 ms repaint); boost the clock for the duration
+of a repaint; or use a faster-ramping governor for the reader. This is a real
+interaction between the awake-power policy and display latency, and it is
+newly documented — `doc/power-management.md`'s conservative selection was made
+on energy grounds without this cost in view.
+
+Either way the correctness work on `screen.bb` aliasing still stands between
+here and a working patch.
 
 *Not measurable remotely:* the landscape half of the repaint A/B. Unlocking
 `lock_rotation` makes KOReader follow the gyro, i.e. the device's physical
