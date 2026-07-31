@@ -480,8 +480,20 @@ still-running repaint faults them all again.
 transposes overstated it at 125-255 ms, the file-manager repaint understated it
 at ~44 ms. Only the injected document turn is representative.)
 
-*What that means for each option.* Closing a 2.3x gap by making KOReader's
-rotation blitter faster is a large ask of upstream code. Raising the period to
+*What that means for each option.* "Make the rotation 2.3x faster" is not a
+well-formed task, and it is worth being precise about why. **KOReader has no
+rotation pass to optimise.** `BlitBuffer:setRotation` merely sets a config bit
+(`ffi/blitbuffer.lua:673-674`, `MASK_ROTATED`); the logical-to-physical
+coordinate translation then happens *per access* (`:769-790`, and `:801`
+"getPixelP routines, working on physical coordinates"). The rotation cost is
+therefore smeared across every glyph and every primitive for the whole ~116 ms,
+and no bulk transpose exists anywhere in the current path. That is what makes
+it a large ask of upstream code — not that a transpose routine is slow, but
+that there is no transpose routine, only re-addressed drawing.
+
+It also means the ~29-43 ms bulk figures elsewhere in this document are **not**
+a comparison point for "the rotation": they are contiguous `memset`/`memcpy`
+with no rotation at all, and today's code performs no bulk operation. Raising the period to
 ~150 ms would contain a 145 ms repaint, but it is also the floor on how quickly
 *any* update reaches the panel, so it would put ~100 ms of extra lag on pen
 strokes — the wrong trade on a device with a stylus.
@@ -500,6 +512,21 @@ Not free of risk: KOReader elsewhere assumes `screen.bb` aliases the
 framebuffer, so a shadow needs care, and ~43 ms leaves only ~7 ms of margin.
 But it is the one option that attacks the actual cause — the *duration* of
 framebuffer exposure — rather than the symptom.
+
+And it has a second, less obvious virtue: it **creates** the bulk transpose
+that does not currently exist, converting a cost smeared across every drawing
+primitive into one operation that can actually be optimised (tiled, or NEON).
+The open question then narrows to a single measurable number: **how fast is a
+cache-blocked transpose of the 10.5 MB framebuffer in C on this SoC?** The
+LuaJIT figures in this document (125-207 ms) are loop-bound and say nothing
+about it; the contiguous `memcpy` bound is 43 ms. That measurement — a small
+cross-compiled aarch64 benchmark — is the prerequisite for committing to this
+route, and has not been done.
+
+*Not measurable remotely:* the landscape half of the repaint A/B. Unlocking
+`lock_rotation` makes KOReader follow the gyro, i.e. the device's physical
+orientation, so isolating the rotation cost by comparing orientations needs
+someone to turn the tablet.
 
 Not recommended: **(1) as a default**. The reader is deliberately locked to
 portrait (`lock_rotation = true`), so defaulting to landscape would mean asking
