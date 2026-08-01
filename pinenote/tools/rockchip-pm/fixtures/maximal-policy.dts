@@ -33,6 +33,7 @@
 		rockchip,pwm-regulator-config = <0x1ff>;
 		rockchip,sleep-debug-en = <8>;
 		rockchip,apios-suspend = <9>;
+		rockchip,suspend-state-override = <5>;
 		rockchip,virtual-poweroff = <1>;
 		rockchip,power-ctrl = <&gpio0 0 0xa0>, <&gpio0 1 0xa1>,
 			<&gpio0 2 0xa2>, <&gpio0 3 0xa3>, <&gpio0 4 0xa4>,

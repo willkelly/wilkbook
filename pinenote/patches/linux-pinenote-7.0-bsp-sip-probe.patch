@@ -745,7 +745,7 @@ new file mode 100644
 index 0000000000000000000000000000000000000000..223ef2bbb4673208bbaf043154a0e8d41e48d7cb
 --- /dev/null
 +++ b/drivers/soc/rockchip/rockchip_suspend_model.c
-@@ -0,0 +1,288 @@
+@@ -0,0 +1,307 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +#include <linux/errno.h>
 +#include <linux/string.h>
@@ -814,7 +814,17 @@ index 0000000000000000000000000000000000000000..223ef2bbb4673208bbaf043154a0e8d4
 +	     input->wakeup.value & ~ROCKCHIP_SUSPEND_MODEL_WAKE_MASK) ||
 +	    (input->pwm_regulator.present &&
 +	     input->pwm_regulator.value & ~ROCKCHIP_SUSPEND_MODEL_PWM_MASK) ||
-+	    (input->virtual_poweroff.present && input->virtual_poweroff.value > 1))
++	    (input->virtual_poweroff.present && input->virtual_poweroff.value > 1) ||
++	    /*
++	     * The ultra-suspend firmware handshake (hrdl's
++	     * rockchip,suspend-state-override, read 2026-07-31): only 5
++	     * (MEM_ULTRA) is a meaningful override.  0 is hrdl's in-band
++	     * no-override sentinel (absence encodes that here), 1-2 are
++	     * not BSP states, 3 restates the default, and 4 (mem-lite)
++	     * would tell firmware "lite" with no lite policy parseable.
++	     */
++	    (input->suspend_state_override.present &&
++	     input->suspend_state_override.value != 5))
 +		return -EINVAL;
 +	for (i = 0; i < input->gpio_count; i++)
 +		if (input->gpios[i].number == 0xffff)
@@ -920,8 +930,17 @@ index 0000000000000000000000000000000000000000..223ef2bbb4673208bbaf043154a0e8d4
 +
 +	if (!policy || rockchip_suspend_model_validate_input(&policy->value))
 +		return -EINVAL;
++	/*
++	 * The override changes ONLY what firmware is told (the 0x09
++	 * LINUX_PM_STATE argument); regulator-list selection stays
++	 * derived from the real Linux suspend state.  This reproduces
++	 * the donor lineage's ordering exactly (state computed from
++	 * suspend_state BEFORE the override is applied to the SMC).
++	 */
 +	rockchip_suspend_model_add_legacy(&built[count++], ROCKCHIP_LEGACY_LINUX_PM_STATE,
-+		linux_suspend_state, 0);
++		policy->value.suspend_state_override.present ?
++			policy->value.suspend_state_override.value :
++			linux_suspend_state, 0);
 +	state = rockchip_suspend_model_state(linux_suspend_state);
 +	if (state < 0)
 +		return rockchip_suspend_model_finish(events, capacity, built, count);
@@ -1039,7 +1058,7 @@ new file mode 100644
 index 0000000000000000000000000000000000000000..d86acfd235de4c11fe6d730cffa67fd6c0528a58
 --- /dev/null
 +++ b/drivers/soc/rockchip/rockchip_suspend_model.h
-@@ -0,0 +1,146 @@
+@@ -0,0 +1,147 @@
 +/* SPDX-License-Identifier: GPL-2.0-only */
 +#ifndef __ROCKCHIP_SUSPEND_MODEL_H
 +#define __ROCKCHIP_SUSPEND_MODEL_H
@@ -1092,6 +1111,7 @@ index 0000000000000000000000000000000000000000..d86acfd235de4c11fe6d730cffa67fd6
 +	struct rockchip_suspend_model_optional sleep_debug;
 +	struct rockchip_suspend_model_optional apios_suspend;
 +	struct rockchip_suspend_model_optional virtual_poweroff;
++	struct rockchip_suspend_model_optional suspend_state_override;
 +	struct rockchip_suspend_model_gpio gpios[ROCKCHIP_SUSPEND_MODEL_MAX_GPIOS];
 +	struct rockchip_suspend_model_regulators regulators[ROCKCHIP_SUSPEND_MODEL_STATE_COUNT];
 +	u32 gpio_count;

@@ -148,6 +148,22 @@ def main() -> int:
         rejected(directory, "wake-bits", source.replace("<0x1ffff>", "<0x20000>"))
         rejected(directory, "pwm-bits", source.replace("<0x1ff>", "<0x200>"))
         rejected(directory, "virtual-two", source.replace("<1>;\n\t\trockchip,power-ctrl", "<2>;\n\t\trockchip,power-ctrl"))
+        # ultra override: only exactly <5>, one cell, exact name.  (The
+        # base fixture is the accepted <5> case.)
+        rejected(directory, "override-bool", source.replace(
+            "rockchip,suspend-state-override = <5>;", "rockchip,suspend-state-override;"))
+        rejected(directory, "override-two-cells", source.replace(
+            "rockchip,suspend-state-override = <5>;", "rockchip,suspend-state-override = <5 0>;"))
+        rejected(directory, "override-mem", source.replace(
+            "rockchip,suspend-state-override = <5>;", "rockchip,suspend-state-override = <3>;"))
+        rejected(directory, "override-lite", source.replace(
+            "rockchip,suspend-state-override = <5>;", "rockchip,suspend-state-override = <4>;"))
+        rejected(directory, "override-range", source.replace(
+            "rockchip,suspend-state-override = <5>;", "rockchip,suspend-state-override = <6>;"))
+        rejected(directory, "override-zero-sentinel", source.replace(
+            "rockchip,suspend-state-override = <5>;", "rockchip,suspend-state-override = <0>;"))
+        rejected(directory, "override-lookalike", source.replace(
+            "rockchip,suspend-state-override = <5>;", "rockchip,suspend-state-overrides = <5>;"))
         rejected(directory, "ten-gpios", source.replace("<&gpio0 8 0xa8>;", "<&gpio0 8 0xa8>, <&gpio0 9 0xa9>;"))
         rejected(directory, "malformed-gpio", source.replace("<&gpio0 8 0xa8>;", "<&gpio0 8>;"))
         rejected(directory, "missing-gpio-alias", source.replace("\t\tgpio0 = &gpio0;\n", ""))

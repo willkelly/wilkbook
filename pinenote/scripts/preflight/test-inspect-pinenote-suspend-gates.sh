@@ -276,6 +276,11 @@ policy_properties = (
     "rockchip,regulator-off-in-mem-ultra",
     "regulator-suspend-microvolt",
     "regulator-suspend-mode",
+    # ultra-suspend policy surface (2026-08-01): the firmware-handshake
+    # override and the SDIO card-power flip are policy, never metadata;
+    # a production DT carrying either must refuse to bind.
+    "rockchip,suspend-state-override",
+    "cap-power-off-card",
 )
 for index, property_name in enumerate(policy_properties):
     name = f"suspend-policy-{index:02d}"

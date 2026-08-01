@@ -22,6 +22,7 @@ OPTIONALS = {
     "rockchip,sleep-debug-en": "sleep_debug",
     "rockchip,apios-suspend": "apios_suspend",
     "rockchip,virtual-poweroff": "virtual_poweroff",
+    "rockchip,suspend-state-override": "suspend_state_override",
 }
 REGULATORS = (
     ("rockchip,regulator-on-in-mem", 0, "on"),
@@ -241,6 +242,9 @@ def adapt(dtb: Path) -> dict:
         fail("pwm-regulator-config has unknown bits")
     if result["virtual_poweroff"][0] and result["virtual_poweroff"][1] not in (0, 1):
         fail("virtual-poweroff must be zero or one")
+    if result["suspend_state_override"][0] and result["suspend_state_override"][1] != 5:
+        fail("suspend-state-override must be exactly 5 (MEM_ULTRA); "
+             "absence encodes no-override")
     gpios: list[tuple[int, int]] = []
     if "rockchip,power-ctrl" in node.properties:
         gpio_cells = cells(node.properties["rockchip,power-ctrl"], "rockchip,power-ctrl")

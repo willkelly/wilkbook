@@ -81,6 +81,13 @@ PATCH_REQUIREMENTS = (
     "rockchip_suspend_model_transaction_poison",
     ".suppress_bind_attrs = true",
     "builtin_platform_driver(rockchip_suspend_activate_driver)",
+    # ultra-suspend firmware-handshake modeling (2026-08-01): the struct
+    # member, the exactly-5 validation clause, and the build_prepare
+    # override emit are each load-bearing; regulator-list selection must
+    # stay derived from the real Linux state.
+    "struct rockchip_suspend_model_optional suspend_state_override;",
+    "input->suspend_state_override.value != 5",
+    "policy->value.suspend_state_override.present ?",
 )
 
 
@@ -387,6 +394,9 @@ def validate_production_sources(sources: dict[str, str]) -> None:
         "rockchip,regulator-off-in-mem-lite",
         "rockchip,regulator-on-in-mem-ultra",
         "rockchip,regulator-off-in-mem-ultra",
+        # ultra override is a policy property, host-model-only until an
+        # active reviewed DT policy exists; production stays narrower.
+        "rockchip,suspend-state-override",
     ):
         forbid(parser, forbidden_property, "production OF parser")
 
@@ -511,7 +521,8 @@ def validate_patch(patch: str) -> None:
                   "of_node_put(provider)",
                   "regulator_put((struct regulator *)regulators->on[i])"):
         require(parser, token, "canonical patch retained regulator parser")
-    for forbidden_property in ("rockchip,virtual-poweroff", "mem-lite", "mem-ultra"):
+    for forbidden_property in ("rockchip,virtual-poweroff", "mem-lite", "mem-ultra",
+                               "suspend-state-override"):
         forbid(parser, forbidden_property, "canonical patch production parser")
     forbid(backend, "of_regulator_get_by_node", "canonical patch backend")
     forbid(backend, "regulator_put", "canonical patch backend")
@@ -782,6 +793,12 @@ def validate_host_test_semantics() -> None:
         "failed restore records were not retained for reverse retry",
         "poisoned retry executed an action",
         "poisoned lifecycle was reset without reboot",
+        "compiled maximal suspend-state-override differs",
+        "override prepare count differs",
+        "override changed regulator list selection",
+        "override one-short capacity accepted",
+        "invalid suspend-state-override accepted",
+        "activation-positive firmware word is not the ultra override",
     ):
         require(test, token, "host C tests")
 

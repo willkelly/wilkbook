@@ -127,6 +127,9 @@ static void test_probe(void)
 		       input.regulators[i].on[0] != input.regulators[i].off[0],
 			"compiled maximal regulator identity differs");
 	}
+	expect(input.suspend_state_override.present &&
+	       input.suspend_state_override.value == 5,
+		"compiled maximal suspend-state-override differs");
 	policy = parse(&input);
 	expect(rockchip_suspend_model_build_probe(&policy, events,
 		ROCKCHIP_SUSPEND_MODEL_MAX_PROBE_EVENTS) == 15, "max probe capacity differs");
@@ -225,6 +228,59 @@ static void test_prepare_and_virtual_poweroff(void)
 	policy = parse(&input);
 	expect(rockchip_suspend_model_build_virtual_poweroff(&policy, NULL, 0) == 0,
 		"zero virtual poweroff differs");
+}
+
+static void test_suspend_state_override(void)
+{
+	struct rockchip_suspend_model_policy_input input = rockchip_pm_compiled_maximal;
+	struct rockchip_suspend_model_event events[ROCKCHIP_SUSPEND_MODEL_MAX_PREPARE_EVENTS];
+	struct rockchip_suspend_model_event before[ROCKCHIP_SUSPEND_MODEL_MAX_PREPARE_EVENTS];
+	struct rockchip_suspend_model_policy policy;
+	static const u32 rejected_values[] = { 0, 1, 2, 3, 4, 6, 0xffffffff };
+	u32 i;
+
+	/*
+	 * The override changes only the 0x09 firmware word; regulator
+	 * list selection stays derived from the real Linux state.  The
+	 * maximal fixture carries <5>, so prepare at Linux state 3 must
+	 * tell firmware 5 while emitting the MEM lists unchanged.
+	 */
+	policy = parse(&input);
+	expect(rockchip_suspend_model_build_prepare(&policy, 3, events,
+		ROCKCHIP_SUSPEND_MODEL_MAX_PREPARE_EVENTS) == 4,
+		"override prepare count differs");
+	legacy(&events[0], 0x09, 5, 0);
+	expect(events[1].kind == ROCKCHIP_SUSPEND_MODEL_REGULATOR &&
+	       events[1].regulator.state == 0 &&
+	       events[1].regulator.action == ROCKCHIP_SUSPEND_MODEL_REGULATOR_ENABLE &&
+	       events[1].regulator.regulator == input.regulators[0].on[0],
+		"override changed regulator list selection");
+	expect(events[2].kind == ROCKCHIP_SUSPEND_MODEL_REGULATOR &&
+	       events[2].regulator.regulator == input.regulators[0].on[1],
+		"override changed regulator list order");
+	expect(events[3].kind == ROCKCHIP_SUSPEND_MODEL_REGULATOR &&
+	       events[3].regulator.action == ROCKCHIP_SUSPEND_MODEL_REGULATOR_DISABLE &&
+	       events[3].regulator.regulator == input.regulators[0].off[0],
+		"override changed off list");
+	/* A nonselecting state still tells firmware the override. */
+	expect(rockchip_suspend_model_build_prepare(&policy, 2, events, 1) == 1,
+		"override nonselecting count differs");
+	legacy(&events[0], 0x09, 5, 0);
+	/* One-short capacity stays an error and stays nonmutating. */
+	expect(rockchip_suspend_model_build_prepare(&policy, 3, events,
+		ROCKCHIP_SUSPEND_MODEL_MAX_PREPARE_EVENTS) == 4,
+		"override recount differs");
+	memcpy(before, events, sizeof(events));
+	expect(rockchip_suspend_model_build_prepare(&policy, 3, events, 3) == -ENOSPC,
+		"override one-short capacity accepted");
+	unchanged(before, events, sizeof(events), "override short prepare mutated output");
+	/* Every non-5 value is rejected without mutating the destination. */
+	for (i = 0; i < sizeof(rejected_values) / sizeof(rejected_values[0]); i++) {
+		input = rockchip_pm_compiled_maximal;
+		input.suspend_state_override = (struct rockchip_suspend_model_optional) {
+			true, rejected_values[i] };
+		expect_parse_rejected(&input, "invalid suspend-state-override accepted");
+	}
 }
 
 static void test_rejections_and_nonmutation(void)
@@ -639,7 +695,12 @@ static void test_activation_positive(void)
 	prepare_count = rockchip_suspend_model_build_prepare(&policy, 3,
 		&events[probe_count], ROCKCHIP_SUSPEND_MODEL_MAX_PREPARE_EVENTS);
 	expect(prepare_count == 4, "activation-positive MEM action count differs");
-	legacy(&events[probe_count], ROCKCHIP_LEGACY_LINUX_PM_STATE, 3, 0);
+	/*
+	 * The maximal fixture carries rockchip,suspend-state-override = <5>:
+	 * the firmware word is the ultra override while the MEM regulator
+	 * actions below stay selected from the real Linux state 3.
+	 */
+	legacy(&events[probe_count], ROCKCHIP_LEGACY_LINUX_PM_STATE, 5, 0);
 	for (i = 0; i < 2; i++) {
 		expect(events[probe_count + 1 + i].kind == ROCKCHIP_SUSPEND_MODEL_REGULATOR &&
 		       events[probe_count + 1 + i].regulator.state == ROCKCHIP_SUSPEND_MODEL_MEM &&
@@ -667,6 +728,9 @@ static void test_activation_positive(void)
 		expect(fake.trace[i].control == probe[i].control &&
 		       fake.trace[i].arg1 == probe[i].arg1 && fake.trace[i].arg2 == probe[i].arg2,
 			"activation-positive fake probe arguments differ");
+	expect(fake.trace[probe_count].control == ROCKCHIP_LEGACY_LINUX_PM_STATE &&
+	       fake.trace[probe_count].arg1 == 5 && fake.trace[probe_count].arg2 == 0,
+		"activation-positive firmware word is not the ultra override");
 	for (i = 0; i < 3; i++)
 		expect(fake.trace[probe_count + 1 + i].regulator ==
 		       events[probe_count + 1 + i].regulator.regulator &&
@@ -736,6 +800,7 @@ int main(int argc, char **argv)
 	test_bindings();
 	test_probe();
 	test_prepare_and_virtual_poweroff();
+	test_suspend_state_override();
 	test_rejections_and_nonmutation();
 	test_status_mappings();
 	test_executor();
