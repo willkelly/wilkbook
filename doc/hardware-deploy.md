@@ -134,6 +134,60 @@ them on exit, so after `herd stop reader-session` set
 the camera's auto-exposure settle — grab a burst and keep the last frame; a
 single grab after an idle period comes back black.
 
+## defio_delay_ms sweep session (first boot of the publish-on-call image)
+
+Goal: choose the shipped `defio_delay_ms` value and prove the single-pass
+portrait page turn (`doc/refresh-policy.md`, "publish-on-call"). The
+deployed image must carry the parameter — check
+`/sys/module/rockchip_ebc/parameters/defio_delay_ms` exists before spending
+any session time; if absent, the wrong image is running.
+
+All over SSH; a UART observer is only needed for the boot itself.
+
+```sh
+# preconditions (same discipline as the barrier campaign)
+sudo herd stop reader-session
+echo 0 | sudo tee /sys/class/vtconsole/vtcon1/bind   # stop re-binds fbcon
+pgrep -af 'reader[.]lua'                             # must print nothing
+# EBC idle: IRQ delta over 6 s must be 0 (teardown repaint needs a few
+# seconds to drain first)
+
+LUAJIT=/run/current-system/profile/lib/koreader/luajit  # or koreader-bin store path
+
+# 1. sweep: for each value, the corrected repaint-duration must show the
+#    150/250/400 ms rows collapse to ONE pass once the window exceeds the span
+for v in 50 250 1000; do
+  echo $v | sudo tee /sys/module/rockchip_ebc/parameters/defio_delay_ms
+  $LUAJIT repaint-duration.lua        # from pinenote/tools/ebc-damage-probe/
+done
+echo 50 | sudo tee /sys/module/rockchip_ebc/parameters/defio_delay_ms  # restore
+
+# 2. re-run fsync-band.lua at the raised value: the fsync path must be
+#    unchanged (publish is timer-independent); the timer path lengthens.
+
+# 3. restore reader, then the real proof: with the chosen value applied,
+#    drive portrait page turns (uinput injector) and count EBC IRQ bursts —
+#    accept exactly ONE pass (one waveform's worth of frames) per turn.
+#    The reader image now publishes via fsync at every refresh call, so
+#    this exercises fsync + raised window + ioctl drain together.
+echo 1 | sudo tee /sys/class/vtconsole/vtcon1/bind
+sudo herd start reader-session
+```
+
+Expectations and traps, from the 2026-08-01 validation session
+(`doc/status.md`):
+
+- One pass = the current temperature bin's phase count (38 and 46 both
+  observed); count passes against a same-session baseline, never a constant.
+- Probe writes must flip against current content or `diff_mode` masks them.
+- The idle-start pipeline floor is ~132–140 ms damage→first-frame; do not
+  read it as publish latency.
+- Wash-ordering signature if a full refresh ever shows stale content:
+  drain working = one wash of new content; drain broken = old-content wash
+  plus a trailing non-flash partial of the new (`doc/refresh-policy.md`).
+- Winner gets pinned in `pinenote-apply-ebc-params`
+  (`pinenote/packages/firmware.scm`) and recorded in `doc/status.md`.
+
 ## Stop conditions
 
 Stop before any write if backups do not verify, the rescue path is unclear,

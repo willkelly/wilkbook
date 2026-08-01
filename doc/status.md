@@ -59,6 +59,25 @@ Useful beyond this campaign — it is the reader UI's usable-area inset.
 
 Suspend remains disabled; none of this is suspend permission.
 
+**2026-08-01 os2 write: the publish-on-call image is deployed and
+readback-verified; reboot pending.** Artifact
+`pinenote-reader-PNGuixRoot-20260731.ext4`, SHA-256
+`7d5d7b493dce95f7b9c55b112401340a9abd1756dbee05b8f31e237906a32487`,
+1,945,591,808 bytes (474,998 × 4096 exactly). Every delta verified in the
+artifact before staging: `parm=defio_delay_ms` in the embedded
+`rockchip_ebc.ko` (with the ioctl wash-ordering drain and the remove-path
+UAF fix), 8 `publish()` sites in the image's KOReader pinenote device
+target, `vt.global_cursor_default=0` in the extlinux `APPEND` (closing the
+fbcon cursor-blink hazard at its source), and the panfrost softdep in the
+system `/etc/modprobe.d`. Full write protocol: os1 identity confirmed by
+the archived ED25519 fingerprint, root=p5 and p6-unmounted re-verified
+immediately before the write, staged to
+`/home/user/wilkbook-artifacts/` with matching SHA, `dd bs=4096
+count=474998 conv=fsync`, readback of the exact byte range matches the
+artifact hash. Reboot (U-Boot menu, "Boot OS2") is user-present as always;
+the first session on this image is the `defio_delay_ms` sweep
+(`doc/hardware-deploy.md`, "defio_delay_ms sweep session").
+
 **2026-08-01 SSH-only probe session on the deployed (2026-07-28) os2 image:
 publish-on-call's kernel half is hardware-validated ahead of deployment, and
 the deferred-io threshold is bracketed.** No reboot, no writes outside
