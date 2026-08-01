@@ -212,7 +212,17 @@ Current blockers after that gate passes:
 
 Do not combine the telemetry deployment, CPU-idle work, boot-firmware changes,
 or suspend orchestration into one verdict. RK817 telemetry is now qualified;
-after boot firmware is identified, test one mode per UART-observed case:
+after boot firmware is identified, test one mode per UART-observed case.
+
+Every case brackets with the proven acceptance instrument: run
+`pinenote/scripts/preflight/pm-ground-truth.sh` on the device before the
+attempt and after resume, and diff (variable lines: timestamp,
+`charge_now`, TMST_VALUE `00:`). Validated live 2026-08-01, stable
+across back-to-back runs. Decision table for the TPS65185 rows: VCOM1
+must read the device calibration (`03: 8f`) after resume — the factory
+default `7d` there means the NVM assumption failed, stop the ladder;
+UPSEQ/DWNSEQ/INT_EN/ENABLE must match the pre-suspend capture — datasheet
+defaults there mean the resume restoration did not run or did not stick:
 
 1. Linux PM test facility -- a freezer-only `pm_test` dry run, restoring
    `pm_test` to `none` afterwards;
