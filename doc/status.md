@@ -59,6 +59,44 @@ Useful beyond this campaign — it is the reader UI's usable-area inset.
 
 Suspend remains disabled; none of this is suspend permission.
 
+**2026-08-01 first boot of the publish-on-call image: the portrait
+double-refresh is FIXED ON GLASS — eight of eight portrait page turns cost
+exactly one pass, and `defio_delay_ms=250` is the chosen, now-pinned
+value.** Clean first boot (waveform 0x19 loaded, zero real error
+signatures, `vt.global_cursor_default=0` live on the cmdline, fb0 reports
+`rockchip-ebcdrm` so KOReader's `eink_fb` invert quirk provably cannot
+fire). All over SSH with the standard preconditions; device left healthy
+(reader running, fbcon unbound, EBC quiescent, `/tmp` clean).
+
+- **Sweep** (`repaint-duration.lua`, live sysfs writes): at 50, spans
+  ≥66 ms cost two passes (defect reproduced on the new kernel, ≤41 ms one
+  pass); at **250**, spans of 72/155 ms cost ONE pass and 261 ms (just over
+  the window) correctly costs two — the window tracks the parameter
+  exactly; at 1000, every span through 390 ms costs one pass. Probe
+  limitation found and worked around: `settle()`'s 400 ms patience
+  under-waits any window > 400 ms and aliases rows (the raw 1000 run showed
+  0-frame rows); re-run with patience 1300 ms was clean.
+- **Publish latency is timer-independent** (`fsync-band.lua` at 250):
+  timer path 380–394 ms (window + ~135 ms pipeline floor), fsync path
+  unchanged at 133–140 ms. Raising the window costs publishers nothing.
+- **The proof**: with the reader's fsync wiring live and the window at
+  250, eight alternating uinput portrait page turns (KEY 158/159, content
+  verified changing via fb0 hashes — a forward-only run pages past the
+  2-page quickstart's end and reads 0 frames, the same-content trap at
+  document level) cost **exactly 46 frames = one pass each**, against
+  23/23 turns at exactly two passes before the fix. The startup wash and
+  session traces confirm the new `device.lua` publishes at every intent.
+- **Value pinned**: 250 in `pinenote-apply-ebc-params` and both modprobe
+  option lines (reaches the device on the next image; this boot has it
+  applied live via sysfs and reverts to 50 on reboot until then). 1000
+  also works but penalizes non-publishing writers for no reader benefit.
+- Temperature bins moved mid-session (38-frame cold, 46 warm) —
+  per-turn pass counting used same-session baselines throughout.
+- Expected lifecycle note: `QUIT`ing the optics injector destroys an
+  input device the reader holds, which correctly restarts reader-session
+  (required-device-loss path); the post-restart wash accounts for the IRQ
+  burst during cleanup.
+
 **2026-08-01 os2 write: the publish-on-call image is deployed and
 readback-verified; reboot pending.** Artifact
 `pinenote-reader-PNGuixRoot-20260731.ext4`, SHA-256

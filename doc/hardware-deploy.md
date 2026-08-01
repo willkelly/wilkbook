@@ -174,14 +174,26 @@ echo 1 | sudo tee /sys/class/vtconsole/vtcon1/bind
 sudo herd start reader-session
 ```
 
-Expectations and traps, from the 2026-08-01 validation session
-(`doc/status.md`):
+Expectations and traps, from the 2026-08-01 validation and sweep sessions
+(`doc/status.md`). **The sweep ran 2026-08-01: 250 won and is pinned; this
+section stays as the replay procedure.**
 
 - One pass = the current temperature bin's phase count (38 and 46 both
-  observed); count passes against a same-session baseline, never a constant.
+  observed, and the bin can move mid-session); count passes against a
+  same-session baseline, never a constant.
 - Probe writes must flip against current content or `diff_mode` masks them.
+  The document-level form of the same trap: a forward-only page-turn run
+  silently pages past a short document's end and reads as ZERO frames —
+  alternate KEY 158/159 and confirm content motion with fb0 hashes.
+- `repaint-duration.lua`'s `settle()` waits for 400 ms of IRQ quiet; any
+  window under test **larger than that** needs the patience raised past the
+  window (sed `stable<400` up, e.g. 1300 for a 1000 ms window) or rows
+  alias into their neighbors and read 0 frames.
 - The idle-start pipeline floor is ~132–140 ms damage→first-frame; do not
   read it as publish latency.
+- Start the optics injector BEFORE reader-session (KOReader enumerates
+  input once, at init), and expect `QUIT` to restart the reader: destroying
+  a held input device is the required-device-loss path, by design.
 - Wash-ordering signature if a full refresh ever shows stale content:
   drain working = one wash of new content; drain broken = old-content wash
   plus a trailing non-flash partial of the new (`doc/refresh-policy.md`).

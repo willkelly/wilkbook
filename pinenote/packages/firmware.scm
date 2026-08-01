@@ -307,11 +307,26 @@ comparison (--verify) and partial dumps (--planes).")
                 ;; This must live here, not on the kernel cmdline: the
                 ;; initrd raw-loads the module, so module.param= tokens
                 ;; never apply (hardware-confirmed 2026-07-05).
-                (display "set_parameter refresh_waveform 6\n" port)))
+                (display "set_parameter refresh_waveform 6\n" port)
+                ;; defio_delay_ms=250 (2026-08-01 sweep, hardware-proven):
+                ;; the deferred-io flush window.  At the vanilla 50 ms a
+                ;; portrait repaint (98-145 ms of writes) straddles the
+                ;; window and costs TWO full refresh passes; at 250 ms
+                ;; every measured span <= 250 ms costs one, and eight of
+                ;; eight portrait page turns cost exactly one pass on
+                ;; glass.  The reader publishes explicitly via fsync at
+                ;; every refresh call (publish-on-call,
+                ;; doc/refresh-policy.md), so the raised window adds no
+                ;; reader latency; it is only the fallback cadence for
+                ;; out-of-band framebuffer writers.  1000 also works but
+                ;; makes non-publishing writers (probes, fbcon in debug)
+                ;; visibly laggy for no additional benefit.  Must live
+                ;; here for the same initrd raw-load reason as above.
+                (display "set_parameter defio_delay_ms 250\n" port)))
             (chmod params-script #o555)
             (call-with-output-file config
               (lambda (port)
-                (display "options rockchip_ebc direct_mode=0 auto_refresh=0 refresh_threshold=60 split_area_limit=0 panel_reflection=1 prepare_prev_before_a2=0 dclk_select=0 refresh_waveform=6\n" port)))))))
+                (display "options rockchip_ebc direct_mode=0 auto_refresh=0 refresh_threshold=60 split_area_limit=0 panel_reflection=1 prepare_prev_before_a2=0 dclk_select=0 refresh_waveform=6 defio_delay_ms=250\n" port)))))))
     (home-page "https://github.com/PNDeb/pinenote-debian-image")
     (synopsis "PineNote firmware helper scripts and EBC module options")
     (description

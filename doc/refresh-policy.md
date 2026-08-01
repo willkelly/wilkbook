@@ -708,12 +708,22 @@ Also observed: an idle-start pipeline floor of ~132–140 ms from damage to
 first frame (commit + EPD power-up + LUT + temperature read) that bounds
 page-turn latency from EBC-idle regardless of the publish path.
 
-Still hardware-gated: the choice of shipped `defio_delay_ms` value — the
-deployed kernel has no such parameter (confirmed absent in sysfs), so the
-sweep {50, 250, 1000} runs after the next image deployment, against the
-corrected `repaint-duration.lua`, confirming a ~145 ms spread costs one
-pass at the raised values; the winner then gets pinned in
-`pinenote-apply-ebc-params` next to the other parameters.
+**Hardware-proven end to end, 2026-08-01** (first boot of the deployed
+publish-on-call image; full record in `doc/status.md`): the sweep
+confirmed the window tracks the parameter exactly (at 250, a 155 ms span
+costs one pass and a 261 ms span two; at 1000 everything through 390 ms is
+one pass), publish latency is timer-independent (fsync path 133–140 ms at
+any window), and **eight of eight uinput-driven portrait page turns cost
+exactly one pass** — against 23/23 at exactly two before the fix.
+**`defio_delay_ms=250` is the chosen value**, pinned in
+`pinenote-apply-ebc-params` and both modprobe option lines: it contains
+the measured 98–145 ms portrait repaint with headroom, while 1000 buys the
+reader nothing (its refreshes publish via fsync) and penalizes
+non-publishing writers. Two probe lessons joined the record: `settle()`'s
+patience must exceed the window under test, and a forward-only page-turn
+run silently pages past a short document's end and reads as zero frames —
+the same-content trap at document level; alternate directions and verify
+content motion with fb0 hashes.
 
 Rollout precisely: only the **timer period** is unchanged until the parameter
 is set. The fsync publishes, the pen-intent publishes, and the ioctl drain are

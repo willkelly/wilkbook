@@ -120,7 +120,7 @@ with descriptive messages. Keep `doc/status.md` in sync with reality after
 any hardware session. Don't commit the per-device waveform or anything
 under a tool's gitignored `build/`.
 
-## Where we are (2026-07-30)
+## Where we are (2026-08-01)
 
 7.0.x is the validated primary: e-ink display with temperature-compensated
 waveforms, Wi-Fi/BT, USB gadget console, and PREEMPT_RT are hardware-proven.
@@ -171,7 +171,18 @@ and the thread `D`→`I` with it unbound. `barrier_poison` was provably never
 set, and the waveform hypothesis was measured out (GC16 and GL16 are both 46
 phases at 23 °C). Mitigations are in: the cmdline argument for the next build,
 and an explicit fbcon unbind plus an EBC-idle precondition in the campaign
-procedure. Also closed: the blank-panel anomaly (fb0 matched the offline card
+procedure. **The portrait double-refresh is fixed on glass (2026-08-01,
+"publish-on-call"):** portrait page turns cost two passes because a 98–145 ms
+repaint straddled the fixed 50 ms deferred-io window and each flush costs one
+pass; the fix made the window a driver parameter (`defio_delay_ms`, chosen
+value 250, pinned in `pinenote-apply-ebc-params`), made KOReader publish via
+fsync at every refresh intent, and drains pending damage into `ctx->final`
+inside the global-refresh ioctl so a wash provably paints the new page. Eight
+of eight uinput portrait turns cost exactly one pass on the deployed image,
+publish latency is timer-independent (133–140 ms to first IRQ from
+EBC-idle), and the pen intents now publish on call instead of waiting out
+the timer. See `doc/refresh-policy.md` ("publish-on-call") and
+`doc/status.md`. Also closed: the blank-panel anomaly (fb0 matched the offline card
 golden byte-for-byte, so the paint was always correct) and the missing 1-px
 border (the bezel occludes the outermost 4–10 px, measured with a
 concentric-ring probe — this is the reader UI's usable-area inset). The
