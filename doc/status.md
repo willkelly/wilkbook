@@ -59,7 +59,36 @@ Useful beyond this campaign — it is the reader UI's usable-area inset.
 
 Suspend remains disabled; none of this is suspend permission.
 
-**2026-08-01 (evening) FIRST SUPERVISED SUSPEND LADDER SESSION: rung 1
+**2026-08-01 (afternoon, offline, follows the midday ladder): the resume defect is root-caused to a
+single gating asymmetry and fixed in-tree; hardware proof pending the
+next boot.** A three-analyst source reconstruction plus two adversarial
+verifiers (all verified against the real 7.0.11 DRM core, our driver,
+and the fetched m-weigand 6.12) pinned it: across a system sleep the
+enable flip makes `mode_changed` true in *both* commits, so the ctx swap
+in `atomic_check` always runs — but the DRM helper *invokes* the
+park/unpark hooks only for an ACTIVE CRTC, and our fbdev CRTC was
+blanked at suspend. The never-parked refresh thread kept the freed
+pre-suspend ctx (its kref-less per-unpark re-read never re-ran) and
+every post-resume refresh hit the empty-list break before the only
+`DSP_FRM_START` write: silent zero-frame success that still
+power-cycled rails via runtime PM — matching all five hardware
+observations, including the abort reproduction and os1's survival
+(compositors keep the CRTC active and re-modeset). The structure is
+**inherited** (6.12 identical; reported in
+`doc/driver-findings-report.md` with the latent-UAF note and three
+suggested upstream fixes); our tree carries the integration fix: the
+hook bodies factored into idempotent quiesce/wake helpers
+(`worker_parked` bracket, `kthread_park` return consumed, no unpark
+into a NULL ctx, PM-side ctx read under the CRTC lock) called
+unconditionally from the system PM callbacks, plus two
+observability-only lines (first-poison warn, runtime-suspend supply
+warn). Offline ladder all green: patch applies, verbatim-source host
+suites pass with the new `ebc-suspend-bracket-test` pinning the bracket
+(13 assertions), full aarch64 cross-build. Deliberate visible change:
+blanked-CRTC suspend now runs the park-tail wash (glass to white).
+Not deployed; the next boot's ladder retry is the proof.
+
+**2026-08-01 (midday) FIRST SUPERVISED SUSPEND LADDER SESSION: rung 1
 PASS, rung 2 suspend/wake mechanics PASS, rung 2 acceptance FAIL — the
 `rockchip_ebc` system-resume path is broken in our tree, reproduced on
 both an aborted and a clean cycle. Ladder stopped; deep untested by

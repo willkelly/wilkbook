@@ -223,6 +223,28 @@ display-side resume defect is now the program's gating blocker; the os1
 oracle question (does stock 6.12 survive s2idle with a working panel?)
 decides inherited-vs-ours and report-vs-fix.
 
+**The resume defect is root-caused and fixed in-tree (2026-08-01,
+afternoon)**: the DRM helper's active-gating skipped the park/unpark
+bracket for our blanked fbdev CRTC while the resume commit still swapped
+the refresh ctx — the never-parked worker kept the freed ctx and every
+refresh silently no-oped (full analysis: `doc/driver-findings-report.md`,
+2026-08-01 finding; fix description: `doc/kernel-forward-port.md`). The
+fix makes the bracket unconditional and idempotent in the system PM
+callbacks. Verified offline: three-analyst reconstruction + two
+adversarial verifiers, all five hardware observations explained; host
+suites green including the new `ebc-suspend-bracket-test`; full
+cross-build green. **Two contract notes for the next session**: (a) a
+system suspend racing an unwaited barrier generation now poisons on the
+blank path too (previously only the active path) — by design, no
+generation may be left behind a parked worker, and poison now logs one
+line; (b) suspending with a blanked CRTC now runs the park-tail wash
+(glass to white) before sleep — expected, matches the CRTC-disabled
+invariant. Next-boot ladder retry: re-run rung 2 with the same
+console-free protocol; also capture the pre-suspend blank/active state
+explicitly (the blanked-at-suspend precondition was soundly inferred,
+never directly measured), and grep resume dmesg for
+`rockchip_ebc_resume` (new symmetric entry print).
+
 Amendments from that session, now standing procedure:
 - **Quiesce the USB gadget before any attempt** (blank
   `/sys/kernel/config/usb_gadget/pinenote-acm/UDC`; rebind after). An

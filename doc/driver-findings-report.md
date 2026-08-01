@@ -936,3 +936,66 @@ configuration-level mitigations we did make are ours, not the driver's:
 `vt.global_cursor_default=0` on the reader image's cmdline, and an explicit
 fbcon unbind in the supervised-campaign procedure
 (`doc/hardware-deploy.md`).
+
+## Finding (2026-08-01, live, twice): system sleep with an inactive CRTC frees the refresh thread's context under it — every later refresh is a silent zero-frame no-op
+
+**Inherited.** The gating structure is identical in m-weigand 6.12 (thread
+created parked, unpark in `mode_changed`-gated `atomic_enable`, park in
+`mode_changed`-gated `atomic_disable`, `kthread_parkme` in the thread loop)
+and in the hrdl `v6.19_ebc` lineage. Only a display client that suspends
+with the CRTC enabled-but-**inactive** (a blanked fbdev console or any
+compositor-less user) ever exercises it, which is presumably why it has
+survived: compositors keep the CRTC active at suspend and issue a fresh
+modeset at resume.
+
+Mechanism, each link verified in source:
+
+- Across a system sleep, `drm_atomic_helper_disable_all` NULLs the mode, so
+  `enable` flips and **`mode_changed` is true in both the suspend disable
+  commit and the resume re-enable commit**. The driver's
+  `atomic_check` therefore always swaps the refresh context: the resume
+  commit allocates a new ctx and drops the last reference on the old one.
+- But the DRM helper **invokes** `atomic_disable` only when the outgoing
+  state was ACTIVE (`crtc_needs_disable`) and `atomic_enable` only when the
+  committed state is active. With the CRTC blanked at suspend, both hooks
+  are skipped as a pair — the park/unpark bracket never runs.
+- The refresh thread caches its ctx pointer **kref-less, re-read only at
+  the outer-loop top after an unpark** ("The context will change each time
+  the thread is unparked"). Never parked, it keeps the freed pre-suspend
+  ctx forever.
+- All post-resume damage is spliced into the *new* ctx and wakes the
+  thread, which runs a partial refresh against the freed ctx: the emptied
+  area list makes `list_empty()` break out **before the partial path's
+  only `DSP_FRM_START` write**. Result: return 0, no frame, no IRQ, no
+  log — while the wake still power-cycles the panel rails through runtime
+  PM. Repeats on every damage event; the panel is frozen until reboot.
+
+Hardware evidence (os2, 7.0.11, fbdev-only reader image, 2026-08-01, on
+both an aborted and a clean s2idle cycle): zero EBC IRQs for every
+post-resume write including the reader's own full boot repaint;
+regulator enables `vcom 0→1, v3p3 1→2, vposneg 0→2` (the stale wakes'
+runtime-PM cycles); `runtime_status` "suspended"; not one line of dmesg.
+Stock os1 Debian (6.12, Sway) survives the identical cycle with a working
+panel — same driver structure, different client behavior.
+
+This is also a latent **use-after-free**: the stale thread `kref_get`s a
+freed object on every wake. On our tree the freed ctx memory happened to
+stay benignly readable; nothing guarantees that.
+
+Suggested upstream fixes, in preference order:
+
+1. Make the thread take its own `kref` on the ctx instead of the
+   kref-less cached pointer — removes the UAF class outright.
+2. Decouple the park/unpark bracket from hook *invocation* gating: park
+   and unpark unconditionally in the driver's system PM callbacks
+   (idempotently), so the ctx swap always happens against a parked
+   thread regardless of CRTC active state.
+3. At minimum, a `dev_warn` when a refresh runs against a ctx that is no
+   longer the CRTC's current one.
+
+Per this repo's policy the inherited structure is unchanged; our tree
+carries fix (2) as a forward-port integration measure (our configuration
+is fbdev-only, the exact exercising case), with the bracket pinned by a
+host regression (`ebc-suspend-bracket-test`) and documented in
+`doc/kernel-forward-port.md`. The 2026-08-01 poison-observability line
+(`refresh worker poisoned: %d`) was added at the same time.

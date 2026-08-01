@@ -102,6 +102,27 @@ It does not change Linux 7.0's `ROCKCHIP_SLEEP_PD_CONFIG=0xff` pmdomain ABI.
   with a full IIO rewrite of the driver (events, triggers); we carry a
   ~70-line additive hunk against mainline instead, to keep future rebases
   cheap.
+- The EBC system-sleep worker bracket (added 2026-08-01): the DRM helper
+  invokes `atomic_disable`/`atomic_enable` only for an ACTIVE CRTC, while
+  the `mode_changed`-gated ctx swap always runs across a system sleep —
+  so a blanked fbdev CRTC had its refresh context freed under a
+  never-parked worker and every post-resume refresh was a silent
+  zero-frame no-op (hardware-measured twice; inherited structure, see
+  `doc/driver-findings-report.md`). Our fix factors the two hook bodies
+  into idempotent `rockchip_ebc_quiesce_worker`/`rockchip_ebc_wake_worker`
+  helpers (park-once bracket via `worker_parked`, `kthread_park` return
+  consumed, unpark only when a ctx exists, PM-side ctx read under the
+  CRTC lock) that the system PM callbacks call unconditionally; hook-path
+  behavior is bit-identical to the hardware-proven active path. Also:
+  first-poison now logs one line, and `runtime_suspend` logs a failed
+  supply disable (both observability-only). The bracket is pinned by
+  `ebc-suspend-bracket-test` in the ebc-logic suite (not
+  waveform-gated), and the ebc-logic kthread shim now returns int from
+  `kthread_park` matching the real API. Note the deliberate visible
+  change on the blank path: suspend now parks the worker, so a
+  blanked-CRTC suspend runs the park-tail wash (glass to white) —
+  matching the driver's documented CRTC-disabled invariant. Hardware
+  proof of the whole fix waits for the next boot's ladder retry.
 - TPS65185 suspend/resume register restoration, same file (added
   2026-08-01, dormant until the suspend ladder reaches `deep`): snapshot
   the nine programmable non-VCOM registers at suspend, wait out the

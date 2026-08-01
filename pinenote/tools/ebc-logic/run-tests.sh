@@ -94,6 +94,18 @@ else
   fail=1
 fi
 
+# --- system-sleep bracket: the 2026-08-01 resume defect's pins ---
+# quiesce/wake idempotence, poison-on-pending exactly once, no unpark
+# into a NULL ctx, poison gating.  Not waveform-gated.
+bout=$build/suspend-bracket.out
+if "$build/ebc-suspend-bracket-test" > "$bout" && grep -q '^RESULT: ok$' "$bout"; then
+  cat "$bout"
+else
+  cat "$bout" >&2
+  echo "FAIL: ebc-suspend-bracket-test failed" >&2
+  fail=1
+fi
+
 cat "$sout"
 
 if grep -q '^FAIL' "$sout"; then

@@ -2827,10 +2827,10 @@ index 948b0f906..aad0a3f77 100644
 +obj-$(CONFIG_DRM_ROCKCHIP_EBC) += rockchip_ebc.o
 diff --git a/drivers/gpu/drm/rockchip/rockchip_ebc.c b/drivers/gpu/drm/rockchip/rockchip_ebc.c
 new file mode 100755
-index 000000000..8db4c36cc
+index 000000000..8db4c36cd
 --- /dev/null
 +++ b/drivers/gpu/drm/rockchip/rockchip_ebc.c
-@@ -0,0 +1,3281 @@
+@@ -0,0 +1,3363 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/*
 + * Copyright (C) 2021-2022 Samuel Holland <samuel@sholland.org>
@@ -3026,6 +3026,10 @@ index 000000000..8db4c36cc
 +bool				worker_available;
 +bool				hardware_uncertain;
 +	bool				worker_stopped;
++	/* System-sleep bracket: set when quiesce parked the worker, cleared
++	 * by wake.  Makes the park/unpark pair idempotent so the PM
++	 * callbacks can mirror the (active-gated) CRTC hooks. */
++	bool				worker_parked;
 +	/* Held only after a physical timeout: this is the exact ctx whose DMA
 +	 * buffers were programmed, and owns one kref until reboot. */
 +	struct rockchip_ebc_ctx	*uncertain_ctx;
@@ -3632,8 +3636,11 @@ index 000000000..8db4c36cc
 +static void rockchip_ebc_poison(struct rockchip_ebc *ebc, int error)
 +{
 +	mutex_lock(&ebc->barrier_lock);
-+	if (!ebc->barrier_poison)
++	if (!ebc->barrier_poison) {
 +		ebc->barrier_poison = error < 0 ? error : -EIO;
++		pr_warn("rockchip-ebc: refresh worker poisoned: %d\n",
++			ebc->barrier_poison);
++	}
 +	ebc->active_generation = 0;
 +	mutex_unlock(&ebc->barrier_lock);
 +	wake_up_all(&ebc->barrier_wait);
@@ -5026,6 +5033,75 @@ index 000000000..8db4c36cc
 +	/* pr_info("ebc: %s", __func__); */
 +}
 +
++/*
++ * wilkbook (2026-08-01): the DRM helper invokes atomic_disable only when
++ * the CRTC is ACTIVE (crtc_needs_disable) and atomic_enable only when the
++ * committed state is active.  A blanked, enabled-but-inactive fbdev CRTC
++ * therefore gets the mode_changed-gated ctx swap in atomic_check on every
++ * system-sleep commit but NEVER the park/unpark bracket in these hooks --
++ * the never-parked worker keeps the freed pre-suspend ctx (the per-unpark
++ * kref-less re-read at the thread's outer-loop top) and every later
++ * refresh is a silent zero-frame no-op that still power-cycles the rails.
++ * Measured on glass 2026-08-01, twice.  The hazard is inherited (6.12 has
++ * the identical gating); only a compositor-less client exercises it, so
++ * the fix lives here: the bodies are factored into idempotent helpers the
++ * system PM callbacks call unconditionally.
++ */
++static void rockchip_ebc_quiesce_worker(struct rockchip_ebc *ebc)
++{
++	bool pending;
++
++	mutex_lock(&ebc->barrier_lock);
++	if (ebc->worker_parked) {
++		mutex_unlock(&ebc->barrier_lock);
++		return;
++	}
++	/* No accepted generation may be left behind a parked worker. */
++	ebc->worker_available = false;
++	pending = ebc->legacy_pending ||
++		ebc->requested_generation > ebc->completed_generation;
++	mutex_unlock(&ebc->barrier_lock);
++	if (pending)
++		rockchip_ebc_poison(ebc, -ENODEV);
++	/* kthread_park: -ENOSYS if the thread is already exiting (the
++	 * PF_EXITING window can outrun the TASK_DEAD peek), -EBUSY on a
++	 * double park.  Record the bracket only on success so a later
++	 * quiesce retries instead of assuming a park that never took. */
++	if (!((ebc->refresh_thread->__state) & (TASK_DEAD)) &&
++	    !kthread_park(ebc->refresh_thread)) {
++		mutex_lock(&ebc->barrier_lock);
++		ebc->worker_parked = true;
++		mutex_unlock(&ebc->barrier_lock);
++	}
++}
++
++static void rockchip_ebc_wake_worker(struct rockchip_ebc *ebc, bool have_ctx)
++{
++	mutex_lock(&ebc->barrier_lock);
++	ebc->worker_available = have_ctx && !ebc->barrier_poison &&
++				!ebc->hardware_uncertain;
++	if (have_ctx)
++		ebc->worker_parked = false;
++	mutex_unlock(&ebc->barrier_lock);
++	/* Never unpark into a NULL ctx: the outer-loop top dereferences
++	 * it unconditionally.  A never-enabled CRTC has no ctx. */
++	if (have_ctx)
++		kthread_unpark(ebc->refresh_thread);
++}
++
++/* The PM callbacks read ctx presence outside any commit; take the CRTC
++ * lock so a concurrent client commit cannot swap and free the state
++ * under the read (fbcon can commit during resume). */
++static bool rockchip_ebc_crtc_has_ctx(struct rockchip_ebc *ebc)
++{
++	bool have_ctx;
++
++	drm_modeset_lock(&ebc->crtc.mutex, NULL);
++	have_ctx = to_ebc_crtc_state(ebc->crtc.state)->ctx != NULL;
++	drm_modeset_unlock(&ebc->crtc.mutex);
++	return have_ctx;
++}
++
 +static void rockchip_ebc_crtc_atomic_enable(struct drm_crtc *crtc,
 +					    struct drm_atomic_state *state)
 +{
@@ -5034,13 +5110,8 @@ index 000000000..8db4c36cc
 +	/* pr_info("ebc: %s", __func__); */
 +
 +	crtc_state = drm_atomic_get_new_crtc_state(state, crtc);
-+	if (crtc_state->mode_changed) {
-+		mutex_lock(&ebc->barrier_lock);
-+		ebc->worker_available = !ebc->barrier_poison &&
-+				!ebc->hardware_uncertain;
-+		mutex_unlock(&ebc->barrier_lock);
-+			kthread_unpark(ebc->refresh_thread);
-+	}
++	if (crtc_state->mode_changed)
++		rockchip_ebc_wake_worker(ebc, true);
 +}
 +
 +static void rockchip_ebc_crtc_atomic_disable(struct drm_crtc *crtc,
@@ -5048,23 +5119,11 @@ index 000000000..8db4c36cc
 +{
 +	struct rockchip_ebc *ebc = crtc_to_ebc(crtc);
 +	struct drm_crtc_state *crtc_state;
-+	bool pending;
 +	/* pr_info("ebc: %s", __func__); */
 +
 +	crtc_state = drm_atomic_get_new_crtc_state(state, crtc);
-+	if (crtc_state->mode_changed){
-+		/* No accepted generation may be left behind a parked worker. */
-+		mutex_lock(&ebc->barrier_lock);
-+		ebc->worker_available = false;
-+		pending = ebc->legacy_pending ||
-+			ebc->requested_generation > ebc->completed_generation;
-+		mutex_unlock(&ebc->barrier_lock);
-+		if (pending)
-+			rockchip_ebc_poison(ebc, -ENODEV);
-+		if (! ((ebc->refresh_thread->__state) & (TASK_DEAD))){
-+			kthread_park(ebc->refresh_thread);
-+		}
-+	}
++	if (crtc_state->mode_changed)
++		rockchip_ebc_quiesce_worker(ebc);
 +}
 +
 +static const struct drm_crtc_helper_funcs rockchip_ebc_crtc_helper_funcs = {
@@ -5766,6 +5825,11 @@ index 000000000..8db4c36cc
 +	if (READ_ONCE(ebc->hardware_uncertain)) {
 +		return -EBUSY;
 +	}
++	/* The helper's disable commit invokes atomic_disable only for an
++	 * ACTIVE CRTC; a blanked fbdev CRTC skips the hook while the
++	 * resume commit still swaps the ctx.  Quiesce unconditionally --
++	 * idempotent if the hook already ran. */
++	rockchip_ebc_quiesce_worker(ebc);
 +	/* A pre-start poison has no hardware owner, so it does not require power
 +	 * retention; only uncertain DMA ownership blocks this transaction. */
 +	ebc->suspend_was_requested = 1;
@@ -5773,6 +5837,8 @@ index 000000000..8db4c36cc
 +	if (ret) {
 +		ebc->suspend_was_requested = 0;
 +		drm_mode_config_helper_resume(&ebc->drm);
++		rockchip_ebc_wake_worker(ebc,
++					 rockchip_ebc_crtc_has_ctx(ebc));
 +	}
 +
 +	return ret;
@@ -5781,18 +5847,27 @@ index 000000000..8db4c36cc
 +static int __maybe_unused rockchip_ebc_resume(struct device *dev)
 +{
 +	struct rockchip_ebc *ebc = dev_get_drvdata(dev);
++	int ret;
++	pr_info("%s", __func__);
 +
 +	if (READ_ONCE(ebc->hardware_uncertain))
 +		return -EBUSY;
 +
 +	pm_runtime_force_resume(dev);
 +
-+	return drm_mode_config_helper_resume(&ebc->drm);
++	ret = drm_mode_config_helper_resume(&ebc->drm);
++	/* Wake only after a successful helper resume so the worker's
++	 * per-unpark ctx re-read lands on the newly committed ctx. */
++	if (!ret)
++		rockchip_ebc_wake_worker(ebc,
++					 rockchip_ebc_crtc_has_ctx(ebc));
++	return ret;
 +}
 +
 +static int rockchip_ebc_runtime_suspend(struct device *dev)
 +{
 +	struct rockchip_ebc *ebc = dev_get_drvdata(dev);
++	int ret;
 +
 +	if (READ_ONCE(ebc->hardware_uncertain))
 +		return -EBUSY;
@@ -5801,7 +5876,12 @@ index 000000000..8db4c36cc
 +
 +	clk_disable_unprepare(ebc->dclk);
 +	clk_disable_unprepare(ebc->hclk);
-+	regulator_bulk_disable(EBC_NUM_SUPPLIES, ebc->supplies);
++	/* Log-only (inherited ignores the return): discriminates a real
++	 * regulator leak from a sampling artifact in future sessions. */
++	ret = regulator_bulk_disable(EBC_NUM_SUPPLIES, ebc->supplies);
++	if (ret)
++		dev_warn(dev, "supply disable failed at runtime suspend: %d\n",
++			 ret);
 +
 +	return 0;
 +}
@@ -5993,6 +6073,8 @@ index 000000000..8db4c36cc
 +	}
 +
 +	kthread_park(ebc->refresh_thread);
++	/* Single-threaded probe context: the thread starts parked. */
++	ebc->worker_parked = true;
 +	sched_set_fifo(ebc->refresh_thread);
 +
 +	ret = rockchip_ebc_drm_init(ebc);

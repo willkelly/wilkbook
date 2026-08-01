@@ -66,6 +66,7 @@ DBG_DRIVER := $(DBGDIR)/drivers/gpu/drm/rockchip/rockchip_ebc.c
 
 all: header-check $(BUILD)/ebc-logic-test $(BUILD)/ebc-refresh-test \
      $(BUILD)/ebc-refresh-test-dbg $(BUILD)/ebc-refresh-starvation-test \
+     $(BUILD)/ebc-suspend-bracket-test \
      $(BUILD)/ebc-replay \
      $(BUILD)/ebc-dump $(BUILD)/ebc-dump-grab
 
@@ -122,6 +123,12 @@ $(BUILD)/ebc-refresh-starvation-test: ebc-refresh-starvation-test.c \
                                       $(EXTRACTED) shim/kernel-shim.h \
                                       shim/fake-ebc.h
 	$(CC) $(CFLAGS) $(ASAN) $(CPPFLAGS) -o $@ ebc-refresh-starvation-test.c
+
+# Not waveform-gated: drives only the system-sleep park/wake bracket.
+$(BUILD)/ebc-suspend-bracket-test: ebc-suspend-bracket-test.c \
+                                   $(EXTRACTED) shim/kernel-shim.h \
+                                   shim/fake-ebc.h
+	$(CC) $(CFLAGS) $(ASAN) $(CPPFLAGS) -o $@ ebc-suspend-bracket-test.c
 
 $(BUILD)/ebc-replay: ebc-replay.c $(EXTRACTED) shim/kernel-shim.h \
                      shim/fake-ebc.h

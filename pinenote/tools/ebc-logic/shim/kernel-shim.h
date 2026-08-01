@@ -504,10 +504,15 @@ static struct task_struct ebc_shim_task; /* single-TU shim */
 static inline bool kthread_should_stop(void) { return ebc_shim.thread_stop; }
 static inline bool kthread_should_park(void) { return ebc_shim.thread_parked; }
 static inline void kthread_parkme(void) { }
-static inline void kthread_park(struct task_struct *t)
+/* Real kthread_park returns int (0, -ENOSYS exiting, -EBUSY double
+ * park); the driver's quiesce path consumes it as of 2026-08-01. */
+static inline int kthread_park(struct task_struct *t)
 {
 	(void)t;
+	if (ebc_shim.thread_parked)
+		return -EBUSY;
 	ebc_shim.thread_parked = true;
+	return 0;
 }
 static inline void kthread_unpark(struct task_struct *t)
 {
