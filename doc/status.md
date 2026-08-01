@@ -59,6 +59,22 @@ Useful beyond this campaign — it is the reader UI's usable-area inset.
 
 Suspend remains disabled; none of this is suspend permission.
 
+**2026-08-01 os2 write #3: the worker-bracket-fix image is deployed and
+readback-verified; reboot pending.** Artifact
+`pinenote-reader-PNGuixRoot-20260801.ext4` (staged as `…-fix.ext4`),
+SHA-256
+`8e302e488243bbdbc4a6ac9f2ade9145eca9120b35325c4ed01c5a026301622d`,
+1,945,595,904 bytes (474,999 × 4096 exactly). Carries the previous
+image plus the system-sleep worker bracket fix (the `l47fsm…` kernel,
+byte-verified inside the artifact before staging). Full write protocol
+from os1: archived-fingerprint identity, staged SHA match, root=p5 and
+p6-unmounted re-checked in the write shell, exact-count dd, readback
+over the identical range matches. First session on this image: the
+rung-2 ladder retry per `doc/power-management.md` — expected new
+behaviors: park-tail white wash on suspend entry (blanked path),
+`rockchip_ebc_resume` in dmesg, and the beacon band actually appearing
+after wake.
+
 **2026-08-01 (afternoon, offline, follows the midday ladder): the resume defect is root-caused to a
 single gating asymmetry and fixed in-tree; hardware proof pending the
 next boot.** A three-analyst source reconstruction plus two adversarial
