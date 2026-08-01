@@ -59,6 +59,39 @@ Useful beyond this campaign — it is the reader UI's usable-area inset.
 
 Suspend remains disabled; none of this is suspend permission.
 
+**2026-08-01 (late evening) discriminator pass: the residual is
+localized to silent damage-drop at the fb-helper's suspended-state
+gate; the driver, thread, and hardware are fully exonerated.**
+Checkpointed cycle (per-step full-line IRQ sums; the single-column
+counter concern was checked and refuted — all interrupts land on CPU0):
+the blank step drives 0 frames; the whole suspend/resume cycle drives
+exactly 2 single frames (one in entry/resume, one at unblank — there
+is no wash and never was; the "white" seen on glass is those minimal
+off-screen drives, the machinery behind os1's fancy suspend image with
+our white fallback, cf. the boot-time `rockchip_ebc_default_screen.bin
+-2` line). Post-resume, ALL FOUR damage probes are dead — plain write,
+write+fsync (the production publish path!), bare FBIOPUT_VSCREENINFO
+set_par, and write-after-set_par — refuting the set_par-revival
+hypothesis. Then the decisive pair on the live wedged state: the raw
+GLOBAL_REFRESH ioctl returns 0 and drives a full pass (+47 frames —
+thread, ctx, rails, hardware all healthy; this is what reader-start
+"recovery" really is), while writes remain dead even AFTER the ioctl's
+drain force-flushed the deferred-io and damage workers. Damage is not
+queued anywhere: it is being dropped at submission. Signature match:
+`drm_fb_helper_fb_dirty`'s FBINFO_STATE gate discards dirty rects
+while the fbdev client is marked suspended — the client's resume
+(deferred through the console-lock dance during the device-resume
+phase) apparently never completes in our configuration. DRM topology
+is intact (plane attached, fb bound, connector live). No stuck
+kworker, no error lines. Open question for the offline pass: why the
+fb client's deferred resume never lands (7.0.11
+`drm_fb_helper_set_suspend_unlocked`/resume_work vs our console
+config), and the fix shape (likely: ensure fb-client resume completion
+from our resume path, or re-arm it post-resume). Also queued: verify
+whether reader partials actually flow after a reader-start recovery or
+only globals. Device restored (reader running, 186-frame boot, /tmp
+clean, no reboot — third wedge-free session in a row).
+
 **2026-08-01 (evening) rung-2 retry on the bracket-fix image: MAJOR
 PARTIAL — the thread un-wedges and the panel recovers WITHOUT a reboot
 for the first time, but plain fb writes between resume and the next
