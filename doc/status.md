@@ -59,6 +59,41 @@ Useful beyond this campaign — it is the reader UI's usable-area inset.
 
 Suspend remains disabled; none of this is suspend permission.
 
+**2026-08-01 (evening) rung-2 retry on the bracket-fix image: MAJOR
+PARTIAL — the thread un-wedges and the panel recovers WITHOUT a reboot
+for the first time, but plain fb writes between resume and the next
+real client commit still do not flow.** Protocol as documented, with
+the blanked-CRTC precondition made deterministic (explicit blank;
+drm-state captured active=1 → 0 pre-suspend). Mechanics clean again:
+24.6 s asleep, alarm wake, gadget quiesced, `rockchip_ebc_resume`
+printed (the fix ran), ctx swap at resume as designed. New facts:
+
+- The whole cycle produced only **2 EBC IRQs** — the expected park-tail
+  wash did not run either (open sub-question).
+- Post-resume band writes: 0 frames (beacon never appeared) — BUT
+  **`herd start reader-session` recovered everything: 186 IRQs, panel
+  alive, reader healthy**. Every previous failure was reboot-only; the
+  bracket fix converted a hard wedge into a
+  recoverable-by-next-modeset state. The reader's start issues
+  `FBIOPUT_VSCREENINFO` (set_par → full mode-restore commit), which is
+  what plain write()-path damage lacks.
+- **The regulator "+1 leak" is retired as a non-leak**: after recovery
+  the counts returned to baseline (v3p3:1, vposneg:0, vcom:0) — it was
+  the enable-count of the stuck refresh state, not an unbalanced path.
+  The earlier analysis's "sampling artifact" branch was correct.
+- Residual defect, now narrow: after a blanked-CRTC resume, damage
+  submitted through the fb-helper dirty path does not reach the panel
+  until a modeset-bearing commit occurs. Production impact: a reader
+  surviving suspend in place would resume into the dead-write window
+  (its refresh calls are commits but not modesets). Next offline
+  analysis question: why the resume-committed enable=1/active=0 state
+  (unblanked to active=1 afterwards) services commit-damage only after
+  a set_par, and where the park-tail wash went.
+- Evidence harvested with verification before cleanup (the multi-file
+  scp trap recurred; caught this time by the gated cleanup — the
+  standing rule works). Device left healthy: reader running, EBC
+  active, regulators balanced, /tmp clean, no reboot performed.
+
 **2026-08-01 os2 write #3: the worker-bracket-fix image is deployed and
 readback-verified; reboot pending.** Artifact
 `pinenote-reader-PNGuixRoot-20260801.ext4` (staged as `…-fix.ext4`),
