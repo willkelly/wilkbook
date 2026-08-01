@@ -59,6 +59,28 @@ Useful beyond this campaign — it is the reader UI's usable-area inset.
 
 Suspend remains disabled; none of this is suspend permission.
 
+**2026-08-01 os2 write #2: the consolidated image is deployed and
+readback-verified; reboot pending.** Artifact
+`pinenote-reader-PNGuixRoot-20260801.ext4`, SHA-256
+`be29e1f72d7abcf3aabdf1fb4276d6b03ed7464c9859cb75bf58246a7febfe41`,
+1,945,587,712 bytes (474,997 × 4096 exactly). Carries everything since
+the last write, verified byte-present inside the artifact before
+staging: `defio_delay_ms=250` pinned in `pinenote-apply-ebc-params` and
+both modprobe lines (the portrait fix persists across reboots from this
+image on), the TPS65185 suspend/resume restoration in the embedded
+kernel (dormant; policy still `false`), the updated dormant ultra model
+(production parser still rejects the override property), and the
+publish-on-call stack from the previous image. Same full protocol: os1
+identity by archived fingerprint, staged SHA match, root=p5 and
+p6-unmounted re-checked in the same shell as the write, exact-count dd,
+readback over the identical byte range matches. Boot expectation:
+identical visible behavior to the current image, except portrait page
+turns are single-pass from first boot with no sysfs step needed —
+verify with one alternating page-turn IRQ count and a
+`defio_delay_ms` readback (expect 250 after `pinenote-ebc-params`
+runs). Nothing suspends; the PM code is dead until the ladder says
+otherwise.
+
 **2026-08-01 (later): the TPS65185 resume-restoration hunk is written,
 gated, and dormant.** The forward-port patch now carries
 suspend/resume PM ops for the mainline tps65185 driver: snapshot the
