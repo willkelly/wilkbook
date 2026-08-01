@@ -87,9 +87,11 @@ kworker, no error lines. Open question for the offline pass: why the
 fb client's deferred resume never lands (7.0.11
 `drm_fb_helper_set_suspend_unlocked`/resume_work vs our console
 config), and the fix shape (likely: ensure fb-client resume completion
-from our resume path, or re-arm it post-resume). Also queued: verify
-whether reader partials actually flow after a reader-start recovery or
-only globals. Device restored (reader running, 186-frame boot, /tmp
+from our resume path, or re-arm it post-resume). The queued
+partials-after-recovery question was answered the same night by use:
+the user loaded a book and turns pages normally — a fresh fb client
+clears the clog completely, so reader-start recovery is full recovery,
+partials included. Device restored (reader running, 186-frame boot, /tmp
 clean, no reboot — third wedge-free session in a row).
 
 **2026-08-01 (evening) rung-2 retry on the bracket-fix image: MAJOR
