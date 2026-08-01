@@ -194,9 +194,11 @@ Current blockers after that gate passes:
   production sleep-frame painting and coordinator wiring remain absent;
 - the known-working downstream stack also carries TPS65185 standby/resume
   register restoration — **resolved 2026-08-01: required before `deep`,
-  shape known (the m-weigand 6.12 resume handler is the template; VCOM is
-  NVM-safe and deliberately skipped; our REGCACHE_MAPLE needs
-  mark-dirty+sync), acceptance instrument proven live** — and explicit
+  and now WRITTEN: the forward-port patch carries a snapshot/restore
+  suspend-resume pair (dormant until the ladder reaches `deep`; VCOM
+  never written; cache-through restore; structurally gated in
+  `make suspend-check`, negative-tested; see
+  `doc/kernel-forward-port.md`)** — and explicit
   RK817 regulator suspend states, whose adoption is now gated on the
   rail-kill wake-collision question (see the evidence pass below);
 - **SC7A20 accelerometer resume** (added 2026-08-01): no coordinator seam

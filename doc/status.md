@@ -59,6 +59,27 @@ Useful beyond this campaign — it is the reader UI's usable-area inset.
 
 Suspend remains disabled; none of this is suspend permission.
 
+**2026-08-01 (later): the TPS65185 resume-restoration hunk is written,
+gated, and dormant.** The forward-port patch now carries
+suspend/resume PM ops for the mainline tps65185 driver: snapshot the
+nine programmable non-VCOM registers at suspend, wait out the 50 ms
+post-wake EEPROM reload window, rewrite bit-exact via cache-through
+`regmap_write`. VCOM is never written (NVM-backed per-device
+calibration — never-bundle class), TMST1 excluded (write-trigger),
+ENABLE last (no rails under stale sequencing), snapshot-not-defaults
+because U-Boot programs sequencing (UPSEQ0 0xe1 measured vs 0xe4
+default). The tps65185 diff section was regenerated with `diff -u`
+(96→212 lines) and the patched source verified byte-identical to the
+edited file. A structural gate
+(`validate-tps65185-pm-hunk.sh`, wired into `make suspend-check`) pins
+the VCOM exclusion, the reload wait ordering, the no-`regcache_sync`
+rule, and ENABLE-last — negative-tested four ways. Dormant on the
+running image: nothing suspends (policy `false`), so the callbacks
+never execute until the ladder reaches `deep`. All host suites green;
+full aarch64 cross-build green. The remaining resume blockers
+(cyttsp5, SC7A20, rail policy) stay open — they are gated on hardware
+truth (the rail-kill wake question), not on writable code.
+
 **2026-08-01 suspend-program groundwork, same os2 session + offline: the
 ultra-suspend firmware handshake is modeled and hard-off, VCOM is proven
 NVM-safe, TPS65185 resume is settled as required-with-known-shape, and

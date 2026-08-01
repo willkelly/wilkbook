@@ -102,6 +102,24 @@ It does not change Linux 7.0's `ROCKCHIP_SLEEP_PD_CONFIG=0xff` pmdomain ABI.
   with a full IIO rewrite of the driver (events, triggers); we carry a
   ~70-line additive hunk against mainline instead, to keep future rebases
   cheap.
+- TPS65185 suspend/resume register restoration, same file (added
+  2026-08-01, dormant until the suspend ladder reaches `deep`): snapshot
+  the nine programmable non-VCOM registers at suspend, wait out the
+  chip's 50 ms post-wake EEPROM reload window, and rewrite them bit-exact
+  at resume via cache-through `regmap_write` (a `regcache_sync` restore
+  would be masked by `REGCACHE_MAPLE`). VCOM is deliberately never
+  written — its power-up default *is* the NVM-stored per-device
+  calibration (never-bundle class); TMST1 is excluded because
+  `READ_THERM` is a write-trigger; ENABLE restores last so rails never
+  power up under stale sequencing. Snapshot-not-defaults matters:
+  U-Boot's e-ink splash programs sequencing (measured UPSEQ0 0xe1 vs
+  datasheet 0xe4). Evidence chain and the known-working m-weigand
+  template: `doc/power-management.md`, "Evidence pass (2026-08-01)".
+  Structurally gated by
+  `pinenote/scripts/preflight/validate-tps65185-pm-hunk.sh` (in
+  `make suspend-check`), negative-tested four ways. This diff section is
+  now regenerated with `diff -u` rather than hand-edited; the old
+  96-line section grew to 212.
 - the `eink,ed103tc2` panel entry for `panel-simple` (added 2026-07-03),
   taken verbatim from the hardware-validated m-weigand 6.6.30 tree (8
   refresh-rate modes, 1872x1404, DPI). Vanilla panel-simple only knows

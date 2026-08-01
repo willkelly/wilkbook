@@ -6949,10 +6949,16 @@ index 000000000..ce6a31d10
 +MODULE_AUTHOR("Samuel Holland <samuel@sholland.org>");
 +MODULE_LICENSE("GPL");
 diff --git a/drivers/regulator/tps65185.c b/drivers/regulator/tps65185.c
-index 786622d..7c9464b 100644
+index 786622d..2ab1170 100644
 --- a/drivers/regulator/tps65185.c
 +++ b/drivers/regulator/tps65185.c
-@@ -10,6 +10,7 @@
+@@ -5,11 +5,13 @@
+ 
+ #include <linux/cleanup.h>
+ #include <linux/completion.h>
++#include <linux/delay.h>
+ #include <linux/gpio/consumer.h>
+ #include <linux/i2c.h>
  #include <linux/module.h>
  #include <linux/mutex.h>
  #include <linux/hwmon.h>
@@ -6960,7 +6966,40 @@ index 786622d..7c9464b 100644
  #include <linux/pm_runtime.h>
  #include <linux/property.h>
  #include <linux/regulator/consumer.h>
-@@ -100,6 +101,54 @@ static const struct hwmon_chip_info tps65185_chip_info = {
+@@ -26,6 +28,10 @@
+ #define TPS65185_REG_INT_EN2 6
+ #define TPS65185_REG_INT1 7
+ #define TPS65185_REG_INT2 8
++#define TPS65185_REG_UPSEQ0 9
++#define TPS65185_REG_UPSEQ1 0xa
++#define TPS65185_REG_DWNSEQ0 0xb
++#define TPS65185_REG_DWNSEQ1 0xc
+ #define TPS65185_REG_TMST1 0xd
+ #define TPS65185_REG_TMST2 0xe
+ #define TPS65185_REG_PG 0xf
+@@ -38,6 +44,13 @@
+ #define TPS65185_ENABLE_STANDBY BIT(6)
+ 
+ #define PGOOD_TIMEOUT_MSECS 200
++/*
++ * After wake-from-SLEEP the chip spends this window reloading its EEPROM;
++ * register writes inside it are clobbered by the reload (the known-working
++ * downstream driver waits out the same window).
++ */
++#define TPS65185_WAKEUP_DELAY_MS 50
++#define TPS65185_NUM_PM_REGS 9
+ 
+ struct tps65185_data {
+ 	struct device *dev;
+@@ -49,6 +62,7 @@
+ 	struct completion pgood_completion;
+ 	int pgood_irq;
+ 	struct completion tmst_completion;
++	unsigned int pm_snapshot[TPS65185_NUM_PM_REGS];
+ };
+ 
+ static const struct hwmon_channel_info *tps65185_info[] = {
+@@ -100,6 +114,54 @@
  	.info = tps65185_info,
  };
  
@@ -7015,7 +7054,7 @@ index 786622d..7c9464b 100644
  static bool tps65185_volatile_reg(struct device *dev, unsigned int reg)
  {
  	switch (reg) {
-@@ -429,6 +478,28 @@ static int tps65185_probe(struct i2c_client *client)
+@@ -429,9 +491,99 @@
  			dev_notice(&client->dev, "failed to register hwmon\n");
  	}
  
@@ -7041,9 +7080,88 @@ index 786622d..7c9464b 100644
 +					     "failed to register iio device\n");
 +	}
 +
++	return 0;
++}
++
++
++/*
++ * PineNote (wilkbook): at deep suspend the WAKEUP pad's IO rail (VCCIO5,
++ * fed from vcc_3v3, off-in-suspend) loses drive, the chip drops to SLEEP,
++ * and SLEEP resets every register to its power-up default.  VCOM is exempt
++ * by construction -- its power-up default IS the NVM-stored per-device
++ * calibration (datasheet 8.3.7.2) -- and must never be written here (it is
++ * per-device calibration data).  Everything else programmable is snapshot
++ * at suspend and rewritten bit-exact at resume: values may have been
++ * programmed by U-Boot's e-ink splash rather than by this driver (measured:
++ * UPSEQ0 0xe1 vs datasheet default 0xe4), so restoring from defaults or DT
++ * would be wrong.  Plain regmap_write is used deliberately: it is
++ * cache-through, so the REGCACHE_MAPLE cache stays coherent and the restore
++ * cannot be masked by a cache that believes the value is already there.
++ * TMST1 is excluded (its READ_THERM bit is a write-trigger); VCOM1/2, INT1/2,
++ * TMST_VALUE, PG and REVID are excluded (NVM-backed, read-to-clear status,
++ * or read-only).  ENABLE is restored last so rails never power up under
++ * stale sequencing.  On s2idle (no rail loss) the rewrite is idempotent.
++ */
++static const unsigned int tps65185_pm_regs[TPS65185_NUM_PM_REGS] = {
++	TPS65185_REG_VADJ,
++	TPS65185_REG_INT_EN1,
++	TPS65185_REG_INT_EN2,
++	TPS65185_REG_UPSEQ0,
++	TPS65185_REG_UPSEQ1,
++	TPS65185_REG_DWNSEQ0,
++	TPS65185_REG_DWNSEQ1,
++	TPS65185_REG_TMST2,
++	TPS65185_REG_ENABLE,
++};
++
++static int tps65185_suspend(struct device *dev)
++{
++	struct tps65185_data *data = dev_get_drvdata(dev);
++	unsigned int i;
++	int ret;
++
++	for (i = 0; i < TPS65185_NUM_PM_REGS; i++) {
++		ret = regmap_read(data->regmap, tps65185_pm_regs[i],
++				  &data->pm_snapshot[i]);
++		if (ret)
++			return ret;
++	}
++
++	return 0;
++}
++
++static int tps65185_resume(struct device *dev)
++{
++	struct tps65185_data *data = dev_get_drvdata(dev);
++	unsigned int i;
++	int ret;
++
++	msleep(TPS65185_WAKEUP_DELAY_MS);
++
++	for (i = 0; i < TPS65185_NUM_PM_REGS; i++) {
++		ret = regmap_write(data->regmap, tps65185_pm_regs[i],
++				   data->pm_snapshot[i]);
++		if (ret)
++			return ret;
++	}
++
  	return 0;
  }
  
++static DEFINE_SIMPLE_DEV_PM_OPS(tps65185_pm_ops,
++				tps65185_suspend, tps65185_resume);
++
+ static const struct of_device_id tps65185_dt_ids[] = {
+ 	{
+ 		.compatible = "ti,tps65185",
+@@ -445,6 +597,7 @@
+ 	.driver = {
+ 		   .name = "tps65185",
+ 		   .of_match_table = tps65185_dt_ids,
++		   .pm = pm_sleep_ptr(&tps65185_pm_ops),
+ 	},
+ 	.probe = tps65185_probe,
+ };
 diff --git a/include/drm/drm_epd_helper.h b/include/drm/drm_epd_helper.h
 new file mode 100755
 index 000000000..56a606841

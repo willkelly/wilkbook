@@ -182,3 +182,4 @@ activation-positive-check:
 # approved DT wake capability, and restricted KOReader policy evaluation.
 suspend-check:
 	guix shell dtc python luajit -- sh pinenote/scripts/preflight/test-inspect-pinenote-suspend-gates.sh
+	sh pinenote/scripts/preflight/validate-tps65185-pm-hunk.sh
