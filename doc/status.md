@@ -59,6 +59,53 @@ Useful beyond this campaign — it is the reader UI's usable-area inset.
 
 Suspend remains disabled; none of this is suspend permission.
 
+**2026-08-01 (evening) FIRST SUPERVISED SUSPEND LADDER SESSION: rung 1
+PASS, rung 2 suspend/wake mechanics PASS, rung 2 acceptance FAIL — the
+`rockchip_ebc` system-resume path is broken in our tree, reproduced on
+both an aborted and a clean cycle. Ladder stopped; deep untested by
+rule.** User present throughout; three reboots total; device restored
+healthy after each. Full record:
+`doc/artifacts/pinenote-suspend-ladder-20260801.md`.
+
+- **Rung 1 (pm_test freezer): PASS** — 5.15 s cycle, clean entry/exit.
+- **Rung 2 attempt 1: FAIL-ABORT, root-caused.** The USB ACM gadget
+  with an active host session vetoes suspend: dwc3 `wait for SETUP
+  phase timed out` → `dwc3_plat_suspend` returns -11 → PM core aborts.
+  New hard precondition: quiesce the gadget (blank
+  `/sys/kernel/config/usb_gadget/pinenote-acm/UDC`) before any attempt.
+  Also: rk808-rtc rejects the `+N` wakealarm form (EAGAIN) — arm with
+  absolute epoch.
+- **Rung 2 attempt 2: mechanics PASS** — gadget unbound, alarm armed
+  +25 s absolute, `suspend entry (s2idle)` → 24.7 s asleep → RTC woke it
+  on schedule, Wi-Fi rejoined, dwc3 clean. The TPS65185 snapshot/restore
+  pair ran on hardware both cycles without errors (registers identical
+  pre/post except ENABLE, explained below).
+- **Acceptance FAIL, the session's headline**: after `rockchip_ebc`'s
+  system-resume (`plane_reset`/`ctx_release`/`ctx_free`), damage is
+  never serviced again — beacon and probe band writes cost 0 frames,
+  the reader's own boot repaint cost 0 frames, and the user confirms
+  nothing ever appeared on glass. Additionally the resume path leaks
+  regulator enables every cycle (vcom 0→1 users, v3p3 1→2, vposneg
+  0→2; TPS `ENABLE` 0x2f→0x3f with VCOM live) while runtime-PM still
+  reports `suspended`. Recovery is reboot-only. **This is the suspend
+  program's display-side blocker**, now precisely characterized with
+  two reproductions.
+- **UART finding**: the USB-C serial cable receives nothing from
+  `ttyS2` at 1.5 Mbaud even when plugged from boot (verified by writing
+  to `/dev/kmsg` and `/dev/ttyS2` directly while capturing) — the
+  console-free protocol (absolute-epoch RTC bound, panel beacon,
+  on-disk evidence, PMIC long-press as recovery) is the validated
+  procedure for this hardware, and the ACM console cannot observe
+  suspend by construction (it is a USB gadget and dies with it).
+- **Operator error, recorded**: the raw rung-2 evidence files were
+  deleted from the device after a silently failed multi-file scp; the
+  full abort-session dmesg survives and every load-bearing value was
+  captured live in-session before the loss (excerpted in the artifact).
+- Next step is offline + one os1 oracle question: does stock Debian's
+  6.12 driver survive an s2idle cycle with a working panel? That
+  decides inherited-vs-forward-port for the resume defect, and
+  therefore report-vs-fix.
+
 **2026-08-01 os2 write #2: the consolidated image is deployed and
 readback-verified; reboot pending.** Artifact
 `pinenote-reader-PNGuixRoot-20260801.ext4`, SHA-256

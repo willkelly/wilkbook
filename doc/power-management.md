@@ -210,6 +210,34 @@ Current blockers after that gate passes:
 
 ### Supervised qualification ladder
 
+**First session run 2026-08-01** (`doc/status.md`, artifact
+`pinenote-suspend-ladder-20260801.md`): rung 1 PASS; rung 2 suspend/wake
+mechanics PASS (gadget quiesced, absolute-epoch RTC alarm, 24.7 s,
+on-schedule wake) but **acceptance FAIL** — the `rockchip_ebc`
+system-resume path never services damage again
+(`plane_reset`/`ctx_release`/`ctx_free`, 0 frames for every subsequent
+write incl. the reader's own repaint) and leaks one regulator enable per
+cycle (vcom/v3p3/vposneg up; TPS `ENABLE` 0x3f; runtime-PM stuck
+`suspended`). Reboot-only recovery. **Deep untested by rule.** The
+display-side resume defect is now the program's gating blocker; the os1
+oracle question (does stock 6.12 survive s2idle with a working panel?)
+decides inherited-vs-ours and report-vs-fix.
+
+Amendments from that session, now standing procedure:
+- **Quiesce the USB gadget before any attempt** (blank
+  `/sys/kernel/config/usb_gadget/pinenote-acm/UDC`; rebind after). An
+  active ACM host session hard-vetoes suspend via dwc3.
+- **Arm the RTC with absolute epoch** (`since_epoch` + N); the `+N`
+  form returns EAGAIN on rk808-rtc.
+- **The procedure is console-free by necessity**: the ACM console is a
+  gadget (dies with suspend; vetoes it while attached), and the USB-C
+  serial cable demonstrably receives nothing from ttyS2. Observation =
+  the panel beacon + on-disk evidence + bounded auto-wake; recovery =
+  PMIC long-press, os1, post-mortem harvest. "Human-observed on UART"
+  is amended to "human-present with bounded auto-wake" for this
+  hardware.
+- Evidence transfers off-device must be verified BEFORE device cleanup.
+
 Do not combine the telemetry deployment, CPU-idle work, boot-firmware changes,
 or suspend orchestration into one verdict. RK817 telemetry is now qualified;
 after boot firmware is identified, test one mode per UART-observed case.
