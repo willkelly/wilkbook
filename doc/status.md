@@ -93,6 +93,21 @@ printed (the fix ran), ctx swap at resume as designed. New facts:
   scp trap recurred; caught this time by the gated cleanup — the
   standing rule works). Device left healthy: reader running, EBC
   active, regulators balanced, /tmp clean, no reboot performed.
+- **Observed re-run, same evening (user watching the glass; identical
+  counters: 25.0 s, 2 IRQs in the gt window, fresh band 0 frames,
+  reader-start recovery 186 IRQs)**. The glass sequence, verbatim:
+  "koreader → console (stays a while) → what looks like a blank screen
+  → wait → console again → wait → koreader". Decoded: the post-wake
+  unblank REPAINTED THE CONSOLE — a modeset-class commit the panel
+  serviced, proving the thread alive and servicing immediately after
+  resume; the beacon band was invisible on glass exactly as the
+  0-frame counter said. New puzzle the counters cannot explain: the
+  "blank screen" around suspend entry suggests the park-tail wash
+  painted white in a window where the IRQ counter moved by only 2 —
+  something drove the glass without counted DSP_END interrupts.
+  Next-cycle discriminators queued: per-step IRQ checkpoints, a
+  write+fsync (publish-path) band vs plain write, and dirtyfb-vs-write
+  discrimination.
 
 **2026-08-01 os2 write #3: the worker-bracket-fix image is deployed and
 readback-verified; reboot pending.** Artifact
