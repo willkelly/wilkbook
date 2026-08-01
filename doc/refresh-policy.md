@@ -694,11 +694,26 @@ asserts every overridden `refresh*Imp` still exists there, that all seven
 overrides call `publish()`, and that publish precedes wash — verified to fail
 on a renamed Imp and on a dropped publish call.
 
-Still hardware-gated: the choice of shipped `defio_delay_ms` value. The next
-probe session should sweep {50, 250, 1000} against the corrected
-`repaint-duration.lua` (which now reports measured spans) and confirm a
-~145 ms spread costs one pass at the raised values; the winner then gets
-pinned in `pinenote-apply-ebc-params` next to the other parameters.
+Hardware-validated 2026-08-01 (SSH probe session on the deployed
+pre-`defio_delay_ms` image; full record in `doc/status.md`): the kernel
+half behaves exactly as designed — no-op fsync free (0.01–0.08 ms), publish
+call 4.6–9.8 ms with a full screen dirty, non-blocking during an active
+pass (4.5 ms), one pass per publish, and a measured **~45 ms** latency win
+for sub-window writes (the pen case: timer 174–189 ms vs fsync 132–140 ms
+to first IRQ). The same session bracketed the deferred-io threshold with
+the corrected probe: measured spans ≤44.4 ms cost one pass, ≥68.0 ms cost
+two — consistent with span-vs-50 ms, no anomalous slack. Two new committed
+probes carry these measurements: `fsync-publish.lua`, `fsync-band.lua`.
+Also observed: an idle-start pipeline floor of ~132–140 ms from damage to
+first frame (commit + EPD power-up + LUT + temperature read) that bounds
+page-turn latency from EBC-idle regardless of the publish path.
+
+Still hardware-gated: the choice of shipped `defio_delay_ms` value — the
+deployed kernel has no such parameter (confirmed absent in sysfs), so the
+sweep {50, 250, 1000} runs after the next image deployment, against the
+corrected `repaint-duration.lua`, confirming a ~145 ms spread costs one
+pass at the raised values; the winner then gets pinned in
+`pinenote-apply-ebc-params` next to the other parameters.
 
 Rollout precisely: only the **timer period** is unchanged until the parameter
 is set. The fsync publishes, the pen-intent publishes, and the ioctl drain are

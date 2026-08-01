@@ -74,12 +74,23 @@ settle()
 print(string.format("  solid-fill cost: %.1f ms (subtracted from each sleep budget)\n",fill_ms))
 print("  target      measured   frames   passes")
 local vals={0,40,80,150,250,400}
+-- self-calibrating pass divisor: the baseline row (one un-spread write)
+-- costs exactly one pass BY CONSTRUCTION, and frames-per-pass is the
+-- waveform phase count, which varies with the temperature bin (38 and
+-- 46 both observed on this panel).  A fixed divisor misreports passes
+-- whenever the bin differs from the one it was written under.
+local per_pass=nil
 for i,ms in ipairs(vals) do
   settle(); local a=irqs()
   local span=spread((i%2==0) and 0x20 or 0xd0, ms==0 and 1 or 8, ms)
   settle(); local n=irqs()-a
-  print(string.format("  %5d ms   %7.1f ms   %5d   %5.1f", ms, span, n, n/38))
+  if i==1 and n>0 then per_pass=n end
+  print(string.format("  %5d ms   %7.1f ms   %5d   %5.1f", ms, span, n,
+    per_pass and n/per_pass or -1))
   io.stdout:flush()
+end
+if per_pass then
+  print(string.format("\n  (one pass = %d frames in the current temperature bin)",per_pass))
 end
 print("\n  If passes track MEASURED duration with NO transpose involved,")
 print("  rotation is merely a way of being slow -- the defect is repaint")

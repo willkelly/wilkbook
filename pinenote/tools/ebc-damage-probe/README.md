@@ -21,6 +21,8 @@ LUAJIT=/run/current-system/profile/lib/koreader/luajit   # or the koreader-bin s
 $LUAJIT damage-scheduling.lua
 $LUAJIT repaint-duration.lua
 $LUAJIT write-cost.lua
+$LUAJIT fsync-publish.lua
+$LUAJIT fsync-band.lua
 # restore
 echo 1 > /sys/class/vtconsole/vtcon1/bind
 herd start reader-session
@@ -90,6 +92,25 @@ driven without a human, and takes the reader pid as `argv[1]`.
 white-on-white, so it is written but unchanged. An earlier attempt that way
 reported an 11-20 ms "write window" from 57 of 936 sample points, which was
 measuring content change, not writing.
+
+`fsync-publish.lua` — validates publish-on-call's kernel half
+(`fb_deferred_io_fsync`) on the running kernel: no-op fsync cost, fsync call
+duration with a full screen dirty, non-blocking behavior during an active
+refresh pass, and one-pass accounting for write+fsync. Hardware-run
+2026-08-01 on the pre-`defio_delay_ms` image: no-op 0.01-0.08 ms, publish
+call 4.6-9.8 ms, 4.5 ms during an active pass, exactly one pass per publish.
+Every write flips against current content — `diff_mode` masks a same-value
+fill and the run reads as "no refresh" (that mistake is preserved in the
+session record).
+
+`fsync-band.lua` — the latency A/B publish-on-call exists for, on a write
+far shorter than the timer window (100 rows ≈ 1 ms — the pen-stroke shape):
+timer path vs write+fsync, write-end to first EBC IRQ. Hardware-run
+2026-08-01: timer 174-189 ms, fsync 132-140 ms — **fsync saves ~45 ms**, the
+mean timer wait. The residual ~135 ms is the idle-start pipeline floor
+(commit blit + EPD power-up + LUT + temperature read before the first
+frame), which full-screen A/Bs cannot see because a governor-paced ~40-100 ms
+fill spans the timer window and both paths flush mid-write.
 
 Measured 2026-07-30, portrait, 24 C:
 

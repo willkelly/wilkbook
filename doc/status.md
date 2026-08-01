@@ -59,6 +59,44 @@ Useful beyond this campaign — it is the reader UI's usable-area inset.
 
 Suspend remains disabled; none of this is suspend permission.
 
+**2026-08-01 SSH-only probe session on the deployed (2026-07-28) os2 image:
+publish-on-call's kernel half is hardware-validated ahead of deployment, and
+the deferred-io threshold is bracketed.** No reboot, no writes outside
+`/tmp`, reader stopped/restarted over SSH with fbcon unbound and EBC-idle
+preconditions; device fully restored (reader running, fbcon unbound, EBC
+quiescent, `/tmp` emptied). Findings, all on the *current* kernel (which has
+no `defio_delay_ms` — confirmed absent from
+`/sys/module/rockchip_ebc/parameters/`, so the {50,250,1000} sweep still
+needs the new image):
+
+- **`fb_deferred_io_fsync` behaves exactly as publish-on-call assumes**
+  (`fsync-publish.lua`): no-op fsync 0.01–0.08 ms; publish call with a full
+  screen dirty 4.6–9.8 ms; fsync during an active 596 ms pass returns in
+  4.5 ms (non-blocking confirmed); write+fsync costs exactly one pass.
+- **The pen-latency win is measured** (`fsync-band.lua`): for a 100-row
+  (~1 ms) write, timer path 174–189 ms vs write+fsync 132–140 ms to first
+  EBC IRQ — **fsync saves ~45 ms**, the mean timer wait. Full-screen A/Bs
+  cannot see this: a governor-paced ~40–100 ms fill spans the timer window
+  and both paths flush mid-write, which is itself the portrait defect in
+  miniature.
+- **Idle-start pipeline floor ~132–140 ms** from damage to first frame
+  (commit blit + EPD power-up + LUT + temperature read). Highly consistent
+  (±5 ms). This bounds any "instant" page-turn expectation from EBC-idle;
+  warm-path latency is unmeasured.
+- **The corrected `repaint-duration.lua` works on glass and the threshold
+  is bracketed**: measured spans ≤44.4 ms cost one pass, ≥68.0 ms cost two,
+  across ten rows over two runs — every point consistent with span-vs-50 ms
+  and no anomalous slack. One pass = **46 frames** in the current
+  temperature bin (the probe's pass divisor is now self-calibrating off its
+  baseline row; 38 and 46 are both real bins).
+- **The RGA is alive on our image**: mainline V4L2 `rockchip-rga` (HW
+  3.02, `/dev/video0`) processed 1404×1872→1872×1404 XR24 during the
+  2026-07-31 feasibility benchmarks — hardware confirmed working even
+  though the accelerator is dominated by publish-on-call for latency.
+- One probe authoring mistake preserved for the record: same-value fills
+  are masked by `diff_mode` and read as "no refresh" — every A/B write must
+  flip against current content.
+
 **2026-07-30 refresh accounting, same os2 session: portrait page turns cost
 exactly two refresh passes, landscape exactly one.** Measured by sampling the
 EBC interrupt counter at ~11 Hz while turning pages and correlating each burst
