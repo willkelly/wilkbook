@@ -73,13 +73,13 @@ kernel (dormant; policy still `false`), the updated dormant ultra model
 publish-on-call stack from the previous image. Same full protocol: os1
 identity by archived fingerprint, staged SHA match, root=p5 and
 p6-unmounted re-checked in the same shell as the write, exact-count dd,
-readback over the identical byte range matches. Boot expectation:
-identical visible behavior to the current image, except portrait page
-turns are single-pass from first boot with no sysfs step needed —
-verify with one alternating page-turn IRQ count and a
-`defio_delay_ms` readback (expect 250 after `pinenote-ebc-params`
-runs). Nothing suspends; the PM code is dead until the ladder says
-otherwise.
+readback over the identical byte range matches. **Booted and verified
+same day**: `defio_delay_ms` reads 250 at boot with no sysfs step, 4/4
+alternating uinput portrait page turns cost exactly 38 frames = one
+pass each (38-phase bin), zero error signatures, reader healthy, EBC
+quiescent, `/tmp` clean. The portrait single-pass fix is persistent
+across reboots from this image on. Nothing suspends; the PM code is
+dead until the ladder says otherwise.
 
 **2026-08-01 (later): the TPS65185 resume-restoration hunk is written,
 gated, and dormant.** The forward-port patch now carries
