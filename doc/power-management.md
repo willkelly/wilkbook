@@ -193,11 +193,16 @@ Current blockers after that gate passes:
   invoked C diagnostic can now paint, wait, and restore under supervision, but
   production sleep-frame painting and coordinator wiring remain absent;
 - the known-working downstream stack also carries TPS65185 standby/resume
-  register restoration and explicit RK817 regulator suspend states. Their
-  necessity with the installed BSP ATF and current mainline regulator drivers
-  must be resolved by source comparison and UART evidence before `deep`, not
-  copied blindly (the downstream half of that comparison is now located —
-  see "Community ultra-suspend series" below);
+  register restoration — **resolved 2026-08-01: required before `deep`,
+  shape known (the m-weigand 6.12 resume handler is the template; VCOM is
+  NVM-safe and deliberately skipped; our REGCACHE_MAPLE needs
+  mark-dirty+sync), acceptance instrument proven live** — and explicit
+  RK817 regulator suspend states, whose adoption is now gated on the
+  rail-kill wake-collision question (see the evidence pass below);
+- **SC7A20 accelerometer resume** (added 2026-08-01): no coordinator seam
+  exists and hrdl's own `v6.19_iio_accel` attempt is unfinished; final4's
+  autorotation state-replay covered service disable/re-enable, not a real
+  system suspend;
 - cover and RK817 wake properties are compiled in, but physical wake routing
   and PMIC child-event attribution are unproven.
 
@@ -725,20 +730,120 @@ What this changes for our program — and what it does not:
   state-replay validation covered service disable/re-enable, not a real
   system suspend.
 - **TPS65185 resume gap, now confirmed on both sides**: the mainline
-  7.0.11 `drivers/regulator/tps65185.c` we build (528 lines, checked
-  2026-07-31) has **no PM ops at all** — no suspend/resume callbacks —
-  and our patch only adds the IIO temperature provider. The downstream
-  half is hrdl's `~hrdl/pinenote-shared`
-  `patches/linux/0001-Rudimentary-attempt-to-keep-PMIC-usable-after-suspen.patch`,
-  which adds a resume callback re-running `tps65185_set_config` because
-  the PMIC's config registers do not survive suspend. This resolves the
-  "source comparison" TODO above: the gap is real, the fix shape is
-  known, and it must be evaluated (not copied) before any `deep` attempt.
+  7.0.11 `drivers/regulator/tps65185.c` we build (457 lines vanilla, 528
+  as-built with our IIO hunk) has **no PM ops at all**, and our patch
+  only adds the IIO temperature provider. See the evidence-settled
+  verdict below.
 
-Before adopting even the offline model, one free check first: diff hrdl's
-`rockchip_pm_config.c`/`rockchip_sip.c` against our bsp-sip-probe donor
-(Samuel Holland's `72127ca`). Same filenames and lineage, but "our model
-can receive the override cheaply" is inferred until that diff is read.
+### Evidence pass (2026-08-01): VCOM is NVM-safe, restoration is still required, and the rail payload collides with every wake source
+
+Five evidence tasks (PNDeb/U-Boot source, TI datasheet SLVSAQ8G, RK3566
+TRM/pin tables, our as-built DTS audit, and the m-weigand 6.12 driver)
+plus a live register dump from the running device settled the open
+questions. Live dump (i2c `3-0068`, regmap debugfs, EBC idle):
+`TMST=0x17 ENABLE=0x2f VADJ=0x03 VCOM1=0x8f VCOM2=0x00 INT_EN1=0x7f
+INT_EN2=0xff UPSEQ=e1/00 DWNSEQ=1e/00 TMST1/2=20/78 PG=0xfa REVID=0x66`.
+The dump doubles as the proven acceptance instrument for the first
+`deep` case (pre/post register compare).
+
+**VCOM survives SLEEP — the display-corruption risk is retired by chip
+NVM.** The chain, each link source-verified: the TPS65185 stores VCOM in
+nonvolatile memory as its *power-up default* (datasheet §8.3.7.2 — the
+PROG bit commits VCOM[8:0] "such that it becomes the new power-up
+default"); SLEEP resets registers *to power-up defaults* (§8.4.1), so
+VCOM comes back calibrated while everything else reverts to datasheet
+defaults. The live VCOM1=0x8f (143 → −1.43 V) vs the factory default
+0x7D proves the NVM was programmed. Who keeps it correct: the installed
+U-Boot (`d6fdb09`, byte-verified 2026-07-25) reads the per-device mV
+from vendor-storage record 17 and calls `tps65185_set_vcom_value`, which
+**reads back first and returns without writing when the chip already
+matches** ("Same as pmic default value, just return.") — a self-healing
+NVM programmer that has been taking the no-op branch on this device.
+Later u-boot-pinenote commits (`e0ec1df5a`, 2024-10-25) disable even
+that "to make sure the vcom value flashed in the factory stays in the
+chip" — community confirmation of the NVM model. Nothing in the PNDeb
+userspace or the m-weigand kernel ever writes VCOM.
+
+**Register restoration at resume is REQUIRED before `deep` — and the
+known-working stack agrees.** The loss chain is fully verified: our DTS
+already marks `vcc_3v3` off-in-suspend; GPIO3_A5 (the TPS65185 WAKEUP
+pin) sits in **VCCIO5**, fed from `vcc_3v3` (RK3566 pin table: the GPIO3
+bank straddles VCCIO5/VCCIO6, A5 is squarely VCCIO5; both fed from
+`vcc_3v3` here); pad dies → WAKEUP deasserts → SLEEP → register reset.
+The strongest template evidence: **stock os1's m-weigand 6.12 driver
+carries exactly this fix** — `SIMPLE_DEV_PM_OPS` whose resume (a) sleeps
+50 ms (`TPS65185_WAKEUP_DELAY_MS`, the documented window in which the
+chip reloads its EEPROM after wake-from-SLEEP and writes would clobber
+it), then (b) re-runs `tps65185_set_config` (UPSEQ/DWNSEQ from DT),
+INT_EN1/2=0xff, and ENABLE — every register it ever programs, **never
+VCOM** (deliberately: NVM). Our future mainline-driver hunk takes that
+shape with one addition the old driver doesn't need: our regmap is
+`REGCACHE_MAPLE`, so restoration must go through
+`regcache_mark_dirty`+`regcache_sync` (or bypass the cache) — a naive
+rewrite of cached values reaches nothing. Do not copy hrdl's
+`pinenote-shared` hunk (restores only sequencing mainline never
+programs, misses INT_EN/ENABLE, and its uncached write method is
+defeated by our cache).
+
+**The rail payload is where the prize lives, and on OUR tree it
+collides with the entire wake path.** The consumer audit of the three
+rails hrdl's ultra policy kills:
+
+- `vcc_3v3_pmu` (LDO_REG6) feeds `pmuio1`/`pmuio2` — the **GPIO0 pad
+  bank, which carries every external wake interrupt on this board**:
+  the rk817 INT (pwrkey, RTC/alarmtimer, battery, charger), cyttsp5
+  touch INT, ws8100 pen INT (its *only* wake path), Wacom INT, BT and
+  Wi-Fi host-wake, and the hall cover switch. Killing it per DT means
+  plausibly an unwakeable device — power key and RTC alarm included.
+  It also feeds cyttsp5's `vdd` (our patch-added supply), mechanically
+  explaining hrdl's admitted cyttsp5 resume `[HACK]`.
+- `vcca_1v8_pmu` (LDO_REG1) feeds VCCIO4 (the Wi-Fi SDIO + BT UART
+  signaling banks), `sdmmc1`'s `vqmmc`, and BT `vddio` — Wi-Fi/BT wake
+  dead, SDIO re-init on resume.
+- `vdda_0v9_pmu` (LDO_REG3) has **zero DT consumers** because it feeds
+  the SoC's own PMU-domain analog supply — invisible to DT and *not*
+  safe to infer killable.
+
+The RK3566 hardware-design guide's standby section says PMUIO0/1/2 IO
+is what *remains valid* in standby — i.e. standard designs keep exactly
+the rail hrdl turns off. Either his device genuinely wakes through some
+path that survives (PMIC-internal PWRON?), or bl31 retains something DT
+doesn't show, or his ~11 mW config simply cannot wake on the sources we
+need. **This is now the gating question for the rail payload**, it is
+supervised-UART territory, and until it is answered the modeled
+firmware handshake (below) and the rail policy are decoupled: we can
+tell firmware "ultra" without adopting any rail kill.
+
+### Model status (2026-08-01): the firmware handshake is modeled, pinned, and hard-off
+
+The free donor-diff check is **done**: hrdl's entire ultra kernel delta
+is 8 lines in `rockchip_pm_config.c` (the SIP transport is
+byte-identical across his branches), and our dormant model already
+carried the load-bearing structural split — 0x09 emission decoupled from
+regulator-list selection. `rockchip,suspend-state-override` is now
+modeled in the bsp-sip-probe patch and host tools with a strict
+contract: exactly one u32, value exactly 5 (0 is hrdl's in-band
+no-override sentinel and is rejected — absence encodes no-override; 1–2
+are not BSP states; 3 restates the default; 4 would tell firmware
+mem-lite with no lite policy parseable). The override changes only the
+firmware word; list selection stays derived from the real Linux state.
+The production OF parser still refuses to bind any DT carrying the
+property, that refusal is forbidden-token-pinned and mutation-tested,
+and `suspend-check` names both the override and `cap-power-off-card` in
+its spoof blacklist. Gates: `make rockchip-pm-check
+activation-positive-check suspend-check`, all green. Whether the
+deployed 2022-06-09 bl31 numerically honors `LINUX_PM_STATE=5` remains
+unverified (string-level firmware inventory only) — supervised-UART
+territory.
+
+Blocker-list deltas from this pass: **SC7A20 accelerometer resume**
+added (hrdl's own attempt is unfinished; our final4 state-replay
+validation covered service disable/re-enable, not system suspend);
+TPS65185 converted from "necessity unresolved" to "required, shape
+known, REGCACHE-caveated, acceptance instrument proven"; **rail-kill
+wake collision** added as the gating question for the ultra payload;
+`sdmmc1 cap-power-off-card` recorded as implying full SDIO Wi-Fi
+re-init on resume (blacklisted in the model, not modeled).
 
 No hardware session is allocated or implied by any of this. The standing
 rule holds: nothing suspends until the qualification ladder says so.

@@ -59,6 +59,37 @@ Useful beyond this campaign — it is the reader UI's usable-area inset.
 
 Suspend remains disabled; none of this is suspend permission.
 
+**2026-08-01 suspend-program groundwork, same os2 session + offline: the
+ultra-suspend firmware handshake is modeled and hard-off, VCOM is proven
+NVM-safe, TPS65185 resume is settled as required-with-known-shape, and
+hrdl's rail payload is found to collide with our entire wake path.**
+Live, read-only: the TPS65185 register file was dumped over regmap
+debugfs (VCOM1=0x8f = the per-device −1.43 V calibration, live in
+chip; the dump is the proven acceptance instrument for the first `deep`
+case) and the regulator/DT/wakeup ground truth harvested
+(`doc/artifacts/pinenote-pm-live-harvest-20260801.md`) — the dormant
+`rockchip-suspend-mode` driver is bound on this image too, and the three
+rails hrdl's ultra policy kills are all `mem=enabled` here. Offline: the
+donor diff settled (his whole kernel delta is 8 lines; SIP transport
+byte-identical), `rockchip,suspend-state-override` is modeled in the
+bsp-sip-probe patch under a strict exactly-5 contract with the firmware
+word decoupled from regulator-list selection, pinned by mutations, and
+still production-rejected (all three gates green — the C tests
+originally absorbed the semantic change silently, the exact assertion
+gap the groundwork brief predicted, closed with negative-tested
+coverage). Evidence pass highlights: VCOM survives SLEEP because the
+TPS65185's NVM value *is* its power-up default (datasheet §8.3.7.2; the
+installed U-Boot is a self-healing NVM programmer that has been taking
+its no-op branch; later community u-boot disables even that to protect
+the factory value); stock os1's kernel already does full non-VCOM
+register restoration on resume (the template for our future
+REGCACHE-caveated hunk); and the rail audit found `vcc_3v3_pmu` feeds
+`pmuio1/2` — the GPIO0 bank carrying **every external wake interrupt on
+this board** — making the rail-kill wake collision the new gating
+question for the ~11 mW prize. New blocker recorded: SC7A20 resume.
+Full detail: `doc/power-management.md`, "Evidence pass (2026-08-01)".
+No suspend was attempted; activation stays compiled out.
+
 **2026-08-01 first boot of the publish-on-call image: the portrait
 double-refresh is FIXED ON GLASS — eight of eight portrait page turns cost
 exactly one pass, and `defio_delay_ms=250` is the chosen, now-pinned
