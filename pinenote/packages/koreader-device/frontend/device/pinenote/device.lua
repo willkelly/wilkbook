@@ -266,17 +266,25 @@ function PineNote:init()
     end
     -- Publish-on-call (doc/refresh-policy.md): fsync on the fbdev fd is
     -- fb_deferred_io_fsync -> flush_delayed_work, i.e. "run the pending
-    -- deferred-io flush now".  It does not wait for the e-ink pass (the
-    -- flush ends at a schedule_work), and with nothing pending the
-    -- empty-pagereflist guard makes it a no-op syscall -- so we bias
-    -- toward calling it and skip any per-tick latch.  Every refresh
-    -- intent below publishes its damage at the moment of the call
-    -- instead of waiting out the deferred-io timer: repaint duration
-    -- stops racing the flush period (the measured cause of the portrait
-    -- double-refresh), and pen strokes stop waiting 0-50 ms for the
-    -- timer.  In refreshFullImp/flash_policy the publish runs *before*
-    -- the global-refresh ioctl, making "the wash paints the new page"
-    -- an ordering guarantee rather than a timing accident.
+    -- deferred-io flush now".  It does not wait for the e-ink pass --
+    -- the flush ends at a schedule_work() of the helper's damage
+    -- worker, whose atomic commit is what actually lands the pixels in
+    -- the driver -- and with nothing pending flush_delayed_work returns
+    -- immediately, so we bias toward calling it and skip any per-tick
+    -- latch.  Every refresh intent below publishes its damage at the
+    -- moment of the call instead of waiting out the deferred-io timer:
+    -- repaint duration stops racing the flush period (the measured
+    -- cause of the portrait double-refresh), and pen strokes stop
+    -- waiting 0-50 ms for the timer.
+    --
+    -- Note what this does NOT order: the commit blit runs on a kworker
+    -- after fsync returns.  "The wash paints the new page" is
+    -- guaranteed by the DRIVER, not here -- the global-refresh ioctl
+    -- drains the deferred-io flush and the damage worker into
+    -- ctx->final before arming the wash (see the forward-port patch's
+    -- ioctl_trigger_global_refresh).  The publish-before-ioctl order
+    -- below is kept because it starts the flush earlier and covers
+    -- kernels without the drain.
     local function publish()
         if self.screen and self.screen.fd and self.screen.fd ~= -1 then
             C.fsync(self.screen.fd)

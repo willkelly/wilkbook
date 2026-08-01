@@ -16,18 +16,20 @@ ffi.cdef[[
 int open(const char*,int,...); int close(int);
 void* mmap(void*,unsigned long,int,int,int,long); int munmap(void*,unsigned long);
 int usleep(unsigned int);
-int gettimeofday(void*,void*);
-typedef struct { long tv_sec; long tv_usec; } dur_tv;
+int clock_gettime(int,void*);
+typedef struct { long tv_sec; long tv_nsec; } dur_ts;
 ]]
+local CLOCK_MONOTONIC = 1
 local W,H,STRIDE=1872,1404,7488
 local LEN=STRIDE*H
 local fd=ffi.C.open("/dev/fb0",2); assert(fd>=0)
 local p=ffi.C.mmap(nil,LEN,3,1,fd,0); assert(p~=nil)
 local fb=ffi.cast("uint8_t*",p)
-local tv=ffi.new("dur_tv")
+-- monotonic: an NTP step mid-row must not corrupt a measured span
+local ts=ffi.new("dur_ts")
 local function now()
-  ffi.C.gettimeofday(tv,nil)
-  return tonumber(tv.tv_sec)+tonumber(tv.tv_usec)/1e6
+  ffi.C.clock_gettime(CLOCK_MONOTONIC,ts)
+  return tonumber(ts.tv_sec)+tonumber(ts.tv_nsec)/1e9
 end
 local function irqs()
   local f=io.open("/proc/interrupts","r")
@@ -60,10 +62,13 @@ local function spread(v,chunks,total_ms)
   return (now()-t0)*1000
 end
 print("fbdur: contiguous write, measured duration is the only variable\n")
--- probe the solid-fill cost first so the sleep budget can be corrected
+-- probe the solid-fill cost first so the sleep budget can be corrected.
+-- 0x20, not 0xd0: row 1 writes 0xd0, and diff_mode masks unchanged
+-- pixels -- a 0xd0 probe fill would make the baseline row a zero-delta
+-- no-op reporting 0 frames.
 settle()
 do
-  local t0=now(); ffi.fill(fb,LEN,0xd0); fill_ms=(now()-t0)*1000
+  local t0=now(); ffi.fill(fb,LEN,0x20); fill_ms=(now()-t0)*1000
 end
 settle()
 print(string.format("  solid-fill cost: %.1f ms (subtracted from each sleep budget)\n",fill_ms))

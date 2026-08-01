@@ -113,19 +113,26 @@ method, and the replayable trace are in `doc/refresh-policy.md` and
 No device state was changed to obtain either.
 
 *Fix implemented offline 2026-07-31 (publish-on-call), not yet
-hardware-proven.* The driver gained a `defio_delay_ms` module parameter (a
-`.fbdev_probe` wrapper over the exported vanilla probe; default 50 =
-bit-identical behavior; sysfs setter retargets the live helper because the
-initrd raw-loads the module), and the KOReader device target now fsyncs the
-fb fd at every `refresh*Imp` — publish-before-wash ordering included. Full
-aarch64 cross-build, `parm=` metadata in the `.ko`, all host suites, a
-fail-loud `substitute*` assertion in `koreader.scm`, and a new
-`test-refresh-seam.lua` (bundle-verbatim Imp seam + publish coverage,
-negative-tested both ways) are green. Hardware-gated remainder: sweep
-`defio_delay_ms` {50, 250, 1000} with the corrected `repaint-duration.lua`,
-pin the winner in `pinenote-apply-ebc-params`, and prove the single-pass
-portrait turn on glass. Until a value is applied, deployed behavior is
-unchanged. Details: `doc/refresh-policy.md`, "publish-on-call".
+hardware-proven.* Three pieces: the driver gained a `defio_delay_ms` module
+parameter (a `.fbdev_probe` wrapper over the exported vanilla probe; default
+50 keeps the timer period bit-identical; the sysfs setter retargets the live
+helper because the initrd raw-loads the module, and `remove()` clears the
+helper static under the param lock); the KOReader device target fsyncs the fb
+fd at every `refresh*Imp`; and the global-refresh ioctl drains the deferred-io
+flush *and* the damage worker into `ctx->final` before arming the wash —
+fsync alone cannot order the commit blit against the refresh thread's
+snapshot, so the wash-paints-new-page guarantee lives in the drain, not the
+fsync (adversarial-review finding, same day). Full aarch64 cross-build,
+`parm=` metadata in the `.ko`, all host suites, a fail-loud `substitute*`
+assertion in `koreader.scm`, and `test-refresh-seam.lua` (bundle-verbatim Imp
+seam + per-Imp publish coverage with trace/publish/wash adjacency,
+negative-tested) are green. Rollout: only the timer period is inert until the
+parameter is set; the publishes and the drain are live immediately (at
+delay=50 extra flushes cannot add passes — saturation at 2.0 was measured).
+Hardware-gated remainder: sweep `defio_delay_ms` {50, 250, 1000} with the
+corrected `repaint-duration.lua`, pin the winner in
+`pinenote-apply-ebc-params`, and prove the single-pass portrait turn on
+glass. Details: `doc/refresh-policy.md`, "publish-on-call".
 
 **2026-07-29 EBC barrier campaign: the image booted, the barrier returned
 `-110`, and the cause is a starved refresh thread — root-caused the same

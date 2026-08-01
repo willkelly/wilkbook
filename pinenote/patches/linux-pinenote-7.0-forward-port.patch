@@ -2830,7 +2830,7 @@ new file mode 100755
 index 000000000..8db4c36cc
 --- /dev/null
 +++ b/drivers/gpu/drm/rockchip/rockchip_ebc.c
-@@ -0,0 +1,3241 @@
+@@ -0,0 +1,3281 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/*
 + * Copyright (C) 2021-2022 Samuel Holland <samuel@sholland.org>
@@ -3154,6 +3154,67 @@ index 000000000..8db4c36cc
 +module_param(hskew_override, int, S_IRUGO|S_IWUSR);
 +MODULE_PARM_DESC(hskew_override, "Override hskew value");
 +
++/*
++ * Deferred-io flush period, in milliseconds.
++ *
++ * Vanilla drm_fbdev_shmem hardcodes fb_helper->fbdefio.delay = HZ / 20
++ * (50 ms).  Every flush that reaches this driver costs one full refresh
++ * pass (no pipelining, no coalescing across flushes), so a userspace
++ * repaint whose writes span the period is cut into two passes -- the
++ * measured cause of the portrait double-refresh.  The vanilla probe is
++ * exported and the fb core re-reads fbdefio.delay on every mkwrite
++ * fault, so wrapping the probe and (re)assigning the delay is the
++ * entire change; the default of 50 keeps the flush period bit-identical
++ * to vanilla until the parameter is deliberately changed.
++ *
++ * The setter also retargets the live helper: on the PineNote the
++ * module is raw-loaded from the initrd, so after boot this parameter
++ * is only reachable through sysfs, long after fbdev probe has run.
++ * The helper pointer is a single-device static in the same spirit as
++ * the rest of the driver's parameters; remove() clears it under the
++ * param lock before the fbdev client teardown frees the helper.
++ */
++#ifdef CONFIG_DRM_FBDEV_EMULATION
++static struct drm_fb_helper *rockchip_ebc_defio_helper;
++
++static int defio_delay_ms = 50;
++
++static int defio_delay_ms_set(const char *val, const struct kernel_param *kp)
++{
++	int ms, ret;
++
++	ret = kstrtoint(val, 0, &ms);
++	if (ret)
++		return ret;
++	if (ms < 1 || ms > 10000)
++		return -EINVAL;
++	*(int *)kp->arg = ms;
++	if (rockchip_ebc_defio_helper)
++		rockchip_ebc_defio_helper->fbdefio.delay = msecs_to_jiffies(ms);
++	return 0;
++}
++
++static const struct kernel_param_ops defio_delay_ms_ops = {
++	.set = defio_delay_ms_set,
++	.get = param_get_int,
++};
++module_param_cb(defio_delay_ms, &defio_delay_ms_ops, &defio_delay_ms,
++		S_IRUGO|S_IWUSR);
++MODULE_PARM_DESC(defio_delay_ms,
++		 "deferred-io flush period in ms (50 = vanilla HZ/20)");
++
++static int rockchip_ebc_fbdev_probe(struct drm_fb_helper *fb_helper,
++				    struct drm_fb_helper_surface_size *sizes)
++{
++	int ret = drm_fbdev_shmem_driver_fbdev_probe(fb_helper, sizes);
++
++	if (ret)
++		return ret;
++	fb_helper->fbdefio.delay = msecs_to_jiffies(defio_delay_ms);
++	rockchip_ebc_defio_helper = fb_helper;
++	return 0;
++}
++#endif
 +
 +DEFINE_DRM_GEM_FOPS(rockchip_ebc_fops);
 +
@@ -3165,6 +3226,32 @@ index 000000000..8db4c36cc
 +
 +	if (args->trigger_global_refresh){
 +		/* printk(KERN_INFO "[rockchip_ebc] ioctl_trigger_global_refresh"); */
++#ifdef CONFIG_DRM_FBDEV_EMULATION
++		/*
++		 * Publish-on-call ordering (wilkbook): drain any fbdev
++		 * deferred-io damage all the way into ctx->final before
++		 * arming the wash, so a global refresh provably paints
++		 * the content userspace had written when it made this
++		 * call.  fsync(2) on the fbdev fd only runs the
++		 * deferred-io flush, which ends at schedule_work() on
++		 * the helper's damage worker; the blit into the
++		 * driver's final buffer happens inside that worker's
++		 * atomic commit.  Waiting on both here closes the race
++		 * between that SCHED_OTHER kworker and the SCHED_FIFO
++		 * refresh thread's snapshot of ctx->final.  No modeset
++		 * locks are held at this point, so flushing a work
++		 * that takes them is safe; the caller holds the DRM fd
++		 * open, which pins the module, so the helper cannot be
++		 * freed under us here (unlike the sysfs param path,
++		 * which is why remove() clears the static under the
++		 * param lock).
++		 */
++		if (rockchip_ebc_defio_helper) {
++			flush_delayed_work(
++				&rockchip_ebc_defio_helper->info->deferred_work);
++			flush_work(&rockchip_ebc_defio_helper->damage_work);
++		}
++#endif
 +		mutex_lock(&ebc->barrier_lock);
 +		if (ebc->barrier_poison) {
 +			mutex_unlock(&ebc->barrier_lock);
@@ -3339,68 +3426,6 @@ index 000000000..8db4c36cc
 +	DRM_IOCTL_DEF_DRV(ROCKCHIP_EBC_REFRESH_BARRIER, ioctl_refresh_barrier,
 +			  DRM_AUTH),
 +};
-+
-+/*
-+ * Deferred-io flush period, in milliseconds.
-+ *
-+ * Vanilla drm_fbdev_shmem hardcodes fb_helper->fbdefio.delay = HZ / 20
-+ * (50 ms).  Every flush that reaches this driver costs one full refresh
-+ * pass (no pipelining, no coalescing across flushes), so a userspace
-+ * repaint whose writes span the period is cut into two passes -- the
-+ * measured cause of the portrait double-refresh.  The vanilla probe is
-+ * exported and the fb core re-reads fbdefio.delay on every mkwrite
-+ * fault, so wrapping the probe and (re)assigning the delay is the
-+ * entire change; the default of 50 keeps vanilla behavior
-+ * bit-identical until the parameter is deliberately changed.
-+ *
-+ * The setter also retargets the live helper: on the PineNote the
-+ * module is raw-loaded from the initrd, so after boot this parameter
-+ * is only reachable through sysfs, long after fbdev probe has run.
-+ * The helper pointer is a single-device static in the same spirit as
-+ * the rest of the driver's parameters; the fbdev client is never torn
-+ * down in production.
-+ */
-+#ifdef CONFIG_DRM_FBDEV_EMULATION
-+static struct drm_fb_helper *rockchip_ebc_defio_helper;
-+
-+static int defio_delay_ms = 50;
-+
-+static int defio_delay_ms_set(const char *val, const struct kernel_param *kp)
-+{
-+	int ms, ret;
-+
-+	ret = kstrtoint(val, 0, &ms);
-+	if (ret)
-+		return ret;
-+	if (ms < 1 || ms > 10000)
-+		return -EINVAL;
-+	*(int *)kp->arg = ms;
-+	if (rockchip_ebc_defio_helper)
-+		rockchip_ebc_defio_helper->fbdefio.delay = msecs_to_jiffies(ms);
-+	return 0;
-+}
-+
-+static const struct kernel_param_ops defio_delay_ms_ops = {
-+	.set = defio_delay_ms_set,
-+	.get = param_get_int,
-+};
-+module_param_cb(defio_delay_ms, &defio_delay_ms_ops, &defio_delay_ms,
-+		S_IRUGO|S_IWUSR);
-+MODULE_PARM_DESC(defio_delay_ms,
-+		 "deferred-io flush period in ms (50 = vanilla HZ/20)");
-+
-+static int rockchip_ebc_fbdev_probe(struct drm_fb_helper *fb_helper,
-+				    struct drm_fb_helper_surface_size *sizes)
-+{
-+	int ret = drm_fbdev_shmem_driver_fbdev_probe(fb_helper, sizes);
-+
-+	if (ret)
-+		return ret;
-+	fb_helper->fbdefio.delay = msecs_to_jiffies(defio_delay_ms);
-+	rockchip_ebc_defio_helper = fb_helper;
-+	return 0;
-+}
-+#endif
 +
 +static const struct drm_driver rockchip_ebc_drm_driver = {
 +	DRM_GEM_SHMEM_DRIVER_OPS,
@@ -6018,6 +6043,21 @@ index 000000000..8db4c36cc
 +		panic("rockchip-ebc: remove with uncertain DMA ownership");
 +	rockchip_ebc_poison(ebc, -ENODEV);
 +
++#ifdef CONFIG_DRM_FBDEV_EMULATION
++	/*
++	 * The defio_delay_ms sysfs setter dereferences this static, and
++	 * the fbdev client (and the helper it points at) is freed by
++	 * drm_dev_unregister() below.  The param sysfs file outlives
++	 * remove() on the rmmod path, and a param write does not pin
++	 * the module the way an open fd does -- so clear the pointer
++	 * first, under the param mutex: param_attr_store() holds
++	 * kernel_param_lock() around ops->set, so the setter can never
++	 * observe the pointer mid-teardown.
++	 */
++	kernel_param_lock(THIS_MODULE);
++	rockchip_ebc_defio_helper = NULL;
++	kernel_param_unlock(THIS_MODULE);
++#endif
 +	drm_dev_unregister(&ebc->drm);
 +	drm_atomic_helper_shutdown(&ebc->drm);
 +

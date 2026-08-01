@@ -68,24 +68,39 @@ for _, name in ipairs({ "beforePaint", "afterPaint" }) do
         string.format("bundle ffi/framebuffer.lua still defines %s", name))
 end
 
--- 4. Publish-on-call: every assigned Imp closure must call publish().
--- The closures are `function(...) ... end` assignments plus the
--- flash_policy-generated pair; count call sites instead of parsing
--- bodies: one per direct Imp, two inside flash_policy (both branches).
-local publish_calls = 0
-for _ in src:gmatch("\n%s*publish%(%)") do
-    publish_calls = publish_calls + 1
+-- 4. Publish-on-call, per Imp -- an aggregate count would let one Imp
+-- drop publish() while another gains a call.  We own device.lua's
+-- formatting, so hold each assignment to its exact shape:
+--   * function-valued Imps are trace-then-publish, nothing between:
+--       self.screen.refreshXImp = function(...)
+--           trace(...)
+--           publish()
+--   * flash_policy-valued Imps route through flash_policy, whose two
+--     branches must each publish, with the global branch publishing
+--     immediately before the wash.
+for _, name in ipairs(ours) do
+    local fn_shape = "self%.screen%." .. name ..
+        "%s*=%s*function[^\n]*\n%s*trace%([^\n]*\n%s*publish%(%)"
+    local policy_shape = "self%.screen%." .. name ..
+        "%s*=%s*flash_policy%("
+    check(src:find(fn_shape) ~= nil or src:find(policy_shape) ~= nil,
+        string.format("%s publishes on call (or routes via flash_policy)",
+            name))
 end
--- 5 direct Imps + 2 flash_policy branches = 7 call sites minimum.  A
--- call site sits alone on its line; the definition line is
--- `local function publish()` and so never matches this pattern.
-check(publish_calls >= 7, string.format(
-    "device.lua has %d publish() call sites (>= 7 expected)", publish_calls))
+-- refreshFullImp additionally washes: publish must sit between its
+-- trace and the global_refresh call.
+check(src:find("self%.screen%.refreshFullImp%s*=%s*function[^\n]*\n" ..
+        "%s*trace%([^\n]*\n%s*publish%(%)\n%s*global_refresh%(%)") ~= nil,
+    "refreshFullImp is trace/publish/global_refresh in that order")
 
--- 5. Ordering: in every publish+global pairing, the publish comes first
--- (the wash must paint already-published content).
-local bad_order = src:find("global_refresh%(%)%s*\n%s*publish%(%)")
-check(not bad_order, "publish() always precedes global_refresh()")
+-- 5. flash_policy's own branches: the global branch is
+-- trace/publish/global_refresh adjacent, the partial branch
+-- trace/publish adjacent.
+check(src:find('trace%(intent, "global"[^\n]*\n%s*publish%(%)\n' ..
+        "%s*global_refresh%(%)") ~= nil,
+    "flash_policy global branch is trace/publish/global_refresh")
+check(src:find('trace%(intent, "partial"[^\n]*\n%s*publish%(%)') ~= nil,
+    "flash_policy partial branch is trace/publish")
 
 if fail then
     print("RESULT: failed")

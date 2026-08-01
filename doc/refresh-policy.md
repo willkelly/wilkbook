@@ -644,13 +644,28 @@ never cached. Both sides of the seam are ours, so:
 2. **KOReader device target** (`device.lua`): a `publish()` helper —
    `fsync(screen.fd)` — at every `refresh*Imp`. `fb_deferred_io_fsync` is
    `flush_delayed_work(&info->deferred_work)`: it runs the pending flush *now*
-   and returns without waiting for the e-ink pass (the flush ends at a
-   `schedule_work`); with nothing pending, the empty-pagereflist guard makes
-   it a free syscall, so the code biases toward calling it and carries no
-   per-tick latch. In `refreshFullImp` and both `flash_policy` branches the
-   publish precedes the global-refresh ioctl, turning "the wash paints the new
-   page" from a timing accident into an ordering guarantee
-   (`doc/pageturn-program.md`'s d2, upgraded).
+   and returns without waiting for the e-ink pass; with nothing pending,
+   `flush_delayed_work` on idle work returns immediately, so the code biases
+   toward calling it and carries no per-tick latch.
+3. **Wash ordering — driver-side, because fsync alone cannot give it.** The
+   deferred-io flush ends at `schedule_work(&helper->damage_work)`; the
+   XRGB→Y4 blit into the driver's `ctx->final` happens inside that worker's
+   atomic commit, on a SCHED_OTHER kworker, *after* fsync has returned —
+   racing the SCHED_FIFO refresh thread's `memcpy(ctx->next, ctx->final)`
+   snapshot. Losing that race washes the OLD page and delivers the new one as
+   a trailing non-flash partial (the d2 artifact, worse than the defect this
+   work fixes). So the guarantee lives in the ioctl:
+   `ioctl_trigger_global_refresh` now drains
+   `flush_delayed_work(&info->deferred_work)` +
+   `flush_work(&helper->damage_work)` before arming the wash — `flush_work`
+   waits out the blocking atomic commit, so `ctx->final` provably holds the
+   new frame when the refresh thread snapshots it. The userspace
+   publish-before-ioctl order is kept (starts the flush earlier; covers
+   kernels without the drain), but it is the drain, not the fsync, that makes
+   "the wash paints the new page" true by construction
+   (`doc/pageturn-program.md`'s d2). The barrier SUBMIT path deliberately did
+   **not** get the drain: its semantics are hardware-proven as-is, and its
+   only caller (the supervised diagnostic) does its own sequencing.
 
 Neither half fixes portrait alone. The fsync publishes at the *refresh call*,
 which comes after painting — but the deferred-io timer starts at the first
@@ -683,11 +698,19 @@ Still hardware-gated: the choice of shipped `defio_delay_ms` value. The next
 probe session should sweep {50, 250, 1000} against the corrected
 `repaint-duration.lua` (which now reports measured spans) and confirm a
 ~145 ms spread costs one pass at the raised values; the winner then gets
-pinned in `pinenote-apply-ebc-params` next to the other parameters. Until
-then the deployed behavior is bit-identical to today's. The single-pass
-portrait page turn itself is likewise unproven on glass until that session
-runs the uinput page-turn measurement with the raised value and fsync wiring
-together.
+pinned in `pinenote-apply-ebc-params` next to the other parameters.
+
+Rollout precisely: only the **timer period** is unchanged until the parameter
+is set. The fsync publishes, the pen-intent publishes, and the ioctl drain are
+live the moment this image ships — all improvements, none behavior-neutral.
+At delay=50 the extra flush cannot add passes: the measured saturation at 2.0
+(three writes 250 ms apart still cost 76 frames) means late damage coalesces
+into the already-pending second pass. The single-pass portrait page turn
+itself is unproven on glass until the sweep session runs the uinput page-turn
+measurement with the raised value and fsync wiring together — and if a wash
+ever still shows old content there, the signature to distinguish is: drain
+working = one wash of new content; drain broken = wash of old content plus a
+trailing non-flash partial of the new.
 
 Not recommended: **(1) as a default**. The reader is deliberately locked to
 portrait (`lock_rotation = true`), so defaulting to landscape would mean asking
