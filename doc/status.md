@@ -101,10 +101,24 @@ healthy after each. Full record:
   deleted from the device after a silently failed multi-file scp; the
   full abort-session dmesg survives and every load-bearing value was
   captured live in-session before the loss (excerpted in the artifact).
-- Next step is offline + one os1 oracle question: does stock Debian's
-  6.12 driver survive an s2idle cycle with a working panel? That
-  decides inherited-vs-forward-port for the resume defect, and
-  therefore report-vs-fix.
+- **The oracle question was answered the same evening** (artifact
+  `pinenote-os1-suspend-oracle-20260801.md`): one bounded **deep**
+  cycle on stock os1 (its own shipping mode — it auto-deep-suspends on
+  idle per its journal, explaining the battery longevity) came back
+  with a **working panel, user-confirmed on glass**. PG 0x00→0xfa
+  proves the rails genuinely cycled, and **VCOM read 0x8f after a real
+  SLEEP reset — the NVM calibration thesis is hardware-proven at the
+  strongest level**. Decisive detail: os1's dmesg logs the *identical*
+  resume teardown ours does (`plane_reset`/`ctx_release`/`ctx_free`) —
+  the teardown is not the defect. The divergence is the display
+  client: os1's DRM compositor re-commits after resume and rebuilds
+  the context; our fbdev emulation never does, leaving damage
+  unserviced and the resume-time regulator enables unbalanced. **The
+  fix is ours to write** (restore the fbdev client after resume —
+  `drm_mode_config_helper_suspend/resume` or an explicit fb-helper
+  restore): a forward-port integration gap, since the lineage never
+  ran this driver fbdev-only. Offline-writable; provable at the next
+  boot with the same console-free ladder protocol.
 
 **2026-08-01 os2 write #2: the consolidated image is deployed and
 readback-verified; reboot pending.** Artifact
