@@ -66,3 +66,18 @@ canonical patch shape, and actual supplied-source-tree architecture. Host tests
 never invoke the real backend. It does not execute the platform driver, boot the
 PineNote, activate suspend policy, or prove firmware, DDR retention, wake,
 resume, display repair, or power use.
+
+## Why the donor probe values are what they are
+
+`test_probe()` pins four events for the compiled donor fixture — `0x01 0x5ec`,
+`0x02 0x10`, `0x04 0 0xffff`, `0x05 0 0`. Those are not chosen, they are
+**differentially verified against the BSP emitter** (`rockchip_pm_config.c`,
+`pm_config_probe()`), and the DT values themselves are measured from os1's
+booted DTB — the kernel on which deep suspend demonstrably works on this
+device. Full derivation, including the control-code table and the two
+non-obvious behaviours the BSP has (the *unconditional* GPIO terminator, and
+`SUSPEND_DEBUG_ENABLE` firing on property **presence** rather than a non-zero
+value), is in `doc/artifacts/pinenote-sip-sequence-differential-20260802.md`.
+
+If a rebase changes any of those four events, do not "fix" the test — re-run
+the differential first. The BSP emitter is the authority, not our model.
