@@ -1,0 +1,38 @@
+[19:39:24] === DEEP LADDER START ===
+[19:39:24] system=/gnu/store/p4mpqkidq9g8ppdx0mfb9iadf44wpzz2-system root=/dev/mmcblk0p6
+[19:39:25] mem_sleep: s2idle [deep]
+[19:39:25] --- prep
+[19:39:35] pre: irq=1024 fb0.state=0 crtc_active=1 VCOM=8f
+mmap-fsync row=100 fill=checker: irq 975 -> 1021 (delta 46) fb-rows-changed=120/120
+[19:39:38] PROBE CONTROL-pre-suspend: irq 1024 -> 1070 (delta 46)
+[19:39:38] CONTROL PASS: 46 frames before any suspend
+[19:39:41] post-blank: crtc_active=0 irq=1070
+[19:39:45] gadget UDC blanked: []
+[19:39:45] alarm armed=1785699645 now=1785699585 (+60s absolute epoch)
+[19:39:45] --- RUNG 3: echo mem > /sys/power/state  (mode=deep)
+[19:40:50] RESUMED rc=0 asleep=60s irq 1070 -> 1072
+[19:40:50] post-resume: fb0.state=0 crtc_active=0 VCOM=8f
+mmap-fsync row=400 fill=checker: irq 1023 -> 1069 (delta 46) fb-rows-changed=120/120
+[19:40:53] PROBE A-blanked: irq 1072 -> 1118 (delta 46)
+[19:40:56] post-unblank: crtc_active=1
+mmap-fsync row=700 fill=checker: irq 1069 -> 1115 (delta 46) fb-rows-changed=120/120
+[19:41:04] PROBE B-unblanked: irq 1118 -> 1164 (delta 46)
+pinenote-ebc-refresh: global refresh triggered
+[19:41:08] PROBE C-global-refresh-ioctl: irq 1164 -> 1165 (delta 1)
+mmap-fsync row=1000 fill=checker: irq 1116 -> 1162 (delta 46) fb-rows-changed=120/120
+[19:41:16] PROBE D-after-global-refresh: irq 1165 -> 1211 (delta 46)
+[19:41:18] VERDICT control=46 A(blanked)=46 B(unblanked)=46 C(ioctl)=1 D(after-ioctl)=46
+[19:41:18] TPS VCOM pre=8f post=8f (8f required)
+[19:41:18] TPS: registers CHANGED across deep:
+2c2
+< 01: 2f
+---
+> 01: 20
+[19:41:18] --- RESTORE
+Service pinenote-waveform has been started.
+Service user-homes has been started.
+Service pinenote-ebc-params has been started.
+Service reader-session has been started.
+[19:41:29] restore: irq=1351 fb0.state=0 reader=● Status of reader-session:
+[19:41:29] mem_sleep left at: [s2idle] deep
+[19:41:29] === DEEP LADDER END ===

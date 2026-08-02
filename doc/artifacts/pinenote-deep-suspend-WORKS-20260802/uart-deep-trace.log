@@ -1,0 +1,96 @@
+[ 1438.408652] Console: switching to colour frame buffer device 234x87
+[ 1441.639691] Console: switching to colour dummy device 80x25
+[ 1454.456254] dwc3 fcc00000.usb: wait for SETUP phase timed out
+[ 1454.458454] dwc3 fcc00000.usb: failed to set STALL on ep0out
+[ 1454.460657] dwc3 fcc00000.usb: ep0 out start transfer failed: -110
+[ 1458.835642] WILKBOOK: entering deep, alarm armed, activation live
+2026-08-02 19:39:45 localhost [ 1458.835642] WILKBOOK: entering deep, alarm armed, activation live
+[ 1458.872226] PM: suspend entry (deep)
+[ 1458.875309] Filesystems sync: 0.003 seconds
+[ 1458.876047] Freezing user space processes
+[ 1458.877644] Freezing user space processes completed (elapsed 0.001 seconds)
+[ 1458.877658] OOM killer disabled.
+[ 1458.877660] Freezing remaining freezable tasks
+[ 1458.878988] Freezing remaining freezable tasks completed (elapsed 0.001 seconds)
+v2.3():v2.3-210-g4af361e4c:zwx
+PM-STATE: mem (ultra: 0, mem: 1, cfg: 0x5ec), pmic: 0x14, 0x25
+abcdeghij701MI/TC: Secondary CPU 1 initializing
+I/TC: Secondary CPU 1 switching to normal world boot
+I/TC: Secondary CPU 2 initializing
+I/TC: Secondary CPU 2 switching to normal world boot
+I/TC: Secondary CPU 3 initializing
+I/TC: Secondary CPU 3 switching to normal world boot
+[ 1458.895527] rockchip_ebc_suspend
+[ 1459.667256] PM: suspend devices took 0.787 seconds
+[ 1459.675195] Disabling non-boot CPUs ...
+[ 1459.684319] psci: CPU3 killed (polled 1 ms)
+[ 1459.690245] psci: CPU2 killed (polled 0 ms)
+[ 1459.699135] psci: CPU1 killed (polled 2 ms)
+[ 1459.700968] Enabling non-boot CPUs ...
+[ 1459.702210] Detected VIPT I-cache on CPU1
+[ 1459.702266] GICv3: CPU1: found redistributor 100 region 0:0x00000000fd480000
+[ 1459.702335] CPU1: Booted secondary processor 0x0000000100 [0x412fd050]
+[ 1459.703493] CPU1 is up
+[ 1459.704418] Detected VIPT I-cache on CPU2
+[ 1459.704462] GICv3: CPU2: found redistributor 200 region 0:0x00000000fd4a0000
+[ 1459.704521] CPU2: Booted secondary processor 0x0000000200 [0x412fd050]
+[ 1459.705686] CPU2 is up
+[ 1459.706609] Detected VIPT I-cache on CPU3
+[ 1459.706655] GICv3: CPU3: found redistributor 300 region 0:0x00000000fd4c0000
+[ 1459.706711] CPU3: Booted secondary processor 0x0000000300 [0x412fd050]
+[ 1459.707900] CPU3 is up
+[ 1459.773739] rockchip_ebc_resume
+[ 1459.773757] ebc: rockchip_ebc_plane_reset
+[ 1459.774249] ebc: rockchip_ebc_ctx_release
+[ 1459.774260] EBC: rockchip_ebc_ctx_free
+[ 1459.937926] PM: resume devices took 0.222 seconds
+[ 1459.950172] OOM killer enabled.
+[ 1459.950183] Restarting tasks: Starting
+[ 1459.951610] Restarting tasks: Done
+[ 1459.952490] PM: suspend exit
+[ 1462.093594] brcmfmac: brcmf_set_channel: set chanspec 0x100c fail, reason -52
+[ 1462.095033] brcmfmac: brcmf_set_channel: set chanspec 0x100d fail, reason -52
+[ 1462.095890] brcmfmac: brcmf_set_channel: set chanspec 0x100e fail, reason -52
+[ 1462.097386] brcmfmac: brcmf_set_channel: set chanspec 0xd022 fail, reason -52
+[ 1462.205707] brcmfmac: brcmf_set_channel: set chanspec 0xd026 fail, reason -52
+[ 1462.309454] brcmfmac: brcmf_set_channel: set chanspec 0xd02a fail, reason -52
+[ 1462.413536] brcmfmac: brcmf_set_channel: set chanspec 0xd02e fail, reason -52
+[ 1462.517955] brcmfmac: brcmf_set_channel: set chanspec 0xd034 fail, reason -52
+[ 1462.519230] brcmfmac: brcmf_set_channel: set chanspec 0xd038 fail, reason -52
+[ 1462.519813] brcmfmac: brcmf_set_channel: set chanspec 0xd03c fail, reason -52
+[ 1463.765534] sdhci-dwcmshc fe310000.mmc: Can't reduce the clock below 52MHz in HS200/HS400 mode
+[ 1463.765612] sdhci-dwcmshc fe310000.mmc: Can't reduce the clock below 52MHz in HS200/HS400 mode
+[ 1463.765635] sdhci-dwcmshc fe310000.mmc: Can't reduce the clock below 52MHz in HS200/HS400 mode
+[ 1465.291296] WILKBOOK: RESUMED FROM DEEP
+2026-08-02 19:40:50 localhost [ 1465.291296] WILKBOOK: RESUMED FROM DEEP
+[ 1493.636415] irq 71: nobody cared (try booting with the "irqpoll" option)
+[ 1493.636437] CPU: 0 UID: 0 PID: 186 Comm: irq/71-sc7a20-t Not tainted 7.0.11 #1 PREEMPT_{RT,LAZY} 
+[ 1493.636445] Hardware name: Pine64 PineNote v1.2 (DT)
+[ 1493.636449] Call trace:
+[ 1493.636452]  show_stack+0x1c/0x38 (C)
+[ 1493.636468]  dump_stack_lvl+0x5c/0x78
+[ 1493.636475]  dump_stack+0x14/0x1c
+[ 1493.636480]  __report_bad_irq+0x50/0xf8
+[ 1493.636487]  note_interrupt+0x324/0x380
+[ 1493.636496]  handle_irq_event+0x9c/0x110
+[ 1493.636503]  handle_level_irq+0xe4/0x180
+[ 1493.636507]  handle_irq_desc+0x38/0x60
+[ 1493.636514]  generic_handle_domain_irq+0x1c/0x30
+[ 1493.636519]  rockchip_irq_demux+0x88/0x228
+[ 1493.636526]  handle_irq_desc+0x38/0x60
+[ 1493.636532]  generic_handle_domain_irq+0x1c/0x30
+[ 1493.636538]  gic_handle_irq+0x54/0xe0
+[ 1493.636542]  call_on_irq_stack+0x30/0x48
+[ 1493.636548]  do_interrupt_handler+0x80/0x90
+[ 1493.636554]  el1_interrupt+0x38/0x60
+[ 1493.636562]  el1h_64_irq_handler+0x14/0x20
+[ 1493.636567]  el1h_64_irq+0x6c/0x70
+[ 1493.636572]  _raw_spin_unlock_irq+0x10/0x50 (P)
+[ 1493.636579]  irq_thread_fn+0x64/0xb0
+[ 1493.636585]  irq_thread+0x1bc/0x308
+[ 1493.636592]  kthread+0x134/0x150
+[ 1493.636598]  ret_from_fork+0x10/0x20
+[ 1493.636604] handlers:
+[ 1493.636606] [<0000000092b8b602>] st_sensors_validate_device [st_sensors] threaded [<0000000086bd79d2>] st_sensors_validate_device [st_sensors]
+[ 1493.636626] Disabling IRQ #71
+2026-08-02 19:41:18 localhost linux: [ 1493.636626] Disabling IRQ #71

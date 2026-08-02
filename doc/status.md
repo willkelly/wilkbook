@@ -2,6 +2,37 @@
 
 Last updated: 2026-08-02.
 
+**2026-08-02 DEEP SUSPEND WORKS. Rung 3 PASS.** Artifact:
+`doc/artifacts/pinenote-deep-suspend-WORKS-20260802/`.
+
+```
+RESUMED rc=0 asleep=60s
+VERDICT control=46 A(blanked)=46 B(unblanked)=46 C(ioctl)=1 D(after-ioctl)=46
+TPS VCOM pre=8f post=8f
+```
+
+Entered `deep`, slept 60 s, woke on the armed RTC alarm, and came back with
+a fully working display at both CRTC states. The firmware boundary tells
+the story — same device, same bl31, hours apart:
+
+| | `PM-STATE` |
+| --- | --- |
+| before activation (hung forever) | `mem (ultra: 0, mem: 1, cfg: 0x0)` |
+| after activation (woke) | `mem (ultra: 0, mem: 1, cfg: 0x5ec)` |
+
+Two independent proofs it was a real power-down: the **kernel monotonic
+clock froze** (1.08 s kernel across 60 s wall — s2idle runs matched exactly,
+so a short kernel delta is the signature of success, not an early wake),
+and **OP-TEE re-initialised secondary CPUs** on resume. VCOM survived at
+`8f`. Reader restored clean.
+
+*Not claimed*: battery life is unmeasured (60 s proves mechanism, not the
+multi-day target); only the RTC wake source is proven; TPS `ENABLE` moved
+`2f → 20` and was not restored by our PM pair (display works via runtime
+PM, but it differs from os1 and is worth understanding before long
+dwells); ultra-suspend remains unadopted; and this is one cycle — repeat
+before trusting it.
+
 **2026-08-02 BSP SIP activation is LIVE and BOUND on os2 — deep's missing
 configuration is now actually being sent.** Image
 `d604ff98d454a5cd89c230363cace1eaf785b71ccfbbae0be03db7de477f78af`
