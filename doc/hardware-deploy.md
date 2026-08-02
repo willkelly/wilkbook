@@ -36,8 +36,30 @@ on `os1` as the rescue path. Nothing here touches `waveform`, `uboot`,
 
 ## Boot and observe
 
-- Power-cycle and pick **"Boot OS2 (part 6)"** from the stock U-Boot menu.
-  OS selection is always manual at the menu; never `fw_setenv`/`saveenv`.
+- Pick **"Boot OS2 (part 6)"** from the stock U-Boot menu; never
+  `fw_setenv`/`saveenv`.
+  **Slot selection is scriptable over UART as of 2026-08-02** — the menu
+  is a normal serial UI and the countdown is ~15 s:
+
+  ```
+    *** U-Boot Boot Menu ***
+       Search for extlinux.conf on all partitions   <- default/highlighted
+       Boot OS1 (part 5)
+       Boot OS2 (part 6)
+       U-Boot console
+    Hit any key to stop autoboot: 15 14 13 ...
+  ```
+
+  With the host port at 1500000 raw, send one DOWN per entry then ENTER:
+  `printf '\033[B' > /dev/ttyUSB0; sleep 0.4; printf '\r' > /dev/ttyUSB0`
+  selects OS1 (one down); two DOWNs select OS2. Any key stops the
+  countdown, so the arrow both stops and moves. Watch the capture and
+  react — do not fire blind.
+  Caveat: keystrokes sent after the kernel is up land on the ttyS2 getty,
+  so a stray arrow shows up as a failed login. Harmless, but send `\003\r`
+  to clear the prompt afterwards.
+  This means a hung os2 no longer strictly needs a human to get back to
+  os1. A **hard** hang (no U-Boot at all) still needs the PMIC long-press.
 - Boot config inside the slot is `/boot/extlinux/extlinux.conf` with
   `/boot/Image`, an explicit `FDT /boot/rk3566-pinenote-v1.2.dtb` line
   (`FDTDIR` has proven unreliable with this U-Boot), `/boot/initrd.cpio.gz`,
