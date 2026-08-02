@@ -1,0 +1,22 @@
+[19:46:55] === DEEP REPEAT START (dwells: 30 30 30 30 120) ===
+[19:47:00] prep done: irq=1397 VCOM=8f
+mmap-fsync row=100 fill=checker: irq 1348 -> 1394 (delta 46) fb-rows-changed=120/120
+[19:47:03] CONTROL pre-loop: delta 46
+mmap-fsync row=200 fill=checker: irq 1396 -> 1442 (delta 46) fb-rows-changed=100/120
+[19:47:39] CYCLE 1: FAIL rc=0 dwell=30s wall=30s kernel=29.88s real-deep=no paint=46 VCOM=8f->8f
+mmap-fsync row=320 fill=checker: irq 1444 -> 1490 (delta 46) fb-rows-changed=120/120
+[19:48:15] CYCLE 2: FAIL rc=0 dwell=30s wall=30s kernel=29.47s real-deep=no paint=46 VCOM=8f->8f
+mmap-fsync row=440 fill=checker: irq 1492 -> 1538 (delta 46) fb-rows-changed=120/120
+[19:48:51] CYCLE 3: FAIL rc=0 dwell=30s wall=30s kernel=29.45s real-deep=no paint=46 VCOM=8f->8f
+mmap-fsync row=560 fill=checker: irq 1540 -> 1586 (delta 46) fb-rows-changed=120/120
+[19:49:27] CYCLE 4: FAIL rc=0 dwell=30s wall=30s kernel=29.47s real-deep=no paint=46 VCOM=8f->8f
+mmap-fsync row=680 fill=checker: irq 1588 -> 1634 (delta 46) fb-rows-changed=120/120
+[19:51:33] CYCLE 5: FAIL rc=0 dwell=120s wall=120s kernel=119.46s real-deep=no paint=46 VCOM=8f->8f
+[19:51:33] === SUMMARY: 0 PASS / 5 FAIL of 5 cycles ===
+[19:51:33] dmesg hazard lines: 4
+[19:51:33] --- RESTORE
+Service pinenote-waveform has been started.
+Service user-homes has been started.
+Service pinenote-ebc-params has been started.
+Service reader-session has been started.
+[19:51:44] restore: irq=1823 reader=● Status of reader-session:

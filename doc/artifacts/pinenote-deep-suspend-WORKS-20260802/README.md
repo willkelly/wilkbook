@@ -86,3 +86,76 @@ emitter, and now firmware-accepted.
 `ladder.log`, `ladder-deep.sh`, `uart-deep-trace.log` (the firmware
 handoff), `gates-*.txt`, `drm-*.txt`, `gt-pre/post.txt`, `tps-pre/post.txt`,
 `dmesg-pre/post.txt`.
+
+---
+
+# Reliability run — 5 cycles, and a real defect found
+
+**Deep suspend is reliable: 5/5 cycles PASS**, dwells 30/30/30/30/120 s.
+Every cycle: `rc=0`, wall time matched the armed dwell, the display painted
+a full 46-frame pass with `fb-rows-changed=120/120`, and VCOM held at `8f`.
+
+| cycle | dwell | wall | printk delta |
+| --- | --- | --- | --- |
+| 1 | 30 s | 30 s | 1.10 s |
+| 2 | 30 s | 30 s | 1.09 s |
+| 3 | 30 s | 30 s | 1.10 s |
+| 4 | 30 s | 30 s | 1.09 s |
+| 5 | **120 s** | 120 s | **1.09 s** |
+
+The printk delta stays ~1.1 s regardless of dwell — the SoC powered down
+every time, including the 2-minute one.
+
+## Instrument trap: `/proc/uptime` is the WRONG clock for this
+
+The harness first scored all five as FAIL, reporting `kernel ≈ wall` and
+therefore "not a real deep". That was the harness, not the device:
+
+- **`/proc/uptime` uses `ktime_get_boottime()`, which INCLUDES suspended
+  time.** It can never show the freeze, so it always looks like nothing
+  happened.
+- **printk timestamps use `sched_clock`, which STOPS across suspend.** So
+  does `CLOCK_MONOTONIC` (as opposed to `CLOCK_BOOTTIME`).
+
+Use printk timestamps or `CLOCK_MONOTONIC`. This is the third instrument
+trap in this program — after `dd`-vs-`mmap` damage and global-vs-partial
+IRQ units — and the same lesson each time: **a measurement that contradicts
+a working system is the measurement's fault until proven otherwise.**
+
+## Defect found: SC7A20 accelerometer dies on deep resume
+
+~28 s after the first deep resume:
+
+```
+[1493.636415] irq 71: nobody cared (try booting with the "irqpoll" option)
+CPU: 0 UID: 0 PID: 186 Comm: irq/71-sc7a20-t Not tainted 7.0.11 #1 PREEMPT_{RT,LAZY}
+Call trace:
+ ... rockchip_irq_demux ... handle_level_irq ... irq_thread_fn
+```
+
+IRQ 71 is `sc7a20-trigger`, level-triggered on `rockchip_gpio_irq`. Across
+deep the accelerometer loses the state that keeps its interrupt line
+de-asserted; the handler cannot clear it, the line stays asserted, and the
+kernel's spurious-IRQ protection disables the IRQ after ~100 k unhandled
+events. Measured after: **rate 0/s** — the storm is over precisely because
+the IRQ is now dead.
+
+**Product impact: autorotation stops working after the first deep sleep,
+until reboot.** Reading itself is unaffected — the reader, panel, touch and
+pen are fine, and the disabled IRQ means no ongoing power drain. But for a
+device meant to match commercial e-readers, orientation silently dying
+after the first sleep is exactly the kind of regression that matters.
+
+This is the **already-documented** `SC7A20 accelerometer resume` blocker
+from `doc/power-management.md` (added 2026-08-01, noting hrdl's own
+`v6.19_iio_accel` attempt is unfinished) — now reproduced on hardware with
+a concrete signature rather than an anticipated risk. It is the next thing
+to fix, and it is a *resume-init* problem: the driver needs to
+re-initialise the device and clear/re-arm the interrupt on resume.
+
+## Standing status after this session
+
+- `deep` enters, sleeps, and resumes reliably (5/5, up to 120 s).
+- Display, VCOM, reader all survive.
+- Accelerometer does not. Fix before treating suspend as shippable.
+- Battery life still unmeasured; only the RTC wake source proven.

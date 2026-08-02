@@ -1,0 +1,22 @@
+[ 1458.872226] PM: suspend entry (deep)
+[ 1459.952490] PM: suspend exit
+[ 1839.110008] WILKBOOK: cycle 1 entering deep (dwell 30s)
+[ 1839.127844] PM: suspend entry (deep)
+[ 1840.224107] PM: suspend exit
+[ 1840.255305] WILKBOOK: cycle 1 resumed
+[ 1846.789697] WILKBOOK: cycle 2 entering deep (dwell 30s)
+[ 1846.819625] PM: suspend entry (deep)
+[ 1847.913244] PM: suspend exit
+[ 1847.940104] WILKBOOK: cycle 2 resumed
+[ 1854.498779] WILKBOOK: cycle 3 entering deep (dwell 30s)
+[ 1854.515966] PM: suspend entry (deep)
+[ 1855.615500] PM: suspend exit
+[ 1855.644376] WILKBOOK: cycle 3 resumed
+[ 1862.180107] WILKBOOK: cycle 4 entering deep (dwell 30s)
+[ 1862.197536] PM: suspend entry (deep)
+[ 1863.287017] PM: suspend exit
+[ 1863.316332] WILKBOOK: cycle 4 resumed
+[ 1869.872436] WILKBOOK: cycle 5 entering deep (dwell 120s)
+[ 1869.890220] PM: suspend entry (deep)
+[ 1870.976854] PM: suspend exit
+[ 1871.010582] WILKBOOK: cycle 5 resumed
