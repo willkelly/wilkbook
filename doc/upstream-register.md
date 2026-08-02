@@ -187,6 +187,39 @@ may already have moved; (3) the standing baseline gate.
 
 **Status:** needs-verification. Do not send on source reading alone.
 
+### 8. `st_accel` has no power management — **needs-work** (real patch, real audience)
+
+`struct i2c_driver st_accel_driver` has no `.pm`, and there are **zero**
+occurrences of `pm_ops`/`suspend`/`resume` across
+`drivers/iio/common/st_sensors/`, `drivers/iio/accel/st_accel*`, and
+`include/linux/iio/common/st_sensors.h` (7.0.11). Across a suspend that
+actually removes power, the sensor loses its configuration, nothing
+re-initialises it, its INT line stays asserted, and the level-triggered
+IRQ storms until the kernel's spurious protection disables it —
+permanently, until reboot.
+
+Observed on PineNote 2026-08-02 as `irq 71: nobody cared`,
+`Comm: irq/71-sc7a20-t`, after the first real `deep` cycle. **Confirmed by
+Will to reproduce on stock Debian/6.12 as well**, so it is inherent to the
+driver rather than to any one image — every PineNote Linux distro that
+suspends loses autorotation after the first sleep.
+
+**For:** linux-iio (`Denis Ciocca` is the listed author; the ST sensors
+maintainers) — this is mainline, *not* the EBC lineage, so unlike every
+other item here it is ours to fix rather than to report to m-weigand/hrdl.
+Worth telling hrdl regardless, since `v6.19_iio_accel` is an unfinished
+attempt at the same problem.
+
+**Shape:** add `.pm` to the i2c (and spi) driver — suspend disables the
+sensor, resume re-runs the probe-time `st_sensors_init_sensor()`, which
+restores ODR, enable state, and the DRDY/interrupt configuration.
+
+**What has to be true first:** written and working on our hardware across
+repeated deep cycles, plus the standing baseline gate. Unlike the EBC
+findings this one has a straightforward upstream home and a reproducer on
+two independent kernels, which makes it the strongest candidate in this
+register once it exists.
+
 ---
 
 ## Destinations

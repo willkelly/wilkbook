@@ -226,10 +226,15 @@ Current blockers after that gate passes:
   driver rather than a defect in the EBC lineage, so it is
   upstream-reportable in its own right.
 
-  Open question, cheap to answer: **os1 runs the same mainline driver and
-  auto-deep-suspends**, so it should have the same defect. Verify whether
-  os1's autorotation survives one of its own sleeps before assuming our
-  configuration is special;
+  **Confirmed inherent, not ours (Will, 2026-08-02): "it also breaks on
+  os1 for sure."** os1 is stock Debian on the 6.12 BSP kernel running the
+  same mainline `st-accel-i2c`, and it auto-deep-suspends on idle — so the
+  defect reproduces on a completely different kernel and userland. That
+  matches the source exactly (a driver with no `.pm` cannot survive a
+  power-down on any distro) and means **every PineNote Linux image that
+  suspends has broken autorotation after the first sleep.** It also
+  explains why hrdl's `v6.19_iio_accel` branch exists. Nothing about our
+  configuration is special, so no os1 verification trip is needed;
 - cover and RK817 wake properties are compiled in, but physical wake routing
   and PMIC child-event attribution are unproven.
 
