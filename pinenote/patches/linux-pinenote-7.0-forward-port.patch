@@ -2830,7 +2830,7 @@ new file mode 100755
 index 000000000..8db4c36cd
 --- /dev/null
 +++ b/drivers/gpu/drm/rockchip/rockchip_ebc.c
-@@ -0,0 +1,3396 @@
+@@ -0,0 +1,3415 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/*
 + * Copyright (C) 2021-2022 Samuel Holland <samuel@sholland.org>
@@ -4703,6 +4703,25 @@ index 000000000..8db4c36cd
 +			/* memset(ctx->prev, 0xff, ctx->gray4_size); */
 +			memset(ctx->next, 0xff, ctx->gray4_size);
 +			/* memset(ctx->final, 0xff, ctx->gray4_size); */
++			/*
++			 * wilkbook (2026-08-02): restore the damage-comparison
++			 * baseline too.  final_atomic_update is the buffer the
++			 * blitters write into and diff against, and areas that
++			 * compare equal are DROPPED (list_del + kfree in
++			 * rockchip_ebc_plane_atomic_update) -- silently, with no
++			 * error and no frame.  It is kmalloc'd, not kzalloc'd, and
++			 * a system resume is the one path that reaches here with a
++			 * BRAND-NEW ctx: crtc_atomic_check reallocates whenever
++			 * mode_changed, which drm_atomic_helper_resume's
++			 * duplicated-state commit always sets.  Both other init
++			 * branches below already seed it (0xff on first run,
++			 * suspend_next on re-init); only this one did not, so after
++			 * resume every damage rect was diffed against uninitialised
++			 * memory.  The panel shows suspend_next after the restoring
++			 * global refresh, so suspend_next is the correct baseline.
++			 */
++			memcpy(ctx->final_atomic_update, ebc->suspend_next,
++			       ctx->gray4_size);
 +			ebc->do_one_full_refresh = 1;
 +		} else {
 +			// only on first run

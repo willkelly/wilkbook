@@ -2,6 +2,45 @@
 
 Last updated: 2026-08-02.
 
+**2026-08-02 (offline code-read) the post-resume dead-write window has a
+named defect: the resume path never restores the damage-comparison
+baseline.** `ctx->final_atomic_update` is the buffer the blitters write
+into and diff against, and
+`rockchip_ebc_plane_atomic_update()` **drops any area whose blit reports
+no change** — `list_del` + `kfree`, silently: no error, no frame, nothing
+logged. It is `kmalloc`'d, **not** `kzalloc`'d. A system resume is the one
+path that reaches the thread's outer-loop init with a *brand-new* ctx
+(`crtc_atomic_check` reallocates whenever `mode_changed`, which
+`drm_atomic_helper_resume`'s duplicated-state commit always sets). Both
+non-suspend init branches seed the buffer — `0xff` on first run,
+`suspend_next` on re-init — and **only the `suspend_was_requested` branch
+did not**. So after every resume, damage was diffed against uninitialised
+memory.
+
+*Fix*: restore it from `suspend_next`, the same source as `ctx->final` —
+the panel shows `suspend_next` after the restoring global refresh, so that
+is the correct baseline. Gated by a new mutation-tested structural check,
+`validate-ebc-resume-baseline-hunk.sh`, wired into `make suspend-check`.
+
+*Ruled out by the same read, each with a reason*: ctx **is** correctly
+reallocated and propagated (thread's cached ctx and the plane's commit ctx
+are the same object — `drm_atomic_get_plane_state()` pulls the plane's
+CRTC into the state, so `drm_atomic_get_new_crtc_state()` is never NULL);
+the thread parks at the **bottom** of its outer loop so unpark re-reads
+ctx as designed; `limit_fb_blits` defaults to `-1` (unlimited) and is
+never set; `worker_available` gates only the barrier ioctl, not refresh.
+
+*Honesty note*: this defect is certain and independently worth fixing, but
+it is **not proven** to be the whole explanation — a total zero requires
+every damage rect to match the stale buffer, and `ctx_alloc` runs *before*
+the old ctx is freed, so the new buffer does not simply inherit the old
+contents. The cheap discriminator on hardware is to write a band of a
+**distinctive** value post-resume instead of black (every probe run so far
+wrote `0x00`), which distinguishes drop-on-match from a further cause.
+The rung-7a harness cannot settle it: its `commit_damage()` appends areas
+directly and never calls the blitter, so drop-on-match is not executed
+offline (recorded in `doc/testing.md`).
+
 **2026-08-02 (offline) the "fbdev re-commit fix" was NOT written — its
 premise is contradicted, and the IRQ unit was being misread.** Three
 independent facts kill the os1-oracle diagnosis ("our fbdev never
