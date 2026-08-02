@@ -201,25 +201,29 @@ suspend permission. Do not allocate another boot merely to repeat zero-call
 binding. Activation, an active reviewed DT policy, real coordinator providers
 and production sleep-frame wiring, and the PineNote-specific resume/ultra-suspend
 dependencies remain required before any suspend attempt—not a firmware reflash.
-The suspend ladder's rung-2 resume defect is fixed (the worker bracket, proven
-on glass: the panel now recovers without a reboot) and its one residual — the
-post-resume dead-write window — has been read out of the 7.0.11 sources: **four**
-gates on the write→panel path produce that exact signature, and every one of them
-fails *silently and successfully*, so no write probe can ever name it. G1 (the
-fbdev client's deferred un-suspend is never awaited) is unconditionally wrong and
-is fixed in the patch; G3 is the trap that our own diagnostics can spring on
-themselves, because the first opener of `/dev/dri/card0` becomes DRM master and
-`FBIOBLANK`/`set_par` then no-op while returning 0. Read the gates with
-`pinenote/tools/power/fb-damage-gates.sh` (opens no DRM node) before probing them.
-Running that probe on os1 established a standing limit on the oracle: **os1 is
-not an oracle for the fbdev damage path.** Its plane holds gnome-shell's
-framebuffer (not fbcon's, which exists but is unused) and logind holds DRM
-master, so os1 has G2 and G3 permanently closed for fbdev and its panel works
-anyway — because it drives the display through KMS, never through fbdev. os1
-still answers hardware questions; it cannot answer "should this fbdev write
-have painted".
-The fix is cross-build-verified and **hardware-unproven**. Note the general
-lesson in `doc/testing.md`: the ebc-logic harness compiles the `#else` stub of
-every `#ifdef` its shim does not define, so a green host suite proves nothing
-about code inside a config guard.
+**Suspend ladder rungs 1 and 2 PASS on s2idle (2026-08-02, hardware-proven).**
+The worker-bracket fix recovers the panel without a reboot, and post-resume
+damage paints a full 46-frame pass at both blanked and unblanked CRTC states,
+confirmed on glass. No regulator or TPS drift; VCOM survives. **Rung 3 (`deep`)
+hangs at bl31 with `PM-STATE: … cfg: 0x0`** — captured over UART: Linux hands
+off cleanly, the BSP ATF runs its whole sequence, and the zero config word is
+firmware-level proof that we send it no suspend-mode configuration or
+wake-source arming (activation is hard-off by design). That is an activation
+*design decision*, not another boot.
+
+Three instrument corrections from that program, all of which cost real sessions
+and are worth internalising: (1) **a zero IRQ delta means nothing on its own** —
+writing content that already matches the region is a genuine no-op the driver
+correctly drops, and every probe here wrote `0x00` onto a black console
+background, which manufactured a phantom "post-resume dead-write window";
+`mmap-band-probe.lua` now reports `fb-rows-changed` and flags no-ops. (2) **A
+global refresh costs 1 IRQ, a partial costs 1 per frame** — never compare the
+two units (`doc/testing.md`). (3) **The UART works** at 1500000; the long-standing
+"receives nothing from ttyS2" was a test artifact (device-side tty defaults to
+9600 and the console shares the divisor; and passive post-boot listens cannot
+tell a dead cable from a quiet one). Also standing: **os1 is not an oracle for
+the fbdev damage path** — it drives its display through KMS, so it never makes an
+fbdev write; and the ebc-logic harness compiles the `#else` stub of every
+`#ifdef` its shim does not define, so a green host suite proves nothing about
+code inside a config guard.
 See `ROADMAP.md`, `doc/status.md`, and `doc/power-management.md` for specifics.
