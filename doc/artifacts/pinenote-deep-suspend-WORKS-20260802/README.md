@@ -159,3 +159,26 @@ re-initialise the device and clear/re-arm the interrupt on resume.
 - Display, VCOM, reader all survive.
 - Accelerometer does not. Fix before treating suspend as shippable.
 - Battery life still unmeasured; only the RTC wake source proven.
+
+## Firmware config confirmed on every cycle
+
+The repeat run's UART capture (`uart-repeat-trace.log`) carries 5 firmware
+banners for the 5 cycles, but only **one** intact `PM-STATE` line — the
+other four were mangled by the documented lossy capture. The fragments
+survived where the full lines did not:
+
+```
+5   cfg: 0x5ec
+0   cfg: 0x0
+1   mem: 6
+```
+
+So the configuration reached bl31 on **all five** cycles, not just the
+first. Note `mem: 6` against the first run's `mem: 1` — that field is a
+cumulative count of mem-suspend entries since boot (1 initial attempt + 5
+repeats), which is a useful free cross-check that every cycle really
+reached the firmware path.
+
+This is also a worked example of the lossy-capture rule from
+`doc/power-management.md`: grep for *fragments* before concluding a line
+was absent.

@@ -1,0 +1,221 @@
+g to colour frame buffer device g to colour dummy device 80x25
+ entering deep (dwell 30s)
+ntering deep (dwell 30s)
+[ 1839.127844] PM: suspend entry[ 1839.131028] Filesystems sync: 0.003 seconds
+[ 1839.131259] F processes completed (elapsed 0.] Freezing remaining freezable tasks
+[ 1839.134099] Freezing rev2.3():v2.3-210-g4af361e4c:zwx
+ cfg: 0x5ec), pmic: 0x14, 0x25
+abcd01MI/TC: Secondary CPU 1 initialtching to normal world boot
+I/TC: Secondary CPU 2 initializing to normal world boot
+I/TC: Secondary CPU 3 initializing
+I/TC:rmal world boot
+[ 1839.150509] rockchip_ebc_suspdevices took 0.805 seconds
+[ 1839.950136] Disabling non-boot CP3 killed (polled 1 ms)
+[ 1839.973193] psci: CPU2 killed (polled1 killed (polled 1 ms)
+[ 1839.981271] Enabling non-boot CPUs ..GICv3: CPU1: found redistributor 100 region 0:0x00000000fd4800000x412fd050]
+[ 1839.983586] CPU1 is up
+[ 1839.984507] Detected butor 200 region 0:0x00000000fd4a0000
+[ 1839.984612] CPU2: Boot CPU2 is up
+[ 1839.986659] Detected VIPT I-cache on CPU3
+[ 18300fd4c0000
+[ 1839.986763] CPU3: Booted secondary processor 0x00 rockchip_ebc_resume
+[ 1840.051613] ebc: rockchip_ebc_plane_res EBC: rockchip_ebc_ctx_free
+[ 1840.209914] PM: resume devices td.
+[ 1840.221121] Restarting tasks: Starting
+[ 1840.223143] Re[ 1840.255305] WILKBOOK: cycle 12026-08-02 19:47:34 localhost [ esumed
+[ 1842.433944] net_ratelimit: 134119] brcmfmac: brcmf_set_channel: set chanspec 0x100c fail, rea[ 1842.438261] brcmfmac: brcmf_set_channel: set chanspec 0x100d t chanspec 0x100e fail, reason -022 fail, reason -52
+[ 1842.554676] brcmfmac: brcmf_sfail, reason -52
+[ 1842.666037] brcmfmac: brcmf_sfail, reason -52
+[ 1842.775934] brcmfmac: brcmf_sfail, reason -52
+[ 1842.889821] brcmfmac: brcmf_sfail, reason -52
+[ 1842.891827]t chanspec 0xd038 fail, reason -52
+[ 1842.893726] brcmfmac: brc03c fail, reason -52
+10000.mmc: Can't reduce the clocfe310000.mmc: Can't reduce the clock below 52MHz in HS200/HS400 e clock below 52MHz in HS200/HS400 mode
+ entering deep (dwell 30s)
+2026.789697] WILKBOOK: cycle 2 entering deep (dwell 30s)
+ (deep)
+ 0.003 seconds
+[ 1846.823574] Freezing user space processes
+ce processes completed (elapsed 0.002 seconds)
+[ 1846.826258] O tasks
+[ 1846.827682] Freezing remaining freezable tasks complev2.3():v2.3-210-g4af361e4c:zwx
+ cfg: 0x5ec), pmic: 0x14, 0x25
+abcd01MI/TC: Secondary CPU 1 initialtching to normal world boot
+I/TC: Secondary CPU 2 initializingondary CPU 3 initializing
+I/TC:[ 1846.848379] rockchip_ebc_suspdevices took 0.810 seconds
+[ 183 killed (polled 0 ms)
+[ 1847.666123] psci: CPU2 killed (polled73596] Enabling non-boot CPUs ...
+[ 1847.674601] Detected VIPT  100 region 0:0x00000000fd480000
+[ 1847.674728] CPU1: Booted se is up
+[ 1847.676907] Detected VIPT I-cache on CPU2
+[ 1847.676a0000
+[ 1847.677014] CPU2: Booted secondary processor 0x0000000cted VIPT I-cache on CPU3
+[ 1847.679128] GICv3: CPU3: found red Booted secondary processor 0x0000000300 [0x412fd050]
+[ 1847.68 rockchip_ebc_resume
+[ 1847.744568] ebc: rockchip_ebc_plane_res EBC: rockchip_ebc_ctx_free
+[ 1847.897899] PM: resume devices td.
+[ 1847.911169] Restarting tastarting tasks: Done
+[ 1847.913244] PM: suspend exit
+ resumed
+1847.940104] WILKBOOK: cycle 2 r callbacks suppressed
+[ 1849.32son -52
+[ 1849.331570] brcmfmac: brcmf_set_channel: set chanspe9.333129] brcmfmac: brcmf_set_chfmac: brcmf_set_channel: set chanspec 0xd022 fail, reason -52
+et_channel: set chanspec 0xd026 et_channel: set chanspec 0xd02a fail, reason -52
+et_channel: set chanspec 0xd02e [ 1849.786069] brcmfmac: brcmf_sfail, reason -52
+[ 1849.787579] brcmfmac: brcmf_set_channel: semf_set_channel: set chanspec 0xd03c fail, reason -52
+10000.mmc: Can't reduce the cloce
+[ 1852.101673] sdhci-dwcmshc fe310000.mmc: Can't reduce the chc fe310000.mmc: Can't reduce the clock below 52MHz in HS200/HS4 entering deep (dwell 30s)
+ntering deep (dwell 30s)
+[ 1854.515966] PM: suspend entry[ 1854.519055] Filesystems sync: 0.003 seconds
+[ 1854.519235] F processes completed (elapsed 0.001 seconds)
+[ 1854.520733] OOMasks
+[ 1854.522069] Freezing rev2.3():v2.3-210-g4af361e4c:zwx
+ cfg: 0x5ec), pmic: 0x14, 0x25
+abcd01MI/TC: Secondary CPU 1 initialtching to normal world boot
+I/T
+I/TC: Secondary CPU 2 switching to normal world boot
+I/TC: Secrmal world boot
+[ 1854.540485] rockchip_ebc_suspdevices took 0.807 seconds
+[ 183 killed (polled 1 ms)
+[ 1855.367067] psci: CPU2 killed (polled74637] Enabling non-boot CPUs ...
+[ 1855.375642] Detected VIPT  100 region 0:0x00000000fd480000
+[ 1855.375768] CPU1: Booted se is up
+[ 1855.377953] Detected butor 200 region 0:0x00000000fd4a0000
+[ 1855.378056] CPU2: Boot200 [0x412fd050]
+[ 1855.379226] CPU2 is up
+[ 1855.380150] Deteistributor 300 region 0:0x00000000fd4c0000
+[ 1855.380254] CPU3:1497] CPU3 is up
+[ 1855.446471] rockchip_ebc_resume
+[ 1855.446_ebc_ctx_release
+[ 1855.446931] EBC: rockchip_ebc_ctx_free
+[ 1] OOM killer enabled.
+[ 1855.613116] Restarting tasks: Startings: Done
+[ 1855.615500] PM: suspend exit
+ resumed
+1855.644376] WILKBOOK: cycle 3 r callbacks suppressed
+[ 1857.02l: set chanspec 0x100c fail, reason -52
+[ 1857.026293] brcmfmac7.027732] brcmfmac: brcmf_set_channel: set chanspec 0x100e fail,nspec 0xd022 fail, reason -52
+[ 1857.146052] brcmfmac: brcmf_sfail, reason -52
+et_channel: set chanspec 0xd02a et_channel: set chanspec 0xd02e et_channel: set chanspec 0xd034  brcmfmac: brcmf_set_channel: set chanspec 0xd038 fail, reason -03c fail, reason -52
+10000.mmc: Can't reduce the clocfe310000.mmc: Can't reduce the clock below 52MHz in HS200/HS400 e clock below 52MHz in HS200/HS400 mode
+ entering deep (dwell 30s)
+ntering deep (dwell 30s)
+ (deep)
+ 0.002 seconds
+[ 1862.200740] Freezing user space processes
+0.002 seconds)
+[ 1862.203217] OOM killer disabled.
+[ 1862.2032remaining freezable tasks complev2.3():v2.3-210-g4af361e4c:zwx
+ cfg: 0x5ec), pmic: 0x14, 0x25
+abcd01MI/TC: Secondary CPU 1 initializing
+I/TC: Secondary CPU 1 switching to normal world boot
+I/TC: Secondary CPU 2 initializing
+I/TC: Secondary CPU 2 switching to normal world boot
+I/TC: Secondary CPU 3 initializing
+I/TC: Secondary CPU 3 switching to normal world boot
+[ 1862.222611] rockchip_ebc_suspend
+[ 1863.013215] PM: suspend devices took 0.807 seconds
+[ 1863.022933] Disabling non-boot CPUs ...
+[ 1863.033009] psci: CPU3 killed (polled 0 ms)
+[ 1863.040021] psci: CPU2 killed (polled 0 ms)
+[ 1863.045845] psci: CPU1 killed (polled 1 ms)
+[ 1863.047728] Enabling non-boot CPUs ...
+[ 1863.048991] Detected VIPT I-cache on CPU1
+[ 1863.049048] GICv3: CPU1: found redistributor 100 region 0:0x00000000fd480000
+[ 1863.049117] CPU1: Booted secondary processor 0x0000000100 [0x412fd050]
+[ 1863.050294] CPU1 is up
+[ 1863.051213] Detected VIPT I-cache on CPU2
+[ 1863.051259] GICv3: CPU2: found redistributor 200 region 0:0x00000000fd4a0000
+[ 1863.051318] CPU2: Booted secondary processor 0x0000000200 [0x412fd050]
+[ 1863.052470] CPU2 is up
+[ 1863.053390] Detected VIPT I-cache on CPU3
+[ 1863.053437] GICv3: CPU3: found redistributor 300 region 0:0x00000000fd4c0000
+[ 1863.053493] CPU3: Booted secondary processor 0x0000000300 [0x412fd050]
+[ 1863.054683] CPU3 is up
+[ 1863.119420] rockchip_ebc_resume
+[ 1863.119438] ebc: rockchip_ebc_plane_reset
+[ 1863.119864] ebc: rockchip_ebc_ctx_release
+[ 1863.119875] EBC: rockchip_ebc_ctx_free
+[ 1863.273685] PM: resume devices took 0.211 seconds
+[ 1863.284921] OOM killer enabled.
+[ 1863.284931] Restarting tasks: Starting
+[ 1863.285932] Restarting tasks: Done
+[ 1863.287017] PM: suspend exit
+[ 1863.316332] WILKBOOK: cycle 4 resumed
+2026-08-02 19:49:22 localhost [ 1863.316332] WILKBOOK: cycle 4 resumed
+[ 1864.687532] net_ratelimit: 13 callbacks suppressed
+[ 1864.687566] brcmfmac: brcmf_set_channel: set chanspec 0x100c fail, reason -52
+[ 1864.689243] brcmfmac: brcmf_set_channel: set chanspec 0x100d fail, reason -52
+[ 1864.690692] brcmfmac: brcmf_set_channel: set chanspec 0x100e fail, reason -52
+[ 1864.692585] brcmfmac: brcmf_set_channel: set chanspec 0xd022 fail, reason -52
+[ 1864.812262] brcmfmac: brcmf_set_channel: set chanspec 0xd026 fail, reason -52
+[ 1864.919604] brcmfmac: brcmf_set_channel: set chanspec 0xd02a fail, reason -52
+[ 1865.033897] brcmfmac: brcmf_set_channel: set chanspec 0xd02e fail, reason -52
+[ 1865.145992] brcmfmac: brcmf_set_channel: set chanspec 0xd034 fail, reason -52
+[ 1865.147575] brcmfmac: brcmf_set_channel: set chanspec 0xd038 fail, reason -52
+[ 1865.149418] brcmfmac: brcmf_set_channel: set chanspec 0xd03c fail, reason -52
+[ 1867.159243] sdhci-dwcmshc fe310000.mmc: Can't reduce the clock below 52MHz in HS200/HS400 mode
+[ 1867.159369] sdhci-dwcmshc fe310000.mmc: Can't reduce the clock below 52MHz in HS200/HS400 mode
+[ 1867.159410] sdhci-dwcmshc fe310000.mmc: Can't reduce the clock below 52MHz in HS200/HS400 mode
+[ 1869.872436] WILKBOOK: cycle 5 entering deep (dwell 120s)
+2026-08-02 19:49:28 localhost [ 1869.872436] WILKBOOK: cycle 5 entering deep (dwell 120s)
+[ 1869.890220] PM: suspend entry (deep)
+[ 1869.894011] Filesystems sync: 0.003 seconds
+[ 1869.894187] Freezing user space processes
+[ 1869.895716] Freezing user space processes completed (elapsed 0.001 seconds)
+[ 1869.895727] OOM killer disabled.
+[ 1869.895729] Freezing remaining freezable tasks
+[ 1869.897122] Freezing remaining freezable tasks completed (elapsed 0.001 seconds)
+v2.3():v2.3-210-g4af361e4c:zwx
+PM-STATE: mem (ultra: 0, mem: 6, cfg: 0x5ec), pmic: 0x14, 0x25
+abcdeghij701MI/TC: Secondary CPU 1 initializing
+I/TC: Secondary CPU 1 switching to normal world boot
+I/TC: Secondary CPU 2 initializing
+I/TC: Secondary CPU 2 switching to normal world boot
+I/TC: Secondary CPU 3 initializing
+I/TC: Secondary CPU 3 switching to normal world boot
+[ 1869.915542] rockchip_ebc_suspend
+[ 1870.706201] PM: suspend devices took 0.807 seconds
+[ 1870.715869] Disabling non-boot CPUs ...
+[ 1870.723990] psci: CPU3 killed (polled 1 ms)
+[ 1870.728820] psci: CPU2 killed (polled 0 ms)
+[ 1870.733942] psci: CPU1 killed (polled 0 ms)
+[ 1870.735377] Enabling non-boot CPUs ...
+[ 1870.736381] Detected VIPT I-cache on CPU1
+[ 1870.736439] GICv3: CPU1: found redistributor 100 region 0:0x00000000fd480000
+[ 1870.736508] CPU1: Booted secondary processor 0x0000000100 [0x412fd050]
+[ 1870.737669] CPU1 is up
+[ 1870.738699] Detected VIPT I-cache on CPU2
+[ 1870.738746] GICv3: CPU2: found redistributor 200 region 0:0x00000000fd4a0000
+[ 1870.738806] CPU2: Booted secondary processor 0x0000000200 [0x412fd050]
+[ 1870.739963] CPU2 is up
+[ 1870.740880] Detected VIPT I-cache on CPU3
+[ 1870.740927] GICv3: CPU3: found redistributor 300 region 0:0x00000000fd4c0000
+[ 1870.740983] CPU3: Booted secondary processor 0x0000000300 [0x412fd050]
+[ 1870.742146] CPU3 is up
+[ 1870.805345] rockchip_ebc_resume
+[ 1870.805362] ebc: rockchip_ebc_plane_reset
+[ 1870.805793] ebc: rockchip_ebc_ctx_release
+[ 1870.805803] EBC: rockchip_ebc_ctx_free
+[ 1870.961657] PM: resume devices took 0.213 seconds
+[ 1870.975552] OOM killer enabled.
+[ 1870.975570] Restarting tasks: Starting
+[ 1870.976532] Restarting tasks: Done
+[ 1870.976854] PM: suspend exit
+[ 1871.010582] WILKBOOK: cycle 5 resumed
+2026-08-02 19:51:28 localhost [ 1871.010582] WILKBOOK: cycle 5 resumed
+[ 1872.407605] net_ratelimit: 13 callbacks suppressed
+[ 1872.407650] brcmfmac: brcmf_set_channel: set chanspec 0x100c fail, reason -52
+[ 1872.409691] brcmfmac: brcmf_set_channel: set chanspec 0x100d fail, reason -52
+[ 1872.411635] brcmfmac: brcmf_set_channel: set chanspec 0x100e fail, reason -52
+[ 1872.413662] brcmfmac: brcmf_set_channel: set chanspec 0xd022 fail, reason -52
+[ 1872.529559] brcmfmac: brcmf_set_channel: set chanspec 0xd026 fail, reason -52
+[ 1872.639618] brcmfmac: brcmf_set_channel: set chanspec 0xd02a fail, reason -52
+[ 1872.751607] brcmfmac: brcmf_set_channel: set chanspec 0xd02e fail, reason -52
+[ 1872.863583] brcmfmac: brcmf_set_channel: set chanspec 0xd034 fail, reason -52
+[ 1872.865246] brcmfmac: brcmf_set_channel: set chanspec 0xd038 fail, reason -52
+[ 1872.866702] brcmfmac: brcmf_set_channel: set chanspec 0xd03c fail, reason -52
+[ 1875.237678] sdhci-dwcmshc fe310000.mmc: Can't reduce the clock below 52MHz in HS200/HS400 mode
+[ 1875.237862] sdhci-dwcmshc fe310000.mmc: Can't reduce the clock below 52MHz in HS200/HS400 mode
+[ 1875.237896] sdhci-dwcmshc fe310000.mmc: Can't reduce the clock below 52MHz in HS200/HS400 mode
+[ 1949.341839] power_supply ws8100_pen: driver failed to report `capacity' property: -74
