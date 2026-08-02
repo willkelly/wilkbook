@@ -1,0 +1,5 @@
+[22:27:12] === WIFI AB START (480s per phase) ===
+[22:35:13] PHASE A wifi-UP  : 481s 2548696 -> 2524272 uAh, 182.8 mA, sdio+mmc irqs 25/s
+[22:43:18] PHASE B wifi-DOWN: 480s 2523928 -> 2501052 uAh, 171.6 mA, sdio+mmc irqs 0/s
+wifi share: 11.2 mA (6% of awake-idle)
+[22:43:43] restored: wlan0=UP

@@ -1,0 +1,23 @@
+window: 60s
+battery: 2561424 -> 2557468 uAh, drain 237.4 mA
+
+== interrupt rates (per second, only nonzero)
+   179.4/s  13: GICv3 Level arch_timer
+    57.2/s  IPI5: IRQ work interrupts
+    56.0/s  IPI0: Rescheduling interrupts
+    44.1/s  29: GICv3 Level fdd40000.i2c
+    31.7/s  61: GICv3 Level dw-mci
+    14.6/s  IPI1: Function call interrupts
+     2.1/s  62: GICv3 Level mmc0
+
+== cpu time delta (jiffies)
+user=118 nice=0 sys=83 idle=23736 iowait=1 irq=33 softirq=17
+
+== cpufreq residency delta (10ms units)
+  408000 kHz  5489
+  600000 kHz  293
+  816000 kHz  78
+ 1104000 kHz  48
+ 1416000 kHz  49
+ 1608000 kHz  12
+ 1800000 kHz  39
