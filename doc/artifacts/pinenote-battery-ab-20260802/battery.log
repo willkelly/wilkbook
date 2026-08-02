@@ -1,0 +1,17 @@
+[21:12:36] === BATTERY AB START (awake 900s, deep 2700s) ===
+[21:12:42] prep done: capacity=66% charge=2651896 uAh charger_online=0
+[21:12:42] PHASE A awake-idle start: charge=2651896
+[21:27:42] PHASE A awake-idle: 900s, 2651896 -> 2608208 uAh, drain 174.8 mA
+[21:27:42] PHASE B deep start: charge=2608208 alarm=+2700s
+[22:12:42] PHASE B deep: rc=0 2700s, 2608208 -> 2593760 uAh, drain 19.3 mA
+[22:12:42] --- RESULT
+[22:12:42] awake-idle : 174.8 mA over 900s
+[22:12:42] deep       : 19.3 mA over 2700s
+deep standby from 4000 mAh full: 8.6 days (207.3 h)
+deep is 9.1x lower draw than awake-idle
+[22:12:42] capacity now 65%  charger_online=0
+Service pinenote-waveform has been started.
+Service user-homes has been started.
+Service pinenote-ebc-params has been started.
+Service reader-session has been started.
+[22:12:47] === BATTERY AB END ===
