@@ -1,0 +1,5 @@
+[23:49:49] safety alarm armed +90s. PRESS THE POWER BUTTON NOW.
+[23:50:24] RESUMED rc=0 after 35s (safety was 90s)
+[23:50:24] rk8xx irq delta: 4   alarm field now: [1785714679]
+[23:50:24] VERDICT: PASS -- woke at 35s, well before the 90s safety alarm.
+[23:50:24]          A human CAN wake this device from deep.
