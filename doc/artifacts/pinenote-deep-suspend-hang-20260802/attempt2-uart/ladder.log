@@ -1,0 +1,12 @@
+[03:50:39] === DEEP LADDER START ===
+[03:50:39] system=/gnu/store/xjwyb5isv0awqj3l6wblfh7090xkzj67-system root=/dev/mmcblk0p6
+[03:50:39] mem_sleep: s2idle [deep]
+[03:50:39] --- prep
+[03:50:50] pre: irq=640 fb0.state=0 crtc_active=1 VCOM=8f
+mmap-fsync row=100: irq 591 -> 637 (delta 46)
+[03:50:53] PROBE CONTROL-pre-suspend: irq 640 -> 686 (delta 46)
+[03:50:53] CONTROL PASS: 46 frames before any suspend
+[03:50:55] post-blank: crtc_active=0 irq=686
+[03:51:00] gadget UDC blanked: []
+[03:51:00] alarm armed=1785642720 now=1785642660 (+60s absolute epoch)
+[03:51:00] --- RUNG 3: echo mem > /sys/power/state  (mode=deep)
