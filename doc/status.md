@@ -94,8 +94,7 @@ returns, and costs nothing when the first call already took the console
 lock. Ordered after `rockchip_ebc_wake_worker()` so released damage has
 a live consumer. G2/G4 are deliberately *not* fixed in the driver:
 re-committing a modeset in resume would override a user's pre-suspend
-blank, and fbcon-unbound is a design property of the reader image (and
-exactly why os1 never shows this). Gates green: `make kernel-drv`,
+blank, and fbcon-unbound is a design property of the reader image. Gates green: `make kernel-drv`,
 `make kernel` (cross-build clean — the compile gate for the
 `CONFIG_DRM_FBDEV_EMULATION` branch the host harness cannot reach), and
 the full `ebc-logic` suite. **Not hardware-verified.** Next session: run
@@ -113,6 +112,21 @@ does not reference at all. The image it supersedes on os2 is preserved
 as `…-20260801-deployed-8e302e48.ext4`. `fb-damage-gates.sh` needs no
 image — it is a read-only shell script, copied at session time like
 `pm-ground-truth.sh`, and runs on whatever is already on the device.
+
+**os1 gate reading taken during the deploy (read-only, os1 healthy), and
+it corrected the write-up.** The probe runs correctly on real hardware.
+os1 reads: G1 `state=0`; G3 **`systemd-logind` holds master** on the EBC
+card; G2 plane[32] → **`fb=39`, allocated by gnome-shell** (fbcon's
+framebuffer is `fb=37` and is *not* on the plane); G4 `vtcon1 bind=1`
+— fbcon is **bound**. So the claim that "fbcon-unbound is why os1 never
+shows this" is wrong: os1 has fbcon bound and still never exercises the
+path, because a KMS compositor owns the plane. Both G2 and G3 are
+permanently closed on os1 *for fbdev*, and the panel is fine anyway.
+**Standing limit, now recorded in `CLAUDE.md`: os1 is not an oracle for
+the fbdev damage path.** It answers hardware questions; it cannot answer
+"should this fbdev write have painted", because it never makes one. The
+probe was improved in place to correlate the plane's fb with its
+allocator, so this reads as one line instead of being inferred.
 
 **2026-08-01 (late evening) discriminator pass: the residual is
 localized to silent damage-drop at the fb-helper's suspended-state

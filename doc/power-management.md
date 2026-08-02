@@ -967,14 +967,31 @@ second returns immediately and costs nothing. It is ordered *after*
 `rockchip_ebc_wake_worker()` so that damage the un-suspend releases has a
 live consumer.
 
+**Correction from the os1 reading (2026-08-01, taken during the deploy).**
+Running the probe on stock Debian showed that the sentence "fbcon-unbound
+is why os1 never shows this" is **wrong**. os1 has fbcon *bound*
+(`vtcon1 bind=1`) and still never exercises this path, because its plane
+holds `fb=39` **allocated by gnome-shell** — the fbcon framebuffer is
+`fb=37` and is not on the plane at all. `systemd-logind` holds DRM
+master. So on os1 both G2 and G3 are permanently closed *for the fbdev
+path*, and the panel works anyway because a KMS compositor owns the plane
+and repaints through atomic commits. The real reason os1 is healthy is
+that **os1 does not drive its display through fbdev at all.**
+
+The consequence is a standing limit on the oracle: **os1 is not an oracle
+for the fbdev damage path.** It answers hardware questions (does the
+panel work, does a rail come back, does the waveform load); it cannot
+answer "should this fbdev write have painted", because it never makes
+one. The probe now correlates the plane's fb with its allocator so this
+is visible in one line instead of inferred.
+
 G2 and G4 are **not** fixed in the driver, deliberately.
 `drm_atomic_helper_resume()` re-commits the state duplicated at suspend
 time; if the panel was blanked before suspend then restoring "blanked"
 is correct, and forcing a modeset on in resume would override the user.
 The userspace unblank is the right actor — it was only ever suspected of
 failing because G3 may have been closed under it. G4 is a design
-property of the reader image (fbcon unbound), not a defect; it explains
-why os1 never shows this and we do.
+property of the reader image (fbcon unbound), not a defect.
 
 Next hardware session: run `fb-damage-gates.sh` once after resume,
 before anything else touches the display. G1 should now read `0`. If a

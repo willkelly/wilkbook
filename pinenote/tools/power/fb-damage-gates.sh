@@ -111,6 +111,33 @@ done
 say ""
 say "G2 is CLOSED when the primary plane shows fb=0 or crtc=(null):"
 say "drm_atomic_helper_dirtyfb() then commits an empty state and returns 0."
+say ""
+say "It is ALSO closed, less obviously, when the plane holds a *different*"
+say "fb than the fbdev one -- e.g. a KMS compositor owning the plane. The"
+say "dirtyfb loop matches on identity, not on 'some plane is lit'. So the"
+say "owner of the plane's fb is the reading that matters:"
+for d in "$dbg"/*/framebuffer; do
+	[ -r "$d" ] || continue
+	sd=$(dirname "$d")
+	[ -r "$sd/state" ] || continue
+	planefb=$(awk '/^plane\[/{p=1} p && /^\tfb=/{sub(/^\tfb=/,""); if ($0 != "0") {print; exit}}' "$sd/state")
+	[ -n "$planefb" ] || continue
+	owner=$(awk -v id="$planefb" '
+		$0 == "framebuffer[" id "]:" { f=1; next }
+		f && /^\tallocated by = /{ sub(/^\tallocated by = /,""); print; exit }
+		f && /^framebuffer\[/ { exit }' "$d")
+	say "$sd: plane fb=$planefb, allocated by ${owner:-(unknown)}"
+	case $owner in
+	"[fbcon]"|*fbcon*|*fbdev*)
+		say "  -> the fbdev framebuffer is on the plane; the fbdev damage path can reach it" ;;
+	"")
+		say "  -> could not resolve the owner; read $d by hand" ;;
+	*)
+		say "  -> NOT the fbdev framebuffer. drm_atomic_helper_dirtyfb() called with"
+		say "     the fbdev fb matches no plane here and commits an empty state."
+		say "     Normal under a KMS compositor; fatal for an fbdev-only reader." ;;
+	esac
+done
 for d in "$dbg"/*/framebuffer; do
 	[ -r "$d" ] || continue
 	say "-- $d"; read_or "$d"
@@ -124,7 +151,9 @@ for v in /sys/class/vtconsole/*; do
 	say "$(basename "$v"): bind=$b  name=$n"
 done
 say "bind=0 for the frame buffer device means nothing regenerates damage"
-say "after fb_set_suspend(0); the reader image runs this way by design."
+say "after fb_set_suspend(0) -- fbcon_resumed() returns early with no"
+say "console attached. The reader image runs that way by design; note it"
+say "only matters when the fbdev path is what drives the panel at all."
 
 hdr "supporting counters"
 say "defio_delay_ms = $(cat /sys/module/rockchip_ebc/parameters/defio_delay_ms 2>/dev/null || echo '(absent)')"

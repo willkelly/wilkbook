@@ -211,6 +211,13 @@ is fixed in the patch; G3 is the trap that our own diagnostics can spring on
 themselves, because the first opener of `/dev/dri/card0` becomes DRM master and
 `FBIOBLANK`/`set_par` then no-op while returning 0. Read the gates with
 `pinenote/tools/power/fb-damage-gates.sh` (opens no DRM node) before probing them.
+Running that probe on os1 established a standing limit on the oracle: **os1 is
+not an oracle for the fbdev damage path.** Its plane holds gnome-shell's
+framebuffer (not fbcon's, which exists but is unused) and logind holds DRM
+master, so os1 has G2 and G3 permanently closed for fbdev and its panel works
+anyway — because it drives the display through KMS, never through fbdev. os1
+still answers hardware questions; it cannot answer "should this fbdev write
+have painted".
 The fix is cross-build-verified and **hardware-unproven**. Note the general
 lesson in `doc/testing.md`: the ebc-logic harness compiles the `#else` stub of
 every `#ifdef` its shim does not define, so a green host suite proves nothing
