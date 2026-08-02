@@ -273,6 +273,19 @@ Amendments from that session, now standing procedure:
   For an entry trace, `no_console_suspend` is on the kernel command line
   (runtime `console_suspend=N` does not hold the 8250 port up through
   `dev_pm_ops`).
+  **Capture fidelity caveat (measured 2026-08-02): the UART capture DROPS
+  CHARACTERS under dense output.** A boot capture at 1500000 rendered
+  `BSP suspend policy activated` as the fragment `pend policy activated`,
+  with interleaved and truncated neighbours — the line was transmitted and
+  the capture mangled it. **A missing line in a UART log is therefore not
+  evidence it was never printed.** Confirm against on-disk `dmesg` before
+  concluding anything from an absence. This is also why the dual-channel
+  protocol matters: on-disk dmesg is lossless up to the freeze, UART covers
+  the handoff past it, and the two stitched gaplessly on 2026-08-02.
+  Enabling `no_console_suspend` increases suspend-phase console volume, so
+  expect *more* drop risk exactly where the trace is most valuable — read
+  the bl31 `PM-STATE` line carefully and re-run rather than trusting a
+  partial.
 - Evidence transfers off-device must be verified BEFORE device cleanup.
 - **Read the gates before probing them, and hold no DRM node while you
   do.** Immediately after resume, before anything else touches the
