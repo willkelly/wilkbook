@@ -65,10 +65,23 @@ tests skip with a clear message rather than fail.
 | `pinenote/tools/orientation` | 2 | Pure SC7A20 orientation classification: calibrated four-edge mapping, flat/diagonal/magnitude rejection, hysteresis, stable-sample dwell debounce, and duplicate suppression | `make orientation-check` |
 | `pinenote/tools/power` | 1 | Read-only Guile snapshot/delta recorder against deterministic fake `/proc`/`/sys` roots; plus a closed, unimported provider constructor and pure injected-capability Lua coordinator with exact transaction/rollback traces, durable records, poisoning, and no filesystem/sysfs authority. Neither Lua module is production-wired | `make power-check`; capability/coordinator gates are in `make activation-positive-check` |
 | `pinenote/tools/rockchip-pm` | 1 | Verbatim extracted BSP SIP/PM model and generic executor plus compiled-DTB donor/maximal fixtures: exact RK3568 bindings; standard OF metadata `compatible`, `name`, `status`; donor event ordering, GPIO/regulator limits, descriptive-only virtual-poweroff, fake-only unwind injection, strict source-tree validation, MEM-only production parsing, consumer-handle lifetime/locking, and proof that the real backend is linked while its active-driver `.prepare` edge is omitted | `make rockchip-pm-check` |
-| suspend preflight | 1 | Fail-closed config/DT/KOReader qualification fixtures: exact PM config lines, effectively enabled cover+RK817 wake identities, exact disabled policy bytes, and restricted two-value KOReader policy evaluation | `make suspend-check` |
+| suspend preflight | 1 | Fail-closed config/DT/KOReader qualification fixtures: exact PM config lines, effectively enabled cover+RK817 wake identities, exact disabled policy bytes, and restricted two-value KOReader policy evaluation; plus structural gates over the TPS65185 PM hunk and the fbdev resume barrier, the latter with its own mutation suite | `make suspend-check` |
 | activation-positive composite | 1 | Runs the closed capability constructor, pure Lua coordinator, a separate compiled-DTB synthetic active Rockchip PM scenario through fake ops, and the unchanged production hard-off preflight in one gate. It cannot select the real backend or write `/sys/power/state` | `make activation-positive-check` |
 
 Each tool's `README.md` documents what it does and does **not** cover.
+
+A second caveat, learned on 2026-08-01: **the host harness compiles the
+driver under its own config, so code behind an `#ifdef` the shim does not
+define is invisible to it.** `rockchip_ebc.c`'s
+`CONFIG_DRM_FBDEV_EMULATION` block — `defio_delay_ms` and the fbdev
+resume barrier — compiles as the `#else` stub in every ebc-logic binary.
+The suite can go fully green with that entire branch deleted. When you
+touch code inside a config guard, the cross-build (`make kernel`) is the
+compile gate and a structural gate over the patch is the behavioral one;
+`validate-ebc-fbdev-resume-hunk.sh` and its mutation suite are the
+worked example. Before trusting a harness result, check that the harness
+actually compiles the lines you changed.
+
 The recurring caveat: **none of this models electrophoretic optics.**
 Ghosting, grayscale uniformity, temperature drift, DC balance, pen
 latency — those stay on the hardware-only list. The tools validate

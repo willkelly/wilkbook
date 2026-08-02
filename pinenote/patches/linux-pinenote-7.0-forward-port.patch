@@ -2830,7 +2830,7 @@ new file mode 100755
 index 000000000..8db4c36cd
 --- /dev/null
 +++ b/drivers/gpu/drm/rockchip/rockchip_ebc.c
-@@ -0,0 +1,3363 @@
+@@ -0,0 +1,3396 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/*
 + * Copyright (C) 2021-2022 Samuel Holland <samuel@sholland.org>
@@ -3218,6 +3218,35 @@ index 000000000..8db4c36cd
 +	rockchip_ebc_defio_helper = fb_helper;
 +	return 0;
 +}
++
++/*
++ * Complete the fbdev client's un-suspend before our resume returns.
++ *
++ * drm_client_dev_resume() -> drm_fbdev_client_resume() ->
++ * drm_fb_helper_set_suspend_unlocked(helper, false) *defers* the
++ * un-suspend to helper->resume_work whenever console_trylock() fails,
++ * and nothing in the resume path ever waits for it.  Until it lands,
++ * info->state stays FBINFO_STATE_SUSPENDED, so drm_fb_helper_damage_work()
++ * returns before drm_fb_helper_fb_dirty() and every damage submission is
++ * dropped *silently*: the write and its fsync both succeed, the clip
++ * merely accumulates in helper->damage_clip, and no frame is ever
++ * queued.  Nothing is logged, because nothing failed.
++ *
++ * Calling the same helper a second time is the missing barrier: it opens
++ * with flush_work(&fb_helper->resume_work), so a deferred un-suspend is
++ * completed here, and it returns immediately when the first call already
++ * took the console lock (the common case, and then this costs nothing).
++ * PM callbacks and remove() are serialised by the device lock, so the
++ * helper pointer cannot be cleared underneath us.
++ */
++static void rockchip_ebc_fbdev_finish_resume(void)
++{
++	if (rockchip_ebc_defio_helper)
++		drm_fb_helper_set_suspend_unlocked(rockchip_ebc_defio_helper,
++						   false);
++}
++#else
++static void rockchip_ebc_fbdev_finish_resume(void) { }
 +#endif
 +
 +DEFINE_DRM_GEM_FOPS(rockchip_ebc_fops);
@@ -5858,9 +5887,13 @@ index 000000000..8db4c36cd
 +	ret = drm_mode_config_helper_resume(&ebc->drm);
 +	/* Wake only after a successful helper resume so the worker's
 +	 * per-unpark ctx re-read lands on the newly committed ctx. */
-+	if (!ret)
++	if (!ret) {
 +		rockchip_ebc_wake_worker(ebc,
 +					 rockchip_ebc_crtc_has_ctx(ebc));
++		/* Only then finish the fbdev client's un-suspend, so any
++		 * damage it releases has a live consumer. */
++		rockchip_ebc_fbdev_finish_resume();
++	}
 +	return ret;
 +}
 +

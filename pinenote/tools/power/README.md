@@ -67,3 +67,16 @@ sorted `paths` list of exact `wakeup-source` property paths found below the DT
 base, without reading property contents.  `dt-cpu-idle-states` is either an
 `available` record with immediate child `nodes`, or an explicit `absent`
 record.
+
+`fb-damage-gates.sh` is a read-only, device-side dump of every gate between a
+userspace framebuffer write and an EBC frame: the fbdev suspended-state gate,
+the plane→fb binding `drm_atomic_helper_dirtyfb()` requires, DRM-master
+ownership, and fbcon binding. All four fail *silently and successfully*, so a
+write probe can only ever report "still no frames" — which is why the
+2026-08-01 post-resume dead-write window took a probe ladder and still did not
+name its gate. The script opens no device node, on purpose: the first opener of
+`/dev/dri/card0` becomes DRM master, and a diagnostic that opens the card
+silently invalidates every `FBIOBLANK` and `set_par` it then attempts. Run it
+once after resume, before anything else touches the display; read G1 first,
+then G3, then G2, then G4. Analysis in `doc/power-management.md`
+("Post-resume dead-write window").

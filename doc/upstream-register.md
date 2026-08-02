@@ -146,6 +146,47 @@ tps65185 and PREEMPT_RT integration.
 
 **Unpark trigger:** someone in the lineage starts a 7.x branch.
 
+### 7. fbdev-emulation resume is silent when it fails — **needs-verification**
+
+Two core-DRM findings from the 2026-08-01 offline pass, both about the
+same thing: the fbdev-emulation path **reports success while doing
+nothing**, so a driver whose display is dead after resume gets no signal
+at all. Full analysis in `doc/power-management.md` ("Post-resume
+dead-write window").
+
+1. **The deferred un-suspend is never awaited.**
+   `drm_fb_helper_set_suspend_unlocked(helper, false)` punts to
+   `helper->resume_work` whenever `console_trylock()` fails, and nothing
+   on the resume path waits for it. Until it lands, `info->state` is
+   still `FBINFO_STATE_SUSPENDED` and `drm_fb_helper_damage_work()`
+   returns before `drm_fb_helper_fb_dirty()` — every damage submission
+   is dropped, the clip silently accumulating in `helper->damage_clip`.
+   Drivers that repaint from userspace writes (no fbcon to trigger
+   `update_screen()`) resume into a dead display. Our fix is a
+   second call to the same helper from the driver's resume, using its
+   own opening `flush_work()` as the barrier — which suggests the real
+   upstream shape is for `drm_fbdev_client_resume()` to do that itself.
+
+2. **`drm_fb_helper_blank()` and `drm_fb_helper_set_par()` discard
+   `-EBUSY`.** Both call into `drm_client_modeset_*`, which return
+   `-EBUSY` from `drm_master_internal_acquire()` whenever any process
+   holds DRM master; both then return 0. So `FBIOBLANK` and
+   `FBIOPUT_VSCREENINFO` report success for a modeset that was refused.
+   This is what makes G3 above so treacherous to diagnose — including
+   for our own tooling, which took master merely by opening the card.
+
+**For:** dri-devel — unlike everything else in this register these are
+mainline core-DRM, not `rockchip_ebc`, so the lineage is not the right
+audience. Small and self-contained.
+
+**What has to be true first:** (1) hardware confirmation that finding 1
+is what our device actually hit — the fix is built but unproven on
+glass, and `pinenote/tools/power/fb-damage-gates.sh` is the instrument;
+(2) check current `drm-misc-next`, not 7.0.11 — this is live code and
+may already have moved; (3) the standing baseline gate.
+
+**Status:** needs-verification. Do not send on source reading alone.
+
 ---
 
 ## Destinations

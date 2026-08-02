@@ -259,6 +259,15 @@ Amendments from that session, now standing procedure:
   is amended to "human-present with bounded auto-wake" for this
   hardware.
 - Evidence transfers off-device must be verified BEFORE device cleanup.
+- **Read the gates before probing them, and hold no DRM node while you
+  do.** Immediately after resume, before anything else touches the
+  display, run `pinenote/tools/power/fb-damage-gates.sh` — it names
+  which of the four silent gates is closed, which no sequence of write
+  probes can. And note that the first opener of `/dev/dri/card0`
+  *becomes* DRM master, which makes `FBIOBLANK` and `set_par` silently
+  no-op: a diagnostic holding the card open invalidates its own
+  recovery attempts. Close the DRM fd before probing fbdev recovery.
+  (Added 2026-08-01; see "Post-resume dead-write window" below.)
 
 Do not combine the telemetry deployment, CPU-idle work, boot-firmware changes,
 or suspend orchestration into one verdict. RK817 telemetry is now qualified;
@@ -909,3 +918,65 @@ re-init on resume (blacklisted in the model, not modeled).
 
 No hardware session is allocated or implied by any of this. The standing
 rule holds: nothing suspends until the qualification ladder says so.
+
+### Post-resume dead-write window (2026-08-01, offline source pass)
+
+The rung-2 retry left one precisely localized residual: after resume,
+every framebuffer write was accepted and produced no frame, while the
+`GLOBAL_REFRESH` ioctl on the same state drove +47 frames. The driver,
+the refresh thread, the ctx, the rails and the panel were all exonerated
+on the device. This pass read the 7.0.11 submission path end to end and
+found **four** gates that can produce that exact signature — accepted
+write, `fsync` returning 0, no frame, and **nothing in dmesg, because
+nothing failed**.
+
+Submission order, from a userspace write to a queued EBC area:
+
+| Gate | Site | Fires when | Readable as |
+| --- | --- | --- | --- |
+| G1 | `drm_fb_helper_damage_work()`, `drm_fb_helper.c:271` | `info->state != FBINFO_STATE_RUNNING`; returns before `drm_fb_helper_fb_dirty()`. Damage is not lost — the clip accumulates in `helper->damage_clip` and is never flushed. | `/sys/class/graphics/fb0/state` |
+| G2 | `drm_atomic_helper_dirtyfb()`, `drm_damage_helper.c` | no plane has `plane->state->fb == fb`, so the loop matches nothing and `drm_atomic_commit()` commits an **empty** state — success, zero effect. | `dri/N/state`: primary plane `fb=0` |
+| G3 | `drm_master_internal_acquire()`, `drm_auth.c` | any process holds DRM master, so `drm_client_modeset_commit()` / `_dpms()` return `-EBUSY` — and `drm_fb_helper_blank()` / `drm_fb_helper_set_par()` **discard that error and return 0**. | any opener of `/dev/dri/card*` |
+| G4 | `fbcon_resumed()`, `fbcon.c:2653` | fbcon unbound, so `update_screen()` never runs and nothing regenerates damage after `fb_set_suspend(0)`. | `/sys/class/vtconsole/*/bind` |
+
+Two consequences worth stating plainly.
+
+**The probe ladder we ran could not have named the gate.** Each of the
+four is silent and each returns success; a write probe can only ever
+report "still no frames". `pinenote/tools/power/fb-damage-gates.sh` now
+reads all four in one shot, and deliberately opens no DRM node — because
+the first opener of `/dev/dri/card0` *becomes* master (`drm_master_open()`),
+so a diagnostic that opens the card to issue an ioctl closes G3 on
+itself and silently invalidates every unblank and `set_par` it then
+attempts. Our own `probeC-setpar` result on 2026-08-01 is therefore not
+conclusive evidence about G2, and is retired as such. **Standing rule:
+check G3 before trusting any recovery attempt, and never hold the DRM
+node open across an fbdev recovery probe.**
+
+**G1 is unconditionally wrong and is now fixed in the driver.**
+`drm_client_dev_resume()` → `drm_fbdev_client_resume()` →
+`drm_fb_helper_set_suspend_unlocked(helper, false)` *defers* the
+un-suspend to `helper->resume_work` whenever `console_trylock()` fails,
+and nothing in the resume path ever waits for it. `rockchip_ebc_resume()`
+now calls the same helper a second time after a successful
+`drm_mode_config_helper_resume()`: that call opens with
+`flush_work(&fb_helper->resume_work)`, which is precisely the missing
+barrier — a deferred un-suspend is completed before resume returns, and
+when the first call already took the console lock (the common case) the
+second returns immediately and costs nothing. It is ordered *after*
+`rockchip_ebc_wake_worker()` so that damage the un-suspend releases has a
+live consumer.
+
+G2 and G4 are **not** fixed in the driver, deliberately.
+`drm_atomic_helper_resume()` re-commits the state duplicated at suspend
+time; if the panel was blanked before suspend then restoring "blanked"
+is correct, and forcing a modeset on in resume would override the user.
+The userspace unblank is the right actor — it was only ever suspected of
+failing because G3 may have been closed under it. G4 is a design
+property of the reader image (fbcon unbound), not a defect; it explains
+why os1 never shows this and we do.
+
+Next hardware session: run `fb-damage-gates.sh` once after resume,
+before anything else touches the display. G1 should now read `0`. If a
+dead-write window survives with G1 open and G3 open, G2 is the answer
+and the fix is a userspace unblank, not a driver change.

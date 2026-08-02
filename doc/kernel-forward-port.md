@@ -123,6 +123,28 @@ It does not change Linux 7.0's `ROCKCHIP_SLEEP_PD_CONFIG=0xff` pmdomain ABI.
   blanked-CRTC suspend runs the park-tail wash (glass to white) —
   matching the driver's documented CRTC-disabled invariant. Hardware
   proof of the whole fix waits for the next boot's ladder retry.
+- The fbdev-client resume barrier (added 2026-08-01): four lines in
+  `rockchip_ebc_resume()` plus one small helper. Vanilla
+  `drm_fb_helper_set_suspend_unlocked(helper, false)` defers the
+  un-suspend to `helper->resume_work` whenever `console_trylock()`
+  fails, and *nothing* on the resume path waits for it — until it lands
+  `info->state` is `FBINFO_STATE_SUSPENDED` and
+  `drm_fb_helper_damage_work()` drops every damage submission with no
+  error anywhere. We call the same helper a second time after a
+  successful `drm_mode_config_helper_resume()`, using its own opening
+  `flush_work(&fb_helper->resume_work)` as the barrier; when the first
+  call already took the console lock it returns immediately and costs
+  nothing. Ordered after `rockchip_ebc_wake_worker()` so damage the
+  un-suspend releases has a live consumer. It reuses the
+  `rockchip_ebc_defio_helper` static that `defio_delay_ms` already
+  keeps; PM callbacks and `remove()` are serialised by the device lock,
+  so no extra locking is needed there. The block is inside
+  `#ifdef CONFIG_DRM_FBDEV_EMULATION` with a no-op `#else` stub — which
+  is what the ebc-logic harness compiles, so **the cross-build is the
+  only compile gate for the live branch**; run `make kernel`, not just
+  the host suite, after touching it. Hardware-unproven; the instrument
+  is `pinenote/tools/power/fb-damage-gates.sh` and the four-gate
+  analysis is in `doc/power-management.md`.
 - TPS65185 suspend/resume register restoration, same file (added
   2026-08-01, dormant until the suspend ladder reaches `deep`): snapshot
   the nine programmable non-VCOM registers at suspend, wait out the

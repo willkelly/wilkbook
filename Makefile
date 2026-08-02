@@ -183,3 +183,5 @@ activation-positive-check:
 suspend-check:
 	guix shell dtc python luajit -- sh pinenote/scripts/preflight/test-inspect-pinenote-suspend-gates.sh
 	sh pinenote/scripts/preflight/validate-tps65185-pm-hunk.sh
+	sh pinenote/scripts/preflight/validate-ebc-fbdev-resume-hunk.sh
+	guix shell python -- sh pinenote/scripts/preflight/test-validate-ebc-fbdev-resume-hunk.sh

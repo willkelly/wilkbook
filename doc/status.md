@@ -1,6 +1,6 @@
 # Hardware status
 
-Last updated: 2026-07-30.
+Last updated: 2026-08-01.
 
 **2026-07-30 EBC barrier campaign: PASSED. The generation barrier is
 hardware-proven, and the starvation cause is now measured rather than
@@ -58,6 +58,49 @@ campaign card's 1-px border at pixel 0 renders and is simply not visible.
 Useful beyond this campaign — it is the reader UI's usable-area inset.
 
 Suspend remains disabled; none of this is suspend permission.
+
+**2026-08-01 (offline source pass, no device) the dead-write window has
+four candidate gates, all silent; G1 is unconditionally wrong and is
+fixed in the driver.** Reading the 7.0.11 submission path end to end
+(`drm_fb_helper.c`, `drm_damage_helper.c`, `drm_client_event.c`,
+`drm_client_modeset.c`, `drm_auth.c`, `fbcon.c`) turned the previous
+entry's single suspected gate into four that each produce the identical
+external signature — write accepted, `fsync` 0, no frame, empty dmesg.
+See `doc/power-management.md` ("Post-resume dead-write window") for the
+table; in short: **G1** `drm_fb_helper_damage_work`'s FBINFO_STATE gate
+(the previously suspected one, confirmed as real and reachable);
+**G2** `drm_atomic_helper_dirtyfb` committing an *empty* state when no
+plane holds the fbdev fb; **G3** any DRM-master holder making
+`drm_fb_helper_blank`/`set_par` silently no-op (they discard the
+`-EBUSY`); **G4** fbcon unbound, so nothing repaints after
+`fb_set_suspend(0)`.
+
+Two results matter beyond the fix. First, **the probe ladder we ran
+could not have named the gate** — all four return success. Second,
+**our own diagnostics can close G3 on themselves**: the first opener of
+`/dev/dri/card0` becomes master, so a tool that opens the card to issue
+an ioctl invalidates every unblank and `set_par` it subsequently tries.
+The previous entry's `probeC-setpar` result is therefore retired as
+evidence about G2. New standing rule, and a new read-only instrument:
+`pinenote/tools/power/fb-damage-gates.sh` reads all four gates in one
+shot and deliberately opens no DRM node.
+
+The G1 fix is in the forward-port patch: `rockchip_ebc_resume()` now
+calls `drm_fb_helper_set_suspend_unlocked(helper, false)` a second time
+after a successful `drm_mode_config_helper_resume()`, whose opening
+`flush_work(&fb_helper->resume_work)` is the barrier the vanilla resume
+path never had — the deferred un-suspend completes before resume
+returns, and costs nothing when the first call already took the console
+lock. Ordered after `rockchip_ebc_wake_worker()` so released damage has
+a live consumer. G2/G4 are deliberately *not* fixed in the driver:
+re-committing a modeset in resume would override a user's pre-suspend
+blank, and fbcon-unbound is a design property of the reader image (and
+exactly why os1 never shows this). Gates green: `make kernel-drv`,
+`make kernel` (cross-build clean — the compile gate for the
+`CONFIG_DRM_FBDEV_EMULATION` branch the host harness cannot reach), and
+the full `ebc-logic` suite. **Not hardware-verified; no session
+allocated.** Next session: run `fb-damage-gates.sh` once after resume,
+before anything else touches the display.
 
 **2026-08-01 (late evening) discriminator pass: the residual is
 localized to silent damage-drop at the fb-helper's suspended-state

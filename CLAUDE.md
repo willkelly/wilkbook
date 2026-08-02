@@ -201,4 +201,18 @@ suspend permission. Do not allocate another boot merely to repeat zero-call
 binding. Activation, an active reviewed DT policy, real coordinator providers
 and production sleep-frame wiring, and the PineNote-specific resume/ultra-suspend
 dependencies remain required before any suspend attempt—not a firmware reflash.
+The suspend ladder's rung-2 resume defect is fixed (the worker bracket, proven
+on glass: the panel now recovers without a reboot) and its one residual — the
+post-resume dead-write window — has been read out of the 7.0.11 sources: **four**
+gates on the write→panel path produce that exact signature, and every one of them
+fails *silently and successfully*, so no write probe can ever name it. G1 (the
+fbdev client's deferred un-suspend is never awaited) is unconditionally wrong and
+is fixed in the patch; G3 is the trap that our own diagnostics can spring on
+themselves, because the first opener of `/dev/dri/card0` becomes DRM master and
+`FBIOBLANK`/`set_par` then no-op while returning 0. Read the gates with
+`pinenote/tools/power/fb-damage-gates.sh` (opens no DRM node) before probing them.
+The fix is cross-build-verified and **hardware-unproven**. Note the general
+lesson in `doc/testing.md`: the ebc-logic harness compiles the `#else` stub of
+every `#ifdef` its shim does not define, so a green host suite proves nothing
+about code inside a config guard.
 See `ROADMAP.md`, `doc/status.md`, and `doc/power-management.md` for specifics.
