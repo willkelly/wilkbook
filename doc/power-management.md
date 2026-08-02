@@ -201,10 +201,35 @@ Current blockers after that gate passes:
   `doc/kernel-forward-port.md`)** — and explicit
   RK817 regulator suspend states, whose adoption is now gated on the
   rail-kill wake-collision question (see the evidence pass below);
-- **SC7A20 accelerometer resume** (added 2026-08-01): no coordinator seam
-  exists and hrdl's own `v6.19_iio_accel` attempt is unfinished; final4's
-  autorotation state-replay covered service disable/re-enable, not a real
-  system suspend;
+- **SC7A20 accelerometer resume — ROOT-CAUSED 2026-08-02, and now
+  reproduced on hardware.** After the first real `deep` cycle:
+  `irq 71: nobody cared (try booting with the "irqpoll" option)`,
+  `Comm: irq/71-sc7a20-t`, level-triggered via `rockchip_irq_demux`. The
+  kernel's spurious-IRQ protection then **disables the IRQ**, so
+  autorotation is dead until reboot (measured rate afterwards: 0/s — the
+  storm ends because the IRQ is gone). Reading is unaffected.
+
+  Cause, read from the 7.0.11 source: the accelerometer is the **mainline**
+  driver (`CONFIG_IIO_ST_ACCEL_3AXIS=m`, `st-accel-i2c`), and that driver
+  has **no power management at all** — `struct i2c_driver st_accel_driver`
+  carries no `.pm`, and there are **zero** occurrences of
+  `pm_ops`/`suspend`/`resume` across `drivers/iio/common/st_sensors/`,
+  `drivers/iio/accel/st_accel*`, or `include/linux/iio/common/st_sensors.h`.
+  Across a power-down the sensor loses its configuration, nothing
+  re-initialises it, its INT line stays asserted, the threaded handler
+  cannot clear it, and the level IRQ storms until the kernel kills it.
+
+  Fix shape: add `.pm` to the i2c driver — suspend disables the sensor,
+  resume re-runs the probe-time initialisation
+  (`st_sensors_init_sensor()`, which restores ODR, enable state and the
+  DRDY/interrupt configuration). This is a genuine gap in a mainline
+  driver rather than a defect in the EBC lineage, so it is
+  upstream-reportable in its own right.
+
+  Open question, cheap to answer: **os1 runs the same mainline driver and
+  auto-deep-suspends**, so it should have the same defect. Verify whether
+  os1's autorotation survives one of its own sleeps before assuming our
+  configuration is special;
 - cover and RK817 wake properties are compiled in, but physical wake routing
   and PMIC child-event attribution are unproven.
 
