@@ -2,6 +2,47 @@
 
 Last updated: 2026-08-02.
 
+**2026-08-02 BSP SIP activation is LIVE and BOUND on os2 — deep's missing
+configuration is now actually being sent.** Image
+`d604ff98d454a5cd89c230363cace1eaf785b71ccfbbae0be03db7de477f78af`
+(475,000 x 4096), system `p4mpqkidq9g8ppdx0mfb9iadf44wpzz2-system`.
+
+```
+[0.267551] rockchip-suspend-mode rockchip-suspend: BSP suspend policy activated
+driver rockchip-suspend-mode -> device rockchip-suspend   (BOUND)
+"DORMANT policy core bound": 0 occurrences
+```
+
+That log line only exists on the activation path, and probe returns
+`-ENODATA` if sleep-mode/wakeup are absent — so a clean bind proves the
+policy reached the driver and the four probe-time SIP calls were emitted
+(`0x01 0x5ec`, `0x02 0x10`, `0x04 0 0xffff`, `0x05 0 0`). Linux reads the
+node exactly as intended:
+
+| property | value | expected |
+| --- | --- | --- |
+| `rockchip,sleep-mode-config` | `0x000005ec` | ✔ |
+| `rockchip,wakeup-config` | `0x00000010` | ✔ |
+| `rockchip,sleep-debug-en` | `0x00000000` | ✔ |
+| `compatible` | `rockchip,pm-rk3568` | ✔ |
+
+**No regression on the normal path**, which was the gating concern since
+activation adds a `.prepare` callback and regulator suspend programming to
+every boot: reader healthy, `defio_delay_ms=250` persisted, and the panel
+paints a full 46-frame pass for both checker and white fills with
+`fb-rows-changed=120/120`. The only dmesg warning is the known benign
+`dwc3 … failed to enable ep0out`.
+
+*Booted to os2 by driving the U-Boot menu over UART* (two DOWN + ENTER),
+no hands on the device.
+
+**Still unproven: firmware acceptance.** bl31 has now been handed the
+configuration, but nothing has attempted `deep` yet. That is the next
+step, and its realistic failure mode is still a hang — with UART live and
+`no_console_suspend` deployed we would this time capture the trace through
+`dpm_suspend` and read bl31's `cfg:` word, which was `0x0` on 2026-08-02
+and should now be non-zero.
+
 **2026-08-02 RUNG 2 PASSES. Post-resume damage paints; the "dead-write
 window" was substantially our own probe.** Artifact:
 `doc/artifacts/pinenote-suspend-ladder-20260802-discriminator/`.
