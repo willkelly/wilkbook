@@ -1,0 +1,31 @@
+[01:28:31] === LADDER START ===
+[01:28:31] system=/gnu/store/xjwyb5isv0awqj3l6wblfh7090xkzj67-system root=/dev/mmcblk0p6
+[01:28:31] mem_sleep forced: [s2idle] deep
+[01:28:31] --- RUNG 1 freezer pm_test dry run
+[01:28:37] RUNG 1 rc=0 elapsed=5s pm_test=[none] core processors platform devices freezer
+[01:28:37] RUNG 1 PASS
+[01:28:37] --- RUNG 2 prep
+[01:28:48] pre: irq=930 fb0.state=0 crtc_active=1
+mmap-fsync row=100: irq 881 -> 919 (delta 38)
+[01:28:51] PROBE CONTROL-pre-suspend: irq 930 -> 968 (delta 38)
+[01:28:51] CONTROL PASS: instrument paints (38 frames) before any suspend
+[01:28:53] post-blank: crtc_active=0 irq=968 fb0.blank=4
+[01:28:57] gadget UDC blanked: []
+[01:28:57] alarm armed=1785634182 now=1785634137 (+45s absolute epoch)
+[01:28:57] --- RUNG 2 entering s2idle
+[01:29:47] RESUMED rc=0 asleep=45s irq 968 -> 970
+[01:29:47] post-resume: fb0.state=0 crtc_active=0
+mmap-fsync row=400: irq 921 -> 921 (delta 0)
+[01:29:50] PROBE A-blanked-write+fsync: irq 970 -> 970 (delta 0)
+[01:29:58] post-unblank: crtc_active=1 irq=970
+mmap-fsync row=700: irq 921 -> 921 (delta 0)
+[01:30:06] PROBE B-unblanked-write+fsync: irq 970 -> 970 (delta 0)
+[01:30:12] VERDICT control=38 probeA(blanked)=0 probeB(unblanked)=0
+[01:30:12] ACCEPTANCE FAIL: post-resume fb writes still produce no frames
+[01:30:12] --- RESTORE
+Service pinenote-waveform has been started.
+Service user-homes has been started.
+Service pinenote-ebc-params has been started.
+Service reader-session has been started.
+[01:30:23] restore done: irq=1162 fb0.state=0 reader=● Status of reader-session:
+[01:30:28] === LADDER END ===

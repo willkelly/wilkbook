@@ -171,3 +171,12 @@ thread counts because idle cores drag the load average below the governor's
 raise the clock regardless.
 
 See `doc/refresh-policy.md`, "Portrait page turns cost two refresh passes".
+
+`mmap-band-probe.lua` paints a band through an `mmap` of `/dev/fb0` and reports
+the EBC IRQ delta, in `fsync` (publish-on-call) or `timer` mode. It exists
+because on 2026-08-02 a `dd`-to-`/dev/fb0` probe was found to change the
+framebuffer while producing **zero** frames on a fully healthy device: the
+fbdev `write()` path generates no damage that reaches this panel, only `mmap`
+does. Any acceptance test that concludes "no frames" from a `write()` probe is
+measuring a dead instrument. Use this, and always take a control reading before
+the condition under test.

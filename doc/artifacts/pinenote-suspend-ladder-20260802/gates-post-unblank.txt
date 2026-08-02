@@ -1,0 +1,98 @@
+
+== G1  fbdev state (0=RUNNING 1=SUSPENDED)
+fb0.state = 0  RUNNING              -- G1 open
+
+== G3  DRM master holders (no node is opened by this script)
+no process holds a DRM primary node -- G3 open (fbdev modesets can commit)
+-- /sys/kernel/debug/dri/0/clients
+             command  tgid dev master a   uid      magic                                                             name                   id
+-- /sys/kernel/debug/dri/fdec0000.ebc/clients
+             command  tgid dev master a   uid      magic                                                             name                   id
+
+== G2  atomic state: which plane owns which fb, and is the CRTC active
+-- /sys/kernel/debug/dri/0/state
+plane[33]: plane-0
+	crtc=crtc-0
+	fb=38
+crtc[35]: crtc-0
+	enable=1
+	active=1
+-- /sys/kernel/debug/dri/fdec0000.ebc/state
+plane[33]: plane-0
+	crtc=crtc-0
+	fb=38
+crtc[35]: crtc-0
+	enable=1
+	active=1
+
+G2 is CLOSED when the primary plane shows fb=0 or crtc=(null):
+drm_atomic_helper_dirtyfb() then commits an empty state and returns 0.
+
+It is ALSO closed, less obviously, when the plane holds a *different*
+fb than the fbdev one -- e.g. a KMS compositor owning the plane. The
+dirtyfb loop matches on identity, not on 'some plane is lit'. So the
+owner of the plane's fb is the reading that matters:
+/sys/kernel/debug/dri/0: plane fb=38, allocated by [fbcon]
+  -> the fbdev framebuffer is on the plane; the fbdev damage path can reach it
+/sys/kernel/debug/dri/fdec0000.ebc: plane fb=38, allocated by [fbcon]
+  -> the fbdev framebuffer is on the plane; the fbdev damage path can reach it
+-- /sys/kernel/debug/dri/0/framebuffer
+framebuffer[38]:
+	allocated by = [fbcon]
+	refcount=2
+	format=XR24 little-endian (0x34325258)
+	modifier=0x0
+	size=1872x1404
+	layers:
+		size[0]=1872x1404
+		pitch[0]=7488
+		offset[0]=0
+		obj[0]:
+			name=0
+			refcount=3
+			start=00100000
+			size=10514432
+			imported=no
+			pages_pin_count=1
+			pages_use_count=1
+			vmap_use_count=2
+			vaddr=00000000c42cb716
+-- /sys/kernel/debug/dri/fdec0000.ebc/framebuffer
+framebuffer[38]:
+	allocated by = [fbcon]
+	refcount=2
+	format=XR24 little-endian (0x34325258)
+	modifier=0x0
+	size=1872x1404
+	layers:
+		size[0]=1872x1404
+		pitch[0]=7488
+		offset[0]=0
+		obj[0]:
+			name=0
+			refcount=3
+			start=00100000
+			size=10514432
+			imported=no
+			pages_pin_count=1
+			pages_use_count=1
+			vmap_use_count=2
+			vaddr=00000000c42cb716
+
+== G4  fbcon binding (the thing that normally repaints after un-suspend)
+vtcon0: bind=1  name=(S) dummy device
+vtcon1: bind=0  name=(M) frame buffer device
+bind=0 for the frame buffer device means nothing regenerates damage
+after fb_set_suspend(0) -- fbcon_resumed() returns early with no
+console attached. The reader image runs that way by design; note it
+only matters when the fbdev path is what drives the panel at all.
+
+== supporting counters
+defio_delay_ms = 250
+EBC IRQs       = 970
+irq/66-fdec0000.ebc (116) state=S (sleeping)
+ebc-refresh/fdec0000.ebc (117) state=I (idle)
+
+Reading order: G1 first (one bit, decisive), then G3 (an open card0
+invalidates any conclusion drawn from an unblank or a set_par), then
+G2, then G4.  G3 must be checked before trusting a recovery attempt.
