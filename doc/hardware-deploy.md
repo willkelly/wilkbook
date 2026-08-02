@@ -60,6 +60,13 @@ on `os1` as the rescue path. Nothing here touches `waveform`, `uboot`,
   to clear the prompt afterwards.
   This means a hung os2 no longer strictly needs a human to get back to
   os1. A **hard** hang (no U-Boot at all) still needs the PMIC long-press.
+  **Scope, measured 2026-08-02: this helps only while the device is
+  BOOTING.** It does not wake a sleeping one. os1 auto-deep-suspends on
+  idle, and from that state the UART is silent, ping fails, and serial
+  keystrokes do nothing — serial is not an armed wake source under
+  `wakeup-config = <0x10>`. Waking still needs a physical button press.
+  So the honest rule is: UART removes the need for a human at the *menu*,
+  not the need for a human at the *device*.
 - Boot config inside the slot is `/boot/extlinux/extlinux.conf` with
   `/boot/Image`, an explicit `FDT /boot/rk3566-pinenote-v1.2.dtb` line
   (`FDTDIR` has proven unreliable with this U-Boot), `/boot/initrd.cpio.gz`,
