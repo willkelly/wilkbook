@@ -7,6 +7,87 @@ tool emits versioned S-expressions on stdout, accepts a fake root for offline te
 only reads an explicit allowlist.  It never reads waveform or VCOM calibration
 data and never writes sysfs, procfs, debugfs, or tracefs.
 
+## Power program: targets, measured gaps, and ordering (2026-08-02)
+
+Will's targets, and where we actually stand. All from a 4000 mAh charge
+(`charge_full`), against measurements in
+`doc/artifacts/pinenote-battery-ab-20260802/` and
+`.../pinenote-awake-idle-profile-20260802/`.
+
+| target | needs | measured | verdict |
+| --- | --- | --- | --- |
+| **~40 h active use** | ≤100 mA average | awake floor **171.6 mA** (23.3 h) | **not reachable awake** — reachable only by suspending between interactions |
+| **a week idle, most of a charge left** | ≤6.0 mA to leave 75% | deep **19.3 mA** (leaves 19%) | **3.2x short** |
+
+### The reframe that makes target 1 achievable
+
+On e-ink, "active use" is mostly *a static page with nothing happening* —
+the panel holds its image at zero power. So reading does not have to mean
+*awake*. If the device suspends between page turns and wakes only to
+render one:
+
+| pattern | average | reading time |
+| --- | --- | --- |
+| page every 30 s, 2 s wake @ ~400 mA | 44.7 mA | ~90 h |
+| page every 30 s, 1 s wake @ ~400 mA | 32.0 mA | ~125 h |
+
+Both clear 40 h comfortably. **The 400 mA wake burst is an assumption, not
+a measurement** — measuring the real energy of one wake+render+refresh
+cycle is the first thing to do, because it sets everything here.
+
+The binding constraint then becomes **resume latency, not power**: a 2 s
+page turn is a bad reader, a 0.3 s one is a Kindle. Deep resume currently
+costs ~1.1 s of kernel time before any repaint. That number is now a *user
+experience* metric as much as a power one.
+
+### Target 2 needs less suspend draw, not better scheduling
+
+No amount of scheduling fixes 19.3 mA → 6 mA. That is the **ultra-suspend
+/ rail-kill** payload we deliberately left unadopted (`ultra: 0` in every
+bl31 `PM-STATE` line so far), and it is gated on the rail-kill wake
+collision: `vcc_3v3_pmu` feeds `pmuio1/2`, the GPIO0 bank carrying every
+external wake source. Turning those rails off is exactly what saves the
+power *and* what could make the device unwakeable.
+
+### Ordering
+
+1. **Auto-suspend scheduling** — the enabling mechanism for both targets,
+   and worth ~7x on its own. Userland policy: inactivity detection, wake
+   sources (power button and cover are still unproven), resume-to-reading.
+2. **Measure one wake+render+refresh cycle.** It sets whether
+   suspend-between-page-turns is viable and what resume latency budget we
+   have.
+3. **Resume latency** — UX first, power second.
+4. **Suspend draw 19.3 → <10 mA** — ultra-suspend, gated on the rail-kill
+   wake question. This is what target 2 actually needs.
+
+### Deferred: awake-idle floor research (after everything else)
+
+Explicitly parked, not forgotten. The 171.6 mA awake floor has two known
+contributors we chose not to pursue now, both large jobs with speculative
+payoff and bad failure modes:
+
+- **CPU idle states.** Hardware and firmware are capable (PSCI v1.1;
+  `psci: CPU3 killed` proves firmware power-gates cores), and the kernel
+  is fully configured (`CONFIG_CPU_IDLE=y`, `CONFIG_ARM_PSCI_CPUIDLE=y`,
+  MENU+TEO governors). **The only missing piece is the DT `idle-states`
+  description** — neither mainline `rk356x-base.dtsi` nor os1's BSP DTB
+  has one. Writing it needs `arm,psci-suspend-param` values that are a
+  firmware ABI we do not have. **Risk asymmetry: a wrong idle param wedges
+  the device on every idle transition — hundreds per second — not once per
+  suspend.**
+- **DDR frequency scaling.** DDR runs at 1056 MHz always (confirmed in our
+  own UART boot capture). `CONFIG_PM_DEVFREQ=y` with the ondemand governor
+  is built, but **no devfreq device registers**: mainline has
+  `rk3399_dmc.c` only, no RK356x DMC driver. `rockchip-dfi.c` supports
+  rk356x but is a bandwidth *monitor*, not frequency control.
+
+Cheap way to size the DDR half before ever investing: os1's BSP kernel
+likely has the DMC driver — boot os1, run
+`doc/artifacts/pinenote-awake-idle-profile-20260802/idle-profile.sh`, and
+compare its awake-idle against our 171.6 mA. ~20 minutes, and it either
+sizes the prize or closes the question permanently.
+
 ## Safe measurement boundary
 
 The five evidence domains stay separate:
