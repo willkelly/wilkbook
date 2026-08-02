@@ -180,3 +180,14 @@ fbdev `write()` path generates no damage that reaches this panel, only `mmap`
 does. Any acceptance test that concludes "no frames" from a `write()` probe is
 measuring a dead instrument. Use this, and always take a control reading before
 the condition under test.
+
+**Always pass a distinctive fill, and always read `fb-rows-changed`.**
+`mmap-band-probe.lua` takes `<fsync|timer> <row> [black|white|checker|N]`.
+A zero IRQ delta means nothing on its own: writing content that already
+matches the region is a genuine no-op which the driver correctly discards
+(`rockchip_ebc_plane_atomic_update()` drops areas whose blit reports no
+change). That ambiguity produced the phantom "post-resume dead-write
+window" of 2026-08-01/02 — every probe wrote `0x00` onto a black console
+background. The probe now reports `fb-rows-changed=N/120` and flags a
+no-op explicitly; a zero delta is only evidence when that field is
+non-zero.

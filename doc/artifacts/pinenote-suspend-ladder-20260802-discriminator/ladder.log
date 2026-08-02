@@ -1,0 +1,35 @@
+[17:25:52] === LADDER START ===
+[17:25:52] system=/gnu/store/ahssvz28xvd1mkni5c6sv0wrr5blhvxf-system root=/dev/mmcblk0p6
+[17:25:52] mem_sleep forced: [s2idle] deep
+[17:25:52] --- RUNG 1 freezer pm_test dry run
+[17:25:57] RUNG 1 rc=0 elapsed=5s pm_test=[none] core processors platform devices freezer
+[17:25:57] RUNG 1 PASS
+[17:25:57] --- RUNG 2 prep
+[17:26:08] pre: irq=864 fb0.state=0 crtc_active=1
+mmap-fsync row=100 fill=checker: irq 815 -> 861 (delta 46)
+[17:26:11] PROBE CONTROL-pre-suspend: irq 864 -> 910 (delta 46)
+[17:26:11] CONTROL PASS: instrument paints (46 frames) before any suspend
+[17:26:13] post-blank: crtc_active=0 irq=910 fb0.blank=4
+[17:26:18] gadget UDC blanked: []
+[17:26:18] alarm armed=1785691622 now=1785691577 (+45s absolute epoch)
+[17:26:18] --- RUNG 2 entering s2idle
+[17:27:07] RESUMED rc=0 asleep=44s irq 910 -> 912
+[17:27:07] post-resume: fb0.state=0 crtc_active=0
+mmap-fsync row=400 fill=black: irq 863 -> 863 (delta 0)
+[17:27:10] PROBE A-blanked-BLACK: irq 912 -> 912 (delta 0)
+mmap-fsync row=560 fill=checker: irq 863 -> 909 (delta 46)
+[17:27:13] PROBE A2-blanked-CHECKER: irq 912 -> 958 (delta 46)
+[17:27:20] post-unblank: crtc_active=1 irq=958
+mmap-fsync row=700 fill=black: irq 909 -> 909 (delta 0)
+[17:27:28] PROBE B-unblanked-BLACK: irq 958 -> 958 (delta 0)
+mmap-fsync row=860 fill=checker: irq 909 -> 955 (delta 46)
+[17:27:31] PROBE B2-unblanked-CHECKER: irq 958 -> 1004 (delta 46)
+[17:27:37] VERDICT control=46 | blanked black=0 checker=46 | unblanked black=0 checker=46
+[17:27:37] ACCEPTANCE: post-resume fb writes DO paint (delta>0)
+[17:27:37] --- RESTORE
+Service pinenote-waveform has been started.
+Service user-homes has been started.
+Service pinenote-ebc-params has been started.
+Service reader-session has been started.
+[17:27:48] restore done: irq=1236 fb0.state=0 reader=● Status of reader-session:
+[17:27:53] === LADDER END ===

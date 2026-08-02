@@ -1,0 +1,69 @@
+# pm-ground-truth 7.0.11 2026-08-02T17:27:35Z
+== tps65185 registers (i2c 3-0068 regmap)
+00: 16
+01: 2f
+02: 03
+03: 8f
+04: 00
+05: 7f
+06: ff
+07: 00
+08: 00
+09: e1
+0a: 00
+0b: 1e
+0c: 00
+0d: 20
+0e: 78
+0f: fa
+10: 66
+== regulators name:state:users:suspend-mem
+regulator-dummy::4:disabled
+vbat_4g::0:disabled
+vdd_gpu_npu:disabled:0:enabled
+vcc_ddr:enabled:1:enabled
+vcc_3v3:enabled:4:enabled
+vcca_1v8_pmu:enabled:3:enabled
+vdda_0v9_ldo:disabled:0:enabled
+vdda_0v9_pmu:enabled:1:enabled
+vccio_acodec:enabled:1:enabled
+vccio_sd:disabled:0:enabled
+vcc_3v3_pmu:enabled:3:enabled
+vcc_1v8_en:enabled:1:enabled
+vcc_1v8::2:disabled
+vbat_4g_en:disabled:0:enabled
+sleep_sta_ctl:disabled:0:enabled
+boost:disabled:0:enabled
+otg_switch:disabled:0:enabled
+v3p3:enabled:1:disabled
+vposneg:enabled:0:disabled
+vcom:disabled:0:disabled
+vcc_bat::4:disabled
+vcc_hall_3v3::1:disabled
+vcc_sys::11:disabled
+vcc_wl:enabled:2:disabled
+vdda_0v9::0:disabled
+vdd_cpu:enabled:2:enabled
+vdd_logic:enabled:1:enabled
+== wakeup sources
+0-0020
+alarmtimer.4.auto
+gpio-keys
+mmc0
+mmc1
+rk805-pwrkey.2.auto
+rk808-rtc.3.auto
+rk817-battery
+rk817-charger
+serial0-0
+ws8100_pen
+== battery
+charge_now=3338004
+charge_full=4000000
+voltage_now=?
+capacity=83
+status=Discharging
+== suspend state
+[s2idle] deep
+ebc_irq=955
+== end

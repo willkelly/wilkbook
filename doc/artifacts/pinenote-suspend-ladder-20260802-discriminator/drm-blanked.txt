@@ -1,0 +1,50 @@
+plane[33]: plane-0
+	crtc=crtc-0
+	fb=38
+		allocated by = [fbcon]
+		refcount=2
+		format=XR24 little-endian (0x34325258)
+		modifier=0x0
+		size=1872x1404
+		layers:
+			size[0]=1872x1404
+			pitch[0]=7488
+			offset[0]=0
+			obj[0]:
+				name=0
+				refcount=3
+				start=00100000
+				size=10514432
+				imported=no
+				pages_pin_count=1
+				pages_use_count=1
+				vmap_use_count=2
+				vaddr=00000000ae84bebe
+	crtc-pos=1872x1404+0+0
+	src-pos=1872.000000x1404.000000+0.000000+0.000000
+	rotation=1
+	normalized-zpos=0
+	color-encoding=ITU-R BT.601 YCbCr
+	color-range=YCbCr limited range
+	color_mgmt_changed=0
+	color-pipeline=0
+crtc[35]: crtc-0
+	enable=1
+	active=0
+	self_refresh_active=0
+	planes_changed=1
+	mode_changed=0
+	active_changed=1
+	connectors_changed=0
+	color_mgmt_changed=0
+	plane_mask=1
+	connector_mask=1
+	encoder_mask=1
+	mode: "1872x1404": 40 125502 1872 1928 2072 2208 1404 1416 1417 1421 0x40 0x2209
+connector[37]: DPI-1
+	crtc=crtc-0
+	self_refresh_aware=0
+	interlace_allowed=0
+	ycbcr_420_allowed=0
+	max_requested_bpc=0
+	colorspace=Default
