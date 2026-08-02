@@ -98,9 +98,21 @@ blank, and fbcon-unbound is a design property of the reader image (and
 exactly why os1 never shows this). Gates green: `make kernel-drv`,
 `make kernel` (cross-build clean — the compile gate for the
 `CONFIG_DRM_FBDEV_EMULATION` branch the host harness cannot reach), and
-the full `ebc-logic` suite. **Not hardware-verified; no session
-allocated.** Next session: run `fb-damage-gates.sh` once after resume,
-before anything else touches the display.
+the full `ebc-logic` suite. **Not hardware-verified.** Next session: run
+`fb-damage-gates.sh` once after resume, before anything else touches the
+display.
+
+Image built and staged, **not yet deployed**:
+`pinenote-reader-PNGuixRoot-20260801.ext4`, SHA-256
+`5493d9941147652d054c3ab63715dc667b143b57eeaba98ee9e725e16970ca7b`. The
+fix was byte-verified inside the artifact before staging: the
+`rockchip_ebc.ko` inside its initrd is byte-identical to the freshly
+cross-built module (`a6fe799e…`), and references
+`drm_fb_helper_set_suspend_unlocked`, which the previous build's module
+does not reference at all. The image it supersedes on os2 is preserved
+as `…-20260801-deployed-8e302e48.ext4`. `fb-damage-gates.sh` needs no
+image — it is a read-only shell script, copied at session time like
+`pm-ground-truth.sh`, and runs on whatever is already on the device.
 
 **2026-08-01 (late evening) discriminator pass: the residual is
 localized to silent damage-drop at the fb-helper's suspended-state
