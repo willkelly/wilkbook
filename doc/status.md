@@ -2,6 +2,34 @@
 
 Last updated: 2026-08-02.
 
+**2026-08-02 deploy to os2: `pinenote-reader-PNGuixRoot-20260802.ext4`,
+SHA-256
+`190321cda1324b8c78e241658f36db0d6a36df348ef22d03af5a00ee9e34020d`,
+1,945,591,808 bytes = 474,998 × 4096.** Full protocol from os1: staged
+SHA verified against the host artifact; preconditions re-checked
+fail-closed immediately before `dd` (root=p5, p6 unmounted, staged SHA,
+size a 4096 multiple, image fits the partition); readback of exactly the
+written range matches. Note the block count is **474,998** here, not the
+474,999 of the previous image — compute it from the artifact, never reuse
+the constant.
+
+Carries two changes, both byte-verified inside the artifact before
+staging: (1) the **damage-baseline fix** — `rockchip_ebc.ko` in the
+initrd is byte-identical to the cross-build (`9035901b…`) and **differs
+from the deployed module** (`a6fe799e…`), confirming new code rather than
+a stale rebuild; (2) **`no_console_suspend`**, confirmed present in the
+embedded `extlinux.conf` cmdline, so the next deep attempt can capture
+the `dpm_suspend` phase the runtime knob could not hold open.
+
+Superseded image preserved as `…-20260801-deployed-5493d994.ext4`.
+
+**Next session, one boot, two questions.** Re-run the rung-2 ladder, and
+fold in the discriminator that costs nothing: post-resume, write a band of
+a **distinctive** value rather than `0x00`. Every probe so far wrote
+black, so a white/patterned band separates "drop-on-match, now fixed"
+from a further cause. Keep the pre-suspend CONTROL gate — it is what makes
+a FAIL trustworthy.
+
 **2026-08-02 (offline code-read) the post-resume dead-write window has a
 named defect: the resume path never restores the damage-comparison
 baseline.** `ctx->final_atomic_update` is the buffer the blitters write
