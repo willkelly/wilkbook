@@ -24,7 +24,7 @@ CONFIG_PM_SLEEP_DEBUG=y
 CONFIG_PM_TEST_SUSPEND=y
 CONFIG_ARM_PSCI_FW=y
 CONFIG_ROCKCHIP_SUSPEND_MODE=y
-# CONFIG_ROCKCHIP_SUSPEND_MODE_ACTIVATE is not set
+CONFIG_ROCKCHIP_SUSPEND_MODE_ACTIVATE=y
 EOF
 }
 
@@ -39,6 +39,10 @@ good = good_path.read_text()
 symbols = (
     "CONFIG_PM_TEST_SUSPEND",
     "CONFIG_ROCKCHIP_SUSPEND_MODE",
+    # Activation became required on 2026-08-02: deep cannot wake without it.
+    # It gets the same missing/prefixed/suffixed/wrong battery as any other
+    # required symbol, so a silently-dropped activation fails the gate.
+    "CONFIG_ROCKCHIP_SUSPEND_MODE_ACTIVATE",
 )
 for symbol in symbols:
     exact = f"{symbol}=y"
@@ -50,9 +54,9 @@ for symbol in symbols:
     }
     for kind, text in fixtures.items():
         (outdir / f"{kind}-{symbol}.config").write_text(text)
-(outdir / "enabled-CONFIG_ROCKCHIP_SUSPEND_MODE_ACTIVATE.config").write_text(
-    good.replace("# CONFIG_ROCKCHIP_SUSPEND_MODE_ACTIVATE is not set",
-                 "CONFIG_ROCKCHIP_SUSPEND_MODE_ACTIVATE=y", 1))
+(outdir / "disabled-CONFIG_ROCKCHIP_SUSPEND_MODE_ACTIVATE.config").write_text(
+    good.replace("CONFIG_ROCKCHIP_SUSPEND_MODE_ACTIVATE=y",
+                 "# CONFIG_ROCKCHIP_SUSPEND_MODE_ACTIVATE is not set", 1))
 PY
 
 printf 'return true\n' >"$tmpdir/enabled-policy.lua"
@@ -124,6 +128,9 @@ write_dts() {
 		compatible = "rockchip,pm-rk3568";
 		name = "rockchip-suspend";
 		status = "okay";
+		rockchip,sleep-mode-config = <0x5ec>;
+		rockchip,wakeup-config = <0x10>;
+		rockchip,sleep-debug-en = <0x00>;
 	};
 	gpio-keys {
 		compatible = $gpio_compatible;
@@ -174,6 +181,9 @@ suspend = '''\trockchip-suspend {
 \t\tcompatible = "rockchip,pm-rk3568";
 \t\tname = "rockchip-suspend";
 \t\tstatus = "okay";
+\t\trockchip,sleep-mode-config = <0x5ec>;
+\t\trockchip,wakeup-config = <0x10>;
+\t\trockchip,sleep-debug-en = <0x00>;
 \t};
 '''
 if good.count(suspend) != 1:
@@ -206,9 +216,11 @@ fixtures = {
         '\t\t\tstatus = "okay";\n\t\t};\n\t};\n\tgpio-keys {',
         1,
     ),
+    # anchor on the LAST property: dtc requires properties before subnodes,
+    # and the activated node now has policy properties after status.
     "suspend-child-policy": good.replace(
-        '\t\tstatus = "okay";',
-        '\t\tstatus = "okay";\n\t\tpolicy {\n\t\t\trockchip,sleep-mode-config;\n\t\t};',
+        '\t\trockchip,sleep-debug-en = <0x00>;',
+        '\t\trockchip,sleep-debug-en = <0x00>;\n\t\tpolicy {\n\t\t\trockchip,sleep-mode-config;\n\t\t};',
         1,
     ),
     "suspend-extra-property": good.replace(
@@ -243,11 +255,13 @@ fixtures = {
     ),
 }
 
+# 2026-08-02: sleep-mode-config / wakeup-config / sleep-debug-en moved OUT
+# of this blacklist -- they are now the reviewed activated policy and are
+# required.  Their exact VALUES are pinned by the value-mutation fixtures
+# below, so the gate did not get weaker: an unreviewed value now fails
+# where previously any value failed.
 policy_properties = (
     "wakeup-source",
-    "rockchip,sleep-mode-config",
-    "rockchip,wakeup-config",
-    "rockchip,sleep-debug-en",
     "rockchip,pwm-regulator-config",
     "rockchip,power-ctrl",
     "rockchip,gpio-power-config",
@@ -290,6 +304,23 @@ for index, property_name in enumerate(policy_properties):
         1,
     )
 
+# The activated policy's values are measured, not tunable.  Any drift must
+# fail closed, and so must dropping one of the three entirely.
+activated_policy = {
+    "sleep-mode": ("rockchip,sleep-mode-config = <0x5ec>;",
+                   "rockchip,sleep-mode-config = <0x5ed>;"),
+    "wakeup": ("rockchip,wakeup-config = <0x10>;",
+               "rockchip,wakeup-config = <0x11>;"),
+    "sleep-debug": ("rockchip,sleep-debug-en = <0x00>;",
+                    "rockchip,sleep-debug-en = <0x01>;"),
+}
+for label, (exact, mutated) in activated_policy.items():
+    if good.count("\t\t" + exact) != 1:
+        raise SystemExit(f"FAIL: fixture cannot locate exact policy line for {label}")
+    fixtures[f"suspend-value-{label}"] = good.replace("\t\t" + exact,
+                                                      "\t\t" + mutated, 1)
+    fixtures[f"suspend-missing-{label}"] = good.replace("\t\t" + exact + "\n", "", 1)
+
 manifest = []
 for name, text in fixtures.items():
     (outdir / f"{name}.dts").write_text(text)
@@ -321,7 +352,7 @@ for symbol in CONFIG_PM_TEST_SUSPEND CONFIG_ROCKCHIP_SUSPEND_MODE; do
     expect_reject "$kind $symbol config" "$tmpdir/$kind-$symbol.config" "$tmpdir/good.dtb" "$repo_policy" "$repo_device"
   done
 done
-expect_reject 'enabled activation config' "$tmpdir/enabled-CONFIG_ROCKCHIP_SUSPEND_MODE_ACTIVATE.config" "$tmpdir/good.dtb" "$repo_policy" "$repo_device"
+expect_reject 'disabled activation config' "$tmpdir/disabled-CONFIG_ROCKCHIP_SUSPEND_MODE_ACTIVATE.config" "$tmpdir/good.dtb" "$repo_policy" "$repo_device"
 expect_reject 'enabled policy' "$tmpdir/good.config" "$tmpdir/good.dtb" "$tmpdir/enabled-policy.lua" "$repo_device"
 expect_reject 'comment policy spoof' "$tmpdir/good.config" "$tmpdir/good.dtb" "$tmpdir/comment-policy.lua" "$repo_device"
 expect_reject 'string policy spoof' "$tmpdir/good.config" "$tmpdir/good.dtb" "$tmpdir/string-policy.lua" "$repo_device"

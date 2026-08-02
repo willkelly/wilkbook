@@ -45,8 +45,15 @@ RETIRED = (
 )
 PATCH_REQUIREMENTS = (
     "CONFIG_ROCKCHIP_SUSPEND_MODE=y",
-    "# CONFIG_ROCKCHIP_SUSPEND_MODE_ACTIVATE is not set",
-    "config ROCKCHIP_SUSPEND_MODE_ACTIVATE\n+\tbool\n+\tdepends on ROCKCHIP_SUSPEND_MODE\n+\tdefault n",
+    "CONFIG_ROCKCHIP_SUSPEND_MODE_ACTIVATE=y",
+    'config ROCKCHIP_SUSPEND_MODE_ACTIVATE\n+\tbool "Activate the Rockchip'
+    ' BSP suspend-mode policy (issues SIP calls)"\n'
+    "+\tdepends on ROCKCHIP_SUSPEND_MODE\n+\tdefault n",
+    # The measured PineNote policy, byte-for-byte.  If a rebase changes any
+    # of these three, re-run the SIP differential before touching the gate.
+    "rockchip,sleep-mode-config = <0x5ec>;",
+    "rockchip,wakeup-config = <0x10>;",
+    "rockchip,sleep-debug-en = <0x00>;",
     "rockchip_suspend_mode_drv-y := rockchip_suspend_mode.o rockchip_suspend_of.o",
     "\trockchip_suspend_model.o rockchip_suspend_executor.o \\",
     "\trockchip_suspend_backend.o",
@@ -257,14 +264,22 @@ def validate_production_sources(sources: dict[str, str]) -> None:
     consumer_h = sources["include/linux/regulator/consumer.h"]
     regulator_h = sources["include/linux/regulator/of_regulator.h"]
 
-    if not re.search(r"config ROCKCHIP_SUSPEND_MODE_ACTIVATE\n\tbool\n"
+    # Activation is now ON for the PineNote (deep suspend requires it -- see
+    # doc/artifacts/pinenote-sip-sequence-differential-20260802.md).  The
+    # symbol must therefore be an EXPLICIT, promptable choice that still
+    # defaults off, so no other platform picks it up silently.
+    if not re.search(r'config ROCKCHIP_SUSPEND_MODE_ACTIVATE\n'
+                     r'\tbool "Activate the Rockchip BSP suspend-mode policy '
+                     r'\(issues SIP calls\)"\n'
                      r"\tdepends on ROCKCHIP_SUSPEND_MODE\n\tdefault n\n", kconfig):
-        reject("activation Kconfig is not hidden exact-default-n")
+        reject("activation Kconfig is not an explicit prompted default-n choice")
     require(kconfig,
             "depends on ARM64 && ARCH_ROCKCHIP && OF && REGULATOR && SUSPEND",
             "Rockchip suspend dependency closure")
-    forbid(kconfig.split("config ROCKCHIP_SUSPEND_MODE_ACTIVATE", 1)[1]
-           .split("endif", 1)[0], 'bool "', "activation Kconfig")
+    # The help text must keep stating the hazard and the evidence gate.
+    for token in ("issue firmware SIP calls", "cfg: 0x0",
+                  "verified against a known-working configuration"):
+        require(kconfig, token, "activation Kconfig hazard documentation")
     for token in (
         "rockchip_suspend_mode_drv-y := rockchip_suspend_mode.o rockchip_suspend_of.o",
         "rockchip_suspend_model.o rockchip_suspend_executor.o",
@@ -277,21 +292,35 @@ def validate_production_sources(sources: dict[str, str]) -> None:
         "rockchip_suspend_mode_drv-$(CONFIG_ROCKCHIP_SUSPEND_MODE_ACTIVATE)", 1)[0]
     forbid(unconditional, "rockchip_suspend_activate.o", "default candidate link")
     require(defconfig, "CONFIG_ROCKCHIP_SUSPEND_MODE=y\n", "PineNote defconfig")
-    require(defconfig, "# CONFIG_ROCKCHIP_SUSPEND_MODE_ACTIVATE is not set\n",
-            "PineNote defconfig")
+    require(defconfig, "CONFIG_ROCKCHIP_SUSPEND_MODE_ACTIVATE=y\n",
+            "PineNote defconfig activation")
     if defconfig.count("CONFIG_ROCKCHIP_SUSPEND_MODE_ACTIVATE") != 1:
         reject("PineNote defconfig activation setting is not unique")
 
-    for token in (
-        'rockchip-suspend {\n\t\tcompatible = "rockchip,pm-rk3568";\n'
-        '\t\tstatus = "okay";\n\t};',
-        "rockchip_suspend_of_require_empty",
-        "DORMANT policy core bound; activation compiled out",
-    ):
-        require(dts + core, token, "dormant core/DT")
-    for token in ("rockchip,sleep-mode-config", "rockchip,wakeup-config",
-                  "rockchip,power-ctrl", "rockchip,regulator-on-in-"):
-        forbid(dts, token, "current PineNote DT policy")
+    # The dormant core must still EXIST in-tree (it is what binds on any
+    # platform that does not activate), even though the PineNote no longer
+    # selects it.
+    for token in ("rockchip_suspend_of_require_empty",
+                  "DORMANT policy core bound; activation compiled out",
+                  "#if !IS_ENABLED(CONFIG_ROCKCHIP_SUSPEND_MODE_ACTIVATE)"):
+        require(core, token, "dormant core retained")
+
+    # The PineNote DT now carries EXACTLY the three properties measured from
+    # os1's booted DTB -- the kernel on which deep demonstrably works on this
+    # device -- and whose emitted SIP sequence is differentially verified
+    # against the BSP emitter.  Exact values, not merely presence.
+    for token in ("rockchip,sleep-mode-config = <0x5ec>;",
+                  "rockchip,wakeup-config = <0x10>;",
+                  "rockchip,sleep-debug-en = <0x00>;"):
+        require(dts, token, "PineNote measured suspend policy")
+    # Everything beyond those three stays out.  Baseline deep only: the
+    # ultra-suspend surface and the rail-kill payload remain unadopted, and
+    # the rail-kill wake collision is still an open question.
+    for token in ("rockchip,power-ctrl", "rockchip,regulator-on-in-",
+                  "rockchip,regulator-off-in-", "rockchip,suspend-state-override",
+                  "rockchip,virtual-poweroff", "rockchip,pwm-regulator-config",
+                  "rockchip,apios-suspend", "-in-mem-lite", "-in-mem-ultra"):
+        forbid(dts, token, "PineNote DT stays baseline-deep only")
     for token in ("rockchip_suspend_executor_run", "arm_smccc_smc",
                   "register_pm_notifier", "register_sys_off_handler",
                   "regulator_suspend_", "suspend_disable_secondary_cpus"):

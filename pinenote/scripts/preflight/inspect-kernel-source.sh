@@ -159,8 +159,12 @@ require_resolved_config CONFIG_POWER_SUPPLY=y CONFIG_POWER_SUPPLY
 require_resolved_config CONFIG_CHARGER_RK817=y CONFIG_CHARGER_RK817
 require_resolved_config CONFIG_MFD_RK8XX_I2C=y CONFIG_MFD_RK8XX_I2C
 require_resolved_config CONFIG_ROCKCHIP_SUSPEND_MODE=y CONFIG_ROCKCHIP_SUSPEND_MODE
-require_source_line arch/arm64/configs/pinenote_defconfig '# CONFIG_ROCKCHIP_SUSPEND_MODE_ACTIVATE is not set' 'hard-off activation config'
-reject_resolved_config_enabled CONFIG_ROCKCHIP_SUSPEND_MODE_ACTIVATE CONFIG_ROCKCHIP_SUSPEND_MODE_ACTIVATE
+require_source_line arch/arm64/configs/pinenote_defconfig 'CONFIG_ROCKCHIP_SUSPEND_MODE_ACTIVATE=y' 'reviewed activation config'
+require_resolved_config CONFIG_ROCKCHIP_SUSPEND_MODE_ACTIVATE=y CONFIG_ROCKCHIP_SUSPEND_MODE_ACTIVATE
+# The activated DT must carry exactly the three values measured from os1's
+# booted DTB, and nothing from the ultra-suspend surface.
+require_contains arch/arm64/boot/dts/rockchip/rk3566-pinenote.dtsi 'rockchip,sleep-mode-config = <0x5ec>' 'measured sleep-mode policy'
+require_contains arch/arm64/boot/dts/rockchip/rk3566-pinenote.dtsi 'rockchip,wakeup-config = <0x10>' 'measured wakeup policy'
 
 require_contains arch/arm64/boot/dts/rockchip/rk3566-pinenote-v1.2.dts 'model = "Pine64 PineNote v1.2"' 'PineNote v1.2 model'
 require_contains arch/arm64/boot/dts/rockchip/rk3566-pinenote-v1.2.dts 'compatible = "pine64,pinenote-v1.2", "pine64,pinenote", "rockchip,rk3566"' 'PineNote compatibility'

@@ -61,10 +61,14 @@ require_config CONFIG_PM_SLEEP_DEBUG=y
 require_config CONFIG_PM_TEST_SUSPEND=y
 require_config CONFIG_ARM_PSCI_FW=y
 require_config CONFIG_ROCKCHIP_SUSPEND_MODE=y
-if grep -E -q '^CONFIG_ROCKCHIP_SUSPEND_MODE_ACTIVATE=(y|m)$' "$config"; then
-  fail "resolved kernel config enables hidden Rockchip suspend activation"
+# Activation is ON as of 2026-08-02: platform `deep` cannot wake without it
+# (bl31 reported cfg: 0x0 and never returned).  The policy values and the
+# emitted SIP sequence are both evidence-gated -- see
+# doc/artifacts/pinenote-sip-sequence-differential-20260802.md.
+if ! grep -F -x -q -- 'CONFIG_ROCKCHIP_SUSPEND_MODE_ACTIVATE=y' "$config"; then
+  fail "resolved kernel config lacks Rockchip suspend activation (deep will not wake)"
 fi
-pass "resolved kernel config leaves hidden Rockchip suspend activation disabled"
+pass "resolved kernel config enables reviewed Rockchip suspend activation"
 
 python3 - "$policy_lua" "$device_lua" <<'PY'
 import sys
@@ -210,7 +214,7 @@ idle_state_references = sorted(
     node["path"] for node in nodes if "cpu-idle-states" in node["properties"]
 )
 if idle_state_nodes or idle_state_references:
-    fail("CPU idle states are forbidden while BSP SIP activation is compiled out: "
+    fail("CPU idle states remain forbidden under BSP SIP activation: "
          f"nodes={idle_state_nodes}, references={idle_state_references}")
 
 suspend_nodes = [
@@ -230,9 +234,27 @@ if quoted_tokens(suspend["properties"].get("name", "")) != ["rockchip-suspend"]:
     fail("/rockchip-suspend name is not exactly rockchip-suspend")
 if quoted_tokens(suspend["properties"].get("status", "")) != ["okay"]:
     fail("/rockchip-suspend status is not exactly okay")
-if set(suspend["properties"]) != {"compatible", "name", "status"}:
-    extra = sorted(set(suspend["properties"]) - {"compatible", "name", "status"})
-    fail(f"/rockchip-suspend carries forbidden dormant-policy properties {extra}")
+# 2026-08-02: activation is ON, so the node now carries policy -- but
+# EXACTLY the three properties measured from os1's booted DTB (the kernel
+# on which deep demonstrably works on this device), with exactly those
+# values, and nothing else.  The whole ultra-suspend surface stays out.
+ACTIVATED_POLICY = {
+    "rockchip,sleep-mode-config": 0x5ec,
+    "rockchip,wakeup-config": 0x10,
+    "rockchip,sleep-debug-en": 0x00,
+}
+allowed = {"compatible", "name", "status"} | set(ACTIVATED_POLICY)
+if set(suspend["properties"]) != allowed:
+    extra = sorted(set(suspend["properties"]) - allowed)
+    missing = sorted(allowed - set(suspend["properties"]))
+    fail("/rockchip-suspend property set is not exactly the reviewed activated "
+         f"policy (unexpected={extra}, missing={missing})")
+for prop, expected in sorted(ACTIVATED_POLICY.items()):
+    got = cells(suspend["properties"][prop])
+    if got != [expected]:
+        fail(f"/rockchip-suspend {prop} is {got}, expected [{hex(expected)}] -- "
+             "these values are measured, not tunable; re-run the SIP "
+             "differential before changing them")
 suspend_descendants = [
     node["path"] for node in nodes if node["path"].startswith("/rockchip-suspend/")
 ]

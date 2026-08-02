@@ -2,13 +2,25 @@ diff --git a/arch/arm64/boot/dts/rockchip/rk3566-pinenote.dtsi b/arch/arm64/boot
 index fafdedb2c4630b70e0ee9dc0dac75ff0c8176e8f..16aac50eae64adc52764bd2357f46841c5f3f8b6 100644
 --- a/arch/arm64/boot/dts/rockchip/rk3566-pinenote.dtsi
 +++ b/arch/arm64/boot/dts/rockchip/rk3566-pinenote.dtsi
-@@ -11,6 +11,11 @@
+@@ -11,6 +11,23 @@
  / {
  	chassis-type = "tablet";
  
 +	rockchip-suspend {
 +		compatible = "rockchip,pm-rk3568";
 +		status = "okay";
++		/*
++		 * Measured from os1's booted DTB (stock 6.12 BSP, the kernel on
++		 * which deep suspend demonstrably works on this device) --
++		 * doc/artifacts/pinenote-os1-suspend-policy-20260802/.  Not
++		 * invented, and byte-identical to the donor fixture.  The
++		 * emitted SIP sequence for exactly these three properties is
++		 * differentially verified against the BSP emitter --
++		 * doc/artifacts/pinenote-sip-sequence-differential-20260802.md.
++		 */
++		rockchip,sleep-mode-config = <0x5ec>;
++		rockchip,wakeup-config = <0x10>;
++		rockchip,sleep-debug-en = <0x00>;
 +	};
 +
  	aliases {
@@ -21,7 +33,7 @@ index 8ad0cd079895e98e879ce01ff9de48c08b5b5c23..c246d5a2bf291223e43aa0c10c66b0a2
 @@ -1,4 +1,6 @@
  CONFIG_DEFAULT_HOSTNAME="pinenote"
 +CONFIG_ROCKCHIP_SUSPEND_MODE=y
-+# CONFIG_ROCKCHIP_SUSPEND_MODE_ACTIVATE is not set
++CONFIG_ROCKCHIP_SUSPEND_MODE_ACTIVATE=y
  # CONFIG_SWAP is not set
  CONFIG_SYSVIPC=y
  CONFIG_POSIX_MQUEUE=y
@@ -158,7 +170,7 @@ diff --git a/drivers/soc/rockchip/Kconfig b/drivers/soc/rockchip/Kconfig
 index 785f60c6f3ad1a09f517e69a69726a8178bed168..473b0399ecba01205b27953abf2ce31abfa234af 100644
 --- a/drivers/soc/rockchip/Kconfig
 +++ b/drivers/soc/rockchip/Kconfig
-@@ -30,4 +30,22 @@ config ROCKCHIP_DTPM
+@@ -30,4 +30,36 @@ config ROCKCHIP_DTPM
  	  on this platform. That will create all the power capping capable
  	  devices.
  
@@ -172,13 +184,27 @@ index 785f60c6f3ad1a09f517e69a69726a8178bed168..473b0399ecba01205b27953abf2ce31a
 +	  firmware, regulator, CPU, PSCI, or MMIO actions.
 +
 +config ROCKCHIP_SUSPEND_MODE_ACTIVATE
-+	bool
++	bool "Activate the Rockchip BSP suspend-mode policy (issues SIP calls)"
 +	depends on ROCKCHIP_SUSPEND_MODE
 +	default n
 +	help
-+	  Link the callback-registration and executor-call edge.  This hidden
-+	  option has no runtime enablement interface and is intentionally unset
-+	  by the PineNote configuration.
++	  Link the callback-registration and executor-call edge, and accept a
++	  policy-bearing rockchip-suspend node.  With this set the driver DOES
++	  issue firmware SIP calls and program regulator suspend state; with it
++	  unset the driver binds only a metadata-only node and touches nothing.
++
++	  This is REQUIRED for platform `deep` suspend on RK356x.  Without it
++	  firmware receives no suspend-mode configuration and no wake-source
++	  arming, and the system will not wake: measured on PineNote
++	  2026-08-02, bl31 reported
++	  `PM-STATE: mem (ultra: 0, mem: 1, cfg: 0x0)` and never returned.
++
++	  Do not set this unless the platform's policy values have been
++	  verified against a known-working configuration for that exact device,
++	  and the emitted SIP sequence has been differentially checked against
++	  the BSP emitter.  Both were done for the PineNote — see
++	  doc/artifacts/pinenote-os1-suspend-policy-20260802/ and
++	  doc/artifacts/pinenote-sip-sequence-differential-20260802.md.
 +
  endif
 diff --git a/drivers/soc/rockchip/Makefile b/drivers/soc/rockchip/Makefile

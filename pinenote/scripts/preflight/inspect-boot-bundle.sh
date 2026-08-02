@@ -60,10 +60,10 @@ pass "found resolved kernel config at $config"
 if ! grep -F -x -q -- 'CONFIG_ROCKCHIP_SUSPEND_MODE=y' "$config"; then
   fail "resolved kernel config lacks dormant Rockchip suspend model"
 fi
-if grep -E -q '^CONFIG_ROCKCHIP_SUSPEND_MODE_ACTIVATE=(y|m)$' "$config"; then
-  fail "resolved kernel config enables Rockchip suspend activation"
+if ! grep -F -x -q -- 'CONFIG_ROCKCHIP_SUSPEND_MODE_ACTIVATE=y' "$config"; then
+  fail "resolved kernel config lacks Rockchip suspend activation (deep will not wake)"
 fi
-pass "resolved kernel config keeps Rockchip suspend activation compiled out"
+pass "resolved kernel config enables reviewed Rockchip suspend activation"
 
 dtb_count=0
 for candidate in "$bundle"/rk3566-pinenote*.dtb "$bundle"/extlinux/rk3566-pinenote*.dtb; do

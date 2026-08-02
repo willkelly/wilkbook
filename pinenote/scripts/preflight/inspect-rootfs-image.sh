@@ -114,10 +114,10 @@ debugfs -R "dump /boot/config $tmpdir/kernel-config" "$rootfs_image" >/dev/null 
   fail "could not extract embedded kernel config"
 grep -F -x -q -- 'CONFIG_ROCKCHIP_SUSPEND_MODE=y' "$tmpdir/kernel-config" || \
   fail "embedded kernel config lacks dormant Rockchip suspend model"
-if grep -E -q '^CONFIG_ROCKCHIP_SUSPEND_MODE_ACTIVATE=(y|m)$' "$tmpdir/kernel-config"; then
-  fail "embedded kernel config enables Rockchip suspend activation"
+if ! grep -F -x -q -- 'CONFIG_ROCKCHIP_SUSPEND_MODE_ACTIVATE=y' "$tmpdir/kernel-config"; then
+  fail "embedded kernel config lacks Rockchip suspend activation (deep will not wake)"
 fi
-pass "embedded kernel config keeps Rockchip suspend activation compiled out"
+pass "embedded kernel config enables reviewed Rockchip suspend activation"
 
 debugfs -R "dump $system_store/profile/bin/pinenote-ebc-sleep-frame-test $tmpdir/barrier-link" \
   "$rootfs_image" >/dev/null 2>&1 || fail "could not resolve packaged EBC sleep-frame test"
