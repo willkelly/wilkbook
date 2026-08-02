@@ -246,6 +246,17 @@ partition and loading PineNote display modules from the initrd.")
      ;; it on stop, so the hazard is live for every maintenance window.
      ;; Stock Debian on os1 ships exactly this argument.
      "vt.global_cursor_default=0"
+     ;; Keep the ttyS2 console alive through suspend entry/exit.  Without
+     ;; it the 8250 port is suspended by its own dev_pm_ops and the trace
+     ;; stops after "Freezing remaining freezable tasks" -- which is
+     ;; exactly where the 2026-08-02 deep hang needed to be observed.  The
+     ;; runtime knob (/sys/module/printk/parameters/console_suspend=N)
+     ;; suppresses *console* suspension but demonstrably does NOT hold the
+     ;; port up: that run still lost every dpm_suspend message.  Costs a
+     ;; little power and a little suspend latency whenever suspend is used
+     ;; at all -- which in production is never, since suspend is disabled.
+     ;; Revert with the suspend program if that ever changes.
+     "no_console_suspend"
      "fw_devlink=off"))
 
 ;; Do NOT put rockchip_ebc.* parameters on the kernel command line: they

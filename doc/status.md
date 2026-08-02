@@ -33,12 +33,44 @@ rail-kill wake collision all remain open. Not excluded by one run: RTC
 alarm not armed in firmware across deep, wake routing through the
 `vcc_3v3_pmu`-fed GPIO0 bank, or a hang on entry that never slept.
 
-*Standing consequence: **do not retry deep console-free.*** The
-console-free protocol only works when the device comes back. Deep did
-not, so the sole observation channel stopped at the suspend write and
-there is no entry trace. A UART capture through entry is the minimum for
-the next attempt. Read the ladder rule as "deep needs a console", not
-just "deep needs rung 2 green".
+**Attempt 2 the same night, with UART: hung identically — and the trace
+answers it.** `console_suspend=N`, live capture at 1500000:
+
+```
+[  439.643831] PM: suspend entry (deep)
+[  439.651652] Freezing remaining freezable tasks completed (elapsed 0.001 seconds)
+v2.3():v2.3-210-g4af361e4c:zwx
+PM-STATE: mem (ultra: 0, mem: 1, cfg: 0x0), pmic: 0x14, 0x25
+abcdeghij7
+```
+
+The last three lines are **bl31, not Linux**. So Linux hands off cleanly,
+the BSP ATF is reached and runs its full sequence — a hang on the *entry*
+path is excluded. **`cfg: 0x0` is the finding**: bl31's suspend
+configuration word is zero, i.e. Linux sent it no suspend-mode
+configuration and no wake-source arming — exactly what our tree does on
+purpose. The hypothesis above is now **firmware-sourced measurement, not
+inference**. Still not activation permission.
+
+***The UART works — that long-standing "receives nothing from ttyS2" claim
+is RETRACTED.*** It was a test artifact that cost two sessions of blind
+protocol. Validated both directions at 1500000. Two causes: the
+device-side `/dev/ttyS2` termios defaults to **9600** and on an 8250 the
+console shares the port divisor (so output left at 9600 while we listened
+at 1500000); and every earlier test was a **passive listen after boot**,
+when the console is idle — which cannot distinguish a dead cable from a
+quiet one. **Working method: transmit a marker from the device while
+sweeping the host baud.** Passive captures yield runs of `0x00`, which
+reads as "broken cable" and is not. Console-free is now an option, not a
+necessity — but **deep must never run without UART**.
+
+*Code change from this*: `no_console_suspend` added to
+`pinenote-kernel-arguments`. Runtime `console_suspend=N` suppresses
+console suspension but does **not** hold the 8250 port up through its own
+`dev_pm_ops` — that run still lost every `dpm_suspend` message, so the
+trace jumps from freezing straight to bl31. Gated: `make kernel-drv` and
+a full `guix system build` green, arg verified present in the built
+closure. Not yet deployed.
 
 *Evidence survived the hard power-cut*: Guix's `%base-file-systems`
 declares no `/tmp`, so os2's `/tmp` is on the ext4 root. It was recovered

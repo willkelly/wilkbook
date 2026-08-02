@@ -1,0 +1,19 @@
+[  360.091081] === DEEP ATTEMPT 2 WITH UART ===
+2026-08-02 03:49:41 localhost [  360.091081] === DEEP ATTEMPT 2 WITH UART ===
+[  418.581191] === DEEP ATTEMPT 2 (UART LIVE) ===
+2026-08-02 03:50:39 localhost [  418.581191] === DEEP ATTEMPT 2 (UART LIVE) ===
+[  419.131273] Console: switching to colour frame buffer device 234x87
+[  422.389127] Console: switching to colour dummy device 80x25
+[  435.233731] dwc3 fcc00000.usb: wait for SETUP phase timed out
+[  435.235195] dwc3 fcc00000.usb: failed to set STALL on ep0out
+[  435.236920] dwc3 fcc00000.usb: ep0 out start transfer failed: -110
+[  439.643831] PM: suspend entry (deep)
+[  439.648002] Filesystems sync: 0.004 seconds
+[  439.648839] Freezing user space processes
+[  439.650333] Freezing user space processes completed (elapsed 0.001 seconds)
+[  439.650346] OOM killer disabled.
+[  439.650349] Freezing remaining freezable tasks
+[  439.651652] Freezing remaining freezable tasks completed (elapsed 0.001 seconds)
+v2.3():v2.3-210-g4af361e4c:zwx
+PM-STATE: mem (ultra: 0, mem: 1, cfg: 0x0), pmic: 0x14, 0x25
+abcdeghij7

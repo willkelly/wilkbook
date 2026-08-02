@@ -251,13 +251,28 @@ Amendments from that session, now standing procedure:
   active ACM host session hard-vetoes suspend via dwc3.
 - **Arm the RTC with absolute epoch** (`since_epoch` + N); the `+N`
   form returns EAGAIN on rk808-rtc.
-- **The procedure is console-free by necessity**: the ACM console is a
-  gadget (dies with suspend; vetoes it while attached), and the USB-C
-  serial cable demonstrably receives nothing from ttyS2. Observation =
-  the panel beacon + on-disk evidence + bounded auto-wake; recovery =
-  PMIC long-press, os1, post-mortem harvest. "Human-observed on UART"
-  is amended to "human-present with bounded auto-wake" for this
-  hardware.
+- ~~**The procedure is console-free by necessity**: … the USB-C serial
+  cable demonstrably receives nothing from ttyS2.~~ **RETRACTED
+  2026-08-02 — the UART works.** That claim was a test artifact, and it
+  cost two sessions of blind protocol. Validated in both directions at
+  1500000 8N1 (direct `/dev/ttyS2` writes *and* kernel printk with
+  timestamps). Two things had defeated it: (a) the device-side
+  `/dev/ttyS2` termios defaults to **9600**, and on an 8250 the console
+  shares the port's divisor, so console output was leaving at 9600 while
+  the host listened at 1500000 — run `stty -F /dev/ttyS2 1500000` on the
+  device (agetty uses `--keep-baud` and will not stomp it); (b) every
+  earlier test was a **passive listen after boot**, when the console is
+  idle, which cannot tell a dead cable from a quiet one. **Test method
+  that works: transmit a known marker from the device while sweeping the
+  host baud rate.** A passive capture yields runs of `0x00` — a line held
+  low, which reads as "broken cable" and is not.
+  The ACM-gadget half stands: it dies with suspend and vetoes it while
+  attached, so quiesce it. Console-free is now an *option*, not a
+  necessity — and **deep must never be run without UART**, since its
+  failure mode is a hang with no on-disk record past the suspend write.
+  For an entry trace, `no_console_suspend` is on the kernel command line
+  (runtime `console_suspend=N` does not hold the 8250 port up through
+  `dev_pm_ops`).
 - Evidence transfers off-device must be verified BEFORE device cleanup.
 - **Read the gates before probing them, and hold no DRM node while you
   do.** Immediately after resume, before anything else touches the
