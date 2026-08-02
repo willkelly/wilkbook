@@ -82,6 +82,20 @@ compile gate and a structural gate over the patch is the behavioral one;
 worked example. Before trusting a harness result, check that the harness
 actually compiles the lines you changed.
 
+A third limit, found while trying to reproduce the post-resume dead-write
+window offline (2026-08-02): **the rung-7a harness drives
+`rockchip_ebc_refresh(ebc, ctx, …)` with an explicitly passed `ctx`, and
+never runs `rockchip_ebc_refresh_thread()` itself.** It can therefore
+validate refresh *mechanics* to a very high standard, but it structurally
+cannot reproduce any defect about *which* context the thread picked up —
+the thread's outer-loop `ctx = to_ebc_crtc_state(READ_ONCE(ebc->crtc.state))->ctx`
+read, its park/unpark boundary, and the ctx handoff across a system sleep
+are all outside what the harness executes. Closing that gap means running
+the thread body against terminating `kthread_should_park`/`_stop` shims
+(the bracket test's shim is the starting point). Until then, thread-ctx
+lifecycle questions are hardware or code-reading questions, and the
+harness going green says nothing about them.
+
 The recurring caveat: **none of this models electrophoretic optics.**
 Ghosting, grayscale uniformity, temperature drift, DC balance, pen
 latency — those stay on the hardware-only list. The tools validate
@@ -196,3 +210,30 @@ end-to-end reading feel. Deep suspend adds TF-A/U-Boot compatibility, DDR
 retention, wake routing, PMIC/EBC rail state, post-resume display repair, and
 actual suspend current to this hardware-only set. Everything else should be
 squeezed onto an offline rung first.
+
+## EBC IRQ counts: global and partial are not the same unit
+
+Verified from the driver's register programming, 2026-08-02. Every EBC
+frame measurement in this repo depends on it:
+
+- **Global refresh** (`rockchip_ebc.c`, the `EBC_DSP_START` write carrying
+  `DSP_FRM_TOTAL(num_phases - 1)`): the whole waveform runs as **one**
+  hardware transaction with a single `wait_for_completion(&display_end)`.
+  It costs **1 IRQ**, whatever the phase count.
+- **Partial refresh** (the `EBC_DSP_START_DSP_FRM_START` write with no
+  total, inside the per-frame loop with its own `reinit_completion` /
+  `wait_for_completion`): drives frame by frame and costs **1 IRQ per
+  frame** — 38–46 for one pass, temperature-dependent.
+
+So an IRQ delta of `1` is a *completed global refresh*, not "one stray
+frame", and a delta of `~46` is one partial pass. Reading a small delta as
+"almost nothing happened" inverts the meaning: on 2026-08-01 and
+2026-08-02 the suspend/resume cycle's "exactly 2 frames" was in fact **two
+successful global refreshes** — the pre-park off-screen wash and the
+post-resume restore — i.e. evidence that the global path *works* after
+resume, not that the panel was dead.
+
+Corollary for acceptance tests: never compare a global-path count with a
+partial-path count, and never compare partial counts across a thermal
+window (the phase count is temperature-compensated; 38 and 46 are both
+one pass).

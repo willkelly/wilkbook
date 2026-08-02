@@ -2,6 +2,38 @@
 
 Last updated: 2026-08-02.
 
+**2026-08-02 (offline) the "fbdev re-commit fix" was NOT written — its
+premise is contradicted, and the IRQ unit was being misread.** Three
+independent facts kill the os1-oracle diagnosis ("our fbdev never
+re-commits, so the ctx stays torn down"): (1) the ctx **is** reallocated
+at resume — `rockchip_ebc_crtc_atomic_check` allocates whenever
+`mode_changed`, which the duplicated-state commit sets, and the
+`ctx_release`/`ctx_free` in dmesg is the *old* ctx being dropped by that
+very allocation; (2) the refresh thread parks at the **bottom** of its
+outer loop, so unpark → loop top → fresh ctx read, exactly as designed;
+(3) the 2026-08-02 run **forced** a re-commit (unblank drove
+`crtc_active` 0→1, `atomic_enable` ran) and still painted nothing.
+
+**Instrument correction, verified from the register programming**
+(`doc/testing.md`, "EBC IRQ counts"): a **global** refresh writes one
+`EBC_DSP_START` with `DSP_FRM_TOTAL(num_phases-1)` and takes a single
+completion — **1 IRQ total**. A **partial** refresh drives frame-by-frame
+with its own `reinit_completion`/`wait` per frame — **1 IRQ per frame**.
+So the suspend/resume cycle's "exactly 2 frames", read on 2026-08-01 and
+again on 2026-08-02 as near-total inactivity, is in fact **two successful
+global refreshes**: the pre-park off-screen wash and the post-resume
+restore. The global path *works* after resume. This also explains the
+`suspend_was_requested` → `do_one_full_refresh` → global → flag-cleared
+sequence running exactly as intended.
+
+**Residual, re-narrowed**: after resume the **partial/damage** path
+produces nothing while the **global** path works. Not commits, not ctx
+allocation, not the thread's park bracket. Next step is *not* another
+boot: it is either code-reading the queue→thread handoff
+(`plane_atomic_update` splices into `ctx->queue` then
+`wake_up_process`), or extending the harness to actually run the thread
+body — see the new harness limitation recorded in `doc/testing.md`.
+
 **2026-08-02 rung 3 `deep` on os2: HARD HANG, no wake, recovered by
 power-cycle to os1.** Artifact:
 `doc/artifacts/pinenote-deep-suspend-hang-20260802/`. Operator-authorised
