@@ -2,6 +2,50 @@
 
 Last updated: 2026-08-02.
 
+**2026-08-02 rung 3 `deep` on os2: HARD HANG, no wake, recovered by
+power-cycle to os1.** Artifact:
+`doc/artifacts/pinenote-deep-suspend-hang-20260802/`. Operator-authorised
+override of the rung-2-first rule, on the correct premise that deep is
+already hardware-proven on this device (os1 oracle, 2026-08-01). The
+evidence ends at the suspend write:
+
+```
+[01:38:15] CONTROL PASS: 38 frames before any suspend
+[01:38:22] alarm armed=1785634761 now=1785634701 (+60s absolute epoch)
+[01:38:22] --- RUNG 3: echo mem > /sys/power/state  (mode=deep)
+```
+
+`rung3.err` 0 bytes, no post files, no `COMPLETE`. The +60 s RTC alarm
+did not wake it. **Deep is not a display problem** — it never reached
+resume. Hardware and firmware are exonerated by the os1 precedent on the
+same bl31 and DDR; the divergence is our 7.0.11 + DT/defconfig +
+PREEMPT_RT stack versus os1's 6.12 BSP kernel.
+
+*Leading hypothesis, consistent with the design and now measured rather
+than assumed*: os1's BSP kernel configures the Rockchip suspend mode via
+the BSP SIP call before entering deep, and **our tree deliberately
+compiles that out** (activation hard-off, no `rockchip-suspend` DT node
+at all). bl31 therefore gets no suspend-mode configuration and no
+wake-source arming. This is the strongest evidence yet for why the
+dormant BSP SIP stack exists — and it is **not** activation permission:
+the reviewed active DT policy, real coordinator providers, and the
+rail-kill wake collision all remain open. Not excluded by one run: RTC
+alarm not armed in firmware across deep, wake routing through the
+`vcc_3v3_pmu`-fed GPIO0 bank, or a hang on entry that never slept.
+
+*Standing consequence: **do not retry deep console-free.*** The
+console-free protocol only works when the device comes back. Deep did
+not, so the sole observation channel stopped at the suspend write and
+there is no entry trace. A UART capture through entry is the minimum for
+the next attempt. Read the ladder rule as "deep needs a console", not
+just "deep needs rung 2 green".
+
+*Evidence survived the hard power-cut*: Guix's `%base-file-systems`
+declares no `/tmp`, so os2's `/tmp` is on the ext4 root. It was recovered
+from os1 by mounting `/dev/mmcblk0p6` read-only (`ro,noload`) and
+unmounted cleanly. **An os2 hang is not an evidence loss** — worth
+remembering for every future session.
+
 **2026-08-02 suspend ladder on the resume-barrier image: rung 1 PASS,
 rung 2 mechanics PASS, G1 fixed on hardware, acceptance still FAIL — and
 the four-gate model is wrong.** Full artifact:
