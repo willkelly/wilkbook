@@ -1,0 +1,179 @@
+Add system-sleep support to the ST accelerometer drivers.
+
+The ST sensor drivers carry no power management at all: struct
+i2c_driver/spi_driver have no .pm, and there is no suspend/resume anywhere
+under drivers/iio/common/st_sensors/ or drivers/iio/accel/st_accel*.
+
+Across a suspend that actually removes power the chip returns at its reset
+defaults.  The configured ODR, full-scale, BDU/DAS and axis enables are
+gone, and the data-ready interrupt is left in a state the driver never
+programmed.  With a level-triggered DRDY line the threaded handler cannot
+clear the source, the interrupt re-asserts forever, and the kernel's
+spurious-interrupt protection disables it permanently:
+
+  irq 71: nobody cared (try booting with the "irqpoll" option)
+  CPU: 0 UID: 0 PID: 186 Comm: irq/71-sc7a20-t
+
+after which the sensor is dead until reboot.
+
+Observed on a Pine64 PineNote (SC7A20 on i2c, level-triggered through the
+rockchip GPIO controller) after its first platform "deep" suspend, and
+confirmed to reproduce on both a 6.12 BSP kernel and 7.0.11 -- i.e. it is
+inherent to the driver, not to one image.
+
+Fix: split the register-programming tail of st_sensors_init_sensor() into
+st_sensors_reinit_hw(), which touches no mutex initialisation and no
+device-tree parsing and is therefore safe to repeat, and add PM ops that
+disable the sensor on suspend and reprogram it from cached state on
+resume.  The data-ready interrupt is re-armed only when a trigger owns it;
+st_sensors_reinit_hw() masks it first, which is what makes the line quiet
+again after a power loss.
+
+Signed-off-by: (wilkbook -- see doc/upstream-register.md item 8)
+
+--- a/drivers/iio/accel/st_accel_i2c.c
++++ b/drivers/iio/accel/st_accel_i2c.c
+@@ -207,6 +207,7 @@
+ 		.name = "st-accel-i2c",
+ 		.of_match_table = st_accel_of_match,
+ 		.acpi_match_table = st_accel_acpi_match,
++		.pm = pm_sleep_ptr(&st_sensors_pm_ops),
+ 	},
+ 	.probe = st_accel_i2c_probe,
+ 	.id_table = st_accel_id_table,
+--- a/drivers/iio/accel/st_accel_spi.c
++++ b/drivers/iio/accel/st_accel_spi.c
+@@ -175,6 +175,7 @@
+ 	.driver = {
+ 		.name = "st-accel-spi",
+ 		.of_match_table = st_accel_of_match,
++		.pm = pm_sleep_ptr(&st_sensors_pm_ops),
+ 	},
+ 	.probe = st_accel_spi_probe,
+ 	.id_table = st_accel_id_table,
+--- a/drivers/iio/common/st_sensors/st_sensors_core.c
++++ b/drivers/iio/common/st_sensors/st_sensors_core.c
+@@ -354,6 +354,24 @@
+ 			return err;
+ 	}
+ 
++	return st_sensors_reinit_hw(indio_dev);
++}
++EXPORT_SYMBOL_NS(st_sensors_init_sensor, "IIO_ST_SENSORS");
++
++/*
++ * Program every register the sensor needs from cached state in @sdata.
++ *
++ * Split out of st_sensors_init_sensor() so it can also run from resume: a
++ * suspend that removes power leaves the chip at its reset defaults, and
++ * unlike the probe path this touches no mutex initialisation and no
++ * device-tree parsing, so it is safe to repeat.
++ */
++int st_sensors_reinit_hw(struct iio_dev *indio_dev)
++{
++	struct device *parent = indio_dev->dev.parent;
++	struct st_sensor_data *sdata = iio_priv(indio_dev);
++	int err;
++
+ 	err = st_sensors_set_enable(indio_dev, false);
+ 	if (err < 0)
+ 		return err;
+@@ -417,7 +435,75 @@
+ 
+ 	return err;
+ }
+-EXPORT_SYMBOL_NS(st_sensors_init_sensor, "IIO_ST_SENSORS");
++EXPORT_SYMBOL_NS(st_sensors_reinit_hw, "IIO_ST_SENSORS");
++
++/*
++ * System sleep support.
++ *
++ * The ST sensor drivers previously had no power management at all.  Across
++ * a suspend that actually removes power (platform "deep" on RK356x, for
++ * example) the chip returns at its reset defaults: the configured ODR,
++ * full-scale, BDU/DAS and axis enables are gone, and crucially the
++ * data-ready interrupt is left in a state the driver never programmed.
++ * With a level-triggered DRDY line the threaded handler then cannot clear
++ * the source, the IRQ re-asserts forever, and the kernel's spurious
++ * interrupt protection disables it permanently:
++ *
++ *   irq NN: nobody cared (try booting with the "irqpoll" option)
++ *
++ * after which the sensor is dead until reboot.  Observed on a Pine64
++ * PineNote (SC7A20 on i2c, level-triggered via rockchip GPIO) on both a
++ * 6.12 and a 7.0 kernel.
++ */
++static int st_sensors_suspend(struct device *dev)
++{
++	struct iio_dev *indio_dev = dev_get_drvdata(dev);
++	struct st_sensor_data *sdata = iio_priv(indio_dev);
++
++	/* Remember what to come back to; set_enable() clears ->enabled. */
++	sdata->pm_enabled = sdata->enabled;
++	if (!sdata->enabled)
++		return 0;
++
++	return st_sensors_set_enable(indio_dev, false);
++}
++
++static int st_sensors_resume(struct device *dev)
++{
++	struct iio_dev *indio_dev = dev_get_drvdata(dev);
++	struct st_sensor_data *sdata = iio_priv(indio_dev);
++	int err;
++
++	/* The chip may have lost power: reprogram from cached state. */
++	err = st_sensors_reinit_hw(indio_dev);
++	if (err < 0)
++		return err;
++
++	/*
++	 * Re-arm the data-ready interrupt only when a trigger owns it.
++	 * st_sensors_reinit_hw() has just masked it, which is what makes
++	 * the line quiet again after a power loss.
++	 */
++	if (sdata->hw_irq_trigger) {
++		err = st_sensors_set_dataready_irq(indio_dev, true);
++		if (err < 0)
++			return err;
++	}
++
++	if (!sdata->pm_enabled)
++		return 0;
++
++	return st_sensors_set_enable(indio_dev, true);
++}
++
++/*
++ * Note: EXPORT_NS_*_PM_OPS() stringifies its namespace argument (#ns),
++ * unlike EXPORT_SYMBOL_NS() which takes an already-quoted string.  Passing
++ * "IIO_ST_SENSORS" here would export into the namespace "\"IIO_ST_SENSORS\""
++ * and modpost would reject every importer.
++ */
++EXPORT_NS_SIMPLE_DEV_PM_OPS(st_sensors_pm_ops, st_sensors_suspend,
++			    st_sensors_resume, IIO_ST_SENSORS);
+ 
+ int st_sensors_set_dataready_irq(struct iio_dev *indio_dev, bool enable)
+ {
+--- a/include/linux/iio/common/st_sensors.h
++++ b/include/linux/iio/common/st_sensors.h
+@@ -246,6 +246,8 @@
+ 	struct regmap *regmap;
+ 
+ 	bool enabled;
++	/* ->enabled as it was before a system sleep, for resume. */
++	bool pm_enabled;
+ 
+ 	unsigned int odr;
+ 	unsigned int num_data_channels;
+@@ -285,6 +287,10 @@
+ int st_sensors_init_sensor(struct iio_dev *indio_dev,
+ 					struct st_sensors_platform_data *pdata);
+ 
++int st_sensors_reinit_hw(struct iio_dev *indio_dev);
++
++extern const struct dev_pm_ops st_sensors_pm_ops;
++
+ int st_sensors_set_enable(struct iio_dev *indio_dev, bool enable);
+ 
+ int st_sensors_set_axis_enable(struct iio_dev *indio_dev, u8 axis_enable);

@@ -67,7 +67,14 @@
 
 (define %linux-pinenote-patches
   (list (local-file "../patches/linux-pinenote-7.0-forward-port.patch")
-        (local-file "../patches/linux-pinenote-7.0-bsp-sip-probe.patch")))
+        (local-file "../patches/linux-pinenote-7.0-bsp-sip-probe.patch")
+        ;; ST accelerometer system-sleep support.  The mainline driver has
+        ;; no .pm at all, so a suspend that removes power leaves the DRDY
+        ;; line asserted and the kernel disables the IRQ permanently
+        ;; ("irq 71: nobody cared") -- autorotation dies until reboot.
+        ;; Reproduces on stock 6.12 too, so it is the driver, not us.
+        ;; doc/upstream-register.md item 8.
+        (local-file "../patches/linux-pinenote-7.0-st-accel-pm.patch")))
 
 (define %linux-pinenote-source
   (origin
