@@ -2,6 +2,48 @@
 
 Last updated: 2026-08-02.
 
+**2026-08-02 RUNG 2 PASSES. Post-resume damage paints; the "dead-write
+window" was substantially our own probe.** Artifact:
+`doc/artifacts/pinenote-suspend-ladder-20260802-discriminator/`.
+
+```
+VERDICT control=46 | blanked black=0 checker=46 | unblanked black=0 checker=46
+ACCEPTANCE: post-resume fb writes DO paint
+```
+
+A full 46-frame pass at **both** CRTC states after resume. Gates all open
+(G1 `state=0`, G2 plane holds `fb=38 [fbcon]`, G3 no master), **zero
+regulator drift, zero TPS drift**, VCOM intact, no poison/timeout/BUG.
+Operator confirmed on glass: three checker bands at rows 100/560/860 of
+1404 — 7 %, 40 %, 61 % down the panel, exactly the predicted geometry —
+while the two black bands were invisible.
+
+*Why black read zero, proven the same session* with the reader restarted
+so the region held non-black content: the **same black probe at the same
+row** drove 46 frames and changed the framebuffer. Black is not dropped
+intrinsically — only when the underlying content is already black, which
+is `rockchip_ebc_plane_atomic_update()`'s drop-on-match working as
+designed. Post-resume the panel showed the black console background, so
+writing black was a genuine no-op.
+
+*Not established*: whether the damage-baseline fix was **necessary**. This
+run cannot separate "the fix cured a real stale baseline" from
+"black-on-black was always the artifact" — both predict it, and a
+distinctive fill was never run on the old image. The fix stays regardless:
+`final_atomic_update` was genuinely `kmalloc`'d and left uninitialised on
+the resume path while every other branch seeds it, and it is the diff
+baseline.
+
+*Instrument fixed so this cannot recur*: `mmap-band-probe.lua` now reports
+`fb-rows-changed=N/120` and flags `[NO-OP WRITE]`. Demonstrated live — the
+same checker twice gives 46 then 0 frames with 0/120 rows changed, which
+under the old probe was indistinguishable from a dead pipeline. **Every
+probe in this program before today wrote `0x00`.**
+
+*Ladder state*: rungs 1 and 2 PASS on s2idle. Rung 3 (`deep`) remains
+blocked at bl31 with `cfg: 0x0` — an activation design decision, not a
+boot.
+
 **2026-08-02 deploy to os2: `pinenote-reader-PNGuixRoot-20260802.ext4`,
 SHA-256
 `190321cda1324b8c78e241658f36db0d6a36df348ef22d03af5a00ee9e34020d`,
