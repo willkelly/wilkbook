@@ -101,15 +101,26 @@ the full `ebc-logic` suite. **Not hardware-verified.** Next session: run
 `fb-damage-gates.sh` once after resume, before anything else touches the
 display.
 
-Image built and staged, **not yet deployed**:
+**Deployed to os2 (2026-08-01, late).**
 `pinenote-reader-PNGuixRoot-20260801.ext4`, SHA-256
-`5493d9941147652d054c3ab63715dc667b143b57eeaba98ee9e725e16970ca7b`. The
+`5493d9941147652d054c3ab63715dc667b143b57eeaba98ee9e725e16970ca7b`,
+1,945,595,904 bytes = 474,999 × 4096. Full protocol from os1: staged SHA
+verified against the host artifact, preconditions re-checked fail-closed
+immediately before `dd` (root=p5, p6 unmounted, staged size and SHA),
+readback of exactly the written range matches. `fb-damage-gates.sh` and
+`pm-ground-truth.sh` are staged in `/home/user` on os1, SHA-verified. The
 fix was byte-verified inside the artifact before staging: the
 `rockchip_ebc.ko` inside its initrd is byte-identical to the freshly
 cross-built module (`a6fe799e…`), and references
 `drm_fb_helper_set_suspend_unlocked`, which the previous build's module
 does not reference at all. The image it supersedes on os2 is preserved
-as `…-20260801-deployed-8e302e48.ext4`. `fb-damage-gates.sh` needs no
+as `…-20260801-deployed-8e302e48.ext4`. Device address note: the PineNote
+took a **new DHCP lease, 192.168.86.145** (not the `.141` in
+`doc/device-runbook.md`); resolve it via `pinenote.local` rather than
+assuming the old address. The host-key warning that produced was benign
+and was resolved by comparison, not bypass — the key offered at `.145` is
+byte-identical to the one recorded for `.141`, and the stale `.145` entry
+belonged to a different device that previously held the lease. `fb-damage-gates.sh` needs no
 image — it is a read-only shell script, copied at session time like
 `pm-ground-truth.sh`, and runs on whatever is already on the device.
 
