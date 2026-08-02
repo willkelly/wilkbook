@@ -1,6 +1,48 @@
 # Hardware status
 
-Last updated: 2026-08-01.
+Last updated: 2026-08-02.
+
+**2026-08-02 suspend ladder on the resume-barrier image: rung 1 PASS,
+rung 2 mechanics PASS, G1 fixed on hardware, acceptance still FAIL — and
+the four-gate model is wrong.** Full artifact:
+`doc/artifacts/pinenote-suspend-ladder-20260802/`.
+
+*What improved, and is now hardware-proven.* `fb0.state=0` after resume —
+the fbdev client's deferred un-suspend now completes, which is exactly
+what the barrier was added for. Suspend/wake mechanics clean again (45 s,
+rc=0, on-schedule RTC alarm, gadget quiesced). **Regulators show zero
+drift pre→post, and so does the TPS65185** (VCOM `03: 8f` intact,
+`ENABLE 2f` = rails properly down). The 2026-08-01 "+1 enable" and the
+stuck `3f` are both gone.
+
+*What did not.* Post-resume damage still paints 0 frames, and **every
+gate reads open at every stage**: G1 `state=0`, G2 plane holds `fb=38`
+`[fbcon]`, G3 no master, `crtc active=1` after unblank, thread idle. The
+post-unblank state is *identical* to the pre-suspend state that painted
+38 frames. G1 was real and is fixed; it was not the cause. Reader restart
+recovers fully (+192 frames, no reboot) as before.
+
+*Methodology failure, caught mid-session.* The first ladder run used
+`dd`/`write()` to `/dev/fb0` and reported ACCEPTANCE FAIL. **That verdict
+was void**: on a fully healthy device with no suspend involved, the same
+probe changed the framebuffer (md5 `f3eb15e1`→`06b5a22c`) and produced
+**zero frames**. The fbdev `write()` path generates no damage that
+reaches this panel; only `mmap` does (38 frames = one pass). The
+2026-08-01 "all four damage probes are dead" result was `write()`-based
+too and **should be assumed to have measured the same dead instrument**;
+the surviving result from that night is the GLOBAL_REFRESH ioctl's +47
+frames, which used a different path. The ladder script now **gates on a
+pre-suspend CONTROL probe and aborts if it paints 0** — the second run
+passed that gate 60 s before the post-resume probes read 0, which is what
+makes its FAIL trustworthy. New instrument:
+`pinenote/tools/ebc-damage-probe/mmap-band-probe.lua`.
+
+*Surviving lead for the offline pass.* `rockchip_ebc_plane_reset` →
+`ctx_release` → `ctx_free` at resume: `drm_atomic_helper_resume()` calls
+`drm_mode_config_reset()` before committing the duplicated state, so the
+DRM-visible plane fb is restored by that commit **while the driver's own
+refresh context is torn down and rebuilt.** Read that ctx lifecycle next.
+Rung 3 (`deep`) NOT run — forbidden by rule until rung 2 passes.
 
 **2026-07-30 EBC barrier campaign: PASSED. The generation barrier is
 hardware-proven, and the starvation cause is now measured rather than
