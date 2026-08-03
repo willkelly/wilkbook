@@ -2,6 +2,19 @@
 
 Last updated: 2026-08-03.
 
+**2026-08-03 charging inhibit deployed to os2.** Image
+`fe48dfd72220d55a010447b8f7f4896a8fbc0edca8dbc7e6850de26ed36e3985`
+(475,027 x 4096). Full protocol from os1, readback verified. Auto-suspend
+no longer runs while plugged in — which the soak showed is **required**,
+not cosmetic: every sleep aborted after 5-6 s while charging (8/8), so the
+device would otherwise thrash a suspend/resume cycle every 65 s forever.
+
+*Staged-image cleanup*: 38 superseded images removed (~70 GB), keeping only
+the current and previous in each location, both hash-verified. Device
+`/home` went from 8.7 G to 50 G free. Rebuildable from Guix, so nothing of
+value was archived. **Keep it to two from here on** — the previous image is
+the rollback, everything older is noise.
+
 **2026-08-03 AUTO-SUSPEND IS LIVE ON os2.** Image
 `8c1a24f49b6d476032751214c0bdc29dae5a34a767f23c827f1ccfb601dd1dd7`
 (475,026 x 4096), system `wl9prfi6wwj98d4l5i4bi4bdd6gp4bbw-system`.
