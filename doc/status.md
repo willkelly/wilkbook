@@ -1,6 +1,37 @@
 # Hardware status
 
-Last updated: 2026-08-02.
+Last updated: 2026-08-03.
+
+**2026-08-03 AUTO-SUSPEND IS LIVE ON os2.** Image
+`8c1a24f49b6d476032751214c0bdc29dae5a34a767f23c827f1ccfb601dd1dd7`
+(475,026 x 4096), system `wl9prfi6wwj98d4l5i4bi4bdd6gp4bbw-system`.
+
+```
+* Status of pinenote-autosuspend: running
+[autosuspend] watching 8 input devices, idle=300s backstop=900s overlay=true
+```
+
+The device now sleeps to `deep` after 5 minutes without input and wakes on
+the power button, showing your page with a
+`SUSPENDED - PRESS POWER TO RESUME` banner instead of a white void. On
+measured numbers this is worth ~7x (172 mA awake vs 19.3 mA deep).
+
+*Tunable two ways*, as designed: build-time fields in
+`pinenote/services/autosuspend.scm`, and `/var/lib/pinenote/autosuspend.conf`
+re-read before every idle wait (`idle=`, `backstop=`, `enabled=0`) with no
+restart.
+
+*Practical consequence for future sessions*: **ssh is now intermittent.**
+The device is only reachable for `idle` seconds after the last input, and
+Wi-Fi re-association eats several of those after each wake. To work on it,
+write `enabled=0` to the runtime config first. UART remains reachable
+whenever the device is awake and gives **passwordless root**, which is the
+recovery channel if auto-suspend ever misbehaves.
+
+*Not yet proven*: a long unattended soak. The daemon has survived several
+cycles including RTC-backstop wakes, but "sleeps correctly on a shelf for a
+week" — the test that would validate the 8.6-day standby end to end — is a
+day of wall clock and has not been run.
 
 **2026-08-02 DEEP SUSPEND WORKS. Rung 3 PASS.** Artifact:
 `doc/artifacts/pinenote-deep-suspend-WORKS-20260802/`.
