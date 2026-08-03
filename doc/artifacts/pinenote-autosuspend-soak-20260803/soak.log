@@ -1,0 +1,12 @@
+2026-08-03 02:25:44 [autosuspend] watching 8 input devices, idle=60s backstop=240s overlay=true config=/var/lib/pinenote/autosuspend.conf
+2026-08-03 02:26:50 [autosuspend] resumed after 6s
+2026-08-03 02:27:55 [autosuspend] resumed after 5s
+2026-08-03 02:29:00 [autosuspend] resumed after 5s
+2026-08-03 02:32:56 [autosuspend] resumed after 5s
+2026-08-03 02:34:01 [autosuspend] resumed after 5s
+2026-08-03 02:35:06 [autosuspend] resumed after 5s
+2026-08-03 02:36:11 [autosuspend] resumed after 5s
+2026-08-03 02:37:16 [autosuspend] resumed after 5s
+=== hazards:
+[    0.000000] printk: debug: ignoring loglevel setting.
+[    0.228057] SGI XFS with ACLs, security attributes, scrub, repair, no debug enabled
