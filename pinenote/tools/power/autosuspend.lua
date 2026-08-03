@@ -228,24 +228,41 @@ end
 
 -- Draw the banner directly with pwrite-style seeks: mmap is unnecessary
 -- for a few rows and this keeps the failure modes simple.
-local function draw_banner(text, scale)
-    local fd = fb_open()
-    if not fd then return false, "open /dev/fb0" end
-    scale = scale or 6
-    local ch_w, ch_h = 8 * scale, 8 * scale
+-- Pixels the banner covers, stashed so resume can put them back.  Drawing
+-- the banner destroys whatever was underneath, and the post-resume global
+-- refresh faithfully repaints the framebuffer -- banner included -- so
+-- without this the banner never goes away.  (Observed 2026-08-03.)
+local saved_band, saved_rows = nil, 0
+
+local function banner_geometry(scale)
+    local ch_h = 8 * scale
     local pad = scale * 3
-    local bar_h = ch_h + pad * 2
+    return ch_h + pad * 2, ch_h, pad
+end
+
+local function draw_banner(text, scale)
+    scale = scale or 6
+    local bar_h, ch_h, pad = banner_geometry(scale)
+    local ch_w = 8 * scale
     local text_w = #text * ch_w
-    local x0 = math.floor((FB_W - text_w) / 2)
-    if x0 < 0 then x0 = 0 end
+    local x0 = math.max(0, math.floor((FB_W - text_w) / 2))
     local y0 = pad
 
+    local fh = io.open("/dev/fb0", "r+b")
+    if not fh then return false, "open /dev/fb0" end
+
+    -- 1. stash the band we are about to destroy
+    fh:seek("set", 0)
+    saved_band = fh:read(bar_h * FB_STRIDE)
+    saved_rows = (saved_band and #saved_band == bar_h * FB_STRIDE) and bar_h or 0
+    if saved_rows == 0 then saved_band = nil end
+
+    -- 2. draw
     local row = ffi.new("uint8_t[?]", FB_STRIDE)
+    local rule_from = bar_h - math.max(2, math.floor(scale / 2))
     for y = 0, bar_h - 1 do
-        -- white bar, with a black rule along the bottom edge to delimit it
-        local rule = (y >= bar_h - math.max(2, math.floor(scale / 2)))
-        local v = rule and 0x00 or 0xFF
-        ffi.fill(row, FB_STRIDE, v)
+        local rule = (y >= rule_from)
+        ffi.fill(row, FB_STRIDE, rule and 0x00 or 0xFF)
         if not rule then
             local gy = y - y0
             if gy >= 0 and gy < ch_h then
@@ -267,14 +284,28 @@ local function draw_banner(text, scale)
                 end
             end
         end
-        local f = io.open("/dev/fb0", "r+b")
-        if not f then ffi.C.close(fd); return false, "reopen" end
-        f:seek("set", y * FB_STRIDE)
-        f:write(ffi.string(row, FB_STRIDE))
-        f:close()
+        fh:seek("set", y * FB_STRIDE)
+        fh:write(ffi.string(row, FB_STRIDE))
     end
-    ffi.C.fsync(fd)
-    ffi.C.close(fd)
+    fh:close()
+
+    local fd = ffi.C.open("/dev/fb0", 2)
+    if fd >= 0 then ffi.C.fsync(fd); ffi.C.close(fd) end
+    return true
+end
+
+-- Put back exactly what the banner covered.  Returns false when there is
+-- nothing stashed, so the caller can fall back to a full refresh.
+local function restore_banner_area()
+    if not saved_band or saved_rows == 0 then return false end
+    local fh = io.open("/dev/fb0", "r+b")
+    if not fh then return false end
+    fh:seek("set", 0)
+    fh:write(saved_band)
+    fh:close()
+    local fd = ffi.C.open("/dev/fb0", 2)
+    if fd >= 0 then ffi.C.fsync(fd); ffi.C.close(fd) end
+    saved_band, saved_rows = nil, 0
     return true
 end
 
@@ -289,7 +320,13 @@ local function quiesce_gadget()
     local udc = "/sys/kernel/config/usb_gadget/pinenote-acm/UDC"
     local cur = read_file(udc)
     if cur and cur ~= "" then
-        write_file(udc, "")
+        -- MUST be a newline, not "".  Lua's io.write with an empty string
+        -- issues no write syscall at all, so configfs never sees the
+        -- unbind and dwc3 goes on vetoing suspend -- which is exactly how
+        -- this daemon "suspended" 10 times with 0 successes on
+        -- 2026-08-03.  `echo "" >` works in shell only because echo emits
+        -- a newline.
+        write_file(udc, "\n")
         return cur
     end
     return nil
@@ -346,6 +383,9 @@ local function suspend_once()
         -- hand the panel back to the reader: allow the normal off-screen
         -- behaviour again and force one clean full refresh over the banner.
         set_no_off_screen(false)
+        -- put the covered pixels back BEFORE refreshing, or the refresh
+        -- just repaints the banner
+        restore_banner_area()
         os.execute("pinenote-ebc-refresh >/dev/null 2>&1")
     end
     log("resumed after %ds", slept)

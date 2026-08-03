@@ -1,3 +1,5 @@
+# RETRACTED IN PART — see the correction at the end
+
 # Auto-suspend soak — 2026-08-03, and why charging must inhibit it
 
 Ran the deployed daemon unattended for ~12 minutes at `idle=60
@@ -59,3 +61,61 @@ counters did not climb (all read 1, stale from boot), so whatever wakes it
 is not attributed there. The clean confirmation is to unplug and re-run
 the identical soak; that is a 15-minute test whenever the UART cable is
 back in the port.
+
+
+---
+
+# CORRECTION (2026-08-03, same night): the conclusion above was WRONG
+
+**The charger was never the cause.** Two of this document's claims are
+retracted:
+
+### 1. "8 clean cycles, reliability good" — false, they were 8 FAILURES
+
+`/sys/power/suspend_stats` settles it:
+
+```
+success = 0     fail = 10     last_failed_dev = fcc00000.usb
+```
+
+Zero successful suspends. Every "resumed after 5s" line was **dwc3 vetoing
+the suspend** after its ~5 s SETUP-phase timeout — not a sleep that got
+interrupted. The daemon never suspended at all. It was robust in the sense
+that it did not crash, and that is the only reliability claim the soak
+supports.
+
+### 2. "Charging breaks deep sleep" — false, it fails identically unplugged
+
+The unplugged soak run afterwards produced **9 of 9 at "resumed after 5s"**
+on battery, `charger=0`. The plugged/unplugged correlation in the table
+above was a coincidence of *when* the daemon was used versus when the
+hand-written shell scripts were.
+
+### The actual cause: a zero-byte write
+
+```lua
+write_file(udc, "")   -- Lua's io.write("") issues NO write syscall
+```
+
+The gadget quiesce never reached configfs, so the UDC stayed bound and
+dwc3 vetoed every attempt. `echo "" >` works in shell only because `echo`
+emits a newline — which is exactly why every hand-written shell test
+(45 s, 120 s, 2700 s dwells) suspended correctly while the daemon never
+did. Verified directly on device: a Lua `f:write("")` produces a **0-byte**
+file, `f:write("\n")` produces 1 byte.
+
+Fixed by writing `"\n"`. Verified on hardware: `suspend_stats/success`
+went **0 → 19** immediately.
+
+### What survives
+
+- The daemon does not crash across many cycles.
+- The charging inhibit is still worth keeping, but on the original
+  convenience rationale — **not** on the evidence claimed here.
+
+### Lesson
+
+`suspend_stats/{success,fail,last_failed_dev}` is the first thing to read
+when a suspend behaves oddly. It would have pointed straight at
+`fcc00000.usb` and saved this entire wrong analysis. A "short sleep" and a
+"failed suspend" look identical from wall-clock timing alone.

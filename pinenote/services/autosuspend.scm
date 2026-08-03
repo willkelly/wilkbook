@@ -98,11 +98,22 @@
       (stop #~(make-kill-destructor))
       (respawn? #t)))))
 
+;; The daemon degrades gracefully when the runtime config is absent, but
+;; the directory must exist for anyone to WRITE one -- on a fresh image
+;; /var/lib/pinenote does not exist, so the documented runtime tunables
+;; were unusable without a manual mkdir (found 2026-08-03).
+(define (pinenote-autosuspend-activation config)
+  #~(begin
+      (use-modules (guix build utils))
+      (mkdir-p "/var/lib/pinenote")))
+
 (define pinenote-autosuspend-service-type
   (service-type
    (name 'pinenote-autosuspend)
    (extensions
     (list (service-extension shepherd-root-service-type
-                             pinenote-autosuspend-shepherd-service)))
+                             pinenote-autosuspend-shepherd-service)
+          (service-extension activation-service-type
+                             pinenote-autosuspend-activation)))
    (default-value (pinenote-autosuspend-configuration))
    (description "Auto-suspend the PineNote to deep after user inactivity.")))
