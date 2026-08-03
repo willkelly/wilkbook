@@ -10,6 +10,7 @@
             pinenote-autosuspend-idle-seconds
             pinenote-autosuspend-backstop-seconds
             pinenote-autosuspend-overlay?
+            pinenote-autosuspend-suspend-while-charging?
             pinenote-autosuspend-config-file
             pinenote-autosuspend-luajit
             pinenote-autosuspend-script))
@@ -55,6 +56,11 @@
   (backstop-seconds pinenote-autosuspend-backstop-seconds (default 900))
   ;; Draw the sleep screen (current framebuffer + banner) before suspending.
   (overlay?         pinenote-autosuspend-overlay?         (default #t))
+  ;; Suspend even while plugged in.  Off by default: on a charger there is
+  ;; no power to save, and a device that darkens on your desk mid-use is
+  ;; just friction.  Runtime override: suspend_while_charging=1.
+  (suspend-while-charging? pinenote-autosuspend-suspend-while-charging?
+                           (default #f))
   (config-file      pinenote-autosuspend-config-file
                     (default "/var/lib/pinenote/autosuspend.conf"))
   ;; The bundle's own luajit -- same interpreter reader-session runs, and
@@ -65,7 +71,8 @@
                     (default (local-file "../tools/power/autosuspend.lua"))))
 
 (define (pinenote-autosuspend-shepherd-service config)
-  (let ((idle     (pinenote-autosuspend-idle-seconds config))
+  (let ((charging (pinenote-autosuspend-suspend-while-charging? config))
+        (idle     (pinenote-autosuspend-idle-seconds config))
         (backstop (pinenote-autosuspend-backstop-seconds config))
         (overlay  (pinenote-autosuspend-overlay? config))
         (conf     (pinenote-autosuspend-config-file config))
@@ -85,7 +92,8 @@
                 "--idle" #$(number->string idle)
                 "--backstop" #$(number->string backstop)
                 "--config" #$conf
-                #$@(if overlay '() '("--no-overlay")))
+                #$@(if overlay '() '("--no-overlay"))
+                #$@(if charging '("--suspend-while-charging") '()))
           #:log-file "/var/log/pinenote-autosuspend.log"))
       (stop #~(make-kill-destructor))
       (respawn? #t)))))

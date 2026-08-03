@@ -52,6 +52,11 @@ local opt = {
     dry = false,
     verbose = true,
     overlay = true,
+    -- Do not sleep while plugged in.  On a charger there is no power to
+    -- save, and a device that darkens on your desk while you are using it
+    -- is just friction.  Opt in with --suspend-while-charging, or
+    -- suspend_while_charging=1 at runtime.
+    charging_inhibits = true,
     config = "/var/lib/pinenote/autosuspend.conf",
 }
 do
@@ -64,6 +69,7 @@ do
         elseif a == "--quiet" then opt.verbose = false
         elseif a == "--no-overlay" then opt.overlay = false
         elseif a == "--banner-only" then opt.banner_only = true
+        elseif a == "--suspend-while-charging" then opt.charging_inhibits = false
         elseif a == "--config" then i = i + 1; opt.config = arg[i]
         end
         i = i + 1
@@ -99,9 +105,10 @@ end
 --     enabled=0       pause auto-suspend entirely
 -- Unknown or malformed keys are ignored rather than fatal: a typo in this
 -- file must not leave the device unable to sleep OR unable to wake.
-local runtime = { idle = nil, backstop = nil, enabled = true }
+local runtime = { idle = nil, backstop = nil, enabled = true, charging = nil }
 local function reload_config()
     runtime.idle, runtime.backstop, runtime.enabled = nil, nil, true
+    runtime.charging = nil
     local f = io.open(opt.config, "r")
     if not f then return end
     for line in f:lines() do
@@ -112,12 +119,33 @@ local function reload_config()
             runtime.backstop = math.floor(tonumber(v))
         elseif k == "enabled" then
             runtime.enabled = not (v == "0" or v == "false" or v == "no")
+        elseif k == "suspend_while_charging" then
+            runtime.charging = (v == "1" or v == "true" or v == "yes")
         end
     end
     f:close()
 end
 local function idle_secs() return runtime.idle or opt.idle end
 local function backstop_secs() return runtime.backstop or opt.backstop end
+
+-- Any mains/USB supply reporting online counts as "plugged in".  The
+-- candidate list is explicit because this luajit has no io.popen;
+-- rk817-charger is the real one on this hardware and the rest are cheap
+-- insurance if the supply set ever changes.
+local SUPPLIES = { "rk817-charger", "usb", "ac", "usb-c", "rk817-usb" }
+local function on_external_power()
+    for _, name in ipairs(SUPPLIES) do
+        if read_file("/sys/class/power_supply/" .. name .. "/online") == "1" then
+            return true, name
+        end
+    end
+    return false
+end
+local function may_suspend_charging()
+    if runtime.charging ~= nil then return runtime.charging end
+    return not opt.charging_inhibits
+end
+local charging_notice = false
 
 -- fd_set helpers: a bit array of longs, which is what select() wants.
 local LONG_BITS = 64
@@ -341,6 +369,18 @@ while true do
     if not runtime.enabled then
         -- paused at runtime: stay responsive, just never suspend
         last_activity = os.time()
+    end
+    local plugged, supply = on_external_power()
+    if plugged and not may_suspend_charging() then
+        if not charging_notice then
+            log("on external power (%s) -- holding off; set suspend_while_charging=1 to override",
+                tostring(supply))
+            charging_notice = true
+        end
+        last_activity = os.time()
+    elseif charging_notice and not plugged then
+        log("external power gone -- auto-suspend active again")
+        charging_notice = false
     end
     local remaining = idle_secs() - (os.time() - last_activity)
     if remaining <= 0 and runtime.enabled then
