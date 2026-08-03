@@ -2,6 +2,34 @@
 
 Last updated: 2026-08-03.
 
+**2026-08-03 auto-suspend actually works now.** Image
+`7bb55c2f940d89f716cf87de163dedb46a9cf693fd73a68e71a9eb6b0991a717`
+(475,027 x 4096) deployed to os2, readback verified. Carries the three
+fixes that turn the daemon from never-suspending into functional:
+
+1. **`write_file(udc, "\n")`** — Lua's `io.write("")` issues no write
+   syscall, so the gadget unbind never reached configfs and dwc3 vetoed
+   every attempt. This is why `suspend_stats` read `success=0 fail=10`
+   while every hand-written *shell* test slept correctly: `echo "" >`
+   emits a newline. Verified: success went 0 → 19.
+2. **Sleep-banner save/restore** — drawing it destroyed the pixels under
+   it and the post-resume refresh repainted the banner. Now the band is
+   stashed and written back before the refresh. Confirmed on glass.
+3. **`/var/lib/pinenote` created by service activation** — it did not
+   exist on a fresh image, so the documented runtime tunables were
+   unusable without a manual mkdir.
+
+*All three verified inside the built artifact before staging*, and the
+activation was confirmed in the system's activation fragments (the
+top-level `activate.scm` is only a loader — grep the fragments it
+references, not the loader).
+
+**Still no evidence about spurious wakes on battery.** Every soak so far
+measured a daemon that never suspended, so the 8.6-day standby figure is
+still an extrapolation from hand-run dwells. The unplugged soak is now
+worth running and is the next thing to do; read
+`suspend_stats/{success,fail,last_failed_dev}` first, not durations.
+
 **2026-08-03 charging inhibit deployed to os2.** Image
 `fe48dfd72220d55a010447b8f7f4896a8fbc0edca8dbc7e6850de26ed36e3985`
 (475,027 x 4096). Full protocol from os1, readback verified. Auto-suspend
