@@ -12,6 +12,7 @@
   #:use-module (pinenote packages orientation)
   #:use-module (pinenote services orientation)
   #:use-module (pinenote services reader-session)
+  #:use-module (pinenote services autosuspend)
   #:use-module (pinenote services usb-gadget)
   #:use-module (pinenote services wifi)
   #:use-module (pinenote systems base)
@@ -33,6 +34,13 @@ reader ALL=(ALL) NOPASSWD: ALL
   (append %pinenote-bringup-services
            (list (service pinenote-orientation-bridge-service-type)
                  (service pinenote-reader-session-service-type)
+                 ;; Sleep to deep after inactivity: ~7x on measured power
+                 ;; (172 mA awake vs 19.3 mA deep, 2026-08-02).  Wake is by
+                 ;; power button, hardware-proven, with an RTC backstop
+                 ;; armed every cycle so a wake regression cannot strand
+                 ;; the device.  Runtime-tunable via
+                 ;; /var/lib/pinenote/autosuspend.conf.
+                 (service pinenote-autosuspend-service-type)
                 ;; Wi-Fi (doc/networking.md): associate from an out-of-band
                 ;; credential file on the persistent data partition (no-op
                 ;; when absent), and lease with dhcpcd.  Credentials are

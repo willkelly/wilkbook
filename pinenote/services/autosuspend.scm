@@ -3,6 +3,7 @@
   #:use-module (gnu services shepherd)
   #:use-module (guix gexp)
   #:use-module (guix records)
+  #:use-module (pinenote packages koreader)
   #:export (pinenote-autosuspend-service-type
             pinenote-autosuspend-configuration
             pinenote-autosuspend-configuration?
@@ -56,8 +57,12 @@
   (overlay?         pinenote-autosuspend-overlay?         (default #t))
   (config-file      pinenote-autosuspend-config-file
                     (default "/var/lib/pinenote/autosuspend.conf"))
-  (luajit           pinenote-autosuspend-luajit           (default #f))
-  (script           pinenote-autosuspend-script           (default #f)))
+  ;; The bundle's own luajit -- same interpreter reader-session runs, and
+  ;; the only one on the image with the ffi the daemon needs.
+  (luajit           pinenote-autosuspend-luajit
+                    (default (file-append koreader-bin "/lib/koreader/luajit")))
+  (script           pinenote-autosuspend-script
+                    (default (local-file "../tools/power/autosuspend.lua"))))
 
 (define (pinenote-autosuspend-shepherd-service config)
   (let ((idle     (pinenote-autosuspend-idle-seconds config))
