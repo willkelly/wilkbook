@@ -8,11 +8,11 @@ Across a suspend that actually removes power the chip returns at its reset
 defaults.  The configured ODR, full-scale, BDU/DAS and axis enables are
 gone, and the data-ready interrupt is left in a state the driver never
 programmed.  With a level-triggered DRDY line the threaded handler cannot
-clear the source, the interrupt re-asserts forever, and the kernel's
-spurious-interrupt protection disables it permanently:
+claim the interrupt, it re-asserts forever, and the kernel's spurious-
+interrupt protection disables it permanently:
 
-  irq 71: nobody cared (try booting with the "irqpoll" option)
-  CPU: 0 UID: 0 PID: 186 Comm: irq/71-sc7a20-t
+  irq 73: nobody cared (try booting with the "irqpoll" option)
+  CPU: 0 UID: 0 PID: 200 Comm: irq/73-sc7a20-t
 
 after which the sensor is dead until reboot.
 
@@ -21,23 +21,42 @@ rockchip GPIO controller) after its first platform "deep" suspend, and
 confirmed to reproduce on both a 6.12 BSP kernel and 7.0.11 -- i.e. it is
 inherent to the driver, not to one image.
 
-Fix, in two parts -- the second is load-bearing and the first alone is
-not sufficient:
+The fix has three parts:
 
 1. Split the register-programming tail of st_sensors_init_sensor() into
    st_sensors_reinit_hw(), which touches no mutex initialisation and no
-   device-tree parsing and is therefore safe to repeat, and add PM ops
-   that reprogram from cached state on resume.
+   device-tree parsing and is therefore safe to repeat.
 
-2. Mask the interrupt across the whole transition.  resume_device_irqs()
-   runs at the noirq stage, BEFORE driver .resume callbacks, so without a
-   disable_irq()/enable_irq() bracket the handler runs while the chip is
-   still at reset defaults and the storm happens before .resume can
-   reconfigure anything.  Part 1 was deployed alone on a PineNote and the
-   storm still fired 0.7 s after every resume.
+2. On resume, reprogram from cached state and re-arm DRDY -- latching
+   ->hw_irq_trigger BEFORE calling st_sensors_reinit_hw().  This ordering
+   is not cosmetic.  reinit_hw() inherits init_sensor()'s "disable DRDY,
+   this might still be enabled after reboot" step, and
+   st_sensors_set_dataready_irq() assigns ->hw_irq_trigger as a side
+   effect, so a later `if (sdata->hw_irq_trigger)` always reads false.
+   The re-arm is then skipped: DRDY stays disabled in hardware, the flag
+   stays false, and st_sensors_irq_thread() takes its "spurious IRQ"
+   branch and returns IRQ_NONE on every interrupt.  On a level-triggered
+   line that reproduces the exact storm the patch is meant to prevent --
+   measured on a PineNote as ~100,000 interrupts in the second after
+   resume before the kernel disabled the line.
+
+3. Mask the interrupt across the transition with disable_irq()/
+   enable_irq(), so the handler cannot run against a chip that is still
+   at its reset defaults.  A ->pm_irq_disabled flag keeps the pairing
+   exact so the depth counter cannot unbalance if suspend returns early.
+
+A note on (3): an earlier revision of this patch carried only parts 1 and
+3 and still stormed, which was attributed to resume_device_irqs() running
+at the noirq stage, before driver .resume callbacks.  That revision
+contained the (2) ordering bug, which is sufficient on its own to explain
+the failure, so the noirq argument should be treated as unproven
+motivation for (3) rather than as a measured result.  Part 3 is retained
+because masking a level-triggered line across a power-removing transition
+is correct regardless, but the defect actually measured was (2).
 
 Signed-off-by: (wilkbook -- see doc/upstream-register.md item 8)
 
+diff -u -r a/drivers/iio/accel/st_accel_i2c.c b/drivers/iio/accel/st_accel_i2c.c
 --- a/drivers/iio/accel/st_accel_i2c.c
 +++ b/drivers/iio/accel/st_accel_i2c.c
 @@ -207,6 +207,7 @@
@@ -48,6 +67,7 @@ Signed-off-by: (wilkbook -- see doc/upstream-register.md item 8)
  	},
  	.probe = st_accel_i2c_probe,
  	.id_table = st_accel_id_table,
+diff -u -r a/drivers/iio/accel/st_accel_spi.c b/drivers/iio/accel/st_accel_spi.c
 --- a/drivers/iio/accel/st_accel_spi.c
 +++ b/drivers/iio/accel/st_accel_spi.c
 @@ -175,6 +175,7 @@
@@ -58,6 +78,7 @@ Signed-off-by: (wilkbook -- see doc/upstream-register.md item 8)
  	},
  	.probe = st_accel_spi_probe,
  	.id_table = st_accel_id_table,
+diff -u -r a/drivers/iio/common/st_sensors/st_sensors_core.c b/drivers/iio/common/st_sensors/st_sensors_core.c
 --- a/drivers/iio/common/st_sensors/st_sensors_core.c
 +++ b/drivers/iio/common/st_sensors/st_sensors_core.c
 @@ -354,6 +354,24 @@
@@ -85,7 +106,7 @@ Signed-off-by: (wilkbook -- see doc/upstream-register.md item 8)
  	err = st_sensors_set_enable(indio_dev, false);
  	if (err < 0)
  		return err;
-@@ -417,7 +435,106 @@
+@@ -417,7 +435,116 @@
  
  	return err;
  }
@@ -149,19 +170,29 @@ Signed-off-by: (wilkbook -- see doc/upstream-register.md item 8)
 +{
 +	struct iio_dev *indio_dev = dev_get_drvdata(dev);
 +	struct st_sensor_data *sdata = iio_priv(indio_dev);
++	bool want_drdy;
 +	int err;
++
++	/*
++	 * Latch this BEFORE st_sensors_reinit_hw().  That helper inherits
++	 * st_sensors_init_sensor()'s "disable DRDY, this might still be
++	 * enabled after reboot" step, and st_sensors_set_dataready_irq()
++	 * assigns ->hw_irq_trigger as a side effect.  Testing the flag
++	 * afterwards therefore always reads false, the re-arm below never
++	 * runs, and enable_irq() unmasks a line the handler can no longer
++	 * claim: st_sensors_irq_thread() takes its "spurious IRQ" branch
++	 * and returns IRQ_NONE every time.  On a level-triggered DRDY that
++	 * is exactly the endless storm this patch exists to prevent.
++	 */
++	want_drdy = sdata->hw_irq_trigger;
 +
 +	/* The chip may have lost power: reprogram from cached state. */
 +	err = st_sensors_reinit_hw(indio_dev);
 +	if (err < 0)
 +		return err;
 +
-+	/*
-+	 * Re-arm the data-ready interrupt only when a trigger owns it.
-+	 * st_sensors_reinit_hw() has just masked it, which is what makes
-+	 * the line quiet again after a power loss.
-+	 */
-+	if (sdata->hw_irq_trigger) {
++	/* Re-arm the data-ready interrupt only when a trigger owns it. */
++	if (want_drdy) {
 +		err = st_sensors_set_dataready_irq(indio_dev, true);
 +		if (err < 0)
 +			return err;
@@ -193,6 +224,7 @@ Signed-off-by: (wilkbook -- see doc/upstream-register.md item 8)
  
  int st_sensors_set_dataready_irq(struct iio_dev *indio_dev, bool enable)
  {
+diff -u -r a/include/linux/iio/common/st_sensors.h b/include/linux/iio/common/st_sensors.h
 --- a/include/linux/iio/common/st_sensors.h
 +++ b/include/linux/iio/common/st_sensors.h
 @@ -246,6 +246,11 @@
