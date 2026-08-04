@@ -282,9 +282,17 @@ function PineNote:init()
     -- guaranteed by the DRIVER, not here -- the global-refresh ioctl
     -- drains the deferred-io flush and the damage worker into
     -- ctx->final before arming the wash (see the forward-port patch's
-    -- ioctl_trigger_global_refresh).  The publish-before-ioctl order
-    -- below is kept because it starts the flush earlier and covers
-    -- kernels without the drain.
+    -- ioctl_trigger_global_refresh).
+    --
+    -- So publish() belongs ONLY on the partial paths.  It was originally
+    -- also called before every global refresh, on the reasoning that it
+    -- starts the flush earlier and covers kernels without the drain.  That
+    -- was wrong on glass (2026-08-04): the deferred-io flush makes the
+    -- driver partial-refresh the damage, which is a full visible paint, and
+    -- the wash then paints the same content again -- "render, flash, render
+    -- again" on rotation and on opening the menu.  The drain is part of the
+    -- forward-port patch, which this image always carries, so relying on it
+    -- costs nothing and saves an entire pass.
     local function publish()
         if self.screen and self.screen.fd and self.screen.fd ~= -1 then
             C.fsync(self.screen.fd)
@@ -318,7 +326,17 @@ function PineNote:init()
             local rect_area = (tonumber(w) or 0) * (tonumber(h) or 0)
             if rect_area >= flash_area_fraction * screen_area then
                 trace(intent, "global", x, y, w, h, d)
-                publish()
+                -- Deliberately NO publish() here.  fsync runs the
+                -- deferred-io flush, which makes the driver partial-refresh
+                -- the damage -- i.e. it PAINTS the new content -- and the
+                -- wash that follows then paints it a second time.  On glass
+                -- that is the "render, flash, render again" double update
+                -- reported for rotation and for opening the menu
+                -- (2026-08-04).  The ioctl already drains deferred-io all
+                -- the way into ctx->final itself (flush_delayed_work +
+                -- flush_work in ioctl_trigger_global_refresh), so the wash
+                -- provably paints what userspace had written when it
+                -- called.  One intent, one visible pass.
                 global_refresh()
             else
                 trace(intent, "partial", x, y, w, h, d)
@@ -346,7 +364,8 @@ function PineNote:init()
     self.screen.refreshFlashPartialImp = flash_policy("flashpartial")
     self.screen.refreshFullImp = function(_, x, y, w, h, d)
         trace("full", "global", x, y, w, h, d)
-        publish()
+        -- Same reason as flash_policy's global branch: the ioctl publishes
+        -- for us, and an fsync first costs a whole extra visible pass.
         global_refresh()
     end
 

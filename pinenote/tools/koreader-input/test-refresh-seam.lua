@@ -71,34 +71,69 @@ end
 -- 4. Publish-on-call, per Imp -- an aggregate count would let one Imp
 -- drop publish() while another gains a call.  We own device.lua's
 -- formatting, so hold each assignment to its exact shape:
---   * function-valued Imps are trace-then-publish, nothing between:
+--   * PARTIAL Imps are trace-then-publish, nothing between:
 --       self.screen.refreshXImp = function(...)
 --           trace(...)
 --           publish()
---   * flash_policy-valued Imps route through flash_policy, whose two
---     branches must each publish, with the global branch publishing
---     immediately before the wash.
+--   * flash_policy-valued Imps route through flash_policy.
 for _, name in ipairs(ours) do
     local fn_shape = "self%.screen%." .. name ..
         "%s*=%s*function[^\n]*\n%s*trace%([^\n]*\n%s*publish%(%)"
     local policy_shape = "self%.screen%." .. name ..
         "%s*=%s*flash_policy%("
-    check(src:find(fn_shape) ~= nil or src:find(policy_shape) ~= nil,
-        string.format("%s publishes on call (or routes via flash_policy)",
-            name))
+    -- refreshFullImp is a global path and is asserted separately below;
+    -- it must NOT publish.
+    if name ~= "refreshFullImp" then
+        check(src:find(fn_shape) ~= nil or src:find(policy_shape) ~= nil,
+            string.format("%s publishes on call (or routes via flash_policy)",
+                name))
+    end
 end
--- refreshFullImp additionally washes: publish must sit between its
--- trace and the global_refresh call.
-check(src:find("self%.screen%.refreshFullImp%s*=%s*function[^\n]*\n" ..
-        "%s*trace%([^\n]*\n%s*publish%(%)\n%s*global_refresh%(%)") ~= nil,
-    "refreshFullImp is trace/publish/global_refresh in that order")
 
--- 5. flash_policy's own branches: the global branch is
--- trace/publish/global_refresh adjacent, the partial branch
--- trace/publish adjacent.
-check(src:find('trace%(intent, "global"[^\n]*\n%s*publish%(%)\n' ..
-        "%s*global_refresh%(%)") ~= nil,
-    "flash_policy global branch is trace/publish/global_refresh")
+-- 5. The GLOBAL paths must NOT publish first.
+--
+-- This inverts what this test asserted before 2026-08-04.  An fsync ahead
+-- of the wash runs the deferred-io flush, which makes the driver
+-- partial-refresh the damage -- a full visible paint -- and then the wash
+-- paints the same content a second time.  On glass that was the "render,
+-- flash, render again" double update on rotation and on opening the menu.
+-- The ioctl drains deferred-io into ctx->final itself
+-- (flush_delayed_work + flush_work in ioctl_trigger_global_refresh), so
+-- the wash still provably paints what userspace had written.
+check(src:find("self%.screen%.refreshFullImp%s*=%s*function[^\n]*\n" ..
+        "%s*trace%([^\n]*\n[^\n]*\n[^\n]*\n%s*global_refresh%(%)") ~= nil
+      or src:find("self%.screen%.refreshFullImp%s*=%s*function[^\n]*\n" ..
+        "%s*trace%([^\n]*\n%s*global_refresh%(%)") ~= nil,
+    "refreshFullImp reaches global_refresh without an intervening publish()")
+
+-- Structural guard: no publish() call anywhere between a global trace and
+-- its global_refresh().  Comments may sit between them; a call may not.
+local function strip_comments(seg)
+    -- The explanation of WHY there is no publish() here naturally contains
+    -- the string "publish()", so a raw find would match the comment that
+    -- documents the fix.  Only executable lines count.
+    local out = {}
+    for line in (seg .. "\n"):gmatch("([^\n]*)\n") do
+        if not line:match("^%s*%-%-") then out[#out + 1] = line end
+    end
+    return table.concat(out, "\n")
+end
+
+local function no_publish_between(pattern, label)
+    local seg = src:match(pattern)
+    check(seg ~= nil, label .. ": segment found")
+    if seg then
+        check(strip_comments(seg):find("publish%(%)") == nil,
+            label .. ": no publish() call before the wash")
+    end
+end
+no_publish_between('trace%(intent, "global"(.-)global_refresh%(%)',
+    "flash_policy global branch")
+no_publish_between('trace%("full", "global"(.-)global_refresh%(%)',
+    "refreshFullImp")
+
+-- The partial branch still publishes -- that is the whole point of
+-- publish-on-call for pen strokes and page turns.
 check(src:find('trace%(intent, "partial"[^\n]*\n%s*publish%(%)') ~= nil,
     "flash_policy partial branch is trace/publish")
 
