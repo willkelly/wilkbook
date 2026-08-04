@@ -225,5 +225,11 @@ tell a dead cable from a quiet one). Also standing: **os1 is not an oracle for
 the fbdev damage path** — it drives its display through KMS, so it never makes an
 fbdev write; and the ebc-logic harness compiles the `#else` stub of every
 `#ifdef` its shim does not define, so a green host suite proves nothing about
-code inside a config guard.
+code inside a config guard — **except `CONFIG_DRM_FBDEV_EMULATION`, which
+`ebc-fbdev-order-test` now defines and executes (2026-08-04)**, covering the
+deferred-io drain, the resume barrier, `defio_delay_ms` and the fbdev probe
+wrapper. That test also earned a rule: a single-stack harness cannot test an
+ordering that depends on preemption (its first version passed against both
+orderings), and a deterministic baton models ordering, not the absence of a
+race.
 See `ROADMAP.md`, `doc/status.md`, and `doc/power-management.md` for specifics.

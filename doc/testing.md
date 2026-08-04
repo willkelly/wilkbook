@@ -72,15 +72,35 @@ Each tool's `README.md` documents what it does and does **not** cover.
 
 A second caveat, learned on 2026-08-01: **the host harness compiles the
 driver under its own config, so code behind an `#ifdef` the shim does not
-define is invisible to it.** `rockchip_ebc.c`'s
-`CONFIG_DRM_FBDEV_EMULATION` block — `defio_delay_ms` and the fbdev
-resume barrier — compiles as the `#else` stub in every ebc-logic binary.
-The suite can go fully green with that entire branch deleted. When you
-touch code inside a config guard, the cross-build (`make kernel`) is the
-compile gate and a structural gate over the patch is the behavioral one;
-`validate-ebc-fbdev-resume-hunk.sh` and its mutation suite are the
-worked example. Before trusting a harness result, check that the harness
-actually compiles the lines you changed.
+define is invisible to it.** The suite can go fully green with such a
+branch deleted outright. When you touch code inside a config guard, the
+cross-build (`make kernel`) is the compile gate and a structural gate over
+the patch is the behavioral one; `validate-ebc-fbdev-resume-hunk.sh` and
+its mutation suite are the worked example. Before trusting a harness
+result, check that the harness actually compiles the lines you changed.
+
+**`CONFIG_DRM_FBDEV_EMULATION` is now the exception (2026-08-04.)**
+`ebc-fbdev-order-test` defines it and exercises all four guarded blocks —
+`defio_delay_ms`, the fbdev probe wrapper, the resume barrier, the
+deferred-io drain in `ioctl_trigger_global_refresh`, and the static
+cleared on remove. Deleting that branch now turns the suite red. The
+general warning above still stands for every *other* config guard.
+
+Two things that test earned, worth stealing:
+
+- **A single-stack harness cannot test an ordering that depends on
+  preemption.** The first version of the drain test passed against *both*
+  orderings — with one stack, `wake_up_process()` cannot let the refresh
+  thread run *inside* the ioctl, which is exactly where the two orderings
+  differ, so the flag was always set before the thread got to run. It
+  needs the thread on a second pthread with a strict baton handoff (one
+  runnable task at a time, control moving only at `wake_up_process` and
+  `schedule`). Verify a new concurrency test by making it **fail** on the
+  broken ordering before believing it passes on the fixed one.
+- **A deterministic baton models preemption, not a race.** The real system
+  runs a SCHED_FIFO refresh thread against a SCHED_OTHER kworker. The
+  harness pins *ordering*; it cannot show the absence of a race window.
+  Never read a green run as race-freedom.
 
 A third limit, found while trying to reproduce the post-resume dead-write
 window offline (2026-08-02): **the rung-7a harness drives
