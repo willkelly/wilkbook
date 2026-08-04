@@ -26,6 +26,7 @@
 #define EBC_LOGIC_KERNEL_SHIM_H
 
 #include <errno.h>
+#include <limits.h>
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -95,6 +96,7 @@ static inline u16 le16_to_cpu(__le16 v) { return v; }
 /* --- harness state (HARNESS; see header comment) ------------------------ */
 
 struct device;
+struct drm_fb_helper;
 
 typedef enum { IRQ_NONE = 0, IRQ_HANDLED = 1 } irqreturn_t;
 typedef irqreturn_t (*irq_handler_t)(int irq, void *dev_id);
@@ -153,6 +155,11 @@ struct ebc_shim_state {
 	void (*kthread_stop_hook)(void);
 	unsigned long schedule_calls;
 	void (*schedule_hook)(void);
+	/* Called from wake_up_process() after the counters move.  A test that
+	 * needs to model the woken SCHED_FIFO thread actually *running* (i.e.
+	 * preempting its waker) installs this; with it NULL, wake_up_process
+	 * stays the pure counter every other test relies on. */
+	void (*wake_up_hook)(void);
 
 	/* pm_runtime: a refcount plus a suspended flag; the driver's real
 	 * runtime callbacks are installed by the test (the shim cannot see
@@ -226,6 +233,37 @@ struct ebc_shim_state {
 	unsigned long module_gets;
 	unsigned long module_puts;
 	bool module_get_fail;
+
+	/* workqueue (see the SYNCHRONOUS caveat at the work model below) */
+	unsigned long schedule_work_calls;
+	unsigned long flush_work_calls;
+	unsigned long flush_delayed_work_calls;
+	unsigned long work_runs;
+
+	/* module parameters written through the kernel_param_ops path */
+	unsigned long param_lock_calls;
+	unsigned long param_unlock_calls;
+	bool param_locked;
+
+	/* fbdev emulation (CONFIG_DRM_FBDEV_EMULATION).  fb_helper is set by
+	 * the fake drm_fbdev_shmem probe, which is how the shim's
+	 * drm_mode_config_helper_{suspend,resume} know there is a client to
+	 * (un)suspend.  All zero in a binary that compiles the #else stub. */
+	struct drm_fb_helper *fb_helper;
+	int fbdev_probe_error;
+	unsigned long fbdev_probe_calls;
+	unsigned long fb_set_suspend_calls;
+	bool fb_last_suspend;
+	/* Model drm_fb_helper_set_suspend_unlocked()'s console_trylock()
+	 * failure this many times: the un-suspend is deferred to
+	 * helper->resume_work and info->state stays FBINFO_STATE_SUSPENDED. */
+	unsigned int fb_defer_resume;
+	unsigned long fb_deferred_io_calls;
+	unsigned long fb_damage_work_calls;
+	unsigned long fb_damage_dropped;
+	unsigned long fb_dirty_calls;
+	unsigned long drm_client_suspend_calls;
+	unsigned long drm_client_resume_calls;
 };
 
 static struct ebc_shim_state ebc_shim = { .dma_next = EBC_SHIM_DMA_BASE };
@@ -542,8 +580,76 @@ static inline void wake_up_process(struct task_struct *t)
 	(void)t;
 	ebc_shim.wake_up_process_calls++;
 	ebc_shim.thread_woken = true;
+	if (ebc_shim.wake_up_hook)
+		ebc_shim.wake_up_hook();
 }
 static inline void sched_set_fifo(struct task_struct *t) { (void)t; }
+
+/* --- workqueue (HARNESS: SYNCHRONOUS -- ORDERING ONLY) ------------------
+ *
+ * schedule_work() marks an item pending; it does NOT run it.  On the
+ * device the fbdev damage worker is a SCHED_OTHER kworker, and the whole
+ * point of rockchip_ebc's publish-on-call ordering is that somebody has
+ * to *wait* for that worker.  flush_work() / flush_delayed_work() run a
+ * pending item inline in the caller's context, which is what "wait for
+ * it" reduces to in a harness that has no independent kworker.
+ *
+ * READ THIS BEFORE BELIEVING A GREEN RUN: running the worker inline
+ * proves ORDERING -- which side of a flush a given store lands on -- and
+ * says NOTHING about the absence of a race.  The real system runs a
+ * SCHED_FIFO refresh thread against a SCHED_OTHER kworker on a
+ * preemptible RT kernel; the interleavings this model cannot produce are
+ * exactly what the 2026-08-01 publish-on-call work is about.  See the
+ * header of ebc-fbdev-order-test.c.
+ */
+struct work_struct {
+	void (*func)(struct work_struct *work);
+	bool pending;
+};
+
+struct delayed_work {
+	struct work_struct work;
+	unsigned long delay;
+};
+
+#define INIT_WORK(w, f) \
+	do { (w)->func = (f); (w)->pending = false; } while (0)
+#define INIT_DELAYED_WORK(dw, f) INIT_WORK(&(dw)->work, (f))
+
+static inline bool schedule_work(struct work_struct *work)
+{
+	ebc_shim.schedule_work_calls++;
+	if (work->pending)
+		return false;
+	work->pending = true;
+	return true;
+}
+static inline bool ebc_shim_run_work(struct work_struct *work)
+{
+	if (!work->pending)
+		return false;
+	work->pending = false;
+	ebc_shim.work_runs++;
+	if (work->func)
+		work->func(work);
+	return true;
+}
+static inline bool flush_work(struct work_struct *work)
+{
+	ebc_shim.flush_work_calls++;
+	return ebc_shim_run_work(work);
+}
+static inline bool flush_delayed_work(struct delayed_work *dwork)
+{
+	ebc_shim.flush_delayed_work_calls++;
+	return ebc_shim_run_work(&dwork->work);
+}
+static inline bool schedule_delayed_work(struct delayed_work *dwork,
+					 unsigned long delay)
+{
+	dwork->delay = delay;
+	return schedule_work(&dwork->work);
+}
 
 /* --- device / driver model (INERT) -------------------------------------- */
 
@@ -647,6 +753,71 @@ static inline void module_put(void *module)
 #define MODULE_FIRMWARE(s) extern int ebc_shim_dummy_decl
 #define MODULE_PARM_DESC(a, b) extern int ebc_shim_dummy_decl
 #define module_param(name, type, perm) extern int ebc_shim_dummy_decl
+
+/* module_param_cb: a parameter with a setter.  Unlike module_param this is
+ * NOT inert -- the setter is driver code (defio_delay_ms_set validates its
+ * range and retargets the live fb helper), so the shim keeps the
+ * kernel_param and the ops under predictable names and a test drives them
+ * exactly as param_attr_store() would:
+ *
+ *   kernel_param_lock(THIS_MODULE);
+ *   ebc_shim_kp_ops_defio_delay_ms->set("250", &ebc_shim_kp_defio_delay_ms);
+ *   kernel_param_unlock(THIS_MODULE);
+ */
+struct kernel_param {
+	void *arg;
+};
+
+struct kernel_param_ops {
+	int (*set)(const char *val, const struct kernel_param *kp);
+	int (*get)(char *buffer, const struct kernel_param *kp);
+};
+
+static inline int param_get_int(char *buffer, const struct kernel_param *kp)
+{
+	return sprintf(buffer, "%d\n", *(int *)kp->arg);
+}
+
+#define module_param_cb(name, ops_, arg_, perm) \
+	static struct kernel_param ebc_shim_kp_##name __maybe_unused = { \
+		.arg = (arg_) \
+	}; \
+	static const struct kernel_param_ops *ebc_shim_kp_ops_##name \
+		__maybe_unused = (ops_)
+
+static inline void kernel_param_lock(void *mod)
+{
+	(void)mod;
+	ebc_shim.param_lock_calls++;
+	ebc_shim.param_locked = true;
+}
+static inline void kernel_param_unlock(void *mod)
+{
+	(void)mod;
+	ebc_shim.param_unlock_calls++;
+	ebc_shim.param_locked = false;
+}
+
+/* kstrtoint: kernel semantics -- a trailing newline is accepted, any other
+ * trailing garbage is -EINVAL, and out-of-range is -ERANGE (not a clamp). */
+static inline int kstrtoint(const char *s, unsigned int base, int *res)
+{
+	char *end;
+	long v;
+
+	errno = 0;
+	v = strtol(s, &end, (int)base);
+	if (end == s)
+		return -EINVAL;
+	if (*end == '\n')
+		end++;
+	if (*end)
+		return -EINVAL;
+	if (errno == ERANGE || v < INT_MIN || v > INT_MAX)
+		return -ERANGE;
+	*res = (int)v;
+	return 0;
+}
 #define MODULE_DEVICE_TABLE(type, name) \
 	static const void *ebc_shim_devtable_##name __maybe_unused = (name)
 #define EXPORT_SYMBOL(sym)
@@ -1459,6 +1630,175 @@ __drm_gem_destroy_shadow_plane_state(struct drm_shadow_plane_state *shadow)
 	(void)shadow;
 }
 
+/* --- fbdev emulation (HARNESS) -----------------------------------------
+ *
+ * Enough of fb_info / drm_fb_helper for rockchip_ebc.c's four
+ * CONFIG_DRM_FBDEV_EMULATION blocks to compile AND execute: the
+ * defio_delay_ms parameter with its live-helper retarget, the fbdev_probe
+ * wrapper and its .fbdev_probe slot, the publish-on-call drain in
+ * ioctl_trigger_global_refresh, the resume barrier, and remove()'s
+ * clearing of the static under the param lock.
+ *
+ * A test selects those blocks by defining CONFIG_DRM_FBDEV_EMULATION
+ * before including rockchip_ebc.c (ebc-fbdev-order-test.c is the one that
+ * does).  Every other binary still compiles the #else stub, so all the
+ * counters here stay at zero there and nothing else changes.
+ *
+ * The chain modelled is the real one, minus the kworker:
+ *
+ *   mmap write -> fb core queues info->deferred_work (delayed)
+ *     -> drm_fb_helper_deferred_io()  -> schedule_work(&helper->damage_work)
+ *       -> drm_fb_helper_damage_work() -> drm_fb_helper_fb_dirty()
+ *         -> the driver's atomic commit (the test supplies ->fb_dirty)
+ *
+ * drm_fb_helper_damage_work() returning early while info->state is
+ * FBINFO_STATE_SUSPENDED -- the silent damage drop the resume barrier
+ * exists to prevent -- is modelled faithfully and counted.
+ */
+
+#define FBINFO_STATE_RUNNING 0
+#define FBINFO_STATE_SUSPENDED 1
+
+struct fb_deferred_io {
+	unsigned long delay;
+};
+
+struct fb_info {
+	struct delayed_work deferred_work;
+	int state;
+	void *par;		/* the drm_fb_helper, as in the real fb core */
+};
+
+struct drm_fb_helper {
+	struct drm_device *dev;
+	struct fb_info *info;
+	struct fb_deferred_io fbdefio;
+	struct work_struct damage_work;
+	struct work_struct resume_work;
+	bool suspended;
+	/* shim-only: stands in for helper->funcs->fb_dirty, i.e. the atomic
+	 * commit at the end of the damage worker. */
+	void (*fb_dirty)(struct drm_fb_helper *helper);
+};
+
+struct drm_fb_helper_surface_size {
+	u32 surface_width;
+	u32 surface_height;
+	u32 surface_bpp;
+	u32 surface_depth;
+	u32 fb_width;
+	u32 fb_height;
+};
+
+/* One fbdev per TU, the way one EBC device has one fbdev. */
+static struct fb_info ebc_shim_fb_info;
+
+static inline void drm_fb_helper_fb_dirty(struct drm_fb_helper *helper)
+{
+	ebc_shim.fb_dirty_calls++;
+	if (helper->fb_dirty)
+		helper->fb_dirty(helper);
+}
+
+static inline void drm_fb_helper_damage_work(struct work_struct *work)
+{
+	struct drm_fb_helper *helper =
+		container_of(work, struct drm_fb_helper, damage_work);
+
+	ebc_shim.fb_damage_work_calls++;
+	if (helper->info && helper->info->state != FBINFO_STATE_RUNNING) {
+		/* the silent drop: the write and its fsync both succeeded */
+		ebc_shim.fb_damage_dropped++;
+		return;
+	}
+	drm_fb_helper_fb_dirty(helper);
+}
+
+static inline void drm_fb_helper_deferred_io(struct work_struct *work)
+{
+	struct delayed_work *dwork =
+		container_of(work, struct delayed_work, work);
+	struct fb_info *info = container_of(dwork, struct fb_info, deferred_work);
+	struct drm_fb_helper *helper = info->par;
+
+	ebc_shim.fb_deferred_io_calls++;
+	schedule_work(&helper->damage_work);
+}
+
+static inline int
+drm_fbdev_shmem_driver_fbdev_probe(struct drm_fb_helper *fb_helper,
+				   struct drm_fb_helper_surface_size *sizes)
+{
+	(void)sizes;
+	ebc_shim.fbdev_probe_calls++;
+	if (ebc_shim.fbdev_probe_error)
+		return ebc_shim.fbdev_probe_error;
+	fb_helper->info = &ebc_shim_fb_info;
+	fb_helper->info->par = fb_helper;
+	fb_helper->info->state = FBINFO_STATE_RUNNING;
+	INIT_DELAYED_WORK(&fb_helper->info->deferred_work,
+			  drm_fb_helper_deferred_io);
+	INIT_WORK(&fb_helper->damage_work, drm_fb_helper_damage_work);
+	/* vanilla drm_fbdev_shmem: fb_helper->fbdefio.delay = HZ / 20 */
+	fb_helper->fbdefio.delay = msecs_to_jiffies(50);
+	ebc_shim.fb_helper = fb_helper;
+	return 0;
+}
+
+/*
+ * drm_fb_helper_set_suspend_unlocked(): opens by flushing a previously
+ * deferred un-suspend -- the property that makes calling it a second time
+ * the missing resume barrier -- and otherwise moves info->state.  With
+ * ebc_shim.fb_defer_resume set, an un-suspend takes the console_trylock()
+ * failure path instead: it is punted to helper->resume_work and
+ * info->state stays FBINFO_STATE_SUSPENDED, exactly the state in which
+ * every subsequent damage submission is dropped without a word.
+ */
+static inline void drm_fb_helper_set_suspend_unlocked(struct drm_fb_helper *helper,
+						      bool suspend)
+{
+	ebc_shim.fb_set_suspend_calls++;
+	ebc_shim.fb_last_suspend = suspend;
+	flush_work(&helper->resume_work);
+	if (!suspend && ebc_shim.fb_defer_resume) {
+		ebc_shim.fb_defer_resume--;
+		schedule_work(&helper->resume_work);
+		return;
+	}
+	helper->suspended = suspend;
+	if (helper->info)
+		helper->info->state = suspend ? FBINFO_STATE_SUSPENDED
+					      : FBINFO_STATE_RUNNING;
+}
+
+static inline int drm_client_dev_suspend(struct drm_device *dev,
+					 bool holds_console_lock)
+{
+	(void)dev; (void)holds_console_lock;
+	ebc_shim.drm_client_suspend_calls++;
+	if (ebc_shim.fb_helper)
+		drm_fb_helper_set_suspend_unlocked(ebc_shim.fb_helper, true);
+	return 0;
+}
+
+static inline int drm_client_dev_resume(struct drm_device *dev,
+					bool holds_console_lock)
+{
+	(void)dev; (void)holds_console_lock;
+	ebc_shim.drm_client_resume_calls++;
+	if (ebc_shim.fb_helper)
+		drm_fb_helper_set_suspend_unlocked(ebc_shim.fb_helper, false);
+	return 0;
+}
+
+/* "userspace faulted a page of the fbdev mmap": the fb core arms the
+ * deferred-io flush at the *current* fbdefio.delay. */
+static inline void ebc_shim_fbdev_mkwrite(struct drm_fb_helper *helper)
+{
+	schedule_delayed_work(&helper->info->deferred_work,
+			      helper->fbdefio.delay);
+}
+
 /* driver registration plumbing (INERT) */
 
 struct file_operations { int dummy; };
@@ -1483,6 +1823,8 @@ struct drm_ioctl_desc {
 struct drm_driver {
 	int shim_gem_ops;
 	int shim_fbdev_ops;
+	int (*fbdev_probe)(struct drm_fb_helper *fb_helper,
+			   struct drm_fb_helper_surface_size *sizes);
 	int major;
 	int minor;
 	const char *name;
@@ -1597,20 +1939,25 @@ static inline void drm_client_setup(struct drm_device *dev, const void *format)
 {
 	(void)dev; (void)format;
 }
+/* Both helpers drive the DRM clients as the real ones do
+ * (drm_client_dev_{suspend,resume}); with no fbdev client registered
+ * that call is a no-op, which is every binary but the fbdev one. */
 static inline int drm_mode_config_helper_suspend(struct drm_device *dev)
 {
-	(void)dev;
 	ebc_shim.drm_suspend_calls++;
 	if (ebc_shim.drm_suspend_hook)
 		ebc_shim.drm_suspend_hook();
-	return ebc_shim.drm_suspend_error;
+	if (ebc_shim.drm_suspend_error)
+		return ebc_shim.drm_suspend_error;
+	drm_client_dev_suspend(dev, false);
+	return 0;
 }
 static inline int drm_mode_config_helper_resume(struct drm_device *dev)
 {
-	(void)dev;
 	ebc_shim.drm_resume_calls++;
 	if (ebc_shim.drm_resume_hook)
 		ebc_shim.drm_resume_hook();
+	drm_client_dev_resume(dev, false);
 	return 0;
 }
 static inline void drm_atomic_helper_shutdown(struct drm_device *dev)

@@ -15,6 +15,21 @@
 #                     (proving the debug patches change no refresh
 #                     behavior: same goldens) plus the EXTRACT_FBS ioctl
 #                     tests.  No debug hunk ships un-executed.
+#   ebc-fbdev-order-test  the only binary that defines
+#                     CONFIG_DRM_FBDEV_EMULATION, so it is the only one
+#                     that compiles the driver's four fbdev-guarded
+#                     blocks (defio_delay_ms, the fbdev_probe wrapper and
+#                     its .fbdev_probe slot, the publish-on-call
+#                     deferred-io drain, the resume barrier, remove()'s
+#                     clearing of the helper static).  Everywhere else
+#                     those compile as the #else stub.  Its shim
+#                     workqueue is SYNCHRONOUS: it proves ORDERING, never
+#                     the absence of a race -- read the file header.
+#   ebc-fbdev-order-test-prefix  the SAME source against the pre-fix
+#                     ordering (mutate-prefix-order.py moves the arm back
+#                     after the drain, exactly what commit 8665ed8
+#                     changed).  run-tests.sh requires this one to FAIL:
+#                     a test that passes on both orderings proves nothing.
 #   ebc-replay        the rung-7a phase-B workbench: replays KOReader
 #                     [pn-refresh] traces through the same machine under
 #                     candidate refresh policies (doc/refresh-policy.md).
@@ -64,9 +79,14 @@ DBGDIR := $(BUILD)/dbg
 DBG_PATCHES := ../../patches/linux-pinenote-debug-extract-fbs.patch
 DBG_DRIVER := $(DBGDIR)/drivers/gpu/drm/rockchip/rockchip_ebc.c
 
+# The pre-fix-ordering variant, for negative-testing the ordering test.
+PREFIXDIR := $(BUILD)/prefix
+PREFIX_DRIVER := $(PREFIXDIR)/drivers/gpu/drm/rockchip/rockchip_ebc.c
+
 all: header-check $(BUILD)/ebc-logic-test $(BUILD)/ebc-refresh-test \
      $(BUILD)/ebc-refresh-test-dbg $(BUILD)/ebc-refresh-starvation-test \
      $(BUILD)/ebc-suspend-bracket-test \
+     $(BUILD)/ebc-fbdev-order-test $(BUILD)/ebc-fbdev-order-test-prefix \
      $(BUILD)/ebc-replay \
      $(BUILD)/ebc-dump $(BUILD)/ebc-dump-grab
 
@@ -129,6 +149,29 @@ $(BUILD)/ebc-suspend-bracket-test: ebc-suspend-bracket-test.c \
                                    $(EXTRACTED) shim/kernel-shim.h \
                                    shim/fake-ebc.h
 	$(CC) $(CFLAGS) $(ASAN) $(CPPFLAGS) -o $@ ebc-suspend-bracket-test.c
+
+# The fbdev-guarded code.  -pthread: the refresh thread runs on a second
+# task so a wake_up_process() can actually preempt its waker (still a
+# strict baton handoff -- ordering, not a race; see the file header).
+$(BUILD)/ebc-fbdev-order-test: ebc-fbdev-order-test.c $(EXTRACTED) \
+                               shim/kernel-shim.h shim/fake-ebc.h
+	$(CC) $(CFLAGS) $(ASAN) $(CPPFLAGS) -pthread \
+	  -o $@ ebc-fbdev-order-test.c
+
+$(PREFIX_DRIVER): $(EXTRACTED) mutate-prefix-order.py
+	rm -rf $(PREFIXDIR)
+	python3 mutate-prefix-order.py \
+	  $(BUILD)/drivers/gpu/drm/rockchip/rockchip_ebc.c $@
+
+# -I$(PREFIXDIR)/... first so `#include "rockchip_ebc.c"` resolves to the
+# pre-fix-ordered driver.  This binary is EXPECTED TO FAIL; run-tests.sh
+# asserts that it does.
+$(BUILD)/ebc-fbdev-order-test-prefix: ebc-fbdev-order-test.c $(EXTRACTED) \
+                                      shim/kernel-shim.h shim/fake-ebc.h \
+                                      $(PREFIX_DRIVER)
+	$(CC) $(CFLAGS) $(ASAN) \
+	  -I$(PREFIXDIR)/drivers/gpu/drm/rockchip $(CPPFLAGS) -pthread \
+	  -o $@ ebc-fbdev-order-test.c
 
 $(BUILD)/ebc-replay: ebc-replay.c $(EXTRACTED) shim/kernel-shim.h \
                      shim/fake-ebc.h

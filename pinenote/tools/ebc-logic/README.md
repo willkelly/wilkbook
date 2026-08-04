@@ -30,6 +30,25 @@ exactly the code the kernel ships — against a kernel-API shim
   plane copy; without the ioctl's own kref the remaining copies are a
   heap-use-after-free and ASan aborts the suite).  No debug hunk ships
   un-executed.
+- **`ebc-fbdev-order-test`** (2026-08-04): the only binary that defines
+  `CONFIG_DRM_FBDEV_EMULATION`, so the only one that compiles the
+  driver's four fbdev-guarded blocks at all — everywhere else they
+  compile as the `#else` stub and the suite can go green with the whole
+  branch deleted.  It executes `defio_delay_ms` and its live-helper
+  retarget, the `fbdev_probe` wrapper, the **publish-on-call** deferred-io
+  drain inside `GLOBAL_REFRESH`, the fbdev **resume barrier**, and
+  `remove()`'s clearing of the helper static under the param lock.  Its
+  headline assertion is the 2026-08-04 portrait double-refresh fix: *with
+  pending fbdev damage, one `GLOBAL_REFRESH` ioctl costs exactly one
+  global refresh and **zero** partial refreshes.*  See the caveat below —
+  it proves **ordering**, not race-freedom.
+- **`ebc-fbdev-order-test-prefix`**: the identical source compiled
+  against the **pre-fix** ordering.  `mutate-prefix-order.py` moves the
+  arm back after the drain, producing code byte-identical to
+  `git show 8665ed8^`'s driver (modulo the comment the fix added), and
+  `run-tests.sh` requires the binary to **FAIL**.  It does, with exactly
+  the hardware signature: `globals 1, partial frames 38`.  A test that
+  passes on both orderings is worthless, so this gate is permanent.
 - **`ebc-dump` / `ebc-dump-grab`** (2026-07-12): the EXTRACT_FBS dump
   pair over the shared `ebc-dump-format.h` container.  `ebc-dump-grab`
   runs on the device against the debug kernel (cross-built by the
@@ -306,6 +325,23 @@ accumulator quirk below) with `WBF=`.
 
 ## What is not validated
 
+- **Races in the fbdev damage path.** `ebc-fbdev-order-test` runs the
+  refresh thread on a second task so a `wake_up_process()` can genuinely
+  preempt its waker, but it is a strict *baton* handoff: exactly one task
+  runs at a time and control moves only at `wake_up_process()` and
+  `schedule()`.  The shim workqueue is likewise synchronous —
+  `schedule_work()` only marks an item pending; `flush_work()` runs it
+  inline.  That proves **ordering** (which side of the flush a store
+  lands on, and what the thread sees the instant it is woken) and says
+  nothing about the absence of a race.  The real system runs a
+  SCHED_FIFO refresh kthread against a SCHED_OTHER kworker under
+  PREEMPT_RT; the interleavings this model cannot generate are exactly
+  the class the 2026-08-01 publish-on-call work addressed.  **Do not read
+  a green run here as race-freedom.**
+- **Config-guarded code outside `CONFIG_DRM_FBDEV_EMULATION`.** The
+  harness still compiles the `#else` stub of every `#ifdef` its shim does
+  not define.  Before trusting a result, check that the binary you ran
+  actually compiles the lines you changed (`doc/testing.md`).
 - Real kernel concurrency: kthread preemption, IRQ timing, PM races.
 - DRM atomic plumbing (plane/CRTC state lifecycles, damage iteration) —
   rung 5's vkms tests cover the client side of that.

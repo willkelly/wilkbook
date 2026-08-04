@@ -116,6 +116,61 @@ if ! grep -qE '^RESULT: (ok|skipped)$' "$sout"; then
   fail=1
 fi
 
+# --- the CONFIG_DRM_FBDEV_EMULATION blocks ---
+# The only binary that defines the config, so the only one that compiles
+# the driver's fbdev-guarded code: defio_delay_ms and its live retarget,
+# the fbdev_probe wrapper, the publish-on-call deferred-io drain in
+# GLOBAL_REFRESH, the resume barrier, and remove()'s clearing of the
+# helper static.  Its workqueue is synchronous: ORDERING, never
+# race-freedom -- see the header of ebc-fbdev-order-test.c.
+fout=$build/fbdev-order.out
+if "$build/ebc-fbdev-order-test" "$fwdir" > "$fout"; then
+  :
+else
+  echo "FAIL: ebc-fbdev-order-test exited nonzero" >&2
+  fail=1
+fi
+
+cat "$fout"
+
+if grep -q '^FAIL' "$fout"; then
+  fail=1
+fi
+if ! grep -qE '^RESULT: (ok|skipped)$' "$fout"; then
+  echo "FAIL: ebc-fbdev-order-test missing RESULT" >&2
+  fail=1
+fi
+
+# --- and the negative test of that test ---
+# The identical source compiled against the pre-fix ordering
+# (mutate-prefix-order.py moves the arm back after the drain: byte-for-byte
+# the code `git show 8665ed8^` carried, modulo the added comment).  It MUST
+# fail; a test that passes on both orderings proves nothing.  Waveform-gated,
+# because the discriminating assertion counts partial frames and the frame
+# count IS the waveform's phase count.
+pfout=$build/fbdev-order-prefix.out
+if [ -n "$wbf" ]; then
+  if "$build/ebc-fbdev-order-test-prefix" "$fwdir" > "$pfout" 2>&1; then
+    echo "FAIL: the ordering test PASSES against the pre-fix ordering -- it proves nothing" >&2
+    cat "$pfout" >&2
+    fail=1
+  elif grep -q '^FAIL: one GLOBAL_REFRESH intent costs exactly one global refresh' "$pfout"; then
+    echo "PASS: ordering test goes red against the pre-fix ordering ($(grep -c '^FAIL' "$pfout") assertions)"
+  else
+    echo "FAIL: pre-fix build failed, but not on the ordering assertion" >&2
+    cat "$pfout" >&2
+    fail=1
+  fi
+else
+  if "$build/ebc-fbdev-order-test-prefix" "" > "$pfout" 2>&1 &&
+     grep -q '^RESULT: skipped$' "$pfout"; then
+    echo "PASS: pre-fix negative gate skipped (no WBF given)"
+  else
+    echo "FAIL: pre-fix negative gate did not skip cleanly without a WBF" >&2
+    fail=1
+  fi
+fi
+
 # --- refresh goldens (synthetic LUT, deterministic, committed) ---
 if (cd "$build" && sha256sum -c ../testdata/refresh-goldens.sha256 > /dev/null 2>&1); then
   echo "PASS: refresh harness golden images (sha256)"
@@ -171,12 +226,15 @@ if [ -n "$wbf" ]; then
   elif grep -q '^SKIP: waveform' "$pout"; then
     echo "FAIL: WBF was given but replay waveform tests were skipped" >&2
     fail=1
+  elif grep -q '^SKIP: waveform' "$fout"; then
+    echo "FAIL: WBF was given but fbdev-order waveform tests were skipped" >&2
+    fail=1
   else
     echo "PASS: waveform-dependent tests ran against $wbf"
   fi
 else
   if grep -q '^SKIP: waveform' "$out" && grep -q '^SKIP: waveform' "$rout" &&
-     grep -q '^SKIP: waveform' "$pout"; then
+     grep -q '^SKIP: waveform' "$pout" && grep -q '^SKIP: waveform' "$fout"; then
     echo "PASS: waveform-dependent tests skipped (no WBF given)"
   else
     echo "FAIL: expected SKIP messages without WBF" >&2
@@ -186,11 +244,14 @@ fi
 
 # --- determinism: identical output across runs (all three binaries) ---
 pout2=$(mktemp)
-trap 'rm -f -- "$out" "$out2" "$rout" "$rout2" "$pout" "$pout2" "$wout" "$wout2"' EXIT HUP INT TERM
+fout2=$(mktemp)
+trap 'rm -f -- "$out" "$out2" "$rout" "$rout2" "$pout" "$pout2" "$fout2" "$wout" "$wout2"' EXIT HUP INT TERM
 "$build/ebc-logic-test" "$wbf" > "$out2" || true
 "$build/ebc-refresh-test" "$fwdir" "$rsl" "$build" > "$rout2" || true
 "$build/ebc-replay" selftest "$fwdir" > "$pout2" || true
-if cmp -s "$out" "$out2" && cmp -s "$rout" "$rout2" && cmp -s "$pout" "$pout2"; then
+"$build/ebc-fbdev-order-test" "$fwdir" > "$fout2" || true
+if cmp -s "$out" "$out2" && cmp -s "$rout" "$rout2" && cmp -s "$pout" "$pout2" &&
+   cmp -s "$fout" "$fout2"; then
   echo "PASS: deterministic output"
 else
   echo "FAIL: output differs between runs" >&2
