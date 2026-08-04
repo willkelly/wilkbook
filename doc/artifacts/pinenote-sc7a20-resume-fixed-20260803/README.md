@@ -93,10 +93,16 @@ re-apply it from `st_sensors_reinit_hw()`.
   means "could not test". Use `grep -a` on the module, or check from the
   host with the cross binutils in the store.
 
-## Still a human check
+## Rotation on glass — CONFIRMED
 
-Rotation on glass. Nothing here proves the reader actually reorients —
-only that the data-ready interrupt is delivered at the configured rate.
+Will rotated the device after a deep cycle on 2026-08-03 and the screen
+followed. This was the one thing the harness could not establish: every
+measurement above proves the data-ready interrupt is *delivered* at the
+configured rate, not that the orientation bridge consumes it and the
+reader reorients. It does.
+
+That closes the loop end to end: chip → DRDY line → GPIO → threaded
+handler → iio buffer → orientation bridge → uinput → KOReader.
 
 ## Reproduce
 

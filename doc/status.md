@@ -33,9 +33,12 @@ Both defects were in our own PM patch, and the first hid the second:
    = *asserted* to a `LEVEL_LOW` GPIO (burst); once data arrives it goes
    high = *de-asserted* (silence).
 
-**Still a human check: rotation on glass.** Nothing above proves the
-reader reorients — only that the interrupt is delivered at the right rate.
-Detail and reusable instrument notes:
+**Rotation confirmed on glass** (Will, 2026-08-03): rotated after a deep
+cycle, the screen follows. That was the one claim the harness could not
+make — it proves delivery of the interrupt, not that the bridge consumes
+it and the reader reorients. The full path is now proven end to end:
+chip → DRDY → GPIO → threaded handler → iio buffer → orientation bridge →
+uinput → KOReader. Detail and reusable instrument notes:
 `doc/artifacts/pinenote-sc7a20-resume-fixed-20260803/`.
 
 **2026-08-03 auto-suspend actually works now.** Image
