@@ -237,3 +237,45 @@ Corollary for acceptance tests: never compare a global-path count with a
 partial-path count, and never compare partial counts across a thermal
 window (the phase count is temperature-compensated; 38 and 46 are both
 one pass).
+
+## Absence of an error is not a passing test
+
+From the SC7A20 deep-suspend work, 2026-08-03
+(`doc/artifacts/pinenote-sc7a20-resume-fixed-20260803/`). The first fix
+removed a loud, obvious failure and replaced it with a silent one that
+every cheap check called healthy:
+
+| check | verdict | reality |
+|---|---|---|
+| no `nobody cared` in dmesg | PASS | storm genuinely gone |
+| IRQ `ddepth=0` | PASS | genirq genuinely fine |
+| control registers read back correct | looks fine | chip genuinely configured |
+| **interrupt rate after resume** | **0/s** | **autorotation dead** |
+
+The rules this earned:
+
+- **Test the positive behaviour, not the absence of the symptom.** "The
+  error stopped" and "the thing works" are different claims. Measure the
+  rate, the output, the effect — something that is *zero* when broken and
+  *non-zero* when working.
+- **Baseline on both sides of the transition, over equal windows.** A
+  post-resume rate means nothing without the same measurement taken
+  before, on the same device, in the same state.
+- **A zero baseline invalidates the run.** Report `INVALID`, never a
+  score. Here an earlier *failed* suspend had already broken the sensor,
+  so `pre=0` — comparing against it would have manufactured a pass.
+- **Confirm the precondition actually happened.** The first run reported
+  "no storm after resume" when the device had never suspended: dwc3
+  returned `-EAGAIN` because the USB gadget was still bound
+  (`last_failed_dev=fcc00000.usb`). Any suspend test must assert
+  `suspend_stats/success` incremented before it interprets anything.
+- **A device-side check that shells out to a missing tool reports
+  "absent", not "untestable".** `readelf`, `nm`, `objdump` and `strings`
+  do not exist on the reader image; a module-verification script using
+  them declared the correct image "WRONG". Use `grep -a` on the binary, or
+  verify from the host with the cross binutils in the store.
+
+Sensor-specific but worth stealing: `STATUS_REG` reading all-ones
+(`0xff` — data-ready **plus** overrun on every axis) is the signature of
+"sampling fine, nobody consuming" — a dead interrupt path wearing a
+healthy register dump.

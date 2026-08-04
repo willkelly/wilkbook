@@ -1,0 +1,44 @@
+=== SC7A20 IRQ acceptance v2 ===
+kernel: 7.0.11   cpus: 4   window: 20s
+irq: 73   ( 73:         79          0          0          0 rockchip_gpio_irq  10 Level     sc7a20-trigger)
+
+--- pre-suspend baseline rate (20s) ---
+  79 -> 99   delta=20   (~1.00/s)
+
+--- suspend cycle ---
+  mem_sleep: s2idle [deep]
+  quiescing usb gadget (was bound to fcc00000.usb)
+  UDC now: ''
+  echo mem rc=0   success 0->1   fail 0->0
+  gadget rebound: 'fcc00000.usb'
+  ACTUALLY SUSPENDED: yes
+
+--- A. error lines from THIS cycle ---
+  new dmesg lines: 53
+  PASS: no 'nobody cared' / 'Disabling IRQ'
+
+--- B. IRQ still enabled ---
+    istate:   0x00004020
+    ddepth:   0
+    wdepth:   0
+  PASS: ddepth=0 (enabled, bracket balanced)
+
+--- C. interrupt rate survives resume (20s, same as baseline) ---
+  pre : delta=20
+  post: 116 -> 136   delta=20
+  PASS: still firing after resume (100% of baseline)
+
+--- buffer/consumer state (context for C) ---
+  node: /sys/bus/iio/devices/iio:device2
+  buffer enable: 1
+  trigger      : sc7a20-trigger
+  sampling_freq: 1
+  bridge alive : 1
+
+=== SUMMARY ===
+  suspended       : yes
+  A no-storm      : PASS
+  B irq-enabled   : PASS
+  C irq-survives  : PASS
+
+Rotation on glass is still a human check.

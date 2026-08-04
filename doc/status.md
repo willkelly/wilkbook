@@ -2,6 +2,42 @@
 
 Last updated: 2026-08-03.
 
+**2026-08-03 SC7A20 autorotation survives deep suspend — FIXED, 6/6
+cycles.** The last open blocker from the deep-suspend program is closed.
+Image `a3ea6a2d2249447f8ece69889758e3ece5495fbb3940b0d3e7c4d157a8a599aa`
+(475,028 x 4096, kernel `vhb7v5fr…`, system `cqvbxca4…`) deployed to os2,
+readback verified. Six consecutive `deep` cycles each measured 10
+data-ready interrupts per 10 s window on **both** sides of the suspend —
+exactly the configured 1 Hz ODR — with no storm, `ddepth=0`, and the
+polarity register holding `0x2` throughout. Session total:
+`success=7 fail=0`.
+
+Both defects were in our own PM patch, and the first hid the second:
+
+1. **Read-after-clobber.** `st_sensors_resume()` tested `->hw_irq_trigger`
+   *after* `st_sensors_reinit_hw()`, which clears it via its inherited
+   "disable DRDY" step. The re-arm never ran, so the storm happened
+   anyway — `irq 73: nobody cared`, count 116 → **100,117**, then
+   `Disabling IRQ #73`.
+2. **Interrupt polarity never restored.** Fixing (1) removed the storm and
+   produced a *silent* failure that looks healthier: no dmesg error,
+   `ddepth=0`, every control register correct — and **zero** interrupts,
+   with the chip sampling into an overrun. The active-low bit is written
+   only in `st_sensors_allocate_trigger()` at probe, so the chip returns
+   at its active-high reset default against a `LEVEL_LOW` GPIO. Proven
+   live before writing code: with `0x25=0x00` the IRQ counted 0/5 s;
+   writing `0x02` by hand restored exactly 1 Hz.
+
+   The same inversion explains the burst-then-silence seen in the
+   (1)-only run (count 65 → 7488, then flat): at reset the line idles low
+   = *asserted* to a `LEVEL_LOW` GPIO (burst); once data arrives it goes
+   high = *de-asserted* (silence).
+
+**Still a human check: rotation on glass.** Nothing above proves the
+reader reorients — only that the interrupt is delivered at the right rate.
+Detail and reusable instrument notes:
+`doc/artifacts/pinenote-sc7a20-resume-fixed-20260803/`.
+
 **2026-08-03 auto-suspend actually works now.** Image
 `7bb55c2f940d89f716cf87de163dedb46a9cf693fd73a68e71a9eb6b0991a717`
 (475,027 x 4096) deployed to os2, readback verified. Carries the three
@@ -773,7 +809,7 @@ rule, and ENABLE-last — negative-tested four ways. Dormant on the
 running image: nothing suspends (policy `false`), so the callbacks
 never execute until the ladder reaches `deep`. All host suites green;
 full aarch64 cross-build green. The remaining resume blockers
-(cyttsp5, SC7A20, rail policy) stay open — they are gated on hardware
+(cyttsp5, rail policy) stay open — SC7A20 was fixed 2026-08-03 — they are gated on hardware
 truth (the rail-kill wake question), not on writable code.
 
 **2026-08-01 suspend-program groundwork, same os2 session + offline: the
@@ -803,7 +839,7 @@ register restoration on resume (the template for our future
 REGCACHE-caveated hunk); and the rail audit found `vcc_3v3_pmu` feeds
 `pmuio1/2` — the GPIO0 bank carrying **every external wake interrupt on
 this board** — making the rail-kill wake collision the new gating
-question for the ~11 mW prize. New blocker recorded: SC7A20 resume.
+question for the ~11 mW prize. New blocker recorded: SC7A20 resume (FIXED 2026-08-03).
 Full detail: `doc/power-management.md`, "Evidence pass (2026-08-01)".
 No suspend was attempted; activation stays compiled out.
 

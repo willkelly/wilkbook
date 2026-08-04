@@ -214,6 +214,32 @@ attempt at the same problem.
 sensor, resume re-runs the probe-time `st_sensors_init_sensor()`, which
 restores ODR, enable state, and the DRDY/interrupt configuration.
 
+**Written and hardware-proven 2026-08-03** (6/6 deep cycles;
+`pinenote/patches/linux-pinenote-7.0-st-accel-pm.patch`,
+`doc/artifacts/pinenote-sc7a20-resume-fixed-20260803/`). Two findings that
+belong in the submission, because a reviewer will hit both:
+
+1. **Re-running the init path is not sufficient by itself.** The split-out
+   `st_sensors_reinit_hw()` inherits `init_sensor()`'s "disable DRDY, this
+   might still be enabled after reboot" step, and
+   `st_sensors_set_dataready_irq()` assigns `->hw_irq_trigger` as a side
+   effect — so any `if (sdata->hw_irq_trigger)` **after** that call reads
+   false and the re-arm is silently skipped. Latch it first.
+2. **`st_sensors_init_sensor()` does not restore the interrupt polarity.**
+   The active-low bit (`drdy_irq.addr_ihl`) is written only in
+   `st_sensors_allocate_trigger()`, which runs once at probe. A chip that
+   lost power returns active-high against an `IRQ_TYPE_LEVEL_LOW` GPIO and
+   delivers nothing at all — a *silent* death, distinct from the storm,
+   and one that survives fixing the storm. This is the part any
+   "just call init_sensor() on resume" patch (including hrdl's unfinished
+   `v6.19_iio_accel`) will miss.
+
+Still not sent — per this register's standing rule, nothing ships until
+the baseline reader image is done. The patch also carries a
+`disable_irq()`/`enable_irq()` bracket whose noirq-ordering justification
+is **unproven**; that should be split out or dropped before submission
+rather than defended with a story we did not measure.
+
 **What has to be true first:** written and working on our hardware across
 repeated deep cycles, plus the standing baseline gate. Unlike the EBC
 findings this one has a straightforward upstream home and a reproducer on

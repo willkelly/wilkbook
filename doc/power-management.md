@@ -309,8 +309,24 @@ Current blockers after that gate passes:
   `doc/kernel-forward-port.md`)** — and explicit
   RK817 regulator suspend states, whose adoption is now gated on the
   rail-kill wake-collision question (see the evidence pass below);
-- **SC7A20 accelerometer resume — ROOT-CAUSED 2026-08-02, and now
-  reproduced on hardware.** After the first real `deep` cycle:
+- **SC7A20 accelerometer resume — FIXED AND HARDWARE-PROVEN 2026-08-03**
+  (6/6 deep cycles; `doc/artifacts/pinenote-sc7a20-resume-fixed-20260803/`).
+  `pinenote/patches/linux-pinenote-7.0-st-accel-pm.patch` adds the missing
+  `.pm` in four parts. Two of them were defects in our own first attempt
+  and are worth remembering, because the first hid the second:
+  *(a)* `st_sensors_resume()` tested `->hw_irq_trigger` **after**
+  `st_sensors_reinit_hw()`, which clears it as a side effect of its
+  inherited "disable DRDY" step — so the re-arm never ran and the storm
+  happened anyway (116 → 100,117 interrupts); *(b)* with that fixed the
+  storm vanished and the interrupt went **silent** instead, because the
+  active-low polarity bit is written only at probe and the chip returns
+  active-high while the GPIO stays `LEVEL_LOW`. `reinit_hw()` now restores
+  it. Diagnostic worth keeping: `STATUS_REG` (0x27) reading `0xff` means
+  data-ready **plus overrun** — the chip is sampling and nothing is
+  reading it, i.e. a dead interrupt path behind a healthy-looking register
+  dump. The historical description follows.
+
+  After the first real `deep` cycle (pre-fix):
   `irq 71: nobody cared (try booting with the "irqpoll" option)`,
   `Comm: irq/71-sc7a20-t`, level-triggered via `rockchip_irq_demux`. The
   kernel's spurious-IRQ protection then **disables the IRQ**, so
