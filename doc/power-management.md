@@ -61,6 +61,33 @@ power *and* what could make the device unwakeable.
 4. **Suspend draw 19.3 → <10 mA** — ultra-suspend, gated on the rail-kill
    wake question. This is what target 2 actually needs.
 
+### Deferred: on-demand Wi-Fi (after everything else)
+
+**Decided 2026-08-03: live with the power for now.** Worth doing later; the
+device is usable without it.
+
+The measured case for it, when we get there:
+
+- **11.2 mA** off awake idle (6 %, measured by taking `wlan0` down).
+- A large share of the **30 % resume-overhead gap** — the unplugged soak
+  averaged 64.4 mA where the component model predicts 49.8 mA, and
+  re-association is most of what happens between wake and usable.
+- **Faster wake to a usable page**, which is the UX number that decides
+  whether suspend-between-page-turns is viable.
+
+Shape, reusing the charging-inhibit pattern so the device stays workable:
+
+| state | Wi-Fi |
+| --- | --- |
+| on charger | on — development mode, always reachable |
+| on battery | off; brought up on demand, dropped after a timeout |
+
+This is how Kobo and Kindle behave, and KOReader already ships `NetworkMgr`
+for exactly it. The catch specific to us is that **ssh is the development
+channel**, so a default-off policy makes the device dark between user
+interactions — hence tying it to charger state rather than switching it off
+outright.
+
 ### Deferred: awake-idle floor research (after everything else)
 
 Explicitly parked, not forgotten. The 171.6 mA awake floor has two known
@@ -306,6 +333,24 @@ Current blockers after that gate passes:
   DRDY/interrupt configuration). This is a genuine gap in a mainline
   driver rather than a defect in the EBC lineage, so it is
   upstream-reportable in its own right.
+
+  **Status 2026-08-03: that patch is written, deployed, and NOT SUFFICIENT.**
+  `st_sensors_pm_ops` is live in the running kernel and the storm still
+  fires 0.7 s after resume. The reason is ordering the patch cannot reach:
+  `resume_device_irqs()` runs at the **noirq** stage, *before* driver
+  `.resume` callbacks. So IRQs are re-enabled while the sensor's level line
+  is still asserted from having lost its configuration, the threaded
+  handler runs and cannot clear it, and genirq disables the IRQ — all
+  before `.resume` gets to reprogram anything.
+
+  **Remaining fix: `disable_irq()` in `.suspend`, `enable_irq()` after the
+  reinit in `.resume`**, so the handler cannot run until the device is
+  programmed. Standard pattern; it is the piece the first attempt missed.
+
+  *Timing note that misled the first reading of this*: printk timestamps
+  freeze across deep suspend, so `PM: suspend entry` at 106.7 s and the
+  storm at 108.9 s are 240 s apart in wall time, not 2 s. A trace that
+  looks like "before the first suspend" may be well after a resume.
 
   **Confirmed inherent, not ours (Will, 2026-08-02): "it also breaks on
   os1 for sure."** os1 is stock Debian on the 6.12 BSP kernel running the
