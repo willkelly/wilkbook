@@ -39,7 +39,15 @@ ssize_t read(int fd, void *buf, size_t n);
 int fsync(int fd);
 int select(int nfds, void *r, void *w, void *e, void *timeout);
 struct as_tv { long tv_sec; long tv_usec; };
+/* struct input_event: 16-byte timeval then type/code/value = 24 bytes. */
+struct as_input_event {
+    long tv_sec; long tv_usec;
+    unsigned short type; unsigned short code; int value;
+};
 ]]
+
+local EV_KEY, KEY_POWER = 1, 116
+local INPUT_EVENT_SIZE = 24
 
 local O_RDONLY, O_NONBLOCK = 0, 2048
 local FD_SETSIZE = 1024
@@ -57,6 +65,19 @@ local opt = {
     -- is just friction.  Opt in with --suspend-while-charging, or
     -- suspend_while_charging=1 at runtime.
     charging_inhibits = true,
+    -- A short press of the power button suspends immediately, without
+    -- waiting out the idle timer.  This is the same button that WAKES the
+    -- device, so the press that woke it must never be read as a request to
+    -- sleep again -- see power_grace below.
+    power_key = true,
+    -- Longer than this and it is not a tap: the PMIC handles a real
+    -- long-press as a hard power-off, and we must not race it by
+    -- suspending on the way there.
+    power_tap_ms = 1000,
+    -- Ignore the power button for this long after a resume.  The wake
+    -- press is delivered as an ordinary input event once the device is
+    -- back, and without this the device would sleep again instantly.
+    power_grace_s = 2,
     config = "/var/lib/pinenote/autosuspend.conf",
 }
 do
@@ -70,6 +91,7 @@ do
         elseif a == "--no-overlay" then opt.overlay = false
         elseif a == "--banner-only" then opt.banner_only = true
         elseif a == "--suspend-while-charging" then opt.charging_inhibits = false
+        elseif a == "--no-power-key" then opt.power_key = false
         elseif a == "--config" then i = i + 1; opt.config = arg[i]
         end
         i = i + 1
@@ -105,10 +127,12 @@ end
 --     enabled=0       pause auto-suspend entirely
 -- Unknown or malformed keys are ignored rather than fatal: a typo in this
 -- file must not leave the device unable to sleep OR unable to wake.
-local runtime = { idle = nil, backstop = nil, enabled = true, charging = nil }
+local runtime = { idle = nil, backstop = nil, enabled = true, charging = nil,
+                  power_key = nil }
 local function reload_config()
     runtime.idle, runtime.backstop, runtime.enabled = nil, nil, true
     runtime.charging = nil
+    runtime.power_key = nil
     local f = io.open(opt.config, "r")
     if not f then return end
     for line in f:lines() do
@@ -121,12 +145,18 @@ local function reload_config()
             runtime.enabled = not (v == "0" or v == "false" or v == "no")
         elseif k == "suspend_while_charging" then
             runtime.charging = (v == "1" or v == "true" or v == "yes")
+        elseif k == "power_key" then
+            runtime.power_key = not (v == "0" or v == "false" or v == "no")
         end
     end
     f:close()
 end
 local function idle_secs() return runtime.idle or opt.idle end
 local function backstop_secs() return runtime.backstop or opt.backstop end
+local function power_key_on()
+    if runtime.power_key ~= nil then return runtime.power_key end
+    return opt.power_key
+end
 
 -- Any mains/USB supply reporting online counts as "plugged in".  The
 -- candidate list is explicit because this luajit has no io.popen;
@@ -165,12 +195,31 @@ end
 -- open every input device
 -- Enumerate by probing rather than popen: this luajit has no io.popen,
 -- and probing avoids depending on a shell at all.
+-- Identify the power key by NAME, never by a fixed event number: the
+-- input node order is not stable across boots (observed 2026-08-04, when
+-- the accelerometer moved iio:device2 -> iio:device1 and its IRQ 73 -> 71
+-- across a power cycle).
+local function input_name(n)
+    local f = io.open("/sys/class/input/event" .. n .. "/device/name", "r")
+    if not f then return nil end
+    local name = f:read("*l")
+    f:close()
+    return name
+end
+
 local fds, maxfd = {}, 0
 for n = 0, 31 do
     local path = "/dev/input/event" .. n
     local fd = ffi.C.open(path, bit.bor(O_RDONLY, O_NONBLOCK))
     if fd >= 0 then
-        fds[#fds + 1] = { fd = fd, path = path }
+        local name = input_name(n) or ""
+        fds[#fds + 1] = {
+            fd = fd, path = path, name = name,
+            -- "rk805 pwrkey" on this board; match loosely so a rename or a
+            -- different PMIC revision does not silently drop the feature.
+            is_power = name:lower():find("pwrkey", 1, true) ~= nil
+                    or name:lower():find("power", 1, true) ~= nil,
+        }
         if fd > maxfd then maxfd = fd end
     end
 end
@@ -179,11 +228,71 @@ if #fds == 0 then
     os.exit(1)
 end
 reload_config()
+local power_nodes = {}
+for _, d in ipairs(fds) do
+    if d.is_power then power_nodes[#power_nodes + 1] = d.path .. " (" .. d.name .. ")" end
+end
 log("watching %d input devices, idle=%ds backstop=%ds overlay=%s config=%s%s",
     #fds, idle_secs(), backstop_secs(), tostring(opt.overlay), opt.config,
     opt.dry and " [DRY RUN]" or "")
+if #power_nodes == 0 then
+    log("no power-key node found -- press-to-suspend unavailable (idle timer still works)")
+else
+    log("press-to-suspend on %s (tap < %dms; %ds grace after resume)",
+        table.concat(power_nodes, ", "), opt.power_tap_ms, opt.power_grace_s)
+end
 
-local drain = ffi.new("uint8_t[512]")
+-- Must hold a whole number of input_events so a short read never splits a
+-- record across reads and desynchronises the parse.
+local DRAIN_EVENTS = 64
+local drain = ffi.new("uint8_t[?]", DRAIN_EVENTS * INPUT_EVENT_SIZE)
+
+-- Returns true if a short tap of the power button was seen on this fd.
+-- A long hold is deliberately ignored: the PMIC turns the device off on
+-- its own, and suspending on the way there would race that.
+--
+-- Press duration comes from the events' own timestamps, not os.time():
+-- os.time() has one-second granularity, which cannot tell a tap from a
+-- half-second hold, and os.clock() is CPU time in a process that is idle
+-- essentially always.
+local function scan_power_events(d, nbytes)
+    local ev = ffi.cast("struct as_input_event *", drain)
+    -- ffi.C.read() returns ssize_t, which reaches Lua as cdata, not a
+    -- number: math.floor() rejects it outright ("bad argument #1 to
+    -- 'floor' (number expected, got cdata)").  Every value that crosses
+    -- from ffi into arithmetic here has to go through tonumber().
+    local count = math.floor(tonumber(nbytes) / INPUT_EVENT_SIZE)
+    local tapped = false
+    for i = 0, count - 1 do
+        local e = ev[i]
+        if e.type == EV_KEY and e.code == KEY_POWER then
+            local t_ms = tonumber(e.tv_sec) * 1000 + tonumber(e.tv_usec) / 1000
+            if e.value == 1 then
+                d.press_ms = t_ms
+            elseif e.value == 0 then
+                -- A release with no matching press means the press was
+                -- consumed elsewhere (typically the wake). Do not treat a
+                -- bare release as a tap.
+                if d.press_ms then
+                    local held = t_ms - d.press_ms
+                    if held >= 0 and held <= opt.power_tap_ms then tapped = true end
+                end
+                d.press_ms = nil
+            end
+            -- value == 2 is autorepeat during a hold: not a tap.
+        end
+    end
+    return tapped
+end
+
+-- Discard anything queued on every input device.  Called after a resume so
+-- the press that woke the device is not then read as a request to sleep.
+local function drain_all()
+    for _, d in ipairs(fds) do
+        while ffi.C.read(d.fd, drain, ffi.sizeof(drain)) > 0 do end
+        d.press_ms = nil
+    end
+end
 
 
 --[[ Sleep screen -----------------------------------------------------
@@ -403,6 +512,13 @@ end
 
 local tv = ffi.new("struct as_tv")
 local last_activity = os.time()
+-- Suppress press-to-suspend until this time.  Set after every resume, and
+-- at startup: the daemon may be starting right after a boot triggered by a
+-- power press whose release is still queued.
+local power_ignore_until = os.time() + opt.power_grace_s
+-- Latched if the power-key parse ever throws, so the failure is reported
+-- once and the daemon keeps doing its primary job.
+local power_scan_broken = false
 
 while true do
     reload_config()
@@ -429,7 +545,11 @@ while true do
             last_activity = os.time()
         else
             suspend_once()
-            -- the wake press itself lands as input; treat resume as activity
+            -- The wake press itself lands as input.  Throw the whole queue
+            -- away rather than let it read as either activity or a fresh
+            -- suspend request, and hold the button off for the grace period.
+            drain_all()
+            power_ignore_until = os.time() + opt.power_grace_s
             last_activity = os.time()
         end
     else
@@ -439,12 +559,46 @@ while true do
         tv.tv_usec = 0
         local n = ffi.C.select(maxfd + 1, fdset, nil, nil, tv)
         if n and n > 0 then
+            local tapped = false
             for _, d in ipairs(fds) do
                 if fd_isset(d.fd) then
-                    while ffi.C.read(d.fd, drain, 512) > 0 do end
+                    while true do
+                        local got = tonumber(ffi.C.read(d.fd, drain, ffi.sizeof(drain)))
+                        if not got or got <= 0 then break end
+                        if d.is_power and power_key_on() then
+                            -- Never let a fault in the convenience feature
+                            -- take down auto-suspend itself.  A crash here
+                            -- once left the device unable to sleep at all,
+                            -- which is far worse than losing the button.
+                            local ok, res = pcall(scan_power_events, d, got)
+                            if ok then
+                                if res then tapped = true end
+                            elseif not power_scan_broken then
+                                power_scan_broken = true
+                                log("power-key scan failed (%s) -- disabling press-to-suspend, idle timer continues",
+                                    tostring(res))
+                            end
+                        end
+                    end
                 end
             end
             last_activity = os.time()
+            if tapped then
+                if os.time() < power_ignore_until then
+                    -- Almost certainly the press that just woke us.
+                    log("power tap within resume grace -- ignoring")
+                elseif not runtime.enabled then
+                    log("power tap but auto-suspend is paused (enabled=0) -- ignoring")
+                elseif opt.dry then
+                    log("DRY RUN: power tap would suspend now")
+                else
+                    log("power tap -- suspending on request")
+                    suspend_once()
+                    drain_all()
+                    power_ignore_until = os.time() + opt.power_grace_s
+                    last_activity = os.time()
+                end
+            end
         end
     end
 end
