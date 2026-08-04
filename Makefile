@@ -130,6 +130,10 @@ wbf-check:
 #   make ebc-logic-check [WBF=/path/to/ebc.wbf]
 ebc-logic-check:
 	guix shell gcc-toolchain python -- $(MAKE) -C pinenote/tools/ebc-logic check WBF=$(WBF)
+	@# The harness does not define CONFIG_DRM_FBDEV_EMULATION, so the suite
+	@# above is blind to the deferred-io drain and to its ordering against
+	@# the wash. That ordering is worth one whole visible refresh pass.
+	sh pinenote/scripts/preflight/validate-ebc-global-arm-order-hunk.sh
 
 # Host-only fake-operation coverage for the separately invoked sleep-frame
 # diagnostic.  It extracts the barrier UAPI from the permanent kernel patch;

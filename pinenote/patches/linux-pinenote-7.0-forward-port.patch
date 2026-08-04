@@ -2830,7 +2830,7 @@ new file mode 100755
 index 000000000..8db4c36cd
 --- /dev/null
 +++ b/drivers/gpu/drm/rockchip/rockchip_ebc.c
-@@ -0,0 +1,3415 @@
+@@ -0,0 +1,3436 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/*
 + * Copyright (C) 2021-2022 Samuel Holland <samuel@sholland.org>
@@ -3259,6 +3259,41 @@ index 000000000..8db4c36cd
 +
 +	if (args->trigger_global_refresh){
 +		/* printk(KERN_INFO "[rockchip_ebc] ioctl_trigger_global_refresh"); */
++		mutex_lock(&ebc->barrier_lock);
++		if (ebc->barrier_poison) {
++			mutex_unlock(&ebc->barrier_lock);
++			return ebc->barrier_poison;
++		}
++		if (!ebc->worker_available || ebc->hardware_uncertain) {
++			mutex_unlock(&ebc->barrier_lock);
++			return -ENODEV;
++		}
++		ebc->legacy_pending = true;
++		mutex_unlock(&ebc->barrier_lock);
++
++		/*
++		 * Arm the wash BEFORE draining deferred-io, not after.
++		 *
++		 * The drain below ends in the damage worker's atomic commit,
++		 * which splices the damage into ctx->queue and then calls
++		 * wake_up_process() on the refresh thread.  With the flag still
++		 * clear at that moment the thread wakes, sees no pending full
++		 * refresh, and runs a PARTIAL pass over that damage -- a
++		 * complete, visible repaint -- before this ioctl gets around to
++		 * asking for the wash.  The user then sees the page render, then
++		 * flash, then render again for a single refresh request.
++		 * Measured on a PineNote 2026-08-04: every global intent cost 38
++		 * partial frames followed by 1 global IRQ.
++		 *
++		 * Setting it first is safe against painting stale content,
++		 * because the wake comes from the commit itself: by the time the
++		 * thread runs, the commit that woke it has already published
++		 * into ctx->final, and rockchip_ebc_global_refresh() splices and
++		 * frees ctx->queue anyway, so the superseded areas cost nothing.
++		 */
++		spin_lock(&ebc->refresh_once_lock);
++		ebc->do_one_full_refresh = true;
++		spin_unlock(&ebc->refresh_once_lock);
 +#ifdef CONFIG_DRM_FBDEV_EMULATION
 +		/*
 +		 * Publish-on-call ordering (wilkbook): drain any fbdev
@@ -3285,20 +3320,6 @@ index 000000000..8db4c36cd
 +			flush_work(&rockchip_ebc_defio_helper->damage_work);
 +		}
 +#endif
-+		mutex_lock(&ebc->barrier_lock);
-+		if (ebc->barrier_poison) {
-+			mutex_unlock(&ebc->barrier_lock);
-+			return ebc->barrier_poison;
-+		}
-+		if (!ebc->worker_available || ebc->hardware_uncertain) {
-+			mutex_unlock(&ebc->barrier_lock);
-+			return -ENODEV;
-+		}
-+		ebc->legacy_pending = true;
-+		mutex_unlock(&ebc->barrier_lock);
-+		spin_lock(&ebc->refresh_once_lock);
-+		ebc->do_one_full_refresh = true;
-+		spin_unlock(&ebc->refresh_once_lock);
 +		// try to trigger the refresh immediately
 +		wake_up_process(ebc->refresh_thread);
 +	}
