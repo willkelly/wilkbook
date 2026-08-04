@@ -21,13 +21,20 @@ rockchip GPIO controller) after its first platform "deep" suspend, and
 confirmed to reproduce on both a 6.12 BSP kernel and 7.0.11 -- i.e. it is
 inherent to the driver, not to one image.
 
-Fix: split the register-programming tail of st_sensors_init_sensor() into
-st_sensors_reinit_hw(), which touches no mutex initialisation and no
-device-tree parsing and is therefore safe to repeat, and add PM ops that
-disable the sensor on suspend and reprogram it from cached state on
-resume.  The data-ready interrupt is re-armed only when a trigger owns it;
-st_sensors_reinit_hw() masks it first, which is what makes the line quiet
-again after a power loss.
+Fix, in two parts -- the second is load-bearing and the first alone is
+not sufficient:
+
+1. Split the register-programming tail of st_sensors_init_sensor() into
+   st_sensors_reinit_hw(), which touches no mutex initialisation and no
+   device-tree parsing and is therefore safe to repeat, and add PM ops
+   that reprogram from cached state on resume.
+
+2. Mask the interrupt across the whole transition.  resume_device_irqs()
+   runs at the noirq stage, BEFORE driver .resume callbacks, so without a
+   disable_irq()/enable_irq() bracket the handler runs while the chip is
+   still at reset defaults and the storm happens before .resume can
+   reconfigure anything.  Part 1 was deployed alone on a PineNote and the
+   storm still fired 0.7 s after every resume.
 
 Signed-off-by: (wilkbook -- see doc/upstream-register.md item 8)
 
@@ -78,7 +85,7 @@ Signed-off-by: (wilkbook -- see doc/upstream-register.md item 8)
  	err = st_sensors_set_enable(indio_dev, false);
  	if (err < 0)
  		return err;
-@@ -417,7 +435,75 @@
+@@ -417,7 +435,106 @@
  
  	return err;
  }
@@ -110,7 +117,29 @@ Signed-off-by: (wilkbook -- see doc/upstream-register.md item 8)
 +
 +	/* Remember what to come back to; set_enable() clears ->enabled. */
 +	sdata->pm_enabled = sdata->enabled;
-+	if (!sdata->enabled)
++
++	/*
++	 * Mask the data-ready line for the duration.  This is the load-bearing
++	 * half of the fix, and reprogramming registers on resume is not enough
++	 * without it: resume_device_irqs() runs at the noirq stage, BEFORE
++	 * driver .resume callbacks, so on a suspend that removed power the
++	 * interrupt is re-enabled while the chip sits at reset defaults with
++	 * its level-triggered line asserted.  The threaded handler then runs
++	 * before anything has reconfigured the device, cannot clear the
++	 * source, and the kernel's spurious protection disables the interrupt
++	 * permanently:
++	 *
++	 *   irq NN: nobody cared (try booting with the "irqpoll" option)
++	 *
++	 * Observed on a PineNote 0.7 s after each resume from platform "deep"
++	 * until this bracket was added.
++	 */
++	if (sdata->irq > 0 && !sdata->pm_irq_disabled) {
++		disable_irq(sdata->irq);
++		sdata->pm_irq_disabled = true;
++	}
++
++	if (!sdata->pm_enabled)
 +		return 0;
 +
 +	return st_sensors_set_enable(indio_dev, false);
@@ -138,10 +167,19 @@ Signed-off-by: (wilkbook -- see doc/upstream-register.md item 8)
 +			return err;
 +	}
 +
-+	if (!sdata->pm_enabled)
-+		return 0;
++	if (sdata->pm_enabled) {
++		err = st_sensors_set_enable(indio_dev, true);
++		if (err < 0)
++			return err;
++	}
 +
-+	return st_sensors_set_enable(indio_dev, true);
++	/* Only now is it safe to let the handler run again. */
++	if (sdata->pm_irq_disabled) {
++		sdata->pm_irq_disabled = false;
++		enable_irq(sdata->irq);
++	}
++
++	return 0;
 +}
 +
 +/*
@@ -157,16 +195,19 @@ Signed-off-by: (wilkbook -- see doc/upstream-register.md item 8)
  {
 --- a/include/linux/iio/common/st_sensors.h
 +++ b/include/linux/iio/common/st_sensors.h
-@@ -246,6 +246,8 @@
+@@ -246,6 +246,11 @@
  	struct regmap *regmap;
  
  	bool enabled;
 +	/* ->enabled as it was before a system sleep, for resume. */
 +	bool pm_enabled;
++	/* set when system suspend masked ->irq, so resume re-enables it
++	 * exactly once and cannot unbalance the depth counter. */
++	bool pm_irq_disabled;
  
  	unsigned int odr;
  	unsigned int num_data_channels;
-@@ -285,6 +287,10 @@
+@@ -285,6 +290,10 @@
  int st_sensors_init_sensor(struct iio_dev *indio_dev,
  					struct st_sensors_platform_data *pdata);
  
