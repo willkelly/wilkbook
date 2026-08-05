@@ -136,24 +136,53 @@ if deep then set_wf(prior) end
          (when (file-exists? "/dev/fb0")
            (system* #$(file-append koreader-bin "/lib/koreader/luajit")
                     "-e" #$%panel-blank-lua))
-         ;; when local fonts are staged in the image, seed the font
-         ;; defaults once (never overwrite on-device choices).  Mirrors
-         ;; wilkhome's fontconfig aliases: serif=Equity, sans=Concourse,
-         ;; mono=Triplicate Code; crengine's built-in fallback chain
-         ;; (Noto Serif/Sans, CJK, FreeSans/Serif) stays in effect below
-         ;; these.
-         #$@(if pinenote-local-fonts
-                #~((let ((settings "/root/.config/koreader/settings.reader.lua"))
-                     (unless (file-exists? settings)
-                       (for-each (lambda (dir)
-                                   (unless (file-exists? dir)
-                                     (mkdir dir #o700)))
-                                 '("/root/.config" "/root/.config/koreader"))
-                       (call-with-output-file settings
-                         (lambda (port)
-                           (display "\
+         ;; Seed KOReader defaults once, and never overwrite on-device
+         ;; choices -- this only writes when the file is absent, which on
+         ;; this image means a fresh reflash (/root comes from the image).
+         ;;
+         ;; Two of these are e-ink refresh policy, not taste, and cost real
+         ;; panel time when left at KOReader's defaults (measured on glass
+         ;; 2026-08-04/05; doc/refresh-policy.md):
+         ;;
+         ;;   cre_show_progress=false -- ReaderRolling:showEngineProgress()
+         ;;     paints a progress bar during a crengine re-render and calls
+         ;;     Screen:refreshFast() every 500 ms.  publish() is fsync on
+         ;;     the fbdev fd and deferred-io tracks dirty PAGES, not the
+         ;;     intent's rect, so each tick republishes the whole pending
+         ;;     re-render as a full-screen ~38-frame pass (~0.8 s).  A
+         ;;     progress indicator that costs 0.8 s per 0.5 s tick makes the
+         ;;     operation it reports on slower.  Upstream added this key for
+         ;;     the same reason on SDL-over-SSH.  Rotations without it cost
+         ;;     exactly 1 IRQ (one wash); with it, 76+ frames plus the wash.
+         ;;
+         ;;   cre_partial_rerendering=false -- otherwise crengine
+         ;;     re-renders in the background and cycles a status icon
+         ;;     (cre.render.partial/working/ready/reload) at 75x75, and a
+         ;;     partial refresh costs ~38 frames REGARDLESS of area, so a
+         ;;     corner icon costs a full-screen repaint.  Note this one is
+         ;;     read per-document first (the book's .sdr sidecar) and only
+         ;;     then globally, so this default loses to an existing book's
+         ;;     saved value -- it governs newly opened books.
+         ;;
+         ;; The font keys mirror wilkhome's fontconfig aliases
+         ;; (serif=Equity, sans=Concourse, mono=Triplicate Code); crengine's
+         ;; built-in fallback chain stays in effect below them.
+         (let ((settings "/root/.config/koreader/settings.reader.lua"))
+           (unless (file-exists? settings)
+             (for-each (lambda (dir)
+                         (unless (file-exists? dir)
+                           (mkdir dir #o700)))
+                       '("/root/.config" "/root/.config/koreader"))
+             (call-with-output-file settings
+               (lambda (port)
+                 (display "\
 -- seeded by wilkbook reader-session; KOReader rewrites this file
 return {
+    [\"cre_show_progress\"] = false,
+    [\"cre_partial_rerendering\"] = false,
+" port)
+                 #$@(if pinenote-local-fonts
+                        #~((display "\
     [\"cre_font\"] = \"Equity A\",
     [\"monospace_font\"] = \"Triplicate A Code\",
     [\"cre_font_family_fonts\"] = {
@@ -161,9 +190,9 @@ return {
         [\"sans-serif\"] = \"Concourse 4\",
         [\"monospace\"] = \"Triplicate A Code\",
     },
-}
-" port))))))
-                #~())
+" port))
+                        #~())
+                 (display "}\n" port)))))
          (apply
           (make-forkexec-constructor
            ;; reader.lua's own shebang is #!./luajit, so run the
