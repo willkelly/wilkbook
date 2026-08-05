@@ -164,6 +164,34 @@ if deep then set_wf(prior) end
          ;;     then globally, so this default loses to an existing book's
          ;;     saved value -- it governs newly opened books.
          ;;
+         ;;   flash_ui=false -- tap feedback on menu rows, file rows and
+         ;;     dialog buttons calls UIManager:forceRePaint() TWICE per tap
+         ;;     (highlight, then unhighlight; menu.lua ~527-543).  Cost is
+         ;;     per UI tick, not per intent -- within one repaint drain the
+         ;;     first publish() empties the deferred-io pagelist and later
+         ;;     ones are no-ops -- so what makes this expensive is the two
+         ;;     EXTRA ticks, each a full pass.  This was the file-browser
+         ;;     double draw.
+         ;;
+         ;;   flash_keyboard=false -- same mechanism, once per keystroke.
+         ;;
+         ;;   cre_header_auto_refresh=0 -- ReaderCoptListener:updateHeader()
+         ;;     calls document:resetBufferCache() ("be sure next repaint is
+         ;;     a redrawing") and setDirty over the full screen width, and
+         ;;     reschedules itself every 60 s while the top bar shows a
+         ;;     clock.  A whole page redraw plus a full-screen pass, once a
+         ;;     minute, forever: ~48 s of panel time per hour of reading for
+         ;;     a clock digit.  The clock still updates on every page turn.
+         ;;
+         ;;   coverbrowser_initial_default_setup_done=true -- CoverBrowser
+         ;;     seeds ITSELF on at first launch (main.lua ~84-95, mode
+         ;;     "list_image_meta"), then polls every 1 s patching extracted
+         ;;     covers into the file browser.  Pre-setting the "already did
+         ;;     first-run setup" flag leaves filemanager_display_mode unset,
+         ;;     which is the classic filename list.  Note the display modes
+         ;;     themselves live in BookInfoManager's sqlite cache, not here,
+         ;;     so this prevents the mode being set rather than unsetting it.
+         ;;
          ;; The font keys mirror wilkhome's fontconfig aliases
          ;; (serif=Equity, sans=Concourse, mono=Triplicate Code); crengine's
          ;; built-in fallback chain stays in effect below them.
@@ -180,6 +208,10 @@ if deep then set_wf(prior) end
 return {
     [\"cre_show_progress\"] = false,
     [\"cre_partial_rerendering\"] = false,
+    [\"flash_ui\"] = false,
+    [\"flash_keyboard\"] = false,
+    [\"cre_header_auto_refresh\"] = 0,
+    [\"coverbrowser_initial_default_setup_done\"] = true,
 " port)
                  #$@(if pinenote-local-fonts
                         #~((display "\
