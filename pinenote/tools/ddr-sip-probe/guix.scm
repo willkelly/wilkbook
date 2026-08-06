@@ -1,6 +1,6 @@
 ;; Out-of-tree kernel module package: ddr-sip-probe, built against the
 ;; exact linux-pinenote package (whose derivation output is the running
-;; kernel /gnu/store/gjpg9940ry0r2bz88ixwjfbl5m2ig384-linux-pinenote-7.0.11-pinenote).
+;; kernel /gnu/store/the running kernel (verify with guix build --dry-run)-linux-pinenote-7.0.11-pinenote).
 ;;
 ;; Build:
 ;;   guix build -L /home/wkelly/src/forgejo/wkelly/wilkbook \
