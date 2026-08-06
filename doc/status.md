@@ -26,16 +26,18 @@ measurement windows; quote ~20. DDR at 324 MHz saves ~24.8 mA (quiesced);
 `wilkbook_dmc` is live on os2 (static 324; the input boost is present but
 disabled pending the power-key fix below).
 
-**On os2**: v2 DMC image `8c5ae451…` (deployed 2026-08-06 evening, boot
-acceptance passed) — the `1a582179…` stack plus `wilkbook_dmc` @324,
-ddr-boost, and the daemon eviction fixes.
+**On os2**: v3 image `f41cf91f…` (written + readback-verified 2026-08-06
+late night, **not yet booted**) — v2 plus the power-key/wash fix stack
+(commit `55c43b0`): KOReader no longer opens the pwrkey, autosuspend
+gates `mem` behind a sustained-quiet EBC-idle wait and washes GC16 on
+resume, both waveform save/restore sites self-heal, ddr-boost ships
+disabled, the boot wash fsyncs its fill. First image that reads root's
+SSH key from `/data/ssh/authorized_keys` — staged before the write.
 
-**Warning (open bug)**: a power tap while the device is AWAKE races
-KOReader's own Power handler (it fires a global refresh) against
-press-to-suspend — the suspend can park the EBC mid-refresh and leave the
-panel corrupted until the next tap's full refresh. Idle-path auto-suspend
-is unaffected. Fix (single ownership of the power key) is queued; see the
-2026-08-06 night entry.
+**Warning (fix deployed, unproven)**: the awake-power-tap corruption
+(KOReader's unconditional Power handler racing press-to-suspend into a
+mid-refresh park) is fixed in v3 but not yet validated on glass. The
+v3 boot acceptance is the tap test; see the 2026-08-06 night entry.
 
 **Next actions**: (1) the week-scale unplugged soak — a first short
 unplugged soak passed clean 2026-08-03 (2 full-duration sleeps, no
@@ -50,6 +52,28 @@ below).
 
 Entries below are newest-first; the ## sections after the parity table
 are a historical document.
+
+**2026-08-06 (late night) v3 fix image written to os2 — not yet
+booted.** [wilkbook / wkelly] The Addendum 5 fix stack (commit
+`55c43b0`, each diff adversarially reviewed; the review caught the
+EBC-idle gate's global-refresh blind spot — a global's only IRQ is its
+completion tick, so "one unchanged sample pair" reads exactly like
+idle — and the waveform save/restore self-poisoning) built, closure-
+verified (pwrkey-free `koreader-bin l3g2wn5h…`, both hardened daemons,
+`panel-wash` in the shepherd conf), extracted with all inspection gates
+green, staged, and dd'd to p6 with matching readback SHA `f41cf91f…`.
+System `cjqyiy02…`. The `/data/ssh/authorized_keys` migration trap was
+live (key not staged, UART disconnected — the image would have booted
+dark); staged from os1 (`/home/ssh/` on p7) before the write. Staging
+copy kept at os1 `/home/pn-stage-v3.ext4` until the boot proves out.
+**v3 boot acceptance**: clean first wash (no console residue; any
+`panel-wash:` stderr lines in the reader-session log are diagnostic
+gold), awake power tap → banner + suspend with no corruption and no
+KOReader reaction (the definitive test — DDR is static so the demoted
+collision theory cannot confound), idle-path sleep screen still clean,
+`suspend boundary noticed` never fires in ddr-boost's log (it ships
+disabled), and the autosuspend log's EBC-gate timeout line never fires
+in normal use.
 
 **2026-08-06 (night) v2 DMC image deployed and soaking; two display bugs
 found on glass, one diagnosis corrected.** [wilkbook / wkelly] The v2
