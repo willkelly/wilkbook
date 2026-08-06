@@ -157,3 +157,26 @@ back but not the ASSOCIATION (stale supplicant on a fresh ifindex);
 recovery ran over the UART root shell, which this session first
 verified is passwordless. `herd restart pinenote-wifi` after any driver
 reload.
+
+## Addendum 3: v2 boot, the GL16 cold-start ghosting gap, and the soak
+
+The DMC v2 image (eviction fixes) is deployed and soaking: 324 MHz floor,
+input boost live, suspend cycling on defaults. Eviction verified: bridge
+respawn leaves both daemons at 0 jiffies/5 s (the v1 bug measured 494).
+
+**New display finding, confirmed on glass:** after ANY other software
+paints the panel (U-Boot splash, an os1 session), our first boot starts
+from the zero-initialized flat cache believing the panel is white; GL16
+(refresh_waveform=6) deliberately drives nothing for white->white, so
+foreign residue survives EVERY normal wash -- "insane ghosting" that
+menu washes and page turns cannot clear, while accumulating no NEW
+ghosting (normal operation is healthy, DDR exonerated). One GC16 wash
+(refresh_waveform=4 momentarily) cleared it completely. Proper fix, not
+yet implemented: make the FIRST wash after boot GC16, then GL16
+thereafter -- one flash at boot buys immunity to foreign panel state.
+
+Operational note from the same evening: a run of "os2 pick lands in os1"
+failures was misattributed to UART TX degradation; a leaked host-side
+`cat /dev/ttyUSB0` reader (competing for bytes, torn captures) polluted
+the diagnosis, and the user's manual menu pick booted v2 fine. Kill
+leaked serial readers before concluding anything about the console.
