@@ -74,7 +74,18 @@
         ;; ("irq 71: nobody cared") -- autorotation dies until reboot.
         ;; Reproduces on stock 6.12 too, so it is the driver, not us.
         ;; doc/upstream-register.md item 8.
-        (local-file "../patches/linux-pinenote-7.0-st-accel-pm.patch")))
+        (local-file "../patches/linux-pinenote-7.0-st-accel-pm.patch")
+        ;; EXPERIMENTAL (2026-08-05): CPU idle-states, so a cpuidle driver
+        ;; exists at all.  Rockchip ships these for rk3308/3328/1808/3528/
+        ;; 3562/3576/3588 but not rk356x, and mainline has none, so the
+        ;; cores never leave WFI and awake idle sits at a ~206 mA floor.
+        ;; The firmware is willing: its own PSCI debugfs reports CPU_SUSPEND
+        ;; implemented, non-OSI, Original StateID format -- which is what
+        ;; Rockchip's 0x0010000 (StateID 0, PowerDown, core) encodes.
+        ;; Unproven on this SoC by anyone; a firmware that accepts the
+        ;; parameter but cannot wake the core wedges the device.  Drop this
+        ;; line to revert.  doc/power-management.md.
+        (local-file "../patches/linux-pinenote-7.0-cpuidle-psci.patch")))
 
 (define %linux-pinenote-source
   (origin
