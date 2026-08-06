@@ -1,0 +1,9 @@
+=== charging-regime calibration, 300s per phase ===
+  charger online: 1
+  capacity: 75%   vbus: 4515000 uV
+  idle-1       net battery   -788.4 mA  (negative = charging)
+  burn         net battery    -43.3 mA  (negative = charging)
+  idle-2       net battery   -798.8 mA  (negative = charging)
+
+verdict: if burn differs from the idle windows by >>50 mA, the input
+is saturated and differential ABBA measurements are valid tonight.

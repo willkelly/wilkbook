@@ -1,0 +1,102 @@
+vdd_cpu (TCS4525) force-PWM -> auto-PFM/PWM runtime A/B — operator reference
+=============================================================================
+Target: PineNote rk3566, TCS4525 buck on I2C bus 0 (alias i2c0), address 0x1c.
+Kernel driver: drivers/regulator/fan53555.c (7.0.11, byte-identical in
+pristine/vanilla/pm-regen trees; no wilkbook patch touches it or the DT node).
+
+Chip/register model (all cited against /tmp/opencode/linux-7.0.11-pm-regen)
+---------------------------------------------------------------------------
+  ID1      = 0x03   low nibble must be 0xC (chip_id 12 = TCS4525)     [fan53555.c:104-106,723]
+  VSEL1    = 0x10   ACTIVE voltage register (bit7=EN, bits6:0=NSEL)   [fan53555.c:33,494,604]
+  VSEL0    = 0x11   sleep voltage register                            [fan53555.c:32,493]
+  TIME     = 0x13   slew (probe-time only)                            [fan53555.c:34,421]
+  COMMAND  = 0x14   mode register                                     [fan53555.c:35,545]
+                    bit7 = force-PWM for VSEL0 (sleep side)           [fan53555.c:63]
+                    bit6 = force-PWM for VSEL1 (ACTIVE side) <- our bit [fan53555.c:64,548-550]
+
+Why VSEL1 is active: DT fcs,suspend-voltage-selector = <0>
+(rk3566-pinenote.dtsi:224 pristine) -> driver sets sleep_reg=VSEL0(0x11),
+vol_reg=VSEL1(0x10) [fan53555.c:490-495] and mode_mask=TCS_VSEL1_MODE=bit6
+[fan53555.c:544-550].
+
+Voltage map: uV = 600000 + NSEL * 6250 (128 steps) [fan53555.c:427-429].
+  850 mV -> NSEL 0x28 -> reg 0x10 = 0xA8
+ 1100 mV -> NSEL 0x50 -> reg 0x10 = 0xD0
+ 1150 mV -> NSEL 0x58 -> reg 0x10 = 0xD8
+
+"fast" in regulator_summary == COMMAND bit6 set (get_mode reads 0x14, tests
+bit6) [fan53555.c:209-222]. opmode sysfs is a live hardware read
+[core.c:660-667], so it is the post-poke verification.
+
+Nothing fights the poke (all code-proven):
+- DVFS writes ONLY reg 0x10 masked 0x7F: set_voltage_sel =
+  regulator_set_voltage_sel_regmap [fan53555.c:243] -> regmap_update_bits
+  (vsel_reg=0x10, vsel_mask=0x7F) [helpers.c:281-288; fan53555.c:604-605].
+  The mode bit lives in a different register (0x14): a cpufreq transition
+  can never undo the poke.
+- No kernel path writes 0x14 at runtime: probe never writes it
+  [fan53555.c:674-749]; initial-mode needs of_map_mode which the driver
+  lacks [of_regulator.c:197-208, no of_map_mode in fan53555.c]; no consumer
+  calls regulator_set_mode (only mtk drivers in tree); DRMS not enabled
+  (no regulator-allow-set-load / allowed-modes in DT).
+- Bootloaders don't set it either: mainline u-boot fan53555 is voltage-only;
+  Rockchip downstream u-boot fan53555_regulator.c defines the TCS mode bits
+  but never writes them (probe reads ID only, mode_count=0).
+  => "fast" is the chip's power-on state (silicon default, or at most the
+  closed rkbin loader) — a one-shot boot-time writer. Nothing re-asserts it.
+
+Preflight (read-only, run all, abort on any mismatch)
+-----------------------------------------------------
+  i2cget -f -y 0 0x1c 0x03      # (val & 0x0f) == 0x0c, else ABORT
+  i2cget -f -y 0 0x1c 0x14      # ORIG. (ORIG & 0x40) != 0 expected ("fast").
+                                # If bit6 already clear: premise wrong, ABORT.
+                                # Log bit7 too (sleep-side mode, informative).
+  i2cget -f -y 0 0x1c 0x10      # (val & 0x80) != 0 (EN) and
+                                # 600000 + (val & 0x7f)*6250 must equal
+                                # /sys/class/regulator/<vdd_cpu>/microvolts.
+                                # Mismatch => active-VSEL model wrong, ABORT.
+  grep -A1 vdd_cpu /sys/kernel/debug/regulator/regulator_summary  # opmode fast
+
+MANDATORY mitigation: clamp DVFS for the whole A/B window
+---------------------------------------------------------
+  echo 408000 > /sys/devices/system/cpu/cpufreq/policy0/scaling_max_freq
+  (save the old value first; verify microvolts drops to 850000 and reg 0x10
+  reads 0xA8). At 408 MHz / 850 mV the load-step amplitude auto-PFM must
+  absorb is minimal and the voltage margin maximal; it also stops all DVFS
+  writes to 0x10 during measurement. Baseline (A) MUST be measured under the
+  same clamp.
+
+The single poke (b) — enables the chip's automatic PFM/PWM
+----------------------------------------------------------
+  V=$(i2cget -f -y 0 0x1c 0x14); i2cset -f -y 0 0x1c 0x14 $(( V & ~0x40 ))
+  # e.g. ORIG 0xC0 -> 0x80 ; ORIG 0x40 -> 0x00. RMW preserves bits 7,5:0.
+  # Verify: i2cget -f -y 0 0x1c 0x14 has bit6 clear AND opmode now "normal".
+  This CLEARS a force bit; mode choice returns to the chip's internal
+  load comparator (auto PFM at light load, PWM under load) — we are not
+  forcing PFM. (Driver-level semantics: REGULATOR_MODE_FAST = set force
+  bit [fan53555.c:196-198]; NORMAL = bit clear = automatic.)
+
+Revert (c)
+----------
+  i2cset -f -y 0 0x1c 0x14 $ORIG      # restore exact original byte
+  # Verify readback == ORIG and opmode == "fast". Then restore
+  # scaling_max_freq.
+
+Dead-man structure (d): use vdd-cpu-ab-deadman.sh in this directory.
+  setsid /root/vdd-cpu-ab-deadman.sh </dev/null >/dev/null 2>&1 &
+  Phases: clamp -> A 900 s (force-PWM baseline) -> poke -> B 900 s (auto)
+  -> revert -> A2 900 s -> unclamp. Trap-based revert on any signal/exit,
+  plus an independent detached fallback process that unconditionally
+  restores ORIG and the clamp at T+3*900+600 s. Battery current sampled
+  every 15 s into the log with phase tags.
+
+NEVER do instead
+----------------
+- Never use any kernel set_mode path to go to NORMAL (e.g. a hacked
+  initial-mode without the driver fix): fan53555_set_mode's NORMAL branch
+  writes vol_reg, not mode_reg [fan53555.c:200-201] — on this board that
+  clears bit6 of the ACTIVE VSEL, i.e. drops the CPU 400 mV instantly at
+  any voltage >= 1.0 V. Hard hang. (Bug present in BSP and current
+  mainline; upstream-register candidate.)
+- Never write absolute values to 0x14; always RMW around bit 0x40 only.
+- Never touch 0x10/0x11/0x13.

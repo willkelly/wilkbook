@@ -1,0 +1,11 @@
+1785994639.674401897 start pid=3002 window=900s clamp=408000kHz
+1785994639.975298064 preflight ID1=0x1c CMD(0x14)=0x41 (bit7=0 bit6=1)
+1785994640.031576898 preflight VSEL1(0x10)=0xd8 hw=1150000uV fw=1150000uV opmode=fast — model confirmed
+1785994643.277110941 clamped: max_freq 1800000->408000 cur=408000 uV=850000 VSEL1=0xa8
+1785994643.324047691 fallback reverter pid=3056 deadline=+3300s
+1785994643.415577941 no power_supply current_now found; external measurement required
+1785994643.575124274 PHASE-A start (force-PWM baseline, clamped) 900s 0x14=0x41 opmode=fast
+1785995543.844883204 PHASE-B start (auto PFM/PWM) 900s 0x14=0x01 opmode=normal
+1785996444.070542258 REVERTED 0x14=0x41 opmode=fast; max_freq restored to 1800000
+1785996444.247128675 PHASE-A2 start (post-revert baseline) 900s 0x14=0x41 opmode=fast
+1785997344.417919979 done: 0x14=0x41 opmode=fast max_freq=1800000

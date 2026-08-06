@@ -1,0 +1,95 @@
+# Awake-power levers, AFK session (2026-08-06)
+
+Unattended session: SSH only, no reboots possible, device on the charger
+the whole time. Three subagents (probe module build, regulator research,
+trims analysis) ran in parallel with on-device measurement. Headline:
+**one register bit was costing ~18% of the awake static floor.**
+
+## Method: differential ABBA while charging
+
+The charger could not be removed (nobody present) and exposes no software
+pause. But the gauge counts *battery* current, and with the charger input
+saturated every mA of load comes 1:1 out of the battery-charge rate — so
+*differential* A/B measurement stays valid, with ABBA/ABA ordering to
+cancel charger taper drift.
+
+The regime was **calibrated, not assumed** (`calib-regime.txt`): a 4-core
+CPU burn moved the battery rate by ~750 mA (idle −788/−799, burn −43),
+proving input saturation. Idle repeatability ±5 mA, drift ~10 mA/16 min →
+honest resolution ~3 mA per lever with 900 s phases.
+
+**Method limit, hit live:** the method died the moment the battery
+reached full (see BT below). Valid only while charge rate is far from
+the CV taper.
+
+## Result 1: vdd_cpu forced-PWM costs ~30 mA at idle — FIXED in next boot
+
+The TCS4525 CPU buck powers on with force-PWM set (COMMAND 0x14 bit 6)
+and *nothing in the ecosystem ever clears it* — not the kernel (fan53555
+has no of_map_mode, so the DT property is ignored), not mainline u-boot,
+not Rockchip's downstream u-boot. Effectively the whole rk3566 fleet runs
+its CPU rail in forced PWM. Meanwhile the same dtsi's RK817 bucks
+(vdd_logic et al.) already request and get auto mode — vdd_cpu was left
+behind purely because its driver couldn't parse the property.
+
+Runtime ABA (`vdd-cpu-deadman.log` + `vdd-cpu-battery-samples.log`),
+direct i2c poke, DVFS clamped to 408 MHz, dead-man auto-revert armed:
+
+```
+A  force-PWM : +803.3 mA charging
+B  auto-PFM  : +823.3 mA charging      <- against the taper direction
+A2 force-PWM : +779.9 mA charging
+```
+
+Drift-corrected saving **+31.7 mA**, quoted **~30 ± 8 mA** after bounding
+taper-shape uncertainty. Rail stable through the full window; revert
+verified byte-exact; cpuidle residency unchanged. Baked into
+`pinenote/patches/linux-pinenote-7.0-vdd-cpu-auto-pfm.patch` — which
+must also carry the `fan53555_set_mode` NORMAL-branch fix
+(upstream-register item 10): without it, the DT route writes the ACTIVE
+VOLTAGE SELECTOR and drops the rail 400 mV at boot.
+
+Projection if boot acceptance confirms: awake floor 163 → ~133 mA
+(settled reader idle ~175 → ~145 mA, +20% reading runtime).
+
+## Result 2: DRAM SIP is implemented — DDR DVFS is GO (see ddr-sip-probe)
+
+`ddr-sip-probe-dmesg.txt`: `DRAM_GET_VERSION → a0=0 (SUCCESS), a1=0x101`,
+above the BSP DMC driver's ≥0x100 floor. First confirmation on this
+device; tool now in-tree at `pinenote/tools/ddr-sip-probe/`.
+
+## Result 3: BT measurement invalid — the method limit, demonstrated
+
+```
+A1: -624.7 mA   B1: -67.3 mA   B2: +0.6 mA   A2: +6.2 mA
+```
+
+The battery reached full mid-run; the "delta" is pure taper. Recorded as
+the reference example of the method's failure mode. What *is* established:
+the BT serdev unbind/rebind works cleanly (hci_uart_bcm, chip is
+dead-but-powered on this image) and cpuidle was unaffected. Expected
+<1 mA from analysis; measure unplugged.
+
+## Also confirmed this session
+
+- **Press-to-suspend works on glass**: `power tap -- suspending on
+  request` in the autosuspend log — the user's tap before going AFK.
+- 5/5 unattended auto-suspend cycles on the cpuidle kernel (bonus soak).
+- Wi-Fi power_save already on (that lever was already pulled).
+- dwc3 runtime-PM trim disqualified *while charging through that port*
+  (suspending the controller could renegotiate input current — measurement
+  poison); untested candidate for an unplugged session.
+
+## Next-boot candidates found by the trims analysis (not yet acted on)
+
+Ranked, all DT/driver work: audio cluster pinning **CPLL at 1 GHz** with
+zero consumers; **NPLL at 1.2 GHz** with no visible owner; VI (camera)
+and VO domains powered on a camera-less reader. Each plausibly mA-class;
+all unknown until tried.
+
+## Safety notes that held
+
+Rules for unattended hardware: never touch the Wi-Fi path or the rootfs
+eMMC; read-only SMCs only; risky pokes last with an independent dead-man
+reverter; auto-suspend paused with a timed self-restore so a lost link
+cannot strand the device awake. All held; zero incidents.

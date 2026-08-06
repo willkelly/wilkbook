@@ -1,0 +1,6 @@
+[ 2173.313001] ddr_sip_probe: loading out-of-tree module taints kernel.
+[ 2173.313539] ddr_sip_probe: read-only Rockchip SIP version queries (no SET calls, no share-mem)
+[ 2173.313554] ddr_sip_probe: ATF_VERSION fid=0x82000001 args=(0x0,0x0,0x0) -> a0=0xffffffffffffffff a1=0x0 a2=0x0 a3=0x0
+[ 2173.313563] ddr_sip_probe: SIP_VERSION fid=0x8200000a args=(0x0,0x0,0x0) -> a0=0x0 a1=0x2 a2=0x0 a3=0x0
+[ 2173.313568] ddr_sip_probe: DRAM_GET_VERSION fid=0x82000008 args=(0x0,0x0,0x8) -> a0=0x0 a1=0x101 a2=0x0 a3=0x0
+[ 2173.313573] ddr_sip_probe: a0=0 => implemented (version in a1); a0=0xffffffffffffffff (SMC_UNK) => not implemented; done, refusing to stay loaded

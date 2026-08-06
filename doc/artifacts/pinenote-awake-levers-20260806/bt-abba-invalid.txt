@@ -1,0 +1,8 @@
+=== ABBA bt  900s/phase  cap=95%  charger=1 ===
+PHASE A1     -624.7 mA   cpu_sleep_us=1802387183
+bt unbound from /sys/bus/serial/drivers/hci_uart_bcm
+PHASE B1      -67.3 mA   cpu_sleep_us=1823223470
+PHASE B2       +0.6 mA   cpu_sleep_us=1812951833
+bt rebound to /sys/bus/serial/drivers/hci_uart_bcm
+PHASE A2       +6.2 mA   cpu_sleep_us=1798449743
+DELTA bt: +275.9 mA  (negative = lever saves power)

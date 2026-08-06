@@ -181,11 +181,18 @@ rather than turning DDR off, so it can only claim a fraction of DDR's
 share of that. **Tens of mA at best.** Worth having; not a step change,
 and not a reason to delay the suspend-scheduling work that is worth 8x.
 
-**Also worth a look while in this area, and much cheaper:** `vdd_cpu`
-sits at 1100–1150 mV in **`fast` opmode** — forced PWM rather than
-auto/PFM. On the RK817 that is real quiescent draw at light load, and it
-is a regulator property rather than a workload. One DT/driver change,
-no firmware ABI involved.
+**vdd_cpu forced PWM: MEASURED AND FIXED 2026-08-06 — ~30 ± 8 mA, the
+largest single awake win of the program.** The TCS4525 CPU buck (not the
+RK817; the rail has its own chip at i2c0/0x1c) powers on with force-PWM
+set and nothing in the ecosystem ever clears it. A runtime i2c ABA with a
+dead-man revert (DVFS clamped to 408 MHz, differential coulomb method
+while charging, input saturation calibrated) measured the chip's
+automatic PFM/PWM mode saving ~30 mA — ~18% of the 163 mA static floor.
+Baked into `linux-pinenote-7.0-vdd-cpu-auto-pfm.patch` together with the
+`fan53555_set_mode` NORMAL-branch fix it requires (upstream-register item
+10). Boot acceptance: `vdd_cpu` opmode reads "normal" with no poke, and a
+settled awake window lands ~30 mA below the old floor. Full data:
+`doc/artifacts/pinenote-awake-levers-20260806/`.
 
 ## Safe measurement boundary
 
