@@ -56,10 +56,12 @@ Multi-agent, two passes, all findings skeptic-verified before action:
    waveform binary was ever committed. Fine for a trusted collaborator;
    a history rewrite is cheapest **before** they have clones, and is a
    destructive operation only Will should trigger.
-2. **Hosting/access.** The canonical remote is a personal account on a
-   home-LAN Forgejo instance. Person 2 needs either an account +
-   off-LAN reachability, or a mirror/bundle workflow. README's Hosting
-   section states the interim answer.
+2. **Hosting/access.** *Decided 2026-08-06: GitHub.* The repo will be
+   shared via GitHub, so no Forgejo provisioning is needed. This makes
+   item 1 sequence-critical: the history rewrite (or a fresh-start
+   push) must happen **before** the first GitHub push — even a private
+   one — because the SSID sits in commit messages that no tree edit can
+   remove, and rewriting after distribution invalidates every clone.
 3. **SSH key parameterization.** `pinenote/systems/pinenote-reader.scm`
    bakes the author's public key as root's only authorized key. Now
    documented in `doc/networking.md` §4.1 with the swap-before-build
