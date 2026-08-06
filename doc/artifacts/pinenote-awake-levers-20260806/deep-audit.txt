@@ -1,0 +1,14 @@
+1786038097 === deep-suspend draw audit, W=900s, cap=92%, ddr=324000000 ===
+1786038998 DEEP D1-normal: 20.6 mA over 900s  suspends 2->3  ddr_after=324000000
+1786039007 pen unbound (1-0009)
+1786039007 touch unbound (5-0024)
+1786039008 bt unbound
+1786039008 wifi: rmmod failed, leaving driver (D2 less clean)
+1786039912 DEEP D2-stripped: 22.7 mA over 900s  suspends 3->4  ddr_after=324000000
+1786039912 === audit complete; restoring ===
+1786039912 RESTORE begin
+1786039913   bt rebound
+1786039914   touch rebound (5-0024)
+1786039914   pen rebound (1-0009)
+1786039914   ddr module unloaded (boot rate restored)
+1786039920 RESTORE done: scmi_ddr=1056000000 reader=2

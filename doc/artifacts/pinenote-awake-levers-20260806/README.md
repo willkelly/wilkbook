@@ -123,3 +123,37 @@ clean. Daily-use numbers come with the driver.
 
 Session ledger against the 163 mA static floor: vdd_cpu auto-PFM
 ~17 realized + DDR@324 ~25 quiesced — the floor is structural no more.
+
+## Addendum 2: the 20.6 mA suspend draw is the rail floor, not a leak
+
+Null-hypothesis audit of deep-suspend draw, same boot, 900 s windows:
+
+```
+D1  normal suspend path:                 20.6 mA
+D2  touch+pen+BT unbound, wlan0 down:    22.7 mA
+```
+
+Pre-killing the peripherals changes nothing (D2's +2.1 mA is itself a
+finding: unbinding a driver SKIPS its suspend hook, and the orphaned
+hardware can sit in a worse state than the suspend path would have left
+it — the callbacks do real work). Honest scope note: `rmmod brcmfmac`
+failed ("D2 less clean" per the script's own log), so wifi was tested
+link-down-driver-present, not hardware-removed; touch/pen/BT were
+genuinely unbound.
+
+Conclusion: the suspended draw is PMIC quiescent + always-on rails +
+DDR self-refresh + bl31 retention — the regulator-suspend-policy /
+rail-kill territory already mapped as the ultra-suspend program (with
+its GPIO0 wake-collision question). No peripheral reachable from Linux
+is leaking.
+
+Also established: suspend draw is identical at 324 MHz DDR, and **bl31
+preserves a non-boot DDR rate across suspend/resume** (ddr_after=324
+following both D1 and D2 resumes) — the future DMC driver needs no
+resume re-assert.
+
+Operational lesson: the audit's restore path brought the wifi DRIVER
+back but not the ASSOCIATION (stale supplicant on a fresh ifindex);
+recovery ran over the UART root shell, which this session first
+verified is passwordless. `herd restart pinenote-wifi` after any driver
+reload.
