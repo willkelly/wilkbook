@@ -85,7 +85,17 @@
         ;; Unproven on this SoC by anyone; a firmware that accepts the
         ;; parameter but cannot wake the core wedges the device.  Drop this
         ;; line to revert.  doc/power-management.md.
-        (local-file "../patches/linux-pinenote-7.0-cpuidle-psci.patch")))
+        (local-file "../patches/linux-pinenote-7.0-cpuidle-psci.patch")
+        ;; vdd_cpu (TCS4525) boots in forced-PWM and nothing in the
+        ;; ecosystem ever clears it.  Measured on glass 2026-08-06 by a
+        ;; runtime i2c ABA with a dead-man revert: the chip's automatic
+        ;; PFM/PWM mode saves ~30 mA at idle -- ~18% of the 163 mA awake
+        ;; static floor.  Carries the fan53555_set_mode NORMAL-branch fix
+        ;; (upstream-register item 10) that the DT route requires, plus
+        ;; of_map_mode so regulator-initial-mode = <2> is honoured.
+        ;; Acceptance on next boot: vdd_cpu opmode reads "normal" with no
+        ;; runtime poke.  Drop this line to revert.
+        (local-file "../patches/linux-pinenote-7.0-vdd-cpu-auto-pfm.patch")))
 
 (define %linux-pinenote-source
   (origin
