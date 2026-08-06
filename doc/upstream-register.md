@@ -258,6 +258,81 @@ register once it exists.
 | ayakael | the Forgejo fork pmOS's kernel patch is generated from | via the pmOS maintainer address above | host `ayakael.net` is up (200) but `/forge/linux-pinenote` **404s**, including the exact `…/compare/526524233b…..v6.19.patch` URL pmaports fetches. Verified 2026-07-31. May be transient or a move — re-probe before relying on it |
 | dri-devel | mainline DRM | `git send-email` | only relevant if the driver is ever resubmitted; no EPD infrastructure in mainline and none pending |
 
+### 9. rk356x has no CPU `idle-states` — **needs-verification** (potentially the widest-reach item here)
+
+Neither mainline nor Rockchip's BSP defines `idle-states` for
+rk3566/rk3568. Rockchip ships them for **rk3308, rk3328, rk1808, rk3528,
+rk3562, rk3576 and rk3588** — both older and newer parts — and skips
+rk356x. The consequence is that Linux registers **no cpuidle driver at
+all**: `/sys/devices/system/cpu/cpuidle/current_driver` reads `none`, a
+governor is selected with nothing to drive, and the cores never leave WFI
+between events.
+
+**Measured cost (2026-08-05, identical 900 s coulomb-counter windows,
+frontlight pinned off, unplugged):**
+
+| stack | awake idle |
+|---|---|
+| stock Debian + GNOME/Wayland + foliate (6.12 BSP) | 232.5 mA |
+| our Guix + bare KOReader on fbdev (7.0.11) | 205.7 mA |
+| our deep suspend | 20.6 mA |
+
+Shedding an entire desktop stack bought **27 mA**. That is the signature
+of a platform floor rather than a workload cost, and it is why deep-sleep
+scheduling has been worth ~10x more than any awake optimisation on this
+board.
+
+**The firmware is willing.** Read off the device at zero risk from the
+kernel's own PSCI debugfs, which calls `psci_features(CPU_SUSPEND)` and
+only reaches these lines when it returns `>= 0`:
+
+    PSCIv1.1 / SMC Calling Convention v1.2
+    OSI is not supported
+    Original StateID format is used
+
+So `CPU_SUSPEND` is implemented; platform-coordinated (non-OSI) mode is in
+force, which is exactly what a DT `arm,psci-suspend-param` is for; and the
+Original StateID format is the one Rockchip's own parameter encodes.
+`CPU_OFF` is demonstrably live too (`psci: CPU3 killed (polled 1 ms)`), so
+the firmware's CPU power management is real rather than stubbed.
+
+**Confirmed absent on BOTH slots**, which matters for the argument: os1
+(6.12 BSP kernel, Rockchip's own DTB and ATF) also reports
+`current_driver: none` and has no `idle-states` in its live DT. Nobody is
+running this configuration today — not us, not Rockchip.
+
+**For:** linux-rockchip / devicetree, and `arch/arm64/boot/dts/rockchip/
+rk356x-base.dtsi` specifically. This is the one item in this register that
+is **not** PineNote-specific: rk3566/rk3568 covers Quartz64, SOQuartz,
+PineTab2, Odroid-M1, Radxa E25 and a long tail of boards, all of which
+would inherit the fix from one node in the shared base dtsi.
+
+**Shape:** an `idle-states` node with a single `arm,idle-state` plus
+`cpu-idle-states` on each core. Our experiment uses Rockchip's own
+parameters from `rk3588s.dtsi` — same Cortex-A55 core; `rk3562` uses the
+identical value — `arm,psci-suspend-param = <0x0010000>`, decoding in the
+Original format as StateID 0, bit[16] PowerDown, affinity level 0 (core).
+
+**What has to be true first** (this register's standing rule, and doubly
+so here):
+
+1. It must actually work on hardware — cpuidle registers, per-state
+   `usage` counters climb, and no core fails to wake across a long soak.
+2. The win must be **measured**, in the same 900 s window as the numbers
+   above, not asserted. If it does not move the 205.7 mA it is not worth
+   sending.
+3. It should be tried on a **second rk356x board** before claiming the SoC
+   rather than the PineNote. We have one device; a DT node in the shared
+   base dtsi affects everyone.
+4. Residency/latency figures should be ours, not copied from rk3588 —
+   borrowed constants are fine for an experiment, not for a submission.
+
+Until then this is a local patch
+(`pinenote/patches/linux-pinenote-7.0-cpuidle-psci.patch`), carried behind
+a one-line deletion in `kernel.scm`, and explicitly EXPERIMENTAL: a
+firmware that accepts the parameter but cannot bring the core back wedges
+the device.
+
 ## Standing caveats
 
 - **We are ahead of, not aligned with, the lineage.** Line numbers and
