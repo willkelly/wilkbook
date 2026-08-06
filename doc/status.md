@@ -23,12 +23,19 @@ device. See `doc/device-access.md`.
 (battery-drain window, pre-cpuidle image) vs 20.6 mA in the 2026-08-06
 rail-floor audit (900 s same-boot windows) — same floor, different
 measurement windows; quote ~20. DDR at 324 MHz saves ~24.8 mA (quiesced);
-`wilkbook_dmc` + boost policy landed in tree 2026-08-06, not yet in the
-deployed image.
+`wilkbook_dmc` is live on os2 (static 324; the input boost is present but
+disabled pending the power-key fix below).
 
-**On os2**: image `1a582179…` (deployed 2026-08-06, vdd_cpu auto-PFM boot
-acceptance passed) — carries the full 2026-08-03 stack plus cpuidle,
-power-button tap suspend, and the refresh seed.
+**On os2**: v2 DMC image `8c5ae451…` (deployed 2026-08-06 evening, boot
+acceptance passed) — the `1a582179…` stack plus `wilkbook_dmc` @324,
+ddr-boost, and the daemon eviction fixes.
+
+**Warning (open bug)**: a power tap while the device is AWAKE races
+KOReader's own Power handler (it fires a global refresh) against
+press-to-suspend — the suspend can park the EBC mid-refresh and leave the
+panel corrupted until the next tap's full refresh. Idle-path auto-suspend
+is unaffected. Fix (single ownership of the power key) is queued; see the
+2026-08-06 night entry.
 
 **Next actions**: (1) the week-scale unplugged soak — a first short
 unplugged soak passed clean 2026-08-03 (2 full-duration sleeps, no
@@ -36,10 +43,50 @@ spurious wakes, 64.4 mA duty cycle), but the 8.6-day standby figure still
 rests on extrapolation; (2) wake attribution — only RTC and power-button
 wake are proven; (3) the unexplained TPS `ENABLE 2f → 20` after deep
 resume; (4) the pre-suspend `nobody cared` trace seen once on the
-st_accel-PM image (soak artifact, open question).
+st_accel-PM image (soak artifact, open question); (5) **before the next
+os2 deploy**: stage `/data/ssh/authorized_keys` on the device — images
+built from this tree no longer bake the key (see the 2026-08-06 entry
+below).
 
 Entries below are newest-first; the ## sections after the parity table
 are a historical document.
+
+**2026-08-06 (night) v2 DMC image deployed and soaking; two display bugs
+found on glass, one diagnosis corrected.** [wilkbook / wkelly] The v2
+image (`8c5ae451…`: `wilkbook_dmc` @324, ddr-boost, eviction fixes)
+passed boot acceptance: DMC one-shot switched to 324 with the EBC
+quiesced, boost proven on real input, bridge-respawn eviction at
+0 jiffies (v1 measured 494). Found on glass: (1) **GL16 cold-start
+ghosting** — heavy residue that partials and GL16 globals could not
+clear; a GC16 wash cleared it on the spot (fix queued: first wash after
+boot is GC16). (2) **Post-tap-suspend panel corruption**, initially
+attributed to a ddr-boost/suspend collision (the operator challenged
+this, correctly): the root cause is **power-key double ownership** —
+KOReader maps the pwrkey and upstream `onPowerEvent` ignores
+`canSuspend`, so every awake tap fires a KOReader global refresh while
+the new press-to-suspend parks the EBC mid-drive ~1.2 s later; the
+desynced glass/cache survives GL16 restore washes (they are neutral) and
+heals on the next tap's full refresh. The absence of EBC frame timeouts
+had already ruled out the DDR-stall mechanism. Full chain + predictions:
+`doc/artifacts/pinenote-awake-levers-20260806/README.md` Addendum 5.
+Soak proceeds static-324 (boost `enabled=0`). Queued fixes: KOReader
+stops opening the pwrkey; autosuspend waits for EBC-idle instead of
+`sleep 1`; post-resume wash forced GC16.
+
+**2026-08-06 SSH authorized key moved out of the image — in tree, NOT
+deployed.** The reader flavor no longer bakes an authorized key;
+`pinenote-ssh-authorized-keys` (new `pinenote/services/ssh-keys.scm`)
+installs `/data/ssh/authorized_keys` over `/root/.ssh/authorized_keys`
+at every boot (survives reflashes; image stays generic —
+`doc/networking.md` §4.1). Offline evidence: reader closure builds, the
+built sshd_config honors `.ssh/authorized_keys`, `/etc` in the image
+carries no key, the one-shot is in the shepherd graph. **MIGRATION TRAP
+for the next os2 deploy**: an image built from this tree has no
+reachable root SSH until the key is staged — run
+`mkdir -p /data/ssh && cp /etc/ssh/authorized_keys.d/root
+/data/ssh/authorized_keys` on the *currently deployed* image (or write
+the key over the ACM console) **before** deploying, or SSH goes dark
+and the consoles are the way back in.
 
 **2026-08-06 vanished-input-device eviction (backfilled 2026-08-06 from
 commit records).** Destroying a uinput device (as an orientation-bridge

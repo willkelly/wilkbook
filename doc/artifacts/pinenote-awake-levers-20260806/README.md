@@ -183,6 +183,10 @@ leaked serial readers before concluding anything about the console.
 
 ## Addendum 4: boost/suspend collision found on glass; soak is static-324
 
+**SUPERSEDED by Addendum 5 (same night).** The DDR switch was coincident,
+not causal; the root cause is power-key double ownership. The soak-state
+change (boost disabled, static 324) stands. Original text kept below.
+
 The input-driven boost's core assumption -- "input arrives when the EBC
 is idle" -- is FALSE at the suspend/wake boundaries, which is exactly
 where buttons get pressed. Timeline from the logs, 2026-08-06 21:25:
@@ -211,3 +215,73 @@ Fixes required before the boost re-enables (next session):
 Soak state changed accordingly: ddr-boost.conf enabled=0 -- static
 324 MHz, zero switches (the collision class cannot occur), which also
 tests whether all-324 rendering feels acceptable in daily reading.
+
+## Addendum 5: corrected diagnosis -- power-key double ownership, not DDR
+
+The operator challenged Addendum 4 ("why would a DDR switch corrupt the
+screen? the sleep screen used to show the book plus a SUSPENDED banner
+and this boot it didn't"), and the challenge was right. Re-examined
+offline, entirely from source; no device access needed.
+
+**Against the DDR theory (already in hand, underweighted):** a DRAM
+stall during an active EBC scan must blow the 25 ms frame budget (the
+MCU-path switch takes ~107 ms) and produce `EBC_FRAME_TIMEOUT` -- and
+the harvested dmesg has zero timeouts and no poison. The mechanism
+predicts evidence that is absent.
+
+**The actual mechanism (source-proven chain):**
+
+1. KOReader has opened the rk805 pwrkey node and mapped `116 -> "Power"`
+   since the original port (`device.lua:379,396`, commit `02962dd`).
+2. Upstream `UIManager:init()` registers a Power handler
+   unconditionally, and `Device:onPowerEvent()` never checks
+   `canSuspend` (which we hard-disable via `suspend_policy.lua`).
+3. Our config leaves `screensaver_type = "disable"`, so
+   `Screensaver:show()` paints nothing -- but still sets
+   `Device.screen_saver_mode = true`. Then, both inherited as `yes`:
+   `needsScreenRefreshAfterResume` fires `screen:refreshFull()` (a
+   global refresh, 1-2 s of drive) plus `UIManager:forceRePaint()` on
+   EVERY power tap while awake. (The Wi-Fi kill in the same branch
+   resolves to an empty stub on our device -- a no-op.)
+4. Press-to-suspend -- NEW on this image -- writes `mem` ~1.2 s after
+   the same tap (banner draw + `sleep 1`). The suspend parks the EBC
+   worker MID-GLOBAL-REFRESH.
+5. A mid-drive park leaves the glass in an intermediate optical state
+   that matches no gray4 buffer, so `suspend_prev/next` snapshot a
+   desynced cache. GL16 restore washes are neutral where buffers agree,
+   so the corruption persists across resume. The next awake tap runs
+   KOReader's `refreshFull` (full drive) and cleans it -- exactly the
+   observed recovery ("pressing the button triggered a redraw").
+
+**Why v1 never showed this:** the same KOReader handler existed, but
+nothing suspended on a tap, so its global refresh always completed
+harmlessly. Idle-path suspends fire after 5 min of input silence -- EBC
+quiet, banner painted cleanly -- which is why the sleep screen "used to
+work". It still should: idle suspends involve no Power event.
+
+**Predictions (all testable without a reboot):**
+
+1. Tonight's soak idle-suspends should show a CLEAN sleep screen (book +
+   banner). Checkable by looking at the sleeping device.
+2. With the boost disabled and DDR pinned at 324 (current soak state),
+   an awake power tap should reproduce the corruption class with ZERO
+   DDR switches -- which would exonerate DDR on glass.
+3. The corruption should never follow an idle-path suspend.
+
+**Revised fix list (supersedes Addendum 4's):**
+
+1. Single ownership of the power key: stop opening the pwrkey node in
+   the KOReader device profile. `canSuspend = no` already says KOReader
+   does not own suspend; today it reacts anyway. This also removes the
+   silent `screen_saver_mode` latch that toggles on every tap/wake.
+2. autosuspend daemon: replace the blind `sleep 1` before `mem` with a
+   bounded EBC-idle wait (the `pinenote-dmc` one-shot pattern) -- robust
+   against ANY in-flight EBC work, not just KOReader's Power repaint.
+3. Post-resume cleanup wash: force GC16 (the panel flashes on resume
+   anyway; GC16 heals any glass/cache desync for free). Same class as
+   the first-wash-GC16 boot fix.
+4. ddr-boost suspend-aware grace: keep as defense-in-depth, demoted
+   from root-cause fix. The boost stays disabled until 1-2 land.
+
+The Addendum 4 legibility trap (backstop wake leaves an awake device
+looking asleep) is real and stands.
