@@ -207,10 +207,9 @@ location, consumed by a first-boot provisioning one-shot.** Concretely:
 - The same mechanism carries the SSH authorized key
   (`/state/ssh/authorized_keys`) and, ideally, persistent SSH **host** keys
   (`/state/ssh/host/`), so the device's identity survives a reflash and the
-  image stays generic (§5, §6). *[Implemented for the authorized key
-  2026-08-06 — as `/data/ssh/authorized_keys`, `/data` being where the
-  shipped image mounts the data partition; see §4.1. Persistent host
-  keys remain open (§6).]*
+  image stays generic (§5, §6). *[Both implemented 2026-08-06 — as
+  `/data/ssh/authorized_keys` and `/data/ssh/host/`, `/data` being
+  where the shipped image mounts the data partition; see §4.1.]*
 
 Fallback for a single personal device that does not want to bother with a
 `/state` partition yet: a gitignored build-time local module (the fonts
@@ -250,7 +249,7 @@ simpler.)
 3. A remote-access listener — `openssh-service-type`, **key-only**
    (`(password-authentication? #f)`), reading the authorized key from
    `/state` *(implemented 2026-08-06, §4.1)* and using persistent host
-   keys from `/state` *(still open)* (see §3). This is
+   keys from `/state` *(implemented 2026-08-06, §4.1)* (see §3). This is
    the control channel §5 needs. Consider `dropbear-service-type` instead
    if closure size matters against the 4 GiB budget — dropbear is much
    smaller; OpenSSH is what os1 already speaks, so it is the lower-surprise
@@ -362,19 +361,44 @@ image (2026-07-24; §6 and `doc/status.md`).
   root SSH is simply unreachable — the ACM/UART consoles remain the way
   in, and a key can be appended over the CDC-ACM console's passwordless
   `sudo` shell (write it to `/data/ssh/authorized_keys` so it persists).
-  Persistent **host** keys (§3, §6) remain a follow-up. Stage the key
-  the same way as the Wi-Fi credentials (provisioning note below):
+  Stage the key the same way as the Wi-Fi credentials (provisioning
+  note below):
 
   ```sh
   sudo mkdir -p /data/ssh
   printf '%s\n' 'ssh-ed25519 AAAA… you@host' | sudo tee /data/ssh/authorized_keys
   ```
 
+  **Persistent host keys** (same one-shot, same partition): `/etc/ssh`'s
+  `ssh_host_*_key` files are synchronized with `/data/ssh/host/` as a
+  union in which `/data` wins per key type — every reflash's freshly
+  generated keys are overwritten by the persistent identity, and any
+  type missing from `/data` (first boot, or a future Guix adding a key
+  type) is seeded into it. A key that fails an `ssh-keygen -y` validity
+  check (empty, truncated, garbage) is never installed in either
+  direction — the boot log says so and the one-shot exits nonzero — and
+  seeds are `sync`ed so a power cut cannot persist a truncated
+  identity; an invalid file already on `/data` is re-seeded over from
+  the valid `/etc/ssh` key, so persistence self-heals. No valid key
+  *file* is ever deleted from `/etc/ssh` (only crash-orphaned temps and
+  directories squatting on key paths), so
+  there is no keyless window even on failure, and sshd runs inetd-style
+  (a fresh sshd per connection) so no ordering against the listener is
+  needed. Host-key deletion is not revocation: to rotate the device
+  identity, delete the type from both `/data/ssh/host/` and `/etc/ssh`
+  and reboot. Exposure tradeoff, accepted: host *private* keys sit
+  0600 root-owned on the shared unencrypted p7 (which os1 mounts at
+  `/home`) — the same class as the Wi-Fi PSK hash already staged there,
+  on a single-trust-domain device whose console users have passwordless
+  sudo anyway.
+
   Offline evidence (2026-08-06): reader closure builds; the built
-  sshd_config honors `.ssh/authorized_keys`; the image's `/etc` carries
-  no authorized key; the one-shot is in the shepherd graph.
-  Hardware-unproven until the next deployed image — see the migration
-  note in `doc/status.md`.
+  sshd_config honors `.ssh/authorized_keys` and carries no `HostKey`
+  override; the image's `/etc` carries no authorized key; the one-shot
+  is in the shepherd graph; the exact store script passed sandboxed
+  seed / restore-after-reflash / union / revocation / CRLF /
+  failure-injection runs. Hardware-unproven until the next deployed
+  image — see the migration note in `doc/status.md`.
 
 **Provisioning (once, over the USB serial console — no Wi-Fi required).** The
 reader user has passwordless `sudo` (its sudoers), so this works over the
@@ -512,14 +536,24 @@ ledger and still need a decision or an os2 session:
 - **DHCP + reachability end to end — RESOLVED 2026-07-24.** Lease acquisition
   on `wlan0`, key-only `root@` SSH, and an `scp` round-trip are hardware-proven
   from the capture host; exact evidence is in `doc/status.md`.
-- **SSH identity persistence.** Confirm host keys and authorized_keys read
-  from `/state` survive an os2 reflash (the whole point of putting them on a
-  persistent partition); otherwise every reflash changes the host
-  fingerprint and re-locks the operator out.
-- **/state partition reality.** `/state` is currently aspirational — the
-  state service is a documented no-op and nothing mounts a `PNGuixState`
-  partition today. Decide and validate the actual mount (reuse `data`
-  p7, or create `PNGuixState`) before the credential file has a home.
+- **SSH identity persistence — IMPLEMENTED IN TREE 2026-08-06,
+  hardware-unproven.** Both halves now persist on `/data`: the
+  authorized key is installed from `/data/ssh/authorized_keys` every
+  boot, and host keys are synchronized with `/data/ssh/host/` (union,
+  `/data` winning per key type — §4.1). Remaining validation, at the
+  next deployed image: confirm on hardware that the fingerprint is
+  stable across an os2 reflash. Note the fingerprint changes **once
+  more** at the first boot of the first deployed image that carries the
+  sync (fresh keys are generated, then seeded) — pin the new
+  fingerprint in your ledger then. The v3 image written to os2 on
+  2026-08-06 predates the sync: its first boot changes the fingerprint
+  without persisting it.
+- **/state partition reality — RESOLVED (reuse `data` p7).** The reader
+  flavor mounts p7 rw at `/data` (books, Wi-Fi credentials, SSH state
+  all live there); no `PNGuixState` partition was ever created, and the
+  state service (`pinenote/services/state.scm`) remains a documented
+  no-op. The design's `/state/…` paths read as `/data/…` in the shipped
+  image.
 - **(If pursued) USB-ECM gadget.** The defconfig change
   (`CONFIG_USB_CONFIGFS_ECM`) and an ECM gadget service are unbuilt and
   unproven; the RK3566 OTG role/`ep0out` history (`doc/status.md`) means the

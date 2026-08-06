@@ -66,7 +66,9 @@ Multi-agent, two passes, all findings skeptic-verified before action:
    (`pinenote/services/ssh-keys.scm`) installs
    `/data/ssh/authorized_keys` for root at every boot (see
    `doc/networking.md` §4.1 and the migration note in `doc/status.md`).
-   Persistent SSH *host* keys on `/data` remain a follow-up.
+   Persistent SSH *host* keys were implemented the same day
+   (`/data/ssh/host/` union sync in the same one-shot); both halves are
+   hardware-unproven until the next deployed image.
 4. **Suspend-gate reconciliation.**
    `inspect-pinenote-suspend-gates.sh` still rejects the CPU idle-state
    nodes the shipped (and hardware-proven) kernel carries; the doc
@@ -150,7 +152,7 @@ is this file plus the diffs in the 2026-08-06 review commits.
 - **[missing] `doc/networking.md:313`** — The implemented-state section (§4.1) never mentions that the reader image hardcodes the author's personal SSH key as root's only authorized key, so a collaborator who builds the unmodified reader flavor gets a device they can never SSH into, with no doc telling them to swap the key first.
   - *Recommendation:* Document the baked key in §4.1 with an explicit "replace with your own public key before building" step (or implement the /state authorized_keys path the doc itself recommends). Note the workaround: the ACM console's passwordless-sudo reader shell can append a key post-boot, but that costs part of a hardware session.
 - **[stale] `doc/networking.md:444`** — §6's validation ledger still lists wlan0 module autoload, rfkill state, MAC stability, and the os1 supplicant/interface-name harvest as open device-needing checks although they were resolved on 2026-07-10 — and the doc's own rule ("unlabelled items in §6 remain open") invites a collaborator to spend a scarce hardware/oracle session re-answering answered questions.
-  - *Recommendation:* Label these four items RESOLVED 2026-07-10 with pointers to the status.md evidence, leaving the genuinely open items (regdomain selection, /state partition reality, SSH host-key persistence across reflash, USB-ECM gadget) as the remaining ledger.
+  - *Recommendation:* Label these four items RESOLVED 2026-07-10 with pointers to the status.md evidence, leaving the genuinely open items (regdomain selection, /state partition reality, SSH host-key persistence across reflash, USB-ECM gadget) as the remaining ledger. *[Of those, /state-partition reality and host-key persistence were implemented later the same day — see deferred item 3.]*
 - **[stale] `doc/pageturn-program.md:27`** — The doc still presents the portrait double-refresh / 50 ms deferred-io window as an open defect with pending fix candidates, but it was fixed on glass 2026-08-01 (publish-on-call, defio_delay_ms=250) — the doc predates the fix and was never updated.
   - *Recommendation:* Add a dated status banner at the top (the opening "The working plan…" gives a new reader no currency signal) stating: the portrait two-pass defect is FIXED on glass 2026-08-01 via publish-on-call (see refresh-policy.md); the §0 cost model (50 ms flush, 750 ms felt) describes the pre-fix image; the single-flush-paint candidate and the d1 stagger caveat are retired. Annotate rather than rewrite — the ranked table still has live content (a, b, e4, d1).
 - **[stale] `doc/pageturn-program.md:343`** — Candidate d2 (post-flush wash alignment) is still ranked #2 as an untried userspace-timing candidate, but it was implemented driver-side in publish-on-call (ioctl drains deferred-io + damage worker before arming the wash) and hardware-proven on the 2026-08-01 image.

@@ -62,7 +62,11 @@ shows a different layout, stop and reconcile before anything else.
    Wi-Fi credentials at `wifi/wlan0.conf` and your SSH public key at
    `ssh/authorized_keys` (the reader image installs it for root at every
    boot; nothing operator-specific is baked into the image). Exact
-   commands and formats: `doc/networking.md` §4.1.
+   commands and formats: `doc/networking.md` §4.1. Note that the reader
+   image also persists the device's **private** SSH host keys at
+   `ssh/host/` on this partition — any backup you take of p7 therefore
+   contains private key material and belongs with your protected backup
+   roots, not anywhere shared.
 6. **Read your device's VCOM** and record it in your ledger *and*
    somewhere offline (paper survives dead disks). It is per-panel
    calibration; never reuse another device's value:

@@ -45,13 +45,33 @@ spurious wakes, 64.4 mA duty cycle), but the 8.6-day standby figure still
 rests on extrapolation; (2) wake attribution — only RTC and power-button
 wake are proven; (3) the unexplained TPS `ENABLE 2f → 20` after deep
 resume; (4) the pre-suspend `nobody cared` trace seen once on the
-st_accel-PM image (soak artifact, open question); (5) **before the next
-os2 deploy**: stage `/data/ssh/authorized_keys` on the device — images
-built from this tree no longer bake the key (see the 2026-08-06 entry
-below).
+st_accel-PM image (soak artifact, open question); (5) SSH state on `/data`:
+the authorized key is already staged (done before the v3 write), and
+the host-identity persistence is in tree but **not in v3** — v3's first
+boot changes the fingerprint without persisting it; pin the fingerprint
+at the first boot of a post-v3 image (see the host-keys entry below).
 
 Entries below are newest-first; the ## sections after the parity table
 are a historical document.
+
+**2026-08-06 (after the v3 write) persistent SSH host keys — in tree,
+NOT in any deployed image.** The same `pinenote-ssh-authorized-keys`
+one-shot now synchronizes `/etc/ssh/ssh_host_*_key` with
+`/data/ssh/host/` (union, `/data` wins per key type; keys failing an
+`ssh-keygen -y` validity check are never installed; nothing ever
+deleted from `/etc/ssh`, so no keyless window; seeds are `sync`ed so a
+power cut cannot persist a truncated identity), closing the
+reflash-changes-the-fingerprint annoyance.  sshd is inetd-style, so
+keys are read per connection and no service ordering is needed.
+Offline evidence: closure builds; the one-shot in the closure's
+shepherd graph is the exact script that passed sandboxed
+seed/restore/union/garbage-rejection/failure runs plus a 3-agent
+adversarial review.  **Scope: v3 on os2 predates this change** — v3's
+first boot regenerates the fingerprint one more time WITHOUT
+persisting it.  The first boot of an image built from this tree seeds
+the identity and it is stable across reflashes after that; pin the
+fingerprint in the ledger THEN, not at the v3 boot.
+`doc/networking.md` §4.1.
 
 **2026-08-06 (late night) v3 fix image written to os2 — not yet
 booted.** [wilkbook / wkelly] The Addendum 5 fix stack (commit

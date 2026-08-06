@@ -64,8 +64,9 @@ reader ALL=(ALL) NOPASSWD: ALL
                 ;; SSH (key-only, no passwords) so the boxed device is
                 ;; reachable over Wi-Fi once the USB cable is removed — this is
                 ;; also the recorder's SSHTransport. Host keys land in /etc/ssh
-                ;; (regenerated on reflash; persistent /data host keys are a
-                ;; follow-up if the changing fingerprint becomes annoying).
+                ;; and are synchronized with /data/ssh/host/ at boot
+                ;; (ssh-keys.scm, since 2026-08-06), so the device identity
+                ;; persists across reflashes.
                 ;;
                 ;; /var/empty (sshd's privilege-separation dir) ships from the
                 ;; image build owned by a build-container uid (998:981 observed

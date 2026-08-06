@@ -20,8 +20,14 @@ reader as `root@`). **Always verify the slot before acting**:
 findmnt -n -o SOURCE /    # …p5 = os1 (stock Debian), …p6 = os2 (ours)
 ```
 
-Host-key policy: os2's host key is regenerated on every reflash — use a
-dedicated known-hosts file and `StrictHostKeyChecking=accept-new`. os1's
+Host-key policy: on images built before 2026-08-06, os2's host key is
+regenerated on every reflash — use a dedicated known-hosts file and
+`StrictHostKeyChecking=accept-new`. Images carrying the host-keys sync
+(post-v3; in tree since late 2026-08-06) persist the identity on the
+data partition (`/data/ssh/host/`, `doc/networking.md` §4.1): the
+fingerprint changes once more at such an image's first boot, then stays
+stable across reflashes — pin it in your ledger then (`accept-new`
+remains a fine default either way). os1's
 archived host-key fingerprint (ledger) is the identity check before any
 os2 write.
 
@@ -95,7 +101,9 @@ device is awake; it is the recovery channel if auto-suspend misbehaves.
 ## SSH to the deployed reader
 
 - Key-only `root@<reader-addr>`; scp works. Each reflash wipes `/root`
-  (re-push test assets) and regenerates the host key (`accept-new`).
+  (re-push test assets). On pre-2026-08-06 images each reflash also
+  regenerates the host key (`accept-new`); newer images restore both the
+  authorized key and the host identity from `/data/ssh/` at boot.
 - **Auto-suspend makes SSH intermittent**: the device is only reachable
   for the idle window after the last input, and Wi-Fi re-association eats
   several seconds of it after each wake. To work on the device, first
