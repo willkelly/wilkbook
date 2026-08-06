@@ -1,0 +1,11 @@
+=== awake-power domain teardown, 300s per stage ===
+  capacity at start: 75%
+  cpufreq: 1800000 kHz  gov=conservative
+  vdd_cpu opmode: 1100mV 0mA
+
+  0 baseline (reader + book, wifi up)   177.5 mA   (baseline)
+  1 - KOReader stopped                 173.4 mA   delta -4.1
+  2 - orientation bridge stopped       175.4 mA   delta +2.0
+  3 - wlan0 down                       165.1 mA   delta -10.3
+  4 - usb gadget unbound               163.1 mA   delta -2.0
+  5 - fbcon unbound + fb blanked       163.1 mA   delta +0.0

@@ -1,0 +1,44 @@
+=== cpuidle acceptance ===
+kernel: 7.0.11
+
+--- A. did a cpuidle driver register? ---
+  current_driver:   psci_idle
+  current_governor: menu
+  => FAIL
+
+--- B. is the state described as intended? ---
+  state0: name=WFI desc=ARM WFI
+      latency=1us residency=1us disable=0
+  state1: name=cpu-sleep desc=cpu-sleep
+      latency=220us residency=1000us disable=0
+
+--- C/D. soak 60s, then are states entered and cores alive? ---
+  cpu0  state0  +1296
+  cpu0  state1  +1516
+  cpu1  state0  +1102
+  cpu1  state1  +754
+  cpu2  state0  +511
+  cpu2  state1  +620
+  cpu3  state0  +825
+  cpu3  state1  +470
+  total idle-state entries in 60s: 7094
+
+  cpus online before: 0-3
+  cpus online after:  0-3
+
+--- kernel complaints this boot ---
+[    0.000000] psci: probing for conduit method from DT.
+[    0.000000] psci: PSCIv1.1 detected in firmware.
+[    0.000000] psci: Using standard PSCI v0.2 function IDs
+[    0.000000] psci: Trusted OS migration not required
+[    0.000000] psci: SMC Calling Convention v1.2
+[    0.136387] cpuidle: using governor menu
+
+=== SUMMARY ===
+  A driver registered : FAIL  (psci_idle)
+  B state described   : PASS
+  C states entered    : PASS  (7094 entries)
+  D all cores alive   : PASS  (0-3)
+
+Power is NOT measured here -- run idle-drain.sh for the 900 s
+comparison against the 205.7 mA baseline.

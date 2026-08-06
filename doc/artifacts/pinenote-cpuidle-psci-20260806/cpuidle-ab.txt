@@ -1,0 +1,13 @@
+=== cpuidle A/B, one boot, book open, 900s per phase ===
+  driver:   psci_idle
+  reader:   2 proc
+  capacity: 79%
+
+  A: cpu-sleep ENABLED        172.7 mA    cpu-sleep entries: 32635
+  B: cpu-sleep DISABLED       174.8 mA    cpu-sleep entries: 0
+
+  cpus online: 0-3
+  capacity now: 77%
+
+  (B is the pre-patch behaviour: WFI only.  Compare with the 205.7 mA
+   measured on the previous kernel under the same 900 s conditions.)

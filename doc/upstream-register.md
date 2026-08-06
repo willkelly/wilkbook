@@ -258,80 +258,62 @@ register once it exists.
 | ayakael | the Forgejo fork pmOS's kernel patch is generated from | via the pmOS maintainer address above | host `ayakael.net` is up (200) but `/forge/linux-pinenote` **404s**, including the exact `…/compare/526524233b…..v6.19.patch` URL pmaports fetches. Verified 2026-07-31. May be transient or a move — re-probe before relying on it |
 | dri-devel | mainline DRM | `git send-email` | only relevant if the driver is ever resubmitted; no EPD infrastructure in mainline and none pending |
 
-### 9. rk356x has no CPU `idle-states` — **needs-verification** (potentially the widest-reach item here)
+### 9. rk356x has no CPU `idle-states` — **needs-work** (works; does NOT do what you would expect)
 
 Neither mainline nor Rockchip's BSP defines `idle-states` for
 rk3566/rk3568. Rockchip ships them for **rk3308, rk3328, rk1808, rk3528,
 rk3562, rk3576 and rk3588** — both older and newer parts — and skips
-rk356x. The consequence is that Linux registers **no cpuidle driver at
-all**: `/sys/devices/system/cpu/cpuidle/current_driver` reads `none`, a
-governor is selected with nothing to drive, and the cores never leave WFI
-between events.
+rk356x. So Linux registers **no cpuidle driver at all**
+(`current_driver` reads `none`) and the cores never leave WFI. Confirmed
+absent on both our 7.0.11 tree *and* os1's 6.12 BSP kernel running
+Rockchip's own DTB and ATF.
 
-**Measured cost (2026-08-05, identical 900 s coulomb-counter windows,
-frontlight pinned off, unplugged):**
+**We added it and it works** (2026-08-06,
+`pinenote/patches/linux-pinenote-7.0-cpuidle-psci.patch`,
+`doc/artifacts/pinenote-cpuidle-psci-20260806/`). `psci_idle` registers,
+`cpu-sleep` is entered constantly, cores idle 31–72% of wall time, and no
+core ever failed to wake:
 
-| stack | awake idle |
-|---|---|
-| stock Debian + GNOME/Wayland + foliate (6.12 BSP) | 232.5 mA |
-| our Guix + bare KOReader on fbdev (7.0.11) | 205.7 mA |
-| our deep suspend | 20.6 mA |
+    current_driver: psci_idle
+    state1: cpu-sleep  latency=220us  residency=1000us
+    cpu0 72.06% / cpu1 70.10% / cpu2 55.98% / cpu3 31.19% of wall
 
-Shedding an entire desktop stack bought **27 mA**. That is the signature
-of a platform floor rather than a workload cost, and it is why deep-sleep
-scheduling has been worth ~10x more than any awake optimisation on this
-board.
+**And it saves 2.1 mA.** Same boot, same book, same 900 s window, toggling
+only `state1/disable`: 172.7 mA enabled vs 174.8 mA disabled — ~1.2%,
+which is noise. A cumulative teardown the same day showed why: **91.9% of
+the awake draw is an irreducible static floor** (163.1 mA of 177.5).
+CPU core power simply is not where this board's awake power goes.
 
-**The firmware is willing.** Read off the device at zero risk from the
-kernel's own PSCI debugfs, which calls `psci_features(CPU_SUSPEND)` and
-only reaches these lines when it returns `>= 0`:
+**This changes what there is to send.** The original framing here was
+"cpuidle is missing and that is why awake idle is 206 mA" — that framing
+is dead. What remains is still worth contributing, but honestly:
 
-    PSCIv1.1 / SMC Calling Convention v1.2
-    OSI is not supported
-    Original StateID format is used
+- rk356x *should* have `idle-states`; it is a real gap in the DT and the
+  hardware and firmware support it (PSCI debugfs reports CPU_SUSPEND
+  implemented, non-OSI, Original StateID format).
+- The patch is small, safe in our testing, and completes the SoC's
+  description.
+- **But anyone adopting it for power reasons will be disappointed**, and
+  the submission should say so with the numbers, rather than let a
+  reviewer assume a win. A DT node that is correct-but-inert is a weaker
+  sell than one that saves power, and pretending otherwise would be the
+  wrong first impression.
 
-So `CPU_SUSPEND` is implemented; platform-coordinated (non-OSI) mode is in
-force, which is exactly what a DT `arm,psci-suspend-param` is for; and the
-Original StateID format is the one Rockchip's own parameter encodes.
-`CPU_OFF` is demonstrably live too (`psci: CPU3 killed (polled 1 ms)`), so
-the firmware's CPU power management is real rather than stubbed.
+**For:** linux-rockchip / devicetree, `rk356x-base.dtsi`. Still the one
+item here that is not PineNote-specific — Quartz64, SOQuartz, PineTab2,
+Odroid-M1, Radxa E25 all inherit from that file.
 
-**Confirmed absent on BOTH slots**, which matters for the argument: os1
-(6.12 BSP kernel, Rockchip's own DTB and ATF) also reports
-`current_driver: none` and has no `idle-states` in its live DT. Nobody is
-running this configuration today — not us, not Rockchip.
+**What has to be true first:**
 
-**For:** linux-rockchip / devicetree, and `arch/arm64/boot/dts/rockchip/
-rk356x-base.dtsi` specifically. This is the one item in this register that
-is **not** PineNote-specific: rk3566/rk3568 covers Quartz64, SOQuartz,
-PineTab2, Odroid-M1, Radxa E25 and a long tail of boards, all of which
-would inherit the fix from one node in the shared base dtsi.
-
-**Shape:** an `idle-states` node with a single `arm,idle-state` plus
-`cpu-idle-states` on each core. Our experiment uses Rockchip's own
-parameters from `rk3588s.dtsi` — same Cortex-A55 core; `rk3562` uses the
-identical value — `arm,psci-suspend-param = <0x0010000>`, decoding in the
-Original format as StateID 0, bit[16] PowerDown, affinity level 0 (core).
-
-**What has to be true first** (this register's standing rule, and doubly
-so here):
-
-1. It must actually work on hardware — cpuidle registers, per-state
-   `usage` counters climb, and no core fails to wake across a long soak.
-2. The win must be **measured**, in the same 900 s window as the numbers
-   above, not asserted. If it does not move the 205.7 mA it is not worth
-   sending.
-3. It should be tried on a **second rk356x board** before claiming the SoC
-   rather than the PineNote. We have one device; a DT node in the shared
-   base dtsi affects everyone.
-4. Residency/latency figures should be ours, not copied from rk3588 —
-   borrowed constants are fine for an experiment, not for a submission.
-
-Until then this is a local patch
-(`pinenote/patches/linux-pinenote-7.0-cpuidle-psci.patch`), carried behind
-a one-line deletion in `kernel.scm`, and explicitly EXPERIMENTAL: a
-firmware that accepts the parameter but cannot bring the core back wedges
-the device.
+1. Residency/latency figures must be **ours**. The current values are
+   copied from rk3588 (same A55 core, different SoC) and Linux sums them
+   into `latency=220us`. Fine for an experiment, not for a submission.
+2. Tried on a **second rk356x board** before claiming the SoC rather than
+   the board. We have one device; this is a shared dtsi.
+3. The power result stated plainly, so nobody adopts it expecting a win
+   we did not get.
+4. Ideally paired with an explanation of *where* the power does go — see
+   the teardown — which is the more useful contribution to that audience.
 
 ## Standing caveats
 

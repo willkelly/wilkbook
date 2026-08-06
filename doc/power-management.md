@@ -19,6 +19,15 @@ Will's targets, and where we actually stand. All from a 4000 mAh charge
 | **~40 h active use** | ≤100 mA average | awake floor **171.6 mA** (23.3 h) | **not reachable awake** — reachable only by suspending between interactions |
 | **a week idle, most of a charge left** | ≤6.0 mA to leave 75% | deep **19.3 mA** (leaves 19%) | **3.2x short** |
 
+**2026-08-06: the awake row is now closed as far as software can take
+it.** A domain teardown attributes only 14 mA of a 177.5 mA awake draw to
+anything we can switch off — Wi-Fi 10.3, KOReader 4.1, USB gadget 2.0,
+panel **0.0** — leaving **163.1 mA (91.9%) as an irreducible static
+floor**. CPU idle states were the last plausible awake lever and, once
+added and working, moved it by **2.1 mA**. See "Both halves resolved"
+below and `doc/artifacts/pinenote-cpuidle-psci-20260806/`. The verdict in
+that row was right, and is now measured rather than inferred.
+
 ### The reframe that makes target 1 achievable
 
 On e-ink, "active use" is mostly *a static page with nothing happening* —
@@ -114,6 +123,67 @@ likely has the DMC driver — boot os1, run
 `doc/artifacts/pinenote-awake-idle-profile-20260802/idle-profile.sh`, and
 compare its awake-idle against our 171.6 mA. ~20 minutes, and it either
 sizes the prize or closes the question permanently.
+
+### Both halves resolved, 2026-08-06
+
+**CPU idle states: done, and they are not the answer.** We wrote the DT
+node and it works — `psci_idle` registers, `cpu-sleep` is entered
+constantly, cores idle 31–72% of wall time, no core ever failed to wake.
+Same boot, same book, toggling only `state1/disable`: **172.7 mA enabled
+vs 174.8 mA disabled — 2.1 mA, ~1.2%, noise.** The risk asymmetry feared
+above did not materialise; the payoff did not either. Full detail and the
+patch in `doc/artifacts/pinenote-cpuidle-psci-20260806/`.
+
+**The reason is now measured: 91.9% of the awake draw is a static floor.**
+Cumulative teardown, 300 s per stage: Wi-Fi 10.3 mA, KOReader 4.1 mA, USB
+gadget 2.0 mA, panel/fbcon **0.0 mA** — and **163.1 mA left when all of it
+is gone**. There is essentially nothing to break down. CPU core power is
+not where this board's awake power goes, and neither is the display.
+
+**os1 does NOT run DDR DVFS either** (checked 2026-08-06): its only
+devfreq device is `fde60000.gpu`, there is no DMC device and no
+`dmc`/`memory-controller` node in its DT. The BSP *has* the driver
+(`drivers/devfreq/rockchip_dmc.c`) — it is simply not wired up for the
+PineNote. So DDR has been pinned at 1056 MHz on every kernel this device
+has ever run, including Rockchip's own. The cheap comparison suggested
+above cannot size the prize, because there is no DVFS on either side.
+
+### Next step: probe the DRAM SIP before porting anything
+
+DDR DVFS on rk356x lives **entirely in bl31**, behind
+`ROCKCHIP_SIP_DRAM_FREQ`. Linux only requests; firmware does the work.
+We already have that machinery — the BSP-SIP suspend patch calls
+`arm_smccc_smc(ROCKCHIP_LEGACY_SIP_SUSPEND_MODE, …)` through the same
+conduit, different function ID.
+
+**Do the read-only query first**, mirroring what worked for cpuidle
+(reading PSCI debugfs answered the firmware question at zero risk and
+saved building anything speculative):
+
+- `ROCKCHIP_SIP_CONFIG_DRAM_GET_VERSION` — does this bl31 implement the
+  DRAM SIP at all?
+- `ROCKCHIP_SIP_CONFIG_DRAM_GET_FREQ_INFO` — what rates does it offer?
+
+Unlike PSCI there is no debugfs for this, so it needs a small kernel
+probe; but it is a read-only SMC and answers the question before any
+driver port is attempted.
+
+**Expect a modest result, and size it before investing.** Deep suspend is
+20.6 mA *with DRAM in self-refresh*, so retention is cheap — but that
+bounds DDR **retention**, not DDR **active**, which additionally runs the
+controller, PHY and I/O at 1056 MHz. What the 20.6 mA does bound is the
+destination: nothing awake can go below ~20 mA, so the 163 mA floor holds
+at most ~142 mA of reachable content, shared between DDR-active, the CPU
+rails and the domains suspend switches off. DVFS lowers the DDR clock
+rather than turning DDR off, so it can only claim a fraction of DDR's
+share of that. **Tens of mA at best.** Worth having; not a step change,
+and not a reason to delay the suspend-scheduling work that is worth 8x.
+
+**Also worth a look while in this area, and much cheaper:** `vdd_cpu`
+sits at 1100–1150 mV in **`fast` opmode** — forced PWM rather than
+auto/PFM. On the RK817 that is real quiescent draw at light load, and it
+is a regulator property rather than a workload. One DT/driver change,
+no firmware ABI involved.
 
 ## Safe measurement boundary
 
