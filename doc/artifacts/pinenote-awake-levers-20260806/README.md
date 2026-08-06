@@ -180,3 +180,34 @@ failures was misattributed to UART TX degradation; a leaked host-side
 `cat /dev/ttyUSB0` reader (competing for bytes, torn captures) polluted
 the diagnosis, and the user's manual menu pick booted v2 fine. Kill
 leaked serial readers before concluding anything about the console.
+
+## Addendum 4: boost/suspend collision found on glass; soak is static-324
+
+The input-driven boost's core assumption -- "input arrives when the EBC
+is idle" -- is FALSE at the suspend/wake boundaries, which is exactly
+where buttons get pressed. Timeline from the logs, 2026-08-06 21:25:
+
+    21:25:16  resumed after 600s (backstop; restore wash runs)
+    21:25:23  input boost 324->1056  AND  power tap -> suspending
+    21:25:27  resumed after 4s (second press)
+
+The switch landed inside suspend-path EBC activity: transient screen
+corruption and a not-visible reader, recovered by the next button press
+(no refresh timeouts, no poison -- the EBC state machine survived).
+Compounding legibility trap: a backstop wake repaints the book and the
+device LOOKS asleep, so the user's "wake" press is actually
+press-to-suspend on an awake device.
+
+Fixes required before the boost re-enables (next session):
+1. ddr-boost: suspend-aware grace -- watch suspend_stats/success and
+   suppress min_freq writes for a few seconds around any change; ideally
+   also an EBC-idle precheck before any write that will fire SET_RATE.
+2. Consider the design doc's device-link/QoS serialization between the
+   DMC and EBC drivers as the structural fix.
+3. Auto-suspend legibility: after a BACKSTOP wake (no user input), the
+   panel should make the awake state visible (or re-suspend much sooner
+   than 300 s) so a wake press cannot be mistaken for needed.
+
+Soak state changed accordingly: ddr-boost.conf enabled=0 -- static
+324 MHz, zero switches (the collision class cannot occur), which also
+tests whether all-324 rendering feels acceptable in daily reading.
