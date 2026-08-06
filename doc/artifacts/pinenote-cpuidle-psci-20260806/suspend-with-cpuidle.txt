@@ -1,0 +1,25 @@
+=== deep suspend WITH cpuidle idle-states, 4 cycles ===
+  driver:      psci_idle
+  cpus online: 0-3
+  mem_sleep:   s2idle [deep]
+
+cycle | rc | success | cpus after | cpu-sleep entries | verdict
+------+----+---------+------------+-------------------+--------
+    1 |  0 |   0->1   |        0-3 |              4149 | PASS
+    2 |  0 |   1->2   |        0-3 |              2787 | PASS
+    3 |  0 |   2->3   |        0-3 |              2964 | PASS
+    4 |  0 |   3->4   |        0-3 |              2622 | PASS
+
+=== 4 / 4 cycles PASS ===
+  cpu-sleep entries between cycles prove idle states are still being
+  used after each resume, not merely that the box came back.
+
+--- any complaint from the last cycle ---
+[   63.143026] psci: CPU3 killed (polled 0 ms)
+[   63.147890] psci: CPU2 killed (polled 0 ms)
+[   63.155791] psci: CPU1 killed (polled 0 ms)
+[   64.872099] brcmfmac: brcmf_set_channel: set chanspec 0x100c fail, reason -52
+[   64.874168] brcmfmac: brcmf_set_channel: set chanspec 0x100d fail, reason -52
+[   64.876016] brcmfmac: brcmf_set_channel: set chanspec 0x100e fail, reason -52
+[   64.878447] brcmfmac: brcmf_set_channel: set chanspec 0xd022 fail, reason -52
+[   65.002042] brcmfmac: brcmf_set_channel: set chanspec 0xd026 fail, reason -52

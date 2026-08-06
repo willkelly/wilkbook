@@ -46,6 +46,29 @@ inferred.
 No core ever failed to wake; all four stayed online across every run. The
 firmware accepts the parameter and honours it.
 
+### Deep suspend is safe with idle-states (added 2026-08-06)
+
+The 20.6 mA suspend figure was measured on the **pre-cpuidle** image, so
+`deep` had never been exercised with `idle-states` in the DT. Closed:
+
+```
+cycle | rc | success | cpus after | cpu-sleep entries | verdict
+    1 |  0 |   0->1  |        0-3 |              4149 | PASS
+    2 |  0 |   1->2  |        0-3 |              2787 | PASS
+    3 |  0 |   2->3  |        0-3 |              2964 | PASS
+    4 |  0 |   3->4  |        0-3 |              2622 | PASS
+```
+
+The entries column is the point: 2,600–4,100 `cpu-sleep` entries *between*
+cycles proves the idle states are still being used after each resume, not
+merely that the box came back with the state dead. Only benign dmesg:
+`psci: CPUn killed` (hotplug-off during suspend entry, by design) and the
+pre-existing `brcmfmac set_channel … reason -52` reassociation chatter.
+
+Scope: **4 cycles, one boot.** Enough to rule out a systematic
+interaction, not enough to rule out something rare; daily auto-suspend
+cycling accumulates that evidence on its own.
+
 ## 2. Domain teardown: the floor is 92% of the total
 
 Cumulative teardown, 300 s per stage, book open, frontlight 0, unplugged:
