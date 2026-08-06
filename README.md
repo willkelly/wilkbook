@@ -136,7 +136,5 @@ boot-order changes. Reboots and other destructive steps are user-present.
 ## Hosting
 
 The canonical remote is currently a private Forgejo instance on the
-author's network; the repo will move to GitHub for sharing (after the
-history-hygiene pass — see `doc/reviews/2026-08-06-pre-share-review.md`).
-Until then, work from a shared clone/bundle and send changes as patches
-or bundles.
+author's network; the repo will move to GitHub for sharing. Until then,
+work from a shared clone/bundle and send changes as patches or bundles.

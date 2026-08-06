@@ -48,20 +48,19 @@ Multi-agent, two passes, all findings skeptic-verified before action:
 
 ## Deliberately deferred (decisions for Will)
 
-1. **Git history rewrite.** The home Wi-Fi SSID survives in git history
-   and two commit messages (tree is scrubbed); the device's Wi-Fi MAC
-   survives in three historical blobs; home-LAN IPs appear in history
-   and commit messages. Verified clean everywhere, tree and all 1,201
-   historical blobs: no PSK, passphrase, private key, token, or
-   waveform binary was ever committed. Fine for a trusted collaborator;
-   a history rewrite is cheapest **before** they have clones, and is a
-   destructive operation only Will should trigger.
+1. **Git history rewrite.** *Decided 2026-08-06: no rewrite — residuals
+   accepted.* The home Wi-Fi SSID survives in git history and two
+   commit messages (tree is scrubbed); the device's Wi-Fi MAC survives
+   in three historical blobs; home-LAN IPs appear in history and commit
+   messages. Will reviewed the exposure and accepted it for GitHub
+   sharing. The load-bearing fact behind that call: verified clean
+   everywhere, tree and all 1,201 historical blobs — no PSK,
+   passphrase, private key, token, or waveform binary was ever
+   committed.
 2. **Hosting/access.** *Decided 2026-08-06: GitHub.* The repo will be
-   shared via GitHub, so no Forgejo provisioning is needed. This makes
-   item 1 sequence-critical: the history rewrite (or a fresh-start
-   push) must happen **before** the first GitHub push — even a private
-   one — because the SSID sits in commit messages that no tree edit can
-   remove, and rewriting after distribution invalidates every clone.
+   shared via GitHub, so no Forgejo provisioning is needed. With item 1
+   decided as accepted, the history can be pushed as-is — nothing
+   sequences ahead of the first push anymore.
 3. **SSH key parameterization.** `pinenote/systems/pinenote-reader.scm`
    bakes the author's public key as root's only authorized key. Now
    documented in `doc/networking.md` §4.1 with the swap-before-build
