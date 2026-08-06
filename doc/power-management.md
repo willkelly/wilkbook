@@ -190,8 +190,9 @@ while charging, input saturation calibrated) measured the chip's
 automatic PFM/PWM mode saving ~30 mA — ~18% of the 163 mA static floor.
 Baked into `linux-pinenote-7.0-vdd-cpu-auto-pfm.patch` together with the
 `fan53555_set_mode` NORMAL-branch fix it requires (upstream-register item
-10). Boot acceptance: `vdd_cpu` opmode reads "normal" with no poke, and a
-settled awake window lands ~30 mA below the old floor. Full data:
+10). ACCEPTED on boot 2026-08-06: opmode "normal" straight from DT, survives
+deep suspend/resume; settled reader idle realized 174 → 156.9 mA
+(~17 mA in daily use; the clamped-idle cost of the bit remains ~30). Full data:
 `doc/artifacts/pinenote-awake-levers-20260806/`.
 
 ## Safe measurement boundary

@@ -49,8 +49,16 @@ must also carry the `fan53555_set_mode` NORMAL-branch fix
 (upstream-register item 10): without it, the DT route writes the ACTIVE
 VOLTAGE SELECTOR and drops the rail 400 mV at boot.
 
-Projection if boot acceptance confirms: awake floor 163 → ~133 mA
-(settled reader idle ~175 → ~145 mA, +20% reading runtime).
+**Boot acceptance PASSED 2026-08-06** (image `1a582179…`): `vdd_cpu`
+opmode reads `normal` from DT with no poke, no boot warnings, opmode
+survives a deep suspend/resume, cpuidle unaffected. Realized in normal
+operation: settled reader idle **~174 → 156.9 mA (~17 mA, ≈10%)**;
+reading runtime 22.9 → 25.5 h. The realized figure is below the clamped
+A/B's ~30 ± 8 mA — the A/B measured the best case (408 MHz pinned, near
+zero load, PFM's sweet spot) while normal idle spends time at higher
+OPPs and under periodic load where auto mode is in PWM anyway. Both
+numbers are real; quote 17 for daily use and 30 for the register bit's
+cost at idle.
 
 ## Result 2: DRAM SIP is implemented — DDR DVFS is GO (see ddr-sip-probe)
 
