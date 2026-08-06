@@ -11,7 +11,8 @@ with two slots expected for A/B testing on 128 GB storage.
 | slim | `pinenote/systems/pinenote-slim.scm` | Smallest current PineNote boot target: PineNote kernel, waveform/EBC/diagnostics services, and local helper packages only. |
 | usb-console | `pinenote/systems/pinenote-usb-console.scm` | Slim target plus a USB CDC-ACM gadget, auto-login `reader` getty on `ttyGS0` and UART `ttyS2`, and passwordless `sudo` for `reader`. Carries the forward-ported `linux-pinenote` kernel; this is the kernel-currency track (see `doc/status.md` for open issues). |
 | usb-console-linux-6-6 | `pinenote/systems/pinenote-usb-console-linux-6-6.scm` | Same as usb-console but with the m-weigand 6.6.30 kernel and matching initrd. Regression-isolation tool only since 2026-07-04, when the 7.0 usb-console flavor reached display/gadget/RT parity on hardware. |
-| reader | `pinenote/systems/pinenote-reader.scm` | usb-console plus KOReader running natively on the framebuffer (`reader-session` Shepherd service; `doc/koreader-spike.md`) and the SC7A20→uinput orientation bridge. The reading-first target; first light 2026-07-05, with final baked autorotation and touch normalization deployed and hardware-accepted 2026-07-19. |
+| reader | `pinenote/systems/pinenote-reader.scm` | The reading-first target and current deploy artifact. Slim base plus: KOReader natively on the framebuffer (`reader-session`; `doc/refresh-policy.md` for the shipped refresh architecture), the SC7A20→uinput orientation bridge, the ACM gadget console with auto-login `reader` shell, Wi-Fi from out-of-band credentials + `dhcpcd` + key-only root SSH (hardware-proven; `doc/networking.md`), DDR dmc/boost services, and idle auto-suspend to deep. **No** ttyS2 auto-login getty — UART login is the base kernel-console getty; a second agetty on that tty caused the 2026-07-12 os2 wedge (see the entrypoint comment). First light 2026-07-05; autorotation/touch normalization hardware-accepted 2026-07-19. |
+| reader-debug | `pinenote/systems/pinenote-reader-debug.scm` | Temporary: the reader flavor with the diagnostic kernel (`linux-pinenote-debug`, EXTRACT_FBS belief-dump ioctl), hostname `pinenote-reader-dbg` so the flashed slot is identifiable at the login prompt, and the inert `ebc-dump-grab` CLI. Delete together with the debug patch when the investigations close (see the entrypoint comment). |
 | networked | `pinenote/systems/pinenote-networked.scm` | Slim target plus `dhcpcd` and `wpa_supplicant` for an initial Wi-Fi/DHCP size baseline. The `wpa_supplicant` D-Bus control interface is disabled, and no network credentials are embedded. |
 | minimal | `pinenote/systems/pinenote-minimal.scm` | Bring-up target with PineNote services plus Guix `%base-packages`, but without the Guix daemon service. |
 | dev | `pinenote/systems/pinenote-dev.scm` | Development comparison target that restores `%base-services`, including the Guix service. Keep this out of release boot slots unless explicitly needed. |
@@ -32,9 +33,10 @@ re-measure before relying on them (tracked in `ROADMAP.md`).
 
 The tarball image is a safe rootfs-size proxy. The `raw-with-offset` image path
 is only a build intermediate; it is not hardware-boot validated and must not be
-written as a full-device image. Gate 6 host-side prep extracts the single Linux
-root partition from that disk image into a direct ext4 rootfs artifact labelled
-`PNGuixRoot` before considering any manual placement into a confirmed OS slot.
+written as a full-device image. Host-side prep (`doc/building.md`, "Rootfs
+extraction") extracts the single Linux root partition from that disk image into
+a direct ext4 rootfs artifact labelled `PNGuixRoot` before considering any
+manual placement into a confirmed OS slot.
 
 ## Measurement Commands
 

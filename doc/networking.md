@@ -70,6 +70,8 @@ The radio and firmware layer works. Verified in the repo and on hardware:
   SSID, passphrase, or per-device credential is committed or bundled.
 - **Remote access.** The current reader image exposes key-only root OpenSSH;
   association, DHCP, SSH, and `scp` were hardware-proven on 2026-07-24.
+  The authorized key is **baked into the image** — collaborators must swap
+  it before building (§4.1).
 - **The `networked` flavor is a size baseline, not a working join.** It
   already wires `dhcpcd-service-type` plus a D-Bus-free
   `wpa-supplicant-service-type` on `wlan0`
@@ -88,11 +90,13 @@ same BCM43455 via `brcmfmac` with the same firmware request path
 (`doc/kernel-forward-port.md`), and the PineNote community image lineage
 (PNDeb, referenced throughout `firmware.scm`) is a wpa_supplicant world.
 The runbook reaches os1 over SSH at a static-looking address
-(`user@192.168.86.141`, `doc/hardware-deploy.md`) — evidence that a
+(recorded in the `doc/device-runbook.md` ledger) — evidence that a
 wpa_supplicant + DHCP + OpenSSH stack is exactly what a PineNote runs
-happily. What os1 actually uses for its supplicant/manager and its
-interface name has not been harvested; that is a cheap os1-oracle check
-(§6).
+happily. os1's manager stack has since been inventoried
+(`doc/device-runbook.md`, 2026-06-10): D-Bus + NetworkManager driving
+`wpa_supplicant`. Its exact interface name was never harvested, but the
+question is moot for us — the reader image's own naming yields `wlan0`,
+hardware-proven 2026-07-10 (§6).
 
 ## 2. The options, with tradeoffs
 
@@ -331,6 +335,20 @@ image (2026-07-24; §6 and `doc/status.md`).
   + `dhcpcd-service-type` to the services and `wpa-supplicant` (brings
   `wpa_supplicant` **and** `wpa_cli` into the profile — Phase 2 needs the
   latter) to the packages.
+- **The SSH authorized key is baked into the image.** The reader flavor's
+  `openssh-service-type` embeds the author's public key as root's **only**
+  authorized key: `pinenote/systems/pinenote-reader.scm` lines 133–139, a
+  `plain-file "wkelly.pub"` ed25519 key in `openssh-configuration`'s
+  `authorized-keys`. **If you are not the author, replace that key with
+  your own public key before building** — an unmodified build produces a
+  device you can never SSH into. The `/state`-based `authorized_keys` (and
+  persistent host keys) described in §3 and §6 remain the intended future
+  mechanism; until that lands, the key is image-baked, which is exactly
+  the "generic, shareable image" gap §3 warns about. Recovery workaround
+  if a wrong-key image is already on os2: the reader shell on the CDC-ACM
+  console has passwordless `sudo` (see the provisioning note below), so a
+  key can be appended to `/root/.ssh/authorized_keys` post-boot — at the
+  cost of part of a hardware session.
 
 **Provisioning (once, over the USB serial console — no Wi-Fi required).** The
 reader user has passwordless `sudo` (its sudoers), so this works over the
@@ -424,14 +442,18 @@ devices; USB-ECM is the reliable tethered fallback.
 
 Sections 2–3 preserve the design reasoning; §4 records the implementation and
 §5 its recorder use. Resolved checks below carry dates and evidence links. The
-remaining unlabelled checks still need the device (cheap os1-oracle checks
-first, then an os2 session):
+remaining unlabelled checks — regdomain selection, SSH identity
+persistence, the `/state` partition, and the USB-ECM gadget — are the open
+ledger and still need a decision or an os2 session:
 
-- **os1 reference (os1 oracle, read-only):** what supplicant and DHCP
-  client stock Debian actually runs, and — crucially — the **interface
-  name** it gives the BCM43455 (`ip link` / `iw dev`). The sketches assume
-  `wlan0`; modern predictable-naming could differ, and Guix's own udev
-  naming needs its own confirmation.
+- **os1 reference — RESOLVED (2026-06-10 inventory; naming question moot
+  2026-07-10).** os1's supplicant/manager are inventoried in
+  `doc/device-runbook.md` ("Active integration services: D-Bus,
+  NetworkManager, `wpa_supplicant`, …" — NetworkManager also supplies its
+  own DHCP). os1's exact interface name was never read out, and no longer
+  needs to be: the sketches' `wlan0` assumption was validated on our own
+  image — the reader's udev naming yields `wlan0`, hardware-proven
+  2026-07-10 (`doc/status.md`).
 - **Association — RESOLVED 2026-07-10.** The radio associates *and* completes
   WPA (DHCP lease + ping) — but only with **`brcmfmac.feature_disable=0x82000`**.
   Without it, the Apr-2021 BCM4345/6 firmware mis-negotiates its WPA offloads
@@ -441,23 +463,26 @@ first, then an os2 session):
   option in the `pinenote-wifi` service + kernel cmdline (A.2.4). Full evidence:
   `doc/status.md` (2026-07-10). The stuck-WORLD-regdomain / `set_channel reason
   -52` symptoms were benign red herrings.
-- **Module autoload path.** brcmfmac is SDIO-attached and should coldplug
-  via udev modalias, but Guix's kmod does not honor `LINUX_MODULE_DIRECTORY`
-  and only the kernel *profile* carries `modules.dep`
-  (`doc/kernel-forward-port.md`, hard-won lessons) — the same trap that
-  broke gadget modprobes. Confirm `wlan0` appears without a manual
-  `modprobe -d /run/booted-system/kernel brcmfmac`.
+- **Module autoload path — RESOLVED 2026-07-10.** brcmfmac coldplugs via
+  udev modalias and `wlan0` appears with no manual `modprobe` on the
+  reader image (`doc/status.md`, 2026-07-10: "`wlan0` autoloads"). The
+  reason this was worth checking — Guix's kmod does not honor
+  `LINUX_MODULE_DIRECTORY` and only the kernel *profile* carries
+  `modules.dep` (`doc/kernel-forward-port.md`), the same trap that broke
+  gadget modprobes — did not bite here.
 - **Regdomain / country.** The signed-regdb mechanism is present but the
   regdomain must be *set* (the `country=` line, or `iw reg set`). Verify the
   regdomain applies and that the intended channels/bands (esp. 5 GHz) are
   permitted.
-- **rfkill soft-block.** With `CONFIG_RFKILL=m`, the radio may come up
-  soft-blocked; check whether `rfkill unblock wifi` is needed at boot.
-- **MAC address stability.** brcmfmac without a per-device MAC in NVRAM can
-  present a random/locally-administered MAC per boot, which breaks DHCP
-  reservations and any allow-listing. Confirm the shipped
-  `...pine64,pinenote-v1.2.txt` NVRAM yields a stable MAC (or plan to pin
-  one).
+- **rfkill soft-block — RESOLVED 2026-07-10.** The radio comes up
+  unblocked (`doc/status.md`, 2026-07-10: "`wlan0` autoloads, is
+  unblocked, scans"), and the `pinenote-wifi` service does a best-effort
+  `rfkill unblock` anyway (§4.1), so a future soft-block cannot strand a
+  boot.
+- **MAC address stability — RESOLVED 2026-07-10.** The shipped
+  `...pine64,pinenote-v1.2.txt` NVRAM yields a stable MAC
+  (`doc/status.md`, summary table: "wlan0 autoloads, unblocked, stable
+  MAC, scans 6 APs").
 - **DHCP + reachability end to end — RESOLVED 2026-07-24.** Lease acquisition
   on `wlan0`, key-only `root@` SSH, and an `scp` round-trip are hardware-proven
   from the capture host; exact evidence is in `doc/status.md`.

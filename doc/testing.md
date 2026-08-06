@@ -50,25 +50,40 @@ and `doc/kernel-forward-port.md`.
 ## The host tools (`pinenote/tools/`)
 
 The C tools build with `guix shell gcc-toolchain python -- make -C <dir>
-check` and every tool has a root-level convenience target.
+check` and every host suite has a root-level convenience target.
+**`make check-host` is the one-command green state**: it runs every
+suite that needs no hardware and no waveform.
 Waveform-dependent tests need the per-device `.wbf` (never committed —
-see the firmware policy): pass `WBF=/path/to/ebc.wbf`; without it those
-tests skip with a clear message rather than fail.
+see the firmware policy): pass `WBF=/path/to/ebc.wbf` (to `check-host`
+too, which then also runs `wbf-check`); without it those tests skip
+with a clear message rather than fail.
 
 | Tool | Ladder rung | What it validates | Run |
 | --- | --- | --- | --- |
 | `pinenote/tools/wbf` | 1 | PVI `.wbf` parsing/decode (header, modes, temperature bins, LUT decode) exactly as `rockchip_ebc` loads it; `--dump-lut` exports a decoded LUT for the simulator | `make wbf-check WBF=…` |
-| `pinenote/tools/ebc-logic` | 2 + 7a | Rung 2 (`ebc-logic-test`): the driver's pure logic — XRGB8888/R4→Y4 blitters, damage split/collision scheduling, threshold/dither paths — vs independent references.  Rung 7a (`ebc-refresh-test`): *executes* the refresh state machine (probe, global/partial orchestration, LUT upload, DMA windowing, IRQ/completion, buffer switching) against a behavioral device model under ASan — with non-coherent DMA (the device reads only synced shadows, so a missing `dma_sync` fails a test) — incl. a drive-sequence differential vs rastersim's independent waveform decode and WBF-gated disable-tail caller/off-screen retention plus exact completion accounting.  Phase B (`ebc-replay`): replays KOReader `[pn-refresh]` traces through the same machine under candidate refresh policies — the display-quality workbench, results in `doc/refresh-policy.md` | `make ebc-logic-check WBF=…` |
+| `pinenote/tools/ebc-logic` | 1 | `ebc-logic-test`: the driver's pure logic — XRGB8888/R4→Y4 blitters, damage split/collision scheduling, threshold/dither paths — vs independent references.  `ebc-refresh-test` (ROADMAP §3's rung 7a): *executes* the refresh state machine (probe, global/partial orchestration, LUT upload, DMA windowing, IRQ/completion, buffer switching) against a behavioral device model under ASan — with non-coherent DMA (the device reads only synced shadows, so a missing `dma_sync` fails a test) — incl. a drive-sequence differential vs rastersim's independent waveform decode and WBF-gated disable-tail caller/off-screen retention plus exact completion accounting.  Phase B (`ebc-replay`): replays KOReader `[pn-refresh]` traces through the same machine under candidate refresh policies — the display-quality workbench, results in `doc/refresh-policy.md` | `make ebc-logic-check WBF=…` |
 | `pinenote/tools/ebc-barrier` | 1 | The separately invoked paint/barrier/restore diagnostic with fake framebuffer/DRM operations: strict fixed-width SUBMIT/WAIT ABI, high generation IDs, geometry/stride bounds, no-retry failure containment, exact restoration, cleanup precedence, double fail-closed reader ownership checks, and atomic pending/blocked signal acknowledgement. It never runs `--run` on the host | `make ebc-barrier-check` |
-| `pinenote/tools/rastersim` | 3 | A standalone Gray8→Y4 raster library + waveform *simulator* (state model + LUT playback), with golden-image and convergence tests | `make rastersim-check WBF=…` |
-| `pinenote/tools/koreader-input` | 2 | KOReader's *verbatim* `device/input.lua` + `gesturedetector.lua` (from the native `koreader-bin` bundle, under its own luajit) fed synthetic pen+touch evdev streams: reproduces the pen-hover tap-capture `quirk:` (finger tap → swipe), validates the `mixedrouter.lua` fix, checks exact `wilkbook-orientation` discovery plus source-gated MSC_RAW→MSC_GYRO translation, and pins cyttsp5 MT-axis normalization to five measured hardware targets | `make koreader-input-check` |
-| `pinenote/tools/orientation` | 2 | Pure SC7A20 orientation classification: calibrated four-edge mapping, flat/diagonal/magnitude rejection, hysteresis, stable-sample dwell debounce, and duplicate suppression | `make orientation-check` |
+| `pinenote/tools/rastersim` | 1 | A standalone Gray8→Y4 raster library + waveform *simulator* (state model + LUT playback), with golden-image and convergence tests | `make rastersim-check WBF=…` |
+| `pinenote/tools/koreader-input` | 1 | KOReader's *verbatim* `device/input.lua` + `gesturedetector.lua` (from the native `koreader-bin` bundle, under its own luajit) fed synthetic pen+touch evdev streams: reproduces the pen-hover tap-capture `quirk:` (finger tap → swipe), validates the `mixedrouter.lua` fix, checks exact `wilkbook-orientation` discovery plus source-gated MSC_RAW→MSC_GYRO translation, and pins cyttsp5 MT-axis normalization to five measured hardware targets | `make koreader-input-check` |
+| `pinenote/tools/orientation` | 1 | Pure SC7A20 orientation classification: calibrated four-edge mapping, flat/diagonal/magnitude rejection, hysteresis, stable-sample dwell debounce, and duplicate suppression | `make orientation-check` |
+| `pinenote/tools/optics` | 1 (checks) / 6 (capture) | The camera-in-a-box optical-defect instrument: deterministic flash/ghost/settle/double-flash classifiers over captured page-transition clips. The check suite validates the classifiers against synthetic clips with known injected defects — no camera, no device; real capture/ingest is a hardware session (`RECORDING.md`) | `make optics-check` |
 | `pinenote/tools/power` | 1 | Read-only Guile snapshot/delta recorder against deterministic fake `/proc`/`/sys` roots; plus a closed, unimported provider constructor and pure injected-capability Lua coordinator with exact transaction/rollback traces, durable records, poisoning, and no filesystem/sysfs authority. Neither Lua module is production-wired | `make power-check`; capability/coordinator gates are in `make activation-positive-check` |
 | `pinenote/tools/rockchip-pm` | 1 | Verbatim extracted BSP SIP/PM model and generic executor plus compiled-DTB donor/maximal fixtures: exact RK3568 bindings; standard OF metadata `compatible`, `name`, `status`; donor event ordering, GPIO/regulator limits, descriptive-only virtual-poweroff, fake-only unwind injection, strict source-tree validation, MEM-only production parsing, consumer-handle lifetime/locking, and proof that the real backend is linked while its active-driver `.prepare` edge is omitted | `make rockchip-pm-check` |
 | suspend preflight | 1 | Fail-closed config/DT/KOReader qualification fixtures: exact PM config lines, effectively enabled cover+RK817 wake identities, exact disabled policy bytes, and restricted two-value KOReader policy evaluation; plus structural gates over the TPS65185 PM hunk and the fbdev resume barrier, the latter with its own mutation suite | `make suspend-check` |
 | activation-positive composite | 1 | Runs the closed capability constructor, pure Lua coordinator, a separate compiled-DTB synthetic active Rockchip PM scenario through fake ops, and the unchanged production hard-off preflight in one gate. It cannot select the real backend or write `/sys/power/state` | `make activation-positive-check` |
+| `pinenote/tools/ebc-damage-probe` | 6 (device-side) | Supervised LuaJIT probes that write chosen patterns into the mmapped framebuffer and count EBC IRQs — isolates deferred-io/damage-scheduling behavior from KOReader entirely (the instrument behind the fbcon-starvation and publish-on-call findings, and the `defio_delay_ms` sweep) | no `make` target; copy to the device, see its README and `doc/hardware-deploy.md` |
+| `pinenote/tools/ddr-sip-probe` | 6 (device-side) | Read-only go/no-go for the bl31 DRAM-frequency SIP: an out-of-tree module that issues version *queries* only and returns `-ENODEV` so it never stays loaded. Answered GO on 2026-08-06 (SIP v2, DRAM version 0x101) | no `make` target; cross-built and insmodded supervised, see its README and `doc/power-management.md` |
+| `pinenote/tools/ddr-dvfs-test` | 6 (device-side) | Supervised DDR `SET_RATE` campaign tool against the same SIP; performed this board's first DDR rate change (324 MHz, 2026-08-06, EBC quiesced for every switch). No `README.md` yet — its `procedure.md`/`protocol.md` are the coverage record | no `make` target; supervised sessions only, see `procedure.md` and `doc/power-management.md` |
 
-Each tool's `README.md` documents what it does and does **not** cover.
+The rung column indexes **the validation ladder below** (1 = offline
+host suite, 6 = needs the device). ROADMAP §3's build-order rungs are a
+*different* numbering and appear here only with an explicit "ROADMAP"
+qualifier (e.g. rung 7a, the offline refresh-machine executor inside
+`ebc-logic-check`).
+
+Each tool's `README.md` documents what it does and does **not** cover
+(`ddr-dvfs-test` has no README yet; its `procedure.md` and `protocol.md`
+serve that role).
 
 A second caveat, learned on 2026-08-01: **the host harness compiles the
 driver under its own config, so code behind an `#ifdef` the shim does not
@@ -135,10 +150,9 @@ tests.  The refresh machine now *executes* offline — rung 7a, part of
 `make ebc-logic-check`, scoped in `doc/ebc-harness-spike.md`; the QEMU
 device model, 7b, remains future work.)
 
-1. **Host tool suites** — `make wbf-check ebc-logic-check ebc-barrier-check
-    rastersim-check koreader-input-check orientation-check optics-check
-    power-check rockchip-pm-check activation-positive-check suspend-check`
-    (with `WBF=`). The Rockchip gate statically proves a zero-SMC production
+1. **Host tool suites** — `make check-host` (the aggregate; with `WBF=`
+    it also runs `wbf-check` and the waveform-gated tests, which a
+    reader candidate requires). The Rockchip gate statically proves a zero-SMC production
     probe path while compiling the dormant typed model and parsing real DTBs
     carrying the donor property schema. Fast; catches
     driver-logic and waveform regressions.

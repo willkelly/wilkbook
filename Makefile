@@ -5,6 +5,14 @@
 GUIX = guix
 TARGET = aarch64-linux-gnu
 GUIX_FLAGS = -L . --target=$(TARGET)
+# Volatile by design: /tmp does not survive a host reboot, so rebuild
+# (or copy out) anything a later deploy will reference.  The
+# /tmp/opencode root is a historical name (a previous coding tool) that
+# is load-bearing as the write-containment boundary hard-coded in the
+# preflight/qemu scripts, so an ARTIFACTS override must still resolve
+# under /tmp/opencode for the qemu-virt* targets (the scripts fail
+# loudly on anything outside it).  Renaming the root is an open task
+# that must move those scripts in the same change.
 ARTIFACTS ?= /tmp/opencode/pinenote-rootfs-artifacts
 
 # reader-debug = reader with the EXTRACT_FBS diagnostic kernel
@@ -12,7 +20,7 @@ ARTIFACTS ?= /tmp/opencode/pinenote-rootfs-artifacts
 FLAVORS = minimal slim networked dev usb-console usb-console-linux-6-6 reader reader-debug
 
 .PHONY: help packages kernel kernel-drv qemu-smoke qemu-virt qemu-virt-check \
-         wbf-check ebc-logic-check ebc-barrier-check rastersim-check koreader-input-check orientation-check optics-check power-check rockchip-pm-check activation-positive-check suspend-check \
+         check-host wbf-check ebc-logic-check ebc-barrier-check rastersim-check koreader-input-check orientation-check optics-check power-check rockchip-pm-check activation-positive-check suspend-check \
         $(FLAVORS) $(addprefix image-,$(FLAVORS)) $(addprefix rootfs-,$(FLAVORS))
 
 help:
@@ -25,6 +33,7 @@ help:
 	@echo "  packages          build the helper/firmware packages"
 	@echo "  qemu-smoke        build the generic ARM64 QEMU smoke VM launcher"
 	@echo "  qemu-virt-check   mechanized virt boot assertions (ROOTFS=.. [WAVEFORM=..])"
+	@echo "  check-host        every host suite needing no hardware ([WBF=..] adds wbf-check + waveform-gated tests)"
 	@echo "  wbf-check         waveform parser checks (WBF=..; never committed)"
 	@echo "  ebc-logic-check   extracted EBC driver logic checks ([WBF=..])"
 	@echo "  ebc-barrier-check supervised EBC sleep-frame command host tests"
@@ -74,14 +83,15 @@ qemu-smoke:
 
 # Boot the real PineNote kernel/initrd/rootfs in QEMU virt with a synthetic
 # PineNote-layout disk (waveform partition + PNGuixRoot). Usage:
-#   make qemu-virt ROOTFS=/tmp/opencode/pinenote-rootfs-artifacts/...ext4 \
+#   make qemu-virt ROOTFS=$(ARTIFACTS)/...ext4 \
 #        [WAVEFORM=/path/to/waveform.bin]
 qemu-virt:
 	@test -n "$(ROOTFS)" || { echo "usage: make qemu-virt ROOTFS=<rootfs.ext4> [WAVEFORM=<file>]"; exit 2; }
 	@set -e; \
 	stamp=$$(date +%Y%m%d-%H%M%S); \
-	bundle=/tmp/opencode/pinenote-virt-bundle-$$stamp; \
-	disk=/tmp/opencode/pinenote-virt-disk-$$stamp.img; \
+	mkdir -p $(ARTIFACTS); \
+	bundle=$(ARTIFACTS)/pinenote-virt-bundle-$$stamp; \
+	disk=$(ARTIFACTS)/pinenote-virt-disk-$$stamp.img; \
 	guix shell e2fsprogs gptfdisk qemu -- sh -c "\
 	  pinenote/scripts/preflight/stage-boot-bundle-from-rootfs.sh '$(ROOTFS)' \"$$bundle\" && \
 	  pinenote/scripts/qemu/make-virt-disk.sh '$(ROOTFS)' \"$$disk\" $(WAVEFORM) && \
@@ -97,8 +107,9 @@ qemu-virt-check:
 	@test -n "$(ROOTFS)" || { echo "usage: make qemu-virt-check ROOTFS=<rootfs.ext4> [WAVEFORM=<file>]"; exit 2; }
 	@set -e; \
 	stamp=$$(date +%Y%m%d-%H%M%S); \
-	bundle=/tmp/opencode/pinenote-virtchk-bundle-$$stamp; \
-	disk=/tmp/opencode/pinenote-virtchk-disk-$$stamp.img; \
+	mkdir -p $(ARTIFACTS); \
+	bundle=$(ARTIFACTS)/pinenote-virtchk-bundle-$$stamp; \
+	disk=$(ARTIFACTS)/pinenote-virtchk-disk-$$stamp.img; \
 	guix shell e2fsprogs gptfdisk qemu -- sh -c "\
 	  pinenote/scripts/preflight/stage-boot-bundle-from-rootfs.sh '$(ROOTFS)' \"$$bundle\" && \
 	  pinenote/scripts/qemu/make-virt-disk.sh '$(ROOTFS)' \"$$disk\" $(WAVEFORM) && \
@@ -112,12 +123,22 @@ qemu-virt-visual:
 	@test -n "$(ROOTFS)" || { echo "usage: make qemu-virt-visual ROOTFS=<rootfs.ext4> [WAVEFORM=<file>]"; exit 2; }
 	@set -e; \
 	stamp=$$(date +%Y%m%d-%H%M%S); \
-	bundle=/tmp/opencode/pinenote-virtvis-bundle-$$stamp; \
-	disk=/tmp/opencode/pinenote-virtvis-disk-$$stamp.img; \
+	mkdir -p $(ARTIFACTS); \
+	bundle=$(ARTIFACTS)/pinenote-virtvis-bundle-$$stamp; \
+	disk=$(ARTIFACTS)/pinenote-virtvis-disk-$$stamp.img; \
 	guix shell e2fsprogs gptfdisk qemu -- sh -c "\
 	  pinenote/scripts/preflight/stage-boot-bundle-from-rootfs.sh '$(ROOTFS)' \"$$bundle\" && \
 	  pinenote/scripts/qemu/make-virt-disk.sh '$(ROOTFS)' \"$$disk\" $(WAVEFORM) && \
 	  pinenote/scripts/qemu/run-virt-visual.sh \"$$bundle\" \"$$disk\""
+
+# Aggregate host gate (doc/testing.md, validation-ladder rung 1): every
+# suite that needs no hardware and no per-device waveform, in one
+# command.  wbf-check hard-requires WBF=, so it joins only when WBF is
+# set; ebc-logic-check and rastersim-check accept the same optional WBF
+# and skip their waveform-gated tests without it.
+check-host: $(if $(WBF),wbf-check) ebc-logic-check ebc-barrier-check \
+        rastersim-check koreader-input-check orientation-check optics-check \
+        power-check rockchip-pm-check activation-positive-check suspend-check
 
 # Host-side waveform parser tests (offline ladder rung 1); needs the
 # per-device .wbf (never committed): make wbf-check WBF=/path/to/ebc.wbf

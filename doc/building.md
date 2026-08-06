@@ -4,16 +4,74 @@ All commands run from the repository root on the x86_64 build host. Everything
 here writes only to the Guix store and `/tmp/opencode`; deploying artifacts to
 the device is covered separately in `doc/hardware-deploy.md`.
 
+Two things to know about the artifact root before relying on it:
+
+- **It is volatile.** `/tmp` does not survive a host reboot; rebuild (or
+  copy out) any rootfs a later deploy session will reference.
+- **The name is historical** (a previous coding tool) but load-bearing:
+  the preflight/QEMU scripts hard-contain their writes under
+  `/tmp/opencode` and fail loudly on anything outside it. `ARTIFACTS=`
+  overrides where the Makefile puts artifacts, but for the `qemu-virt*`
+  targets the override must still resolve under `/tmp/opencode`.
+  Renaming the root is an open task that has to move those scripts in
+  the same change.
+
 The `Makefile` wraps the common invocations; the raw commands are recorded
 below for when a wrapper is not enough.
 
+## Host prerequisites
+
+- An x86_64 GNU/Linux host with Guix installed and current-ish
+  (`guix pull`). Everything cross-builds to `aarch64-linux-gnu` from
+  x86_64; no aarch64 hardware or binfmt emulation is needed.
+- **The channel depends on nonguix** (see `.guix-channel` /
+  `channels.scm`): `linux-pinenote` builds from nonguix's vanilla
+  kernel.org `linux` package (linux-libre cannot carry the PineNote
+  stack), and the firmware/font packaging uses nonguix's license
+  helpers. Your `guix pull` channel set must include nonguix or every
+  build here fails at module resolution.
+- **Set up substitutes for nonguix before the first kernel build.**
+  Subscribe to `https://substitutes.nonguix.org` and authorize its
+  signing key (see nonguix's README for the current key; the usual
+  moves are adding the server to `--substitute-urls`/your
+  `guix-daemon` configuration and `guix archive --authorize` with the
+  published key). Be warned honestly: without substitutes, the
+  cross-built PineNote kernel alone is an hours-long build, and a full
+  image pulls tens of GB into `/gnu/store`. With substitutes, most of
+  the toolchain arrives prebuilt and only the PineNote-specific
+  packages compile locally.
+- **Reproducibility caveat — the make targets call the *ambient*
+  `guix`.** `channels.scm` is a courtesy copy of the channel set; no
+  build path consumes it (`guix time-machine` integration is an open
+  task). What you build against is whatever your last `guix pull`
+  produced. The as-of-2026-08-06 known-good channel set (the author's
+  generation since 2026-06-05, so everything hardware-validated from
+  June onward built against it) is:
+
+  ```
+  guix    2cd0118  https://git.guix.gnu.org/guix.git        (master)
+  nonguix 3ed7c20  https://gitlab.com/nonguix/nonguix       (master)
+  ```
+
+  Record your own `guix describe` output alongside any image you
+  deploy, so a misbehaving build can be bisected to a channel bump.
+- **Fonts (optional).** The hardware-validated reader images bundle
+  personally-licensed fonts staged from the gitignored
+  `pinenote/fonts/local/` (see `pinenote/fonts/README.md`). A fresh
+  clone builds fine without them — KOReader falls back to its bundled
+  Noto fonts — but the result is typographically different from the
+  images `doc/status.md` validated.
+
 ## System flavors
 
-See `doc/pinenote-flavors.md` for the flavor matrix. Build a system closure:
+See `doc/pinenote-flavors.md` for the flavor matrix. **The `reader`
+flavor is the product and the current deploy target** — start there
+(`make rootfs-reader` is the one-command path to a deployable artifact).
+Build a system closure:
 
 ```sh
 guix system build -L . --target=aarch64-linux-gnu \
-  pinenote/systems/pinenote-usb-console.scm
+  pinenote/systems/pinenote-reader.scm
 ```
 
 Build the deployable disk image (an MBR image with a single ext4 partition;
@@ -21,12 +79,15 @@ the rootfs gets extracted from it before deployment, see below):
 
 ```sh
 guix system image -t raw-with-offset -L . --target=aarch64-linux-gnu \
-  pinenote/systems/pinenote-usb-console.scm
+  pinenote/systems/pinenote-reader.scm
 ```
 
-Substitute any other flavor entrypoint from `pinenote/systems/`. The
-`usb-console` flavor carries the hardware-validated primary 7.0 kernel; use
-`usb-console-linux-6-6` only for regression isolation (see `doc/status.md`).
+Substitute any other flavor entrypoint from `pinenote/systems/`. Every
+flavor carries the hardware-validated primary 7.0 kernel except the two
+that exist to vary it: `usb-console-linux-6-6` (regression isolation
+only; see `doc/status.md`) and `reader-debug` (the diagnostic kernel).
+`usb-console` is the bring-up/debug image — the gadget console without
+KOReader.
 
 ## Packages
 
@@ -173,9 +234,10 @@ reasoning behind this ordering — and the host tools in rung 0 — is in
 `doc/testing.md`.
 
 0. Host tool suites (offline, no VM), all required for a reader candidate:
-   `make wbf-check ebc-logic-check ebc-barrier-check rastersim-check koreader-input-check
-   orientation-check optics-check power-check rockchip-pm-check activation-positive-check suspend-check
-   WBF=/path/to/ebc.wbf KOREADER_BUNDLE=/path/to/koreader-bundle`.
+   `make check-host` runs every suite that needs no hardware and no
+   waveform in one command; `make check-host WBF=/path/to/ebc.wbf
+   KOREADER_BUNDLE=/path/to/koreader-bundle` folds in `wbf-check` and the
+   waveform-gated tests, which a reader candidate requires.
    These compile the verbatim EBC driver/waveform sources and catch
    driver-logic and waveform regressions. The Rockchip PM gate separately
    compiles the verbatim typed model/executor, builds and parses donor/maximal

@@ -1,11 +1,83 @@
-# PineNote Gate 6 Runbook
+# PineNote device runbook (device ledger)
 
-Gate 6 is the first hardware-adjacent preflight. It must remain read-only until
-the backup, rescue, and operator-approval checks below pass. Do not flash,
-repartition, mount images for writing, write bootloader environment variables,
-or change persistent boot selection from this runbook.
+This runbook is two things at once: the generic pre-write checklist every
+operator must satisfy before hardware work, and **the author's filled-in
+device ledger** — the inventory, backup roots, addresses, and VCOM value
+below describe Will's PineNote and serve as the worked example. Every
+operator keeps their own copy or section with their own device's values
+(see "Provisioning a new device" below); the deploy preconditions in
+`doc/hardware-deploy.md` require *your* ledger's checklist to be
+satisfied, with your values. Access conventions (slot disambiguation,
+SSH/ACM/UART discipline, post-mortem harvest) live in
+`doc/device-access.md`.
 
-## Current device inventory
+This runbook is hardware-adjacent preflight and must remain read-only
+until the backup, rescue, and operator-approval checks below pass. Do
+not flash, repartition, mount images for writing, write bootloader
+environment variables, or change persistent boot selection from this
+runbook.
+
+## Provisioning a new device
+
+What a collaborator runs on **their own** PineNote, from stock Debian
+`os1`, to create the backup set the deploy preconditions require.
+Assumed baseline: the community PineNote Debian image family (PNDeb /
+`pinenote-debian-image`) — Debian trixie with a `-pinenote` kernel and
+the GPT layout used throughout this repo (`uboot` p1, `waveform` p2,
+`uboot_env` p3, `logo` p4, `os1` p5, `os2` p6, `data` p7). If `lsblk`
+shows a different layout, stop and reconcile before anything else.
+
+1. **Enable SSH on stock os1** (`sudo systemctl enable --now ssh`), find
+   the device's address (router, or `ip neigh` after a ping sweep), and
+   record the address and host-key fingerprint in your ledger.
+2. **Verify the partition layout, read-only:**
+
+   ```sh
+   lsblk -o NAME,SIZE,TYPE,PARTLABEL,PARTUUID,MOUNTPOINTS
+   findmnt -n -o SOURCE /       # must be /dev/mmcblk0p5 (os1)
+   ```
+
+3. **Take the backups**, all read-only `dd if=` (run in a scratch
+   directory on the device and copy off, or stream over SSH):
+
+   ```sh
+   sudo dd if=/dev/mmcblk0p2 of=waveform_p2.img bs=1M status=none
+   sudo dd if=/dev/mmcblk0p3 of=uboot_env_p3.img bs=1M status=none
+   sudo dd if=/dev/mmcblk0p1 of=uboot_p1.img bs=1M status=none
+   sudo dd if=/dev/mmcblk0p4 of=logo_p4.img bs=1M status=none
+   sudo dd if=/dev/mmcblk0 of=mmcblk0_first16M.img bs=1M count=16 \
+     status=none
+   cp waveform_p2.img ebc_orig.wbf   # firmware-form copy, same bytes
+   sha256sum *.img ebc_orig.wbf > SHA256SUMS
+   ```
+
+   `waveform_p2.img` is the irreplaceable one: ~2 MiB of per-device
+   e-ink calibration that exists nowhere else (the repo's never-bundle
+   policy in `CLAUDE.md` exists because of it). `mmcblk0_first16M.img`
+   covers the GPT and early eMMC area, including only the beginning of
+   `uboot` — hence the separate full `uboot_p1.img`.
+4. **Duplicate to two independent roots** (e.g. workstation plus
+   NAS/second machine) and run `sha256sum -c SHA256SUMS` in both.
+5. **Read your device's VCOM** and record it in your ledger *and*
+   somewhere offline (paper survives dead disks). It is per-panel
+   calibration; never reuse another device's value:
+
+   ```sh
+   for r in /sys/class/regulator/regulator.*; do
+     [ "$(cat "$r/name")" = vcom ] && cat "$r/microvolts"
+   done
+   ```
+
+6. **Record the inventory** the checklist below asks for: the partition
+   map with sizes/labels/PARTUUIDs, the current kernel cmdline
+   (`cat /proc/cmdline`), and the outputs of the read-only command list
+   at the end of this file.
+
+With both roots verifying, the "Must have" checklist below is
+satisfiable with your own values, and the write protocol in
+`doc/hardware-deploy.md` applies.
+
+## Current device inventory (author's device — the worked example)
 
 Observed over SSH as `user@192.168.86.141` while stock Debian was running:
 
@@ -32,7 +104,7 @@ root=/dev/mmcblk0p5 ignore_loglevel rw rootwait earlycon console=tty0 console=tt
 The Guix preflight target should continue to use Guix initrd label shorthand:
 `root=PNGuixRoot`, not the Linux `LABEL=` root form.
 
-## Existing backup roots
+## Existing backup roots (author's device)
 
 Two backup copies currently exist:
 
@@ -60,8 +132,9 @@ A read-only supplement also exists in both backup roots:
 - `/home/wkelly/pinenote-backup/2026-05-10`
 - `/mnt/nastyboy/main/home/wkelly/pinenote-backup/2026-05-10`
 
-The supplement fills the pre-Gate-6 gaps that were safe to fill from stock
-Debian over SSH. Both copies verify with their `SHA256SUMS`, and matching files
+The supplement fills the remaining pre-write-protocol gaps ("Gate 6" in a
+retired ladder numbering) that were safe to fill from stock Debian over
+SSH. Both copies verify with their `SHA256SUMS`, and matching files
 have the same SHA-256 hashes and apparent sizes.
 
 Supplement artifacts:
@@ -85,9 +158,11 @@ The current backup is byte-for-byte identical: idblock SHA-256
 and U-Boot FIT SHA-256
 `078f81dcab0a41cc4d4bd046e8b81a833d1994c6c1b09fb34c7aaf2f14cc9031`.
 The stable installer would rewrite identical bytes; do not run it as a suspend
-experiment. The owner-only extraction and component manifest are under
+experiment. The owner-only extraction and component manifest were under
 `/tmp/opencode/pinenote-boot-firmware-compare-20260725/` and must not be
-committed as binary artifacts.
+committed as binary artifacts; that path is volatile (gone after any host
+reboot), and the durable record of the comparison is this ledger entry
+and the SHA-256s above.
 
 ## Backup sufficiency checklist
 
@@ -100,9 +175,10 @@ committed as binary artifacts.
 - `uboot_env_p3.img` or equivalent raw `/dev/mmcblk0p3` backup.
 - Current partition map with sizes, labels, PARTUUIDs, and mountpoints.
 - Current kernel command line.
-- Current VCOM value: `1430000` microvolts.
-- Known-good rescue path: stock Debian `os1` boots to SSH at
-  `user@192.168.86.141`.
+- Current VCOM value recorded (author's device: `1430000` microvolts —
+  per-panel; read your own, never reuse this one).
+- Known-good rescue path: stock Debian `os1` boots to SSH (author's
+  device: `user@192.168.86.141`).
 - Explicit operator approval for any command that writes to eMMC, bootloader
   environment, partitions, firmware paths, or OS slots.
 
@@ -140,7 +216,7 @@ committed as binary artifacts.
 - Serial-console setup notes and power-recovery procedure.
 - Photos of the current partition table, boot menu, and working stock display.
 
-## Gate 6 stop conditions
+## Stop conditions
 
 Stop before any temporary boot attempt if any of these are true:
 
