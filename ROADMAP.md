@@ -17,8 +17,8 @@ tests, and adversarial review — before a single reboot.
 
 Goal: stay close to current mainline kernels while carrying the PineNote
 display/pen stack as one explicit patch, with working firmware. Context:
-nobody else publicly runs 7.0.x on the PineNote (community trees top out
-at 6.19); we are the frontier, so expect to find issues first —
+nobody else publicly runs 7.0.x on the PineNote (as of 2026-07, community
+trees top out at 6.19); we are the frontier, so expect to find issues first —
 especially PREEMPT_RT interactions (see the RT watch list in
 `doc/eink-research.md` §6).
 
@@ -60,8 +60,9 @@ community convention and stays).
 - [x] `make rootfs-<flavor>` builds the image and extracts + inspects the
       validated `PNGuixRoot` rootfs (was implemented but unchecked here;
       README quick start already uses it).
-- [ ] Re-measure flavor closure sizes; add the usb-console flavors to the
-      `doc/pinenote-flavors.md` table (stale, predates firmware pkgs).
+- [ ] Re-measure flavor closure sizes in `doc/pinenote-flavors.md` (the
+      usb-console flavors are in the table now; sizes predate the firmware
+      packages, and the reader-debug flavor needs a row).
 - [x] Broadcom firmware delivery story decided (2026-07-04): the packaged
       firmware in the OS firmware field is hardware-proven, so
       `pinenote-brcm-firmware-service-type` and the `/state/firmware/brcm`
@@ -254,77 +255,36 @@ the start of this track — no panel required. Policy background in
 - [x] Hardware-validate SC7A20 autorotation, disable/re-enable state replay,
       touch/pen-contact deferral, and cyttsp5 coordinate normalization (final4
       deployed and accepted 2026-07-19; exact evidence in `doc/status.md`).
-- [ ] **Awake power-policy program.** RK817 telemetry, two cable-free static
-      ABBAs, and the realistic reader-energy ABBA are complete (2026-07-24/25).
-      Static draw tied at about 180--181 mA for `powersave`/`conservative`; on
-      the exact 45-turn reader workload, conservative averaged 13.072 mAh and
-       176.5 s versus powersave's 15.910 mAh and 209.0 s, with 45 fresh traces
-       per leg at 26 C. The forward-port defconfig now selects conservative as
-       the awake default; the 2026-07-25 probe-only reader boot verified the
-       `conservative` readback.
-      Measure Wi-Fi-down savings separately, then decide whether an awake-only
-      activity policy on `idlewasher`'s timer seam adds value beyond the adaptive
-      governor. Do not couple this to suspend qualification; see
+- [x] **Awake power-policy program — concluded 2026-08-06.** The
+      `conservative` governor is the validated awake default (2026-07-25);
+      the vdd_cpu auto-PFM fix took awake reader idle ~174 → ~157 mA on
+      the deployed image; DDR DVFS landed in tree (~25 mA more available,
+      not yet deployed); the domain teardown measured the remaining
+      floor. On-demand Wi-Fi was deliberately deferred (2026-08-03).
+      Ledger, numbers, and any future levers: `doc/power-management.md`.
+- [x] **E-reader suspend program — mechanism proven; validation continues.**
+      Deep suspend works on hardware (2026-08-02: BSP SIP activation live
+      and bound, RTC wake, display recovery, VCOM held), and auto-suspend
+      is deployed on os2 (2026-08-03: idle -> deep, power-button wake,
+      charging inhibit, runtime `enabled=0` off-switch). Note on the old
+      gate: this file previously required "repeated deep cycles with
+      unplugged energy measurements" before any idle autosuspend; the
+      2026-08-03 deployment superseded that gate, with the charging
+      inhibit and the runtime disable knob as compensating controls — the
+      unplugged multi-day soak remains the outstanding validation, not a
+      precondition. Full history: `doc/status.md`; campaign records:
       `doc/power-management.md`.
-- [ ] **E-reader suspend program.** Keep KOReader's exact disabled policy
-       bound to `canSuspend` while firmware inventory and the supervised PM-test
-       -> one real `s2idle` -> `deep` ladder are completed (`freeze` is Linux's
-       suspend-to-idle, not a separate mode). The fail-closed offline gate and
-       RK817 telemetry boot are complete (2026-07-24). Firmware comparison on
-       2026-07-25 proved the backup already byte-matches Pine64/PNDeb's stable
-       1056-MHz idblock/FIT and identified its 2022 downstream BSP ATF; reflashing
-       it would change nothing. The probe-only compatibility boot completed on
-       2026-07-25, but its private legacy version-query gate returned
-       `-EOPNOTSUPP`; call identity is ambiguous, the driver remained unbound,
-       and no suspend was requested. That gate is retired. The maximal offline
-       activation-hard-off Linux-side contract is complete: donor-faithful typed probe,
-       prepare, regulator, and descriptive virtual-poweroff events are built from
-       compiled DT fixtures. Production links the strict parser, model,
-       unwind-safe executor, consumer-handle regulator API, and narrow real
-       backend, but hidden exact-default-n Kconfig omits the active-driver
-       `.prepare`/executor object; the policy-free probe remains zero-action.
-       Production rejects mem-lite, mem-ultra, and virtual-poweroff policy, so
-       linked CPU/PSCI methods remain dormant. Regulator changes are
-       provider-deduplicated and transactionally restored; Kconfig closes the
-       `SUSPEND`/`CPU_PM` dependency. Do not allocate a second
-       hardware boot merely to prove zero-call binding. The next host slice is
-       complete: the verbatim EBC harness now proves caller/off-screen snapshots,
-       exact disable-tail completion accounting, and a fixed-width generation
-       barrier. A timeout or setup failure permanently poisons EBC until reboot,
-       retains potentially active DMA mappings, wakes every waiter with the same
-       error, and prevents late DSP_END from authorizing another hardware start.
-       A closed provider constructor and pure injected-capability coordinator prove checkpoint/restore/durable
-       poison behavior; and a separate synthetic active DT policy executes only
-       through fake Rockchip operations. `make activation-positive-check` ties
-       those positives to the unchanged production hard-off gate. A dormant
-       LuaJIT EBC UAPI adapter and injected sleep-frame provider are host-proven,
-       and a separate root-only diagnostic is packaged for the supervised
-       paint/barrier/restore hardware rung. None is wired into `device.lua`, and
-       activation remains disabled.
-       **The barrier is hardware-proven as of 2026-07-30.** The corrected run
-       passed all five acceptance criteria (generations 1 and 2, exact restore,
-       exit 0, clean reader repaint) on the unchanged deployed image, with no
-       rebuild. The 2026-07-29 failure was never in the barrier:
-       `rockchip_ebc_partial_refresh` never returns while damage keeps arriving,
-       so `do_one_full_refresh` — the handshake both the barrier and the legacy
-       global-refresh ioctl depend on — was starved; the run reported `-110`
-       with an entirely silent kernel log. `herd stop reader-session` re-binds
-       fbcon, whose blinking cursor is the damage source, and the reader image
-       lacked stock os1's `vt.global_cursor_default=0`. Both mitigations are in
-       (cmdline argument for the next build, explicit fbcon unbind in the
-       campaign procedure) and the waveform hypothesis was measured out — GC16
-       and GL16 are both 46 phases at 23 °C. The producer was then *measured*
-       on 2026-07-30 (fbcon bound: cursor_blink=1, 63 Hz, thread `D`; unbound:
-       exactly 0 Hz, thread `I`), and both remaining 2026-07-29 open items
-       closed — fb0 matched the offline card golden byte-for-byte, and the
-       "missing" 1-px border is occluded by a bezel that covers the outermost
-       4–10 px. See `doc/status.md` and `doc/driver-findings-report.md`.
-       Upstream TF-A is a separate later recovery-qualified
-       migration, never a hybrid. Production orchestration still needs reviewed
-       capability providers, production sleep-frame wiring, explicit wake
-       attribution, and display repair. No cover-triggered or idle autosuspend
-       until an EBC contract and repeated deep cycles with unplugged energy
-       measurements pass. See `doc/power-management.md`.
+- [ ] Suspend program, remaining direction: the week-scale unplugged soak
+      (a first short unplugged soak passed clean 2026-08-03 — no spurious
+      wakes at the 240 s dwell; the ~8-day standby figure, 8.6 d at the
+      19.3 mA measurement or 8.1 d at the 20.6 mA audit floor, still
+      rests on extrapolation); wake attribution and the cover wake source; the
+      unexplained TPS `ENABLE` 2f->20 delta after deep; resume latency as
+      a UX metric (~1.1 s kernel time today; measure one full
+      wake+render+refresh cycle); ultra-suspend (rail-kill) for the
+      week-idle target, gated on the `vcc_3v3_pmu`/GPIO0 wake collision.
+      Upstream TF-A stays a separate, later, recovery-qualified migration
+      — never a hybrid.
 - [ ] Reader polish, next: refresh-policy tuning (KOReader's
       partial/UI/full hints → EBC behavior; the `org.pinenote.ebc`
       dbus/UAPI compatibility story remains relevant for community

@@ -1,32 +1,84 @@
 # PineNote power management: evidence first
 
-This document defines the first, **read-only** power-management slice.  It is
-instrumentation discovery, not a suspend policy, battery-life estimate, or a
-claim about final4's idle drain.  The companion `pinenote/tools/power` Guile
-tool emits versioned S-expressions on stdout, accepts a fake root for offline tests, and
-only reads an explicit allowlist.  It never reads waveform or VCOM calibration
-data and never writes sysfs, procfs, debugfs, or tracefs.
+**Current state (2026-08-06).** What is hardware-proven, in one place:
 
-## Power program: targets, measured gaps, and ordering (2026-08-02)
+- **Deep suspend works** (2026-08-02): BSP SIP activation is live and
+  bound (`cfg: 0x5ec`, wakeup-config `0x10`); the device enters `deep`,
+  wakes on the RTC alarm and the power button, and resumes with a
+  working display at both CRTC states. Suspend-ladder rungs 1–3 all
+  PASS (`doc/status.md`).
+- **Auto-suspend is live on os2** (2026-08-03): the standalone
+  `pinenote-autosuspend` daemon sleeps the device after 5 minutes
+  without input (RTC backstop every cycle, sleep banner, charging
+  inhibit, short-press-to-suspend). Consequence: **ssh is
+  intermittent** — see `doc/device-access.md` for the runtime
+  `enabled=0` pause before working on the device.
+- **The awake floor fell twice on 2026-08-06**: vdd_cpu auto-PFM is
+  accepted on hardware (settled reader idle 174 → **156.9 mA**,
+  ~25.5 h), and DDR DVFS landed (`wilkbook_dmc` + input-driven boost;
+  DDR at 324 MHz saves ~24.8 mA, quiesced measurement).
+- **Deep draw is 20.6 mA and it is the rail floor** (2026-08-06 audit,
+  peripherals exonerated). The 2026-08-02 gauge A/B read 19.3 mA — see
+  the reconciliation note under the targets table.
+- **Not yet proven**: the unplugged multi-day soak; any wake source
+  beyond RTC + power button (cover wake in particular); the TPS
+  `ENABLE` 2f → 20 drift across deep is unexplained; ultra-suspend
+  remains unadopted (rail-kill wake collision unresolved).
+
+The rest of this document accumulated with the program. Dated sections
+are session records and stand as written at their dates; where later
+work superseded one, a dated note says so in place. The document began
+as the first, **read-only** power-management slice — instrumentation
+discovery, not policy — and the companion `pinenote/tools/power` Guile
+snapshot tool from that slice is still the measurement instrument: it
+emits versioned S-expressions on stdout, accepts a fake root for
+offline tests, and only reads an explicit allowlist.  It never reads
+waveform or VCOM calibration data and never writes sysfs, procfs,
+debugfs, or tracefs.
+
+## Power program: targets, measured gaps, and ordering (2026-08-02, figures refreshed 2026-08-06)
 
 Will's targets, and where we actually stand. All from a 4000 mAh charge
 (`charge_full`), against measurements in
-`doc/artifacts/pinenote-battery-ab-20260802/` and
-`.../pinenote-awake-idle-profile-20260802/`.
+`doc/artifacts/pinenote-battery-ab-20260802/`,
+`.../pinenote-awake-idle-profile-20260802/`, and
+`.../pinenote-awake-levers-20260806/`.
 
 | target | needs | measured | verdict |
 | --- | --- | --- | --- |
-| **~40 h active use** | ≤100 mA average | awake floor **171.6 mA** (23.3 h) | **not reachable awake** — reachable only by suspending between interactions |
-| **a week idle, most of a charge left** | ≤6.0 mA to leave 75% | deep **19.3 mA** (leaves 19%) | **3.2x short** |
+| **~40 h active use** | ≤100 mA average | awake floor **156.9 mA** (25.5 h) since the 2026-08-06 vdd_cpu fix; was 171.6 mA (23.3 h) | **not reachable awake** — reachable only by suspending between interactions |
+| **a week idle, most of a charge left** | ≤6.0 mA to leave 75% | deep **20.6 mA** (leaves ~13%) | **~3.4x short** |
 
-**2026-08-06: the awake row is now closed as far as software can take
-it.** A domain teardown attributes only 14 mA of a 177.5 mA awake draw to
-anything we can switch off — Wi-Fi 10.3, KOReader 4.1, USB gadget 2.0,
-panel **0.0** — leaving **163.1 mA (91.9%) as an irreducible static
-floor**. CPU idle states were the last plausible awake lever and, once
-added and working, moved it by **2.1 mA**. See "Both halves resolved"
-below and `doc/artifacts/pinenote-cpuidle-psci-20260806/`. The verdict in
-that row was right, and is now measured rather than inferred.
+**Which suspend-draw number to quote (19.3 vs 20.6 mA):** both are
+real measurements of the same deep draw at different dates and
+durations. **19.3 mA** is the 2026-08-02 battery A/B
+(`doc/artifacts/pinenote-battery-ab-20260802/`); **20.6 mA** is the
+2026-08-06 rail-floor audit (900 s windows, same boot,
+`doc/artifacts/pinenote-awake-levers-20260806/` Addendum 2). Quote
+**20.6** going forward: it is the newer, longer measurement, and the
+audit established it as the rail floor — PMIC quiescent + always-on
+rails + DDR self-refresh + bl31 retention, with every Linux-reachable
+peripheral exonerated. Older text below says 19.3; read it as the same
+floor measured earlier.
+
+**2026-08-06: the switch-things-off half of the awake row is closed —
+and the "irreducible" floor fell the same day.** A domain teardown
+attributes only 14 mA of a 177.5 mA awake draw to anything we can
+switch off — Wi-Fi 10.3, KOReader 4.1, USB gadget 2.0, panel **0.0** —
+leaving **163.1 mA (91.9%) as a static floor**, and CPU idle states,
+the last plausible *scheduling* lever, moved it by only **2.1 mA** (see
+"Both halves resolved" below and
+`doc/artifacts/pinenote-cpuidle-psci-20260806/`). But that floor turned
+out to be configuration, not structure: the same day's lever hunt
+measured **~30 mA** in the vdd_cpu forced-PWM bit (~17 mA realized at
+settled reader idle, 174 → 156.9) and **~24.8 mA** in DDR pinned at
+1056 MHz (driver landed as `wilkbook_dmc`; quiesced measurement). The
+honest ledger: 163 mA measured floor − ~17 mA realized vdd_cpu −
+~25 mA available DDR ≈ **~120 mA still unattributed**. The row's
+verdict stands — no awake floor reaches a 100 mA average — but
+"irreducible" was falsified within hours of being measured
+(`doc/artifacts/pinenote-awake-levers-20260806/`: "the floor is
+structural no more").
 
 ### The reframe that makes target 1 achievable
 
@@ -51,23 +103,39 @@ experience* metric as much as a power one.
 
 ### Target 2 needs less suspend draw, not better scheduling
 
-No amount of scheduling fixes 19.3 mA → 6 mA. That is the **ultra-suspend
+No amount of scheduling fixes 20.6 mA → 6 mA. That is the **ultra-suspend
 / rail-kill** payload we deliberately left unadopted (`ultra: 0` in every
 bl31 `PM-STATE` line so far), and it is gated on the rail-kill wake
 collision: `vcc_3v3_pmu` feeds `pmuio1/2`, the GPIO0 bank carrying every
 external wake source. Turning those rails off is exactly what saves the
 power *and* what could make the device unwakeable.
 
+The 2026-08-06 deep audit sharpened this: pre-killing touch, pen, and
+BT and downing wlan0 before suspend does not lower the draw at all (the
+stripped run D2 read 22.7 mA against the normal path's 20.6) —
+**no peripheral reachable from Linux is leaking**, so the whole
+20.6 → 6 gap lives in the PMIC-quiescent/always-on-rail territory only
+ultra-suspend touches. D2's excess is itself a finding worth keeping:
+**unbinding a driver skips its suspend hook**, and the orphaned
+hardware can sit in a worse state than the suspend path would have
+left it — the callbacks do real work. The same audit also proved twice
+that bl31 preserves a non-boot DDR rate across suspend/resume.
+(`doc/artifacts/pinenote-awake-levers-20260806/`, Addendum 2.)
+
 ### Ordering
 
-1. **Auto-suspend scheduling** — the enabling mechanism for both targets,
-   and worth ~7x on its own. Userland policy: inactivity detection, wake
-   sources (power button and cover are still unproven), resume-to-reading.
+1. **Auto-suspend scheduling — SHIPPED 2026-08-03.** The
+   `pinenote-autosuspend` daemon is live on os2: inactivity detection
+   over every input device, power-button wake (hardware-proven
+   2026-08-02) with an RTC backstop armed every cycle, sleep banner,
+   charging inhibit, and short-press-to-suspend (2026-08-04). Cover
+   wake remains unproven. The unplugged multi-day soak that would
+   validate standby end to end has **not** been run.
 2. **Measure one wake+render+refresh cycle.** It sets whether
    suspend-between-page-turns is viable and what resume latency budget we
    have.
 3. **Resume latency** — UX first, power second.
-4. **Suspend draw 19.3 → <10 mA** — ultra-suspend, gated on the rail-kill
+4. **Suspend draw 20.6 → <10 mA** — ultra-suspend, gated on the rail-kill
    wake question. This is what target 2 actually needs.
 
 ### Deferred: on-demand Wi-Fi (after everything else)
@@ -97,9 +165,11 @@ channel**, so a default-off policy makes the device dark between user
 interactions — hence tying it to charger state rather than switching it off
 outright.
 
-### Deferred: awake-idle floor research (after everything else)
+### Deferred: awake-idle floor research (resolved 2026-08-06, below)
 
-Explicitly parked, not forgotten. The 171.6 mA awake floor has two known
+Written when this was explicitly parked; both halves were then resolved
+on 2026-08-06 — see "Both halves resolved" and the vdd_cpu/DDR results
+that follow it. The 171.6 mA awake floor has two known
 contributors we chose not to pursue now, both large jobs with speculative
 payoff and bad failure modes:
 
@@ -148,7 +218,7 @@ PineNote. So DDR has been pinned at 1056 MHz on every kernel this device
 has ever run, including Rockchip's own. The cheap comparison suggested
 above cannot size the prize, because there is no DVFS on either side.
 
-### Next step: probe the DRAM SIP before porting anything
+### Probe the DRAM SIP before porting anything (answered 2026-08-06: GO, and landed)
 
 DDR DVFS on rk356x lives **entirely in bl31**, behind
 `ROCKCHIP_SIP_DRAM_FREQ`. Linux only requests; firmware does the work.
@@ -169,12 +239,24 @@ first-ever DDR rate change (324 MHz, MCU path, 106.8 ms, memory intact,
 EBC quiesced for every switch) and the measurement is in: **DDR at
 324 MHz saves ~24.8 mA over 1056** (quiesced battery-drain windows, same
 boot, minutes apart).  Firmware table: 324/528/780/1056.  The Linux-side
-integration plan is the design doc's static-low architecture (SIP-only
-driver, `powersave` governor, `opp-suspend` at 1056); the win is real and
-measured, not speculative.  Rules that held and must keep holding: never
-switch with the EBC active (a retraining stall inside a frame can trip
-the terminal-poison timeout), never target above the boot rate (no OPP
-voltage scaling).
+integration **landed the same day** (commit `7b0251b`): `wilkbook_dmc`,
+a minimal devfreq driver over the same SIP
+(`pinenote/patches/linux-pinenote-7.0-dmc-static-low.patch`), floored
+at 324 by the `powersave` governor, plus an input-driven boost daemon
+that raises `min_freq` to the firmware's top rate on any input event
+and drops back to the floor after 10 s quiet
+(`pinenote/tools/power/ddr-boost.lua`; services `pinenote-dmc` and
+`pinenote-ddr-boost` in `pinenote/services/{dmc,ddr-boost}.scm`).  The
+SMC sequences and their BSP citations are documented in
+`pinenote/tools/ddr-dvfs-test/{procedure,protocol}.md`.  One earlier
+design choice is explicitly **overridden** by newer evidence: the
+driver carries no suspend hooks and no `opp-suspend`, because the deep
+audit proved twice that bl31 preserves a non-boot DDR rate across
+suspend/resume (awake-levers artifact, Addendum 2) — suspend hooks
+would only add switches, and EBC exposure, for nothing.  Rules that
+held and must keep holding: never switch with the EBC active (a
+retraining stall inside a frame can trip the terminal-poison timeout),
+never target above the boot rate (no OPP voltage scaling).
 
 **Expect a modest result, and size it before investing.** Deep suspend is
 20.6 mA *with DRAM in self-refresh*, so retention is cheap — but that
@@ -210,7 +292,8 @@ The five evidence domains stay separate:
 2. **Reader/display activity:** bracket known page turns or refresh intervals;
    do not infer panel energy from counters alone.
 3. **Suspend/resume:** capture before/after evidence and console signatures.
-   The first actual suspend remains outside this slice.
+   (The first actual suspends have since run and passed — 2026-08-02 —
+   but the bracketing discipline stands for every new experiment.)
 4. **Wake attribution:** compare named wakeup-source and IRQ counters, then
    confirm suspected wakes on a human-observed UART session.
 5. **Gauge accuracy:** compare a future exposed gauge against controlled charge
@@ -229,14 +312,28 @@ and mount information, so keep them outside the repository (normally under
 The production target is suspend-to-RAM with appliance behavior, not merely a
 successful `echo mem`. Linux `freeze` is suspend-to-idle; `s2idle` names that
 same system-suspend mode, while `deep` is the platform suspend mode. Only a
-measured `deep` result can support a multi-day battery target. The current
-product verdict remains **unsupported**: the exact disabled
-`suspend_policy.lua` is bound to `device.lua`'s sole `canSuspend` field, there
-is no idle or cover-triggered autosuspend, and no unsupervised code may write
-`/sys/power/state`.
+measured `deep` result can support a multi-day battery target.
 
-The eventual suspend operation needs one serialized transaction, but the
-current EBC path makes its static sleep-screen phase explicitly unavailable:
+**Verdict updated 2026-08-03: suspend is SUPPORTED and scheduled.**
+`deep` is hardware-proven (2026-08-02) and the standalone
+`pinenote-autosuspend` daemon now writes `/sys/power/state` on its own:
+idle-triggered `deep` with an RTC backstop, power-button wake, a sleep
+banner with band save/restore, charging inhibit, and
+short-press-to-suspend. The ownership split is deliberate: the
+*daemon*, not KOReader, owns suspend — `suspend_policy.lua` still
+returns `false`, so `device.lua`'s sole `canSuspend` field stays off
+and KOReader's own suspend transaction remains unwired. Cover-triggered
+suspend is still blocked (cover wake unproven). Operational
+consequence: **ssh is intermittent on the deployed image**; see
+`doc/device-access.md` for the runtime `enabled=0` pause before any
+session. (The pre-2026-08-03 verdict here read "unsupported: … no
+unsupervised code may write `/sys/power/state`" — retired.)
+
+The eventual full KOReader-integrated suspend operation needs one
+serialized transaction; the live daemon implements a minimal version
+of it (gadget quiesce, banner save/restore, post-resume refresh), and
+the numbered phases below remain the specification for the full
+orchestration, which is future work:
 
 1. Inhibit new page turns, refresh-policy work, and duplicate power/cover
    requests. A held wake key must not become an immediate post-resume action.
@@ -299,6 +396,14 @@ and [PocketBook InkView path](https://github.com/koreader/koreader/blob/dab8e448
 
 ### Trigger and wake policy
 
+**Superseded in part, 2026-08-03:** qualification is complete for
+`deep` with RTC and power-button wake (both hardware-proven
+2026-08-02), and automatic idle suspend is live (`pinenote-autosuspend`,
+5-minute default, runtime-tunable). What stands: cover, touch/pen, MMC,
+USB, and network wake remain unproven and out of scope, and cover-close
+suspend stays blocked until cover wake is attributed. The original
+qualification rule follows as written at the time.
+
 Qualification starts with an explicit, human-issued command only. DT wake
 annotations are limited to the cover switch and RK817 PMIC path; this does not
 prove runtime wake policy, physical routing, or which PMIC child event woke the
@@ -343,18 +448,36 @@ guix shell dtc python luajit -- \
   pinenote/packages/koreader-device/frontend/device/pinenote/device.lua
 ```
 
-The gate requires exact suspend/freezer/debug config, rejects enabled hidden activation,
-exactly the approved two effectively enabled DT wake declarations with their
-verified identities, and the exact disabled policy module. A restricted LuaJIT
-harness evaluates `device.lua` with injected false and true policy values and
-requires its returned class to follow both. It rejects CPU idle-state nodes and
-references, any additional matching probe node, and every property or child
-beneath the exact root probe node.
-Passing proves none of TF-A/U-Boot, DDR retention, runtime wake policy, physical
-wake routing, RK817/TPS65185 behavior, EBC rail state, resume, or current draw.
-The 2026-07-20 built 7.0.11 kernel and generated DTB passed the then-current
-gate. The current BSP compatibility build passes the expanded gate against its
-packaged config and DTB; suspend remains unsupported.
+**The gate flipped polarity on 2026-08-02, with activation.** It now
+*requires* `CONFIG_ROCKCHIP_SUSPEND_MODE_ACTIVATE=y` (`deep` cannot
+wake without the SIP configuration activation sends — the cfg `0x0`
+hang proved it) and exactly the reviewed ACTIVE policy node:
+`rockchip,sleep-mode-config = 0x5ec`, `rockchip,wakeup-config = 0x10`,
+`rockchip,sleep-debug-en = 0`, and nothing else — where it previously
+required activation unset and a policy-free node. It still requires
+exact suspend/freezer/debug config, exactly the approved two
+effectively enabled DT wake declarations with their verified
+identities, and the exact disabled policy module (`suspend_policy.lua`
+returns `false`: the autosuspend daemon owns suspend, KOReader does
+not). A restricted LuaJIT harness evaluates `device.lua` with injected
+false and true policy values and requires its returned class to follow
+both.
+
+**Known gate/kernel contradiction (noted 2026-08-06, follow-up
+tracked):** the gate still rejects CPU idle-state nodes and references
+— a rule from before `linux-pinenote-7.0-cpuidle-psci.patch` added the
+reviewed `CPU_SLEEP` state to the PineNote DTS (2026-08-05,
+deep-proven 4/4 cycles). Until `inspect-pinenote-suspend-gates.sh` is
+reconciled to accept that node, the against-a-built-image invocation
+above is **expected to fail on idle-states** for any current build;
+that failure is the stale gate, not a kernel regression. Do not "fix"
+it by removing the idle-states — they are hardware-proven.
+
+Passing proves none of TF-A/U-Boot, DDR retention, runtime wake policy,
+physical wake routing, RK817/TPS65185 behavior, EBC rail state, resume,
+or current draw — those were proven on hardware separately (2026-08-02
+and after; `doc/status.md`). The 2026-07-20 built 7.0.11 kernel and
+generated DTB passed the then-current, pre-activation gate.
 
 The closed `power_capabilities.lua` constructor rejects missing, malformed, and
 extra providers without inventing authority. The pure `power_coordinator.lua` host model accepts only the
@@ -371,21 +494,28 @@ sysfs authority and is not imported by the production device target. QEMU may
 later validate service adapters, but the real `/sys/power/state` write must
 remain unavailable there.
 
-Current blockers after that gate passes:
+**2026-08-03 update: these are no longer suspend blockers** — deep is
+proven and scheduled. The list is preserved with per-item status
+because several items still gate the *full* KOReader-integrated
+transaction and the ultra-suspend program:
 
 - no production provider or userspace coordinator yet performs the host-proven
   transaction; a dormant LuaJIT barrier adapter and injected sleep-frame
   provider are host-proven and packaged with the recursively grafted PineNote
-  device sources, but remain intentionally unimported by `device.lua`;
+  device sources, but remain intentionally unimported by `device.lua`.
+  *Still true 2026-08-06: the live autosuspend daemon performs a
+  minimal transaction outside the coordinator model*;
 - the deployed stable BSP-ATF/DDR/U-Boot contract is identified, and its
   execution-capable Linux parser/model/executor/backend stack is now
-  production-linked and offline-qualified. Activation and active DT policy
-  remain deliberately absent, so firmware compatibility, execution ordering,
-  wake, and resume still require the later supervised qualification ladder;
+  production-linked and offline-qualified. **Resolved 2026-08-02:**
+  activation and the reviewed active DT policy are live (`0x5ec`/`0x10`),
+  the driver binds on the activation path, and the supervised
+  qualification ladder ran and passed through `deep`;
 - the EBC driver has system/runtime PM callbacks, special post-suspend refresh
   bookkeeping, and a host-proven refresh-completion barrier. The separately
-  invoked C diagnostic can now paint, wait, and restore under supervision, but
-  production sleep-frame painting and coordinator wiring remain absent;
+  invoked C diagnostic can now paint, wait, and restore under supervision, and
+  the daemon's banner save/restore is proven on glass (2026-08-03), but
+  production sleep-frame painting through the coordinator remains absent;
 - the known-working downstream stack also carries TPS65185 standby/resume
   register restoration — **resolved 2026-08-01: required before `deep`,
   and now WRITTEN: the forward-port patch carries a snapshot/restore
@@ -463,8 +593,13 @@ Current blockers after that gate passes:
   suspends has broken autorotation after the first sleep.** It also
   explains why hrdl's `v6.19_iio_accel` branch exists. Nothing about our
   configuration is special, so no os1 verification trip is needed;
-- cover and RK817 wake properties are compiled in, but physical wake routing
-  and PMIC child-event attribution are unproven.
+- cover and RK817 wake properties are compiled in. **Partially proven
+  2026-08-02:** power-button and RTC wake work through the RK817 path
+  on real deep cycles; cover wake and finer PMIC child-event
+  attribution remain unproven. Also open from that session: TPS
+  `ENABLE` moved `2f → 20` across deep and was not restored by our PM
+  pair — the display works via runtime PM, but understand the drift
+  before long dwells.
 
 ### Supervised qualification ladder
 
@@ -503,7 +638,25 @@ explicitly (the blanked-at-suspend precondition was soundly inferred,
 never directly measured), and grep resume dmesg for
 `rockchip_ebc_resume` (new symmetric entry print).
 
-Amendments from that session, now standing procedure:
+**2026-08-02: the ladder completed — rungs 1–3 all PASS.** The retry
+ran with the worker-bracket fix in place. Rung 2 passed both
+discriminator cases: post-resume damage paints a full 46-frame pass at
+blanked *and* unblanked CRTC states, no regulator or TPS drift, VCOM
+intact (`doc/artifacts/pinenote-suspend-ladder-20260802-discriminator/`).
+Rung 3 (`deep`) first hung inside bl31 with `PM-STATE: … cfg: 0x0` —
+firmware-level proof that dormant activation sends no suspend
+configuration or wake-source arming
+(`doc/artifacts/pinenote-deep-suspend-hang-20260802/`). Enabling
+activation the same day (`cfg: 0x5ec`, wakeup-config `0x10`) turned
+that hang into a clean 60 s deep cycle: RTC wake on schedule, the
+monotonic clock frozen (1.08 s kernel across 60 s wall — the signature
+of a real power-down), OP-TEE re-initialising secondary CPUs on
+resume, VCOM surviving at `8f`, and a fully working display at both
+CRTC states (`doc/artifacts/pinenote-deep-suspend-WORKS-20260802/`).
+Full session record: `doc/status.md`. Open residue: TPS `ENABLE`
+`2f → 20` across deep, unrestored by our PM pair and unexplained.
+
+Amendments from the 2026-08-01/02 sessions, now standing procedure:
 - **Quiesce the USB gadget before any attempt** (blank
   `/sys/kernel/config/usb_gadget/pinenote-acm/UDC`; rebind after). An
   active ACM host session hard-vetoes suspend via dwc3.
@@ -663,6 +816,8 @@ for the absent cpuidle sysfs states. The inherited upstream RK3566 DTS/DTSI
 also has no CPU idle-state nodes, which narrows this to missing platform DT
 description rather than a final4-only runtime disappearance; adding states
 still requires RK3566 firmware/PSCI validation and is not part of this slice.
+(Since done: `linux-pinenote-7.0-cpuidle-psci.patch`, 2026-08-05,
+deep-proven 4/4 cycles — see "Both halves resolved" above.)
 
 The live DT also has no `simple-battery`, `monitored-battery`, design-capacity,
 voltage-limit, current-limit, sense-resistor, or OCV profile property.  The
@@ -908,6 +1063,18 @@ the BSP policy.
 
 ### BSP SIP compatibility milestone
 
+**Superseded 2026-08-02 — activation is now ON.** This section records
+the activation-hard-off milestone as built (2026-07-26) and is kept as
+the design record of the fail-closed core; read its present tense as of
+that date. Since 2026-08-02 the PineNote defconfig sets
+`ROCKCHIP_SUSPEND_MODE_ACTIVATE=y`, the DT carries the reviewed ACTIVE
+policy (`sleep-mode-config 0x5ec`, `wakeup-config 0x10`,
+`sleep-debug-en 0` — values measured from os1's booted DTB, not
+tuned), the driver binds on the activation path (`BSP suspend policy
+activated`, four probe-time SIP calls emitted), and deep suspend is
+hardware-proven through it (`doc/status.md`, 2026-08-02 entries; SIP
+evidence in `doc/artifacts/pinenote-sip-sequence-differential-20260802.md`).
+
 The compatibility patch remains deliberately narrower than donor commit
 `72127ca`. It preserves upstream's `0xff` power-domain subcommand unchanged.
 Production links a composite parser/model/executor/backend core, but its only activation
@@ -944,6 +1111,9 @@ builder emits it. The donor treats any nonzero virtual-poweroff value as true;
 the dormant model intentionally narrows that to `0` or `1` and rejects other
 values. This is host-model fidelity, not an executable production policy.
 Parsing and short-capacity failures leave caller-owned output unchanged.
+(2026-08-02: production now binds the reviewed activated policy node
+described in the supersession note above; this donor model still backs
+the host harness.)
 
 `make rockchip-pm-check` compiles the verbatim model and injected-ops executor
 under ASan/UBSan, builds
@@ -966,10 +1136,12 @@ runs the pure Lua coordinator suite, parses the compiled maximal synthetic DTB,
 builds exact probe and MEM-prepare events, executes them through `fake_ops`, and
 fails each MEM regulator action. Only successful fake mutations enter that same
 transaction, pinning failure stop order, the exact reverse restore set and prior
-values, permanent poison, and zero-action retry. The same composite command then reruns the unchanged
-production suspend preflight, which requires activation unset, policy-free DT,
-and `suspend_policy.lua` exactly false. Passing is fake-only implementation
-evidence, not permission to enable activation or request suspend.
+values, permanent poison, and zero-action retry. The same composite command then reruns the
+production suspend preflight, which since 2026-08-02 requires
+activation *set* and exactly the reviewed active policy node, with
+`suspend_policy.lua` exactly false. Passing is fake-only implementation
+evidence for the coordinator model; activation and suspend are
+governed by the hardware evidence recorded above, not by this gate.
 
 The corrected 2026-07-26 reader candidate completes the artifact half of this
 milestone. Its ext4 image is
@@ -1033,7 +1205,9 @@ either supply and offline-prove its matching Linux driver/DT policy or complete
 a separately recovery-qualified upstream-TF-A migration. The attempt must be
 human-observed on UART with `os1` available, and acceptance requires a forced
 full EBC refresh after resume in addition to wake-source and service-health
-evidence.
+evidence. (**Done 2026-08-02**: the BSP driver/DT policy path was
+supplied, offline-proven, and the supervised attempt succeeded — see
+the qualification ladder above.)
 
 ## Community ultra-suspend series (read 2026-07-31): the priced policy surface
 
@@ -1069,7 +1243,10 @@ What this changes for our program — and what it does not:
 
 - It does **not** remove a blocker. Activation, an active reviewed DT
   policy, real coordinator providers, production sleep-frame wiring, and
-  the resume dependencies all still stand.
+  the resume dependencies all still stand. *(2026-08-02: activation and
+  the reviewed MEM policy have since landed and `deep` is proven; the
+  coordinator and sleep-frame items still stand, and the ultra rail
+  payload remains unadopted.)*
 - It **re-prices** the program: the prize was previously unquantified;
   a claimed 5.5× standby extension is reader-defining if it replicates.
 - It makes "PineNote-specific ultra-suspend dependencies" **concrete**:
@@ -1202,8 +1379,12 @@ wake collision** added as the gating question for the ultra payload;
 `sdmmc1 cap-power-off-card` recorded as implying full SDIO Wi-Fi
 re-init on resume (blacklisted in the model, not modeled).
 
-No hardware session is allocated or implied by any of this. The standing
-rule holds: nothing suspends until the qualification ladder says so.
+No hardware session is allocated or implied by any of this. The
+standing rule as written then — nothing suspends until the
+qualification ladder says so — was satisfied on 2026-08-02: the ladder
+ran, `deep` passed, and scheduled suspend is now live. The rule's
+successor applies to the *ultra* payload: no rail-kill suspend until
+its GPIO0 wake-collision question is answered under supervised UART.
 
 ### Post-resume dead-write window (2026-08-01, offline source pass)
 

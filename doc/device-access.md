@@ -1,0 +1,141 @@
+# Device access and diagnosis conventions
+
+How to reach and safely use a PineNote running this stack — the SSH
+oracle on os1, the ACM console, UART, post-mortem log harvest, and the
+traps each of these has already cost sessions to learn. These conventions
+were previously tribal knowledge; they are repo policy now. Concrete
+per-device values (addresses, fingerprints, VCOM) live in each operator's
+device ledger — see `doc/device-runbook.md`; this file stays generic.
+
+Convention: the reader's static LAN address is deliberately **not**
+written into repo docs. Find it via the router / `ip neigh` (hostname
+`pinenote-reader`) and record it in your own ledger.
+
+## Which slot am I on?
+
+Both slots can answer at the same LAN address (os1 as `user@`, the os2
+reader as `root@`). **Always verify the slot before acting**:
+
+```sh
+findmnt -n -o SOURCE /    # …p5 = os1 (stock Debian), …p6 = os2 (ours)
+```
+
+Host-key policy: os2's host key is regenerated on every reflash — use a
+dedicated known-hosts file and `StrictHostKeyChecking=accept-new`. os1's
+archived host-key fingerprint (ledger) is the identity check before any
+os2 write.
+
+## os1 as a read-only oracle
+
+Stock Debian on os1 (6.12-pinenote, everything working) is the cheapest
+"is our build doing the right thing" check: live `/proc/device-tree`,
+`/sys/bus/iio`, dmesg signatures, gadget bracketing. Use it before
+theorizing. Two limits: os1 drives its display through KMS, so it is
+**not** an oracle for the fbdev damage path; and os1 auto-deep-suspends
+on idle — if ssh/ping fails it is probably asleep, not broken (wake it;
+don't debug connectivity).
+
+Related patterns, all proven:
+
+- **Post-mortem harvest**: after an unobserved os2 boot, mount
+  `/dev/mmcblk0p6` read-only from os1 and read `/var/log/messages`.
+- **Chroot testing**: `sudo chroot /mnt/os2 <store-path>` runs the Guix
+  aarch64 binaries natively — proves deployed-binary behavior without a
+  boot.
+- **os2's /tmp is on-disk, but Guix WIPES it when os2 boots.** Evidence
+  under /tmp survives a hang + power-cycle *only if you boot os1 next*:
+  boot os1, mount p6 `ro,noload`, harvest, sha256-verify, unmount — then
+  reboot os2. Re-staged scripts must be re-copied every os2 boot.
+
+## The ACM gadget console
+
+Host side, the device enumerates as an ACM tty (descriptor
+`Pine64 PineNote Guix … ACM Console`); check `udevadm info` before
+assuming a `/dev/ttyACM*` node is the PineNote. I/O pattern:
+
+```sh
+(timeout N cat /dev/ttyACM1 > log &  sleep 0.3; printf 'cmd\r' > /dev/ttyACM1; wait)
+```
+
+- With the host tty in `stty raw`, terminate lines with `\r` (CR), not
+  `\n` — `\n` alone leaves the shell at a `>` continuation prompt. Lead
+  each command with Ctrl-C (`\003`) + `\r` to clear any partial line.
+  Avoid `!` in commands (history expansion).
+- On the reader flavor the console user is unprivileged `reader` with
+  **passwordless sudo** — `sudo -n <cmd>` for sysfs/mount ops.
+- Binary transfer: base64 payload, sha256-verify on device (~2 MB in
+  seconds). One-line script placement:
+  `printf %s '<base64>' | base64 -d > /tmp/x.sh`.
+
+## UART
+
+The UART **works** at 1500000 baud — host `/dev/ttyUSB0` (CH340 on the
+USB-C SBU debug cable):
+
+```sh
+stty -F /dev/ttyUSB0 1500000 cs8 -cstopb -parenb -crtscts clocal -echo raw
+```
+
+Two traps that defeated every early attempt (the long-standing "receives
+nothing from ttyS2" claim was a test artifact, retracted 2026-08-02):
+
+1. The **device-side** `/dev/ttyS2` termios defaults to **9600**, and on
+   an 8250 the console shares the port divisor — console output leaves at
+   9600 while you listen at 1500000. Run `stty -F /dev/ttyS2 1500000` on
+   the device (agetty uses `--keep-baud`).
+2. A **passive listen after boot** cannot tell a dead cable from a quiet
+   console. Test method: transmit a known marker from the device while
+   sweeping host bauds, and grep for it.
+
+For a trace through suspend entry, `no_console_suspend` on the cmdline is
+required — the runtime `console_suspend=N` knob does not hold the 8250 up
+through its own dev_pm_ops. UART gives passwordless root whenever the
+device is awake; it is the recovery channel if auto-suspend misbehaves.
+
+## SSH to the deployed reader
+
+- Key-only `root@<reader-addr>`; scp works. Each reflash wipes `/root`
+  (re-push test assets) and regenerates the host key (`accept-new`).
+- **Auto-suspend makes SSH intermittent**: the device is only reachable
+  for the idle window after the last input, and Wi-Fi re-association eats
+  several seconds of it after each wake. To work on the device, first
+  write `enabled=0` to `/var/lib/pinenote/autosuspend.conf` (re-read
+  before every idle wait; no restart needed).
+- After a broken scp, sshd's `PerSourcePenalties` can temporarily ban the
+  host — pings fine, TCP accepted, handshake drops. Rapid retries DEEPEN
+  the ban: stop for 5+ minutes, then one clean try.
+
+## Misc proven patterns
+
+- **Cross-compiled one-offs**: `aarch64-linux-gnu-gcc` from the Guix store
+  with `-I <linux-libre-headers-cross> -I <glibc-cross>
+  -Wl,--dynamic-linker=<glibc-cross>/lib/ld-linux-aarch64.so.1
+  -Wl,-rpath,<glibc-cross>/lib` runs on the device as-is.
+- **Live-editing a store bundle on device**: `cp -rL` (NOT `cp -a`) —
+  profiles are symlink forests; `cp -a` copies the symlinks and later
+  edits fail through them into the read-only store.
+- `drm.debug=0x2` works without CONFIG_DYNAMIC_DEBUG, but with
+  `console=tty0` its printks redraw fbcon and feed a commit/log feedback
+  loop — turn it off after capturing.
+- **Never put KOReader in portrait via `copt_rotation_mode=1` on a
+  diagnostic image**: it can wedge the EBC (panel ignores all fb writes;
+  only a reboot recovers — see `doc/driver-findings-report.md`). Use
+  landscape-native test cards.
+- Diagnose "blank page" issues by dumping `/dev/fb0` (32bpp XR24, stride
+  7488) and looking at it — separates render-side from glass-side
+  instantly.
+
+## What stays manual, and per-operator permissions
+
+Destructive steps — dd to os2, reboots (which need a human to pick the
+U-Boot slot), anything touching waveform/U-Boot/partition table — are
+user-present, per the safety model in `CLAUDE.md`. Standing permissions
+(e.g. letting an agent run the os2 write protocol autonomously) are
+**per-operator grants, not repo facts**: each operator decides what their
+own tooling may do on their own device, after their ledger's backups
+exist.
+
+**Why this file exists:** hardware sessions are scarce. These read-only
+patterns have root-caused multiple device bugs without a single reboot,
+and the ACM patterns carried entire debug sessions without UART. Exhaust
+the oracle, the log harvest, and chroot tests before proposing a session.

@@ -1,6 +1,115 @@
 # Hardware status
 
-Last updated: 2026-08-03.
+Last updated: 2026-08-06. Update protocol: add a dated entry at the top
+after every hardware session; entries are per-device/per-operator.
+
+## Current state (2026-08-06)
+
+**Proven on glass**: KOReader on fbdev with pen, finger, frontlight, and
+SC7A20 autorotation on all four edges; temperature-compensated waveforms;
+Wi-Fi association + key-only SSH; USB ACM gadget console; PREEMPT_RT.
+Portrait page turns cost exactly one pass (publish-on-call +
+`defio_delay_ms=250`, fixed 2026-08-01). Deep suspend works (2026-08-02,
+BSP-ATF activation live, `cfg: 0x5ec`) and **auto-suspend is live on os2**
+(2026-08-03): sleeps to `deep` after 5 min idle, wakes on the power
+button, short-press tap suspends, inhibited while charging.
+
+**Warning**: with auto-suspend live, **ssh is intermittent** — write
+`enabled=0` to `/var/lib/pinenote/autosuspend.conf` before working on the
+device. See `doc/device-access.md`.
+
+**Power**: awake reader idle **156.9 mA** (was 174; vdd_cpu auto-PFM,
+2026-08-06). Deep is **~20 mA**: 19.3 mA measured 2026-08-02
+(battery-drain window, pre-cpuidle image) vs 20.6 mA in the 2026-08-06
+rail-floor audit (900 s same-boot windows) — same floor, different
+measurement windows; quote ~20. DDR at 324 MHz saves ~24.8 mA (quiesced);
+`wilkbook_dmc` + boost policy landed in tree 2026-08-06, not yet in the
+deployed image.
+
+**On os2**: image `1a582179…` (deployed 2026-08-06, vdd_cpu auto-PFM boot
+acceptance passed) — carries the full 2026-08-03 stack plus cpuidle,
+power-button tap suspend, and the refresh seed.
+
+**Next actions**: (1) the week-scale unplugged soak — a first short
+unplugged soak passed clean 2026-08-03 (2 full-duration sleeps, no
+spurious wakes, 64.4 mA duty cycle), but the 8.6-day standby figure still
+rests on extrapolation; (2) wake attribution — only RTC and power-button
+wake are proven; (3) the unexplained TPS `ENABLE 2f → 20` after deep
+resume; (4) the pre-suspend `nobody cared` trace seen once on the
+st_accel-PM image (soak artifact, open question).
+
+Entries below are newest-first; the ## sections after the parity table
+are a historical document.
+
+**2026-08-06 vanished-input-device eviction (backfilled 2026-08-06 from
+commit records).** Destroying a uinput device (as an orientation-bridge
+respawn does) left its fd permanently select-readable with `ENODEV`, and
+both input-watching daemons (autosuspend, ddr-boost) could spin at 100%
+CPU — measured live by the ddr-boost acceptance test. Both now evict the
+fd and rebuild the select set; a vanish event no longer resets the idle
+timer. Commit `db71109`.
+
+**2026-08-06 DDR DVFS lands in tree (backfilled 2026-08-06 from commit
+records).** `wilkbook_dmc` (minimal devfreq driver over the proven DRAM
+SIP, powersave governor floors at 324 MHz, never above the boot rate) plus
+the `pinenote-dmc` one-shot (EBC quiesced before the probe-time switch)
+and the input-driven `ddr-boost` min_freq daemon. In tree, **not yet in
+the deployed image**. Commit `7b0251b`.
+
+**2026-08-06 deep-suspend rail-floor audit: 20.6 mA, peripherals
+exonerated (backfilled 2026-08-06 from commit records).** Normal-path deep
+20.6 mA vs 22.7 mA with touch/pen/BT unbound and wlan0 down — same boot,
+900 s windows. Bypassing driver suspend hooks makes things *worse*; the
+20.6 mA is PMIC quiescent + always-on rails + DDR self-refresh + bl31
+(ultra-suspend territory). Bonus: bl31 preserves a non-boot DDR rate
+across suspend/resume (324 survived both cycles). Commit `981afae`,
+`doc/artifacts/pinenote-awake-levers-20260806/`.
+
+**2026-08-06 first-ever DDR rate change on this board; 324 MHz saves
+~24.8 mA (backfilled 2026-08-06 from commit records).** Supervised
+`ddr-dvfs-test` SET_RATE 324: MCU path, 106.8 ms, memory intact, EBC
+quiesced for every switch. Firmware table 324/528/780/1056 (v0x101).
+Measured quiesced@324 174.4 mA vs quiesced@1056 199.2 mA, same-boot
+battery-drain windows. Rules that held: never switch with the EBC active;
+never target above the boot rate. Commits `5197aab`/`1bd1855`,
+`doc/artifacts/pinenote-awake-levers-20260806/`.
+
+**2026-08-06 vdd_cpu auto-PFM: ~30 mA off the clamped idle floor;
+174 → 156.9 mA realized (backfilled 2026-08-06 from commit records).** The
+TCS4525 CPU buck powers on with force-PWM set and nothing in the ecosystem
+ever clears it. Runtime i2c ABA with dead-man revert measured ~30 ± 8 mA;
+baked into `linux-pinenote-7.0-vdd-cpu-auto-pfm.patch` with the
+`fan53555_set_mode` NORMAL-branch fix it requires. Boot acceptance PASSED
+on image `1a582179…`: opmode "normal" from DT, survives deep
+suspend/resume; settled reader idle 156.9 mA. Commits `881224f`/`689a632`,
+`doc/artifacts/pinenote-awake-levers-20260806/`.
+
+**2026-08-05 DDR SIP probe: firmware says GO; TCS4525 landmine recorded
+(backfilled 2026-08-06 from commit records).** The read-only
+`ddr-sip-probe` module got `DRAM_GET_VERSION → SUCCESS, v0x101` from bl31,
+turning the DDR DVFS port from speculation into justified work. Research
+for the vdd_cpu A/B found `fan53555_set_mode()`'s NORMAL branch writes the
+ACTIVE voltage selector on TCS4525 — −400 mV on the CPU rail in one write
+(upstream-register item 10; never "test" the broken path on hardware).
+Commit `9a5432a`.
+
+**2026-08-05 cpuidle works and does not help; 92% of awake draw is a
+static floor (backfilled 2026-08-06 from commit records).** First cpuidle
+driver ever to register on this SoC (DT `idle-states` node, PSCI): cores
+idle 31–72% of wall time — and the same-boot A/B says **2.1 mA**. A domain
+teardown attributes only 14 mA of 177.5 to anything switchable (Wi-Fi
+10.3, KOReader 4.1, gadget 2.0, panel 0.0): 163.1 mA is an irreducible
+static floor. Deep suspend verified safe with idle-states present, 4/4
+cycles. Commits `036dae0`/`b93fd90`,
+`doc/artifacts/pinenote-cpuidle-psci-20260806/`.
+
+**2026-08-04 power-button short-press suspend (backfilled 2026-08-06 from
+commit records).** A tap now suspends immediately; a long hold is left to
+the PMIC hard power-off. Post-resume the daemon drains the input queue and
+ignores the button for a grace period so the wake press cannot re-suspend.
+Devices are found by name, never by event number (numbering moved across a
+power cycle this session). Also fixed a cdata-vs-`math.floor` crash that
+had killed the daemon on the first real press. Commit `ff2904a`.
 
 **2026-08-03 SC7A20 autorotation survives deep suspend — FIXED, 6/6
 cycles.** The last open blocker from the deep-suspend program is closed.
@@ -41,6 +150,19 @@ chip → DRDY → GPIO → threaded handler → iio buffer → orientation bridg
 uinput → KOReader. Detail and reusable instrument notes:
 `doc/artifacts/pinenote-sc7a20-resume-fixed-20260803/`.
 
+**2026-08-03 unplugged soak, working daemon: clean — no spurious wakes
+(backfilled 2026-08-06 from commit records).** On image `7bb55c2f…`,
+unplugged, `idle=60 backstop=240`: `success=2 fail=0`, both sleeps ran
+their full armed duration (240 s and 241 s) — **nothing wakes the device
+spuriously on battery** at this dwell length, the open question the
+8.6-day standby figure rested on. Duty-cycle average 64.4 mA at ~20 %
+awake (naive model 49.8 mA; the ~30 % gap is per-cycle resume cost —
+Wi-Fi re-association, banner, full refresh — which argues for the long
+300 s default). Not concluded: one pre-suspend `nobody cared` + call
+trace at 108.9 s uptime on this st_accel-PM image. The week-scale soak
+remains open. Commit `9c4795f`,
+`doc/artifacts/pinenote-autosuspend-soak-unplugged-20260803/`.
+
 **2026-08-03 auto-suspend actually works now.** Image
 `7bb55c2f940d89f716cf87de163dedb46a9cf693fd73a68e71a9eb6b0991a717`
 (475,027 x 4096) deployed to os2, readback verified. Carries the three
@@ -63,7 +185,9 @@ activation was confirmed in the system's activation fragments (the
 top-level `activate.scm` is only a loader — grep the fragments it
 references, not the loader).
 
-**Still no evidence about spurious wakes on battery.** Every soak so far
+**Still no evidence about spurious wakes on battery.** *[superseded
+2026-08-03, same evening: the unplugged soak ran clean — see the entry
+above (`9c4795f`); only the week-scale soak remains open.]* Every soak so far
 measured a daemon that never suspended, so the 8.6-day standby figure is
 still an extrapolation from hand-run dwells. The unplugged soak is now
 worth running and is the next thing to do; read
@@ -95,6 +219,9 @@ The device now sleeps to `deep` after 5 minutes without input and wakes on
 the power button, showing your page with a
 `SUSPENDED - PRESS POWER TO RESUME` banner instead of a white void. On
 measured numbers this is worth ~7x (172 mA awake vs 19.3 mA deep).
+**[Figures superseded 2026-08-06: awake reader idle is now 156.9 mA
+after vdd_cpu auto-PFM, and the deep rail-floor audit reads 20.6 mA —
+see "Current state" at the top.]**
 
 *Tunable two ways*, as designed: build-time fields in
 `pinenote/services/autosuspend.scm`, and `/var/lib/pinenote/autosuspend.conf`
@@ -742,7 +869,9 @@ healthy after each. Full record:
   reports `suspended`. Recovery is reboot-only. **This is the suspend
   program's display-side blocker**, now precisely characterized with
   two reproductions.
-- **UART finding**: the USB-C serial cable receives nothing from
+- **UART finding** **[superseded 2026-08-02: the UART works at 1500000;
+  this was a test artifact — see `doc/device-access.md` and the
+  2026-08-02 rung-3 entry]**: the USB-C serial cable receives nothing from
   `ttyS2` at 1.5 Mbaud even when plugged from boot (verified by writing
   to `/dev/kmsg` and `/dev/ttyS2` directly while capturing) — the
   console-free protocol (absolute-epoch RTC bound, panel beacon,
@@ -1879,7 +2008,7 @@ axis: fbcon text on the panel, USB ACM gadget console working end-to-end
 (this session's diagnostics were gathered *over that console*), full
 `PREEMPT_RT`, untainted kernel, zero dwc3 errors, zero RT splats.
 
-## Summary
+## 6.6-vs-7.0 parity (historical, mid-July)
 
 | Area | 6.6.30 (m-weigand) | 7.0 forward-port (vanilla via nonguix) |
 | --- | --- | --- |
@@ -1988,14 +2117,27 @@ Also staged 2026-07-03:
 
 ## Current os2 contents
 
-os2 currently holds the **2026-07-28 signal-safe dormant EBC adapter
-candidate**, SHA
+**The newest deploy entry at the top of this file is the authority for
+what os2 holds** — this section is a pointer plus a historical deployment
+ledger, so it cannot rot silently again. As of 2026-08-06 os2 holds the
+**vdd_cpu auto-PFM reader image `1a582179…`** (deployed from the p7
+staged copy; boot acceptance passed 2026-08-06 — see
+`doc/artifacts/pinenote-awake-levers-20260806/`). It carries the full
+2026-08-03 stack — auto-suspend live with charging inhibit and the
+power-button tap, the SC7A20 resume fix — plus cpuidle and the refresh
+seed. The intermediate 2026-08-02/03 deployments are recorded in their
+dated entries above. Note the 2026-08-03 staged-image cleanup: only the
+current and previous images remain staged; older staged copies named
+below were removed.
+
+Ledger (oldest deployments last): the previously installed **2026-07-28
+signal-safe dormant EBC adapter candidate** had SHA
 `1777dde4c5febd7eaaf9d763b422b48ab7d24ca5c75a615bc966406cf973ae64` —
-written from stock os1 with exact-range readback verification. The staged copy
-is `/home/user/pinenote-reader-ebc-adapter-release-reviewed-20260727.ext4`.
-**This image has not booted. The next action is one UART-supervised boot and
-paint/barrier/restore diagnostic under `doc/hardware-deploy.md`; suspend remains
-disabled.** The previously installed 2026-07-27 EBC generation-barrier reader
+written from stock os1 with exact-range readback verification, staged copy
+`/home/user/pinenote-reader-ebc-adapter-release-reviewed-20260727.ext4`.
+(Its record here once said "this image has not booted"; it booted
+2026-07-29 and its diagnostic passed on 2026-07-30 — see the dated
+entries above.) The previously installed 2026-07-27 EBC generation-barrier reader
 candidate had SHA
 `c15d023159e130633db87a0df742248ef5be2ac6e9aece9d4fc83f73c59cfd4d`
 and staged copy
@@ -2142,13 +2284,13 @@ A.2.5 + the integrated optics blocker work and subsequently booted and used for
 the optics campaign recorded above.
 
 A.2.4 (Wi-Fi, first-boot-confirmed 2026-07-11: cold boot brought the full chain
-up on its own — `feature_disable` applied, `wlan0` associated to `largeprofanity`,
+up on its own — `feature_disable` applied, `wlan0` associated to `<home-ssid>`,
 DHCP `192.168.86.144`, ping + DNS OK) = the **Phase 1 Wi-Fi userland**
 (`pinenote-wifi` service +
 `wpa_supplicant` + `dhcpcd`, out-of-band conf on the `data` partition;
 `doc/networking.md §4.1`) **plus the confirmed brcmfmac Wi-Fi fix**
 (`feature_disable=0x82000` via modprobe.d + kernel cmdline, `d911e57`; the
-`82f111c` PATH fix). Wi-Fi credentials for SSID `largeprofanity` are pre-staged
+`82f111c` PATH fix). Wi-Fi credentials for SSID `<home-ssid>` are pre-staged
 on the `data` partition (`0600`, persists across reflashes). The superseded
 A.2.3 (`196d601c…`) and A.2.2 (`b166d869…`) staged copies remain on os1 for
 rollback.
@@ -2713,20 +2855,11 @@ validation on hardware.
 
 ## Next sessions
 
-Autorotation and touch acceptance are complete; no corrective device session is
-queued. Continue ordinary reading dogfood and harvest one organic `[pn-refresh]`
-trace for the phase-B workbench. If a future input failure appears, preserve the
-smallest failing evdev interval plus `/var/log/{wilkbook-orientation,
-reader-session}.log`; do not reopen calibration from an anecdotal miss alone.
-
-Still queued behind the display program:
-
-- The community-standard ECM ethernet gadget alongside ACM.
-- RT characterization under load (refresh + pen input; watch the EBC
-  refresh kthread).
-- Finger-touch DTS validation happened 2026-07-05 (cyttsp5 works); the
-  cherry-picked driver (fsleep + shrunken dma_sync) has now survived
-  three hardware boots with artifact-free partials.
+See the **"Current state" header at the top of this file** for the live
+queue (unplugged multi-day soak, wake attribution, TPS `ENABLE 2f → 20`).
+This section held a mid-July action list, superseded 2026-08-06; the
+long-parked items (ECM ethernet gadget, RT characterization under load)
+remain parked and are tracked in `ROADMAP.md`.
 
 ## Device facts
 
