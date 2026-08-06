@@ -4,11 +4,17 @@ Keeping the kernel current is a core goal of this project. The PineNote needs
 a downstream display/pen stack that has never been mainlined, so every kernel
 update means carrying those changes forward.
 
+Hardware-proof notes in this doc are dated snapshots; when a note here
+says "unproven" and `doc/status.md` records a later proof, status.md
+wins — it is the single source of hardware truth.
+
 ## The working reference: stock os1 (Debian, 6.12-pinenote)
 
 Stock Debian on `os1` runs a 6.12 PineNote kernel with everything working;
 it is the cheapest oracle for "is our build doing the right thing"
-(harvested read-only over SSH, 2026-06-10):
+(harvested read-only over SSH, 2026-06-10; the standing access
+conventions — slot disambiguation, host-key policy, console discipline,
+post-mortem harvest — are `doc/device-access.md`):
 
 - Healthy EBC probe signature to expect in dmesg: several deferred
   `rockchip_ebc_probe start` lines, then
@@ -39,18 +45,71 @@ it is the cheapest oracle for "is our build doing the right thing"
 - 6.12 runs `GPIO_ROCKCHIP=m` with early initrd loading; our `=y` achieves
   the same probe ordering more bluntly.
 
-## The two kernel packages
+## The three kernel packages
 
-Both live in `pinenote/packages/kernel.scm`:
+All live in `pinenote/packages/kernel.scm`:
 
 - `linux-pinenote-6.6.30` — the m-weigand PineNote tree, pinned by commit.
   Hardware-validated end to end (display, Wi-Fi, BT, USB gadget). Kept as the
   known-good baseline and for isolating regressions in newer kernels.
 - `linux-pinenote` — vanilla kernel.org sources (nonguix's `linux` package,
-  which tracks the same version as Guix's `linux-libre`) plus
-  `pinenote/patches/linux-pinenote-7.0-forward-port.patch`, configured with
-  `pinenote_defconfig`. This is the kernel-currency track. The channel
-  therefore depends on nonguix (see `.guix-channel` / `channels.scm`).
+  which tracks the same version as Guix's `linux-libre`) plus the patch
+  stack inventoried below, configured with `pinenote_defconfig`. This is
+  the kernel-currency track. The channel therefore depends on nonguix
+  (see `.guix-channel` / `channels.scm`).
+- `linux-pinenote-debug` — `linux-pinenote` plus stacked debug patches
+  (currently `linux-pinenote-debug-extract-fbs.patch`, which implements
+  the `EXTRACT_FBS` belief-dump ioctl the primary kernel stubs with
+  `-EOPNOTSUPP`). A separate inheriting variant so the primary stays
+  byte-identical; debug patches are deleted as their investigations
+  close.
+
+## Patch inventory — what `linux-pinenote` actually applies
+
+`%linux-pinenote-patches` in `pinenote/packages/kernel.scm` is the
+authoritative list; the comments there carry each patch's rationale and
+revert instruction. As of 2026-08-06 it is six patches, applied in list
+order on top of the vanilla source:
+
+1. `linux-pinenote-7.0-forward-port.patch` — the EBC display stack,
+   WS8100 pen, PineNote DTS, `pinenote_defconfig`; the permanent core
+   (this doc, "What the forward-port patch carries").
+2. `linux-pinenote-7.0-bsp-sip-probe.patch` — the BSP SIP suspend
+   compatibility layer, a narrow port of donor `72127ca` (next section;
+   `doc/power-management.md`).
+3. `linux-pinenote-7.0-st-accel-pm.patch` — ST accelerometer
+   system-sleep support: mainline has no `.pm`, so a powered-down
+   suspend leaves DRDY asserted, the kernel kills the IRQ ("nobody
+   cared"), and autorotation dies until reboot
+   (`doc/upstream-register.md` item 8).
+4. `linux-pinenote-7.0-cpuidle-psci.patch` — rk356x CPU idle-states so
+   a cpuidle driver exists at all. Marked **EXPERIMENTAL** when written
+   (2026-08-05: unproven on this SoC by anyone; a firmware that accepts
+   the state parameter but cannot wake the core **wedges the device**),
+   **since hardware-proven** the same day — 4/4 deep cycles with
+   idle-states active, and deployed in the current os2 image
+   (`doc/status.md`, `doc/power-management.md`).
+5. `linux-pinenote-7.0-vdd-cpu-auto-pfm.patch` — vdd_cpu (TCS4525)
+   automatic PFM/PWM instead of the boot-forced PWM nothing ever
+   clears: ~30 mA at idle, measured on glass 2026-08-06; carries the
+   fan53555 NORMAL-branch fix (`doc/power-management.md`,
+   `doc/upstream-register.md` item 10).
+6. `linux-pinenote-7.0-dmc-static-low.patch` — `wilkbook_dmc`: holds
+   DDR at the firmware table's lowest rate (324 MHz) over the DRAM SIP,
+   ~25 mA saved quiesced, measured 2026-08-06 (`doc/power-management.md`).
+
+`linux-pinenote-debug` stacks `linux-pinenote-debug-extract-fbs.patch`
+on top of the same six.
+
+**A patch refresh must carry all six.** The refresh procedure below
+regenerates only the forward-port patch — the other five are separate
+files that a refreshed `kernel.scm` still applies, and nothing in the
+procedure touches them, so the failure mode is *omission*: forgetting
+they exist, or rebasing the forward-port onto a base where one of them
+no longer applies. After any base change, `git apply --check` each of
+the six against the new source before building, and re-read the
+kernel.scm comments — several are deliberate, revertable experiments,
+not permanent carry.
 
 The BSP SIP compatibility milestone is a second, separately applied patch:
 `linux-pinenote-7.0-bsp-sip-probe.patch`. It is a narrow port of Samuel
@@ -90,7 +149,8 @@ It does not change Linux 7.0's `ROCKCHIP_SLEEP_PD_CONFIG=0xff` pmdomain ABI.
   OTG's USB3 PIPE phy unwired, the first ep0out `DEPCFG` command then times
   out — the exact `dwc3: failed to enable ep0out` gadget failure seen since
   the 7.0 bring-up. USB3 is unused on the PineNote, so suspend-phy stays
-  off. Unproven on hardware until the next session,
+  off. Hardware-proven 2026-07-04: the gadget enumerates and passes
+  data with zero dwc3 errors (`doc/status.md`),
 - `arch/arm64/configs/pinenote_defconfig`,
 - a minimal IIO temperature provider added to mainline
   `drivers/regulator/tps65185.c` (added 2026-07-03): mainline exposes the
@@ -121,8 +181,12 @@ It does not change Linux 7.0's `ROCKCHIP_SLEEP_PD_CONFIG=0xff` pmdomain ABI.
   `kthread_park` matching the real API. Note the deliberate visible
   change on the blank path: suspend now parks the worker, so a
   blanked-CRTC suspend runs the park-tail wash (glass to white) —
-  matching the driver's documented CRTC-disabled invariant. Hardware
-  proof of the whole fix waits for the next boot's ladder retry.
+  matching the driver's documented CRTC-disabled invariant.
+  Hardware-proven: the 2026-08-01 evening ladder session showed the
+  bracket converting the old hard wedge into a
+  recoverable-without-reboot state, and on 2026-08-02 suspend-ladder
+  rungs 1 and 2 PASS on s2idle with post-resume damage painting a full
+  pass at both blanked and unblanked CRTC states (`doc/status.md`).
 - The fbdev-client resume barrier (added 2026-08-01): four lines in
   `rockchip_ebc_resume()` plus one small helper. Vanilla
   `drm_fb_helper_set_suspend_unlocked(helper, false)` defers the
@@ -142,8 +206,14 @@ It does not change Linux 7.0's `ROCKCHIP_SLEEP_PD_CONFIG=0xff` pmdomain ABI.
   `#ifdef CONFIG_DRM_FBDEV_EMULATION` with a no-op `#else` stub — which
   is what the ebc-logic harness compiles, so **the cross-build is the
   only compile gate for the live branch**; run `make kernel`, not just
-  the host suite, after touching it. Hardware-unproven; the instrument
-  is `pinenote/tools/power/fb-damage-gates.sh` and the four-gate
+  the host suite, after touching it. (Since 2026-08-04
+  `ebc-fbdev-order-test` defines `CONFIG_DRM_FBDEV_EMULATION` and
+  executes this barrier — the lone exception to the harness's
+  config-guard blindness; see `doc/testing.md`.) Hardware-proven
+  2026-08-02: `fb0.state=0` after resume — the deferred un-suspend now
+  completes, which is exactly what the barrier was added for
+  (`doc/status.md`). The instrument is
+  `pinenote/tools/power/fb-damage-gates.sh` and the four-gate
   analysis is in `doc/power-management.md`.
 - TPS65185 suspend/resume register restoration, same file (added
   2026-08-01, dormant until the suspend ladder reaches `deep`): snapshot
@@ -170,8 +240,10 @@ It does not change Linux 7.0's `ROCKCHIP_SLEEP_PD_CONFIG=0xff` pmdomain ABI.
   temperature channel — parks forever in `-EPROBE_DEFER` at
   `devm_drm_of_get_bridge()` because nothing ever binds the panel node.
   (Found by adversarial review before it cost a hardware session.)
-- the cyttsp5 touchscreen DTS node (added 2026-07-05, **unvalidated on
-  hardware**): `touchscreen@24` (`cypress,tt21000`) on `&i2c5` plus the
+- the cyttsp5 touchscreen DTS node (added 2026-07-05; hardware-proven
+  the same day — finger-navigable KOReader — and coordinates under
+  rotation validated 2026-07-19, final4; `doc/status.md`):
+  `touchscreen@24` (`cypress,tt21000`) on `&i2c5` plus the
   `ts_int_l`/`ts_rst_l` pinctrl entries, taken from the m-weigand 6.6.30
   tree. Context: `CONFIG_TOUCHSCREEN_CYTTSP5=m` was already in the
   defconfig, but neither mainline's `rk3566-pinenote.dtsi` nor hrdl's
@@ -243,17 +315,40 @@ a claim that dynamic EBC removal is safe or supported.
 6. Verify the output contains uncompressed `Image`, modules, and
     `lib/dtbs/rockchip/rk3566-pinenote-v1.2.dtb`.
 
+### Refresh record
+
+ROADMAP's patch-refresh discipline: every refresh gets a row here —
+base version, notable conflicts, config deltas. No refresh has happened
+yet; the current row is the state everything above applies to. The base
+tracks whatever nonguix's `linux` pins, so step 1's guix command is
+always the live answer.
+
+| date | base | conflicts | config deltas | notes |
+| --- | --- | --- | --- | --- |
+| (current, 2026-08-06) | 7.0.11 (nonguix `linux`, vanilla kernel.org) | — | — | all six inventory patches apply; BSP worktree base commit `5e2c0c5659cc` (below) |
+
 ### Regenerating the BSP SIP compatibility patch
 
 Do not regenerate the forward-port patch for a BSP PM edit. From the applied
 7.0.11 worktree, require base
 `5e2c0c5659cc3909cd7d99b5fb1dab60e0ae6bb2`, verify that its changed-path set
 is exactly `PATHS` in `pinenote/tools/rockchip-pm/check.py`, then generate the
-canonical full-index diff only over that inventory:
+canonical full-index diff only over that inventory.
+
+Constructing the applied worktree (it is a throwaway; nothing here is
+machine-specific): check out vanilla 7.0.11, apply the forward-port
+patch, and commit — the `base` commit's tree is vanilla + forward-port
+(proof: the BSP patch's dtsi pre-image blob `fafdedb2c463…` is the
+forward-port's post-image). Then `git apply` the current
+`linux-pinenote-7.0-bsp-sip-probe.patch` so the BSP edits sit on top as
+uncommitted changes, and make your edit. A freshly built commit will not
+reproduce the pinned hash (commit metadata differs), so substitute your
+own HEAD for `base` after verifying the tree state; the path-set
+comparison below is the guard that actually protects the patch.
 
 ```sh
-base=5e2c0c5659cc3909cd7d99b5fb1dab60e0ae6bb2
-tree=/tmp/opencode/linux-7.0.11-executor-work
+base=5e2c0c5659cc3909cd7d99b5fb1dab60e0ae6bb2   # or your own worktree's HEAD, see above
+tree=/path/to/linux-7.0.11-bsp-work             # the applied worktree you constructed
 patch="$PWD/pinenote/patches/linux-pinenote-7.0-bsp-sip-probe.patch"
 test "$(git -C "$tree" rev-parse HEAD)" = "$base"
 paths=$(python3 -c 'from pathlib import Path; ns = {}; exec(Path("pinenote/tools/rockchip-pm/check.py").read_text(), ns); print("\n".join(ns["PATHS"]))')
@@ -395,7 +490,9 @@ Record anything that took a hardware session to discover:
   `/sys/kernel/debug` file-system service loops on EPERM, and the gadget
   service cannot reach the dwc3 debugfs `mode` file, so the role-gated
   gadget never binds.
-- `CONFIG_PREEMPT_RT=y` (2026-07-03, unproven on hardware yet): full RT
+- `CONFIG_PREEMPT_RT=y` (2026-07-03; hardware-proven 2026-07-04:
+  `#1 SMP PREEMPT_RT`, taint zero, no atomic/sleeping-function splats —
+  `doc/status.md`): full RT
   preemption for pen/refresh latency. arm64 has mainline RT support since
   6.12, so this only exists on the 7.0 track — 6.6's olddefconfig will
   silently drop the symbol, which is fine for the regression-isolation
@@ -447,14 +544,22 @@ Record anything that took a hardware session to discover:
 ## Known driver quirks pinned by the host test tools (2026-07-04)
 
 The offline ladder (`pinenote/tools/ebc-logic`, `pinenote/tools/rastersim`)
-compiles the verbatim driver sources out of the patch and surfaced seven
-latent issues, all documented with patch line numbers in the tool READMEs
-and pinned as `quirk:` tests so a future refresh that changes the behavior
-turns a test red. None affect the shipped configuration paths in a
-user-visible way today. Items 1, 2 and the odd-`x1` leak in 5 were
+compiles the verbatim driver sources out of the patch and has surfaced
+**nine** findings so far (the last found on hardware 2026-07-29 and
+reproduced offline the same day), all documented with patch line numbers
+in the tool READMEs and pinned as `quirk:`/`fix:` tests so a future
+refresh that changes the behavior turns a test red. The ebc-logic
+README's findings list is the authoritative count, and its numbering
+(with `doc/driver-findings-report.md` for the community-facing writeups)
+is the one to cite outside this file — the highlight numbers below are
+local, in upstream-fix priority order, and do **not** match the README's.
+Most findings do not affect the shipped configuration paths in a
+user-visible way; the exception is the refresh-starvation hang (item 7
+below), which cost the 2026-07-29 hardware session. Items 1, 2 and the
+odd-`x1` leak in 5 were
 **fixed in-tree 2026-07-12** by porting hrdl's own fixes (cherry-pick
 record above); their pins now assert the *fixed* behavior, so they still
-guard rebases. Highlights, in upstream-fix priority order:
+guard rebases. Highlights:
 
 1. **(fixed in-tree, `11c358d1ca7a`)** `rockchip_ebc_blit_pixels`
    odd-`x2` "preserve" wrote byte `pitch-1` instead of the clip edge — a
@@ -490,6 +595,23 @@ guard rebases. Highlights, in upstream-fix priority order:
    instrumented refutation, and current evidence are recorded in
    `doc/driver-findings-report.md`. Shipped mitigation remains
    `auto_refresh=0` (`ebc.scm`); PNDeb's defaults remain exposed.
+7. **A sustained damage supply starves the global-refresh /
+   `REFRESH_BARRIER` path indefinitely, silently** (found on hardware
+   2026-07-29, reproduced offline the same day; ebc-logic README
+   finding 9). `rockchip_ebc_partial_refresh`'s frame loop exits only
+   when its area list drains but re-splices `ctx->queue` every frame,
+   so damage arriving faster than one area lifetime (fbcon's cursor
+   blink, at 63 Hz) keeps `rockchip_ebc_refresh_thread` from ever
+   reaching the `do_one_full_refresh` read — nothing times out (every
+   frame lands inside the 25 ms `EBC_FRAME_TIMEOUT`) and nothing is
+   logged. Inherited verbatim from the `dd99c3f` import, so it is
+   reported in `doc/driver-findings-report.md` rather than patched;
+   `ebc-refresh-starvation-test` pins it against the verbatim driver,
+   and the shipped mitigations are policy-level (fbcon unbind before
+   barrier use, `vt.global_cursor_default=0`). The README's own
+   finding 7 — manual global washes never reset the auto-refresh
+   accumulator, a policy-level inefficiency under `auto_refresh=1` —
+   is also absent from this list; we ship `auto_refresh=0`.
 
 When refreshing the patch or cherry-picking from hrdl/ayakael, check
 whether their trees already fix any of these before re-pinning.

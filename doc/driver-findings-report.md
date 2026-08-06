@@ -1,10 +1,14 @@
 # rockchip_ebc findings — draft report for the PineNote kernel community
 
-Status: draft, 2026-07-04. Intended audience: hrdl (git.sr.ht/~hrdl/linux),
-ayakael (postmarketOS PineNote kernel), m-weigand/linux issues, and — for
-finding 1 — potentially dri-devel if the driver is ever resubmitted.
-Post as-is or trimmed; everything below is machine-verified against the
-driver source, not just read.
+Status: living draft, last updated 2026-08-06. First drafted 2026-07-04
+with the seven host-suite findings; it now also carries four defects in
+the `v6.19_ebc` EXTRACT_FBS reference implementation and dated findings
+from live hardware sessions and code reads through 2026-08-02. Intended
+audience: hrdl
+(git.sr.ht/~hrdl/linux), ayakael (postmarketOS PineNote kernel),
+m-weigand/linux issues, and — for finding 1 — potentially dri-devel if
+the driver is ever resubmitted. Post as-is or trimmed; everything below
+is machine-verified against the driver source, not just read.
 
 ## Context and method
 
@@ -98,6 +102,13 @@ triggers if the device is torn down with damage still queued (rare:
 unbind/unload under load). GCC's `-Wuse-after-free` flags it in our host
 build. Fix: `list_for_each_entry_safe`.
 
+**Fixed in-tree 2026-07-28** (commit `1ef5bf5`): the teardown loop is now
+`list_for_each_entry_safe` with unlink-before-free (patch:3523), and the
+fix is ASan-pinned — the rung-7a regression in `pinenote/tools/ebc-logic`
+(README finding 6) frees a context with damage still queued and asserts
+safe teardown. The upstream ask is unchanged: apply the safe iterator in
+the lineage.
+
 ## 4. `rockchip_ebc_blit_direct` reads the LUT transposed (latent, `direct_mode=1` only)
 
 The packed-LUT lookup is `word[next] >> (2*prev)`, but three independent
@@ -129,7 +140,7 @@ test.
   the corruption-hunt suspect list.)
 
 All pinned with references in `pinenote/tools/ebc-logic/README.md`
-(Findings a–c) and cross-checked by the rastersim damage-composition
+(Findings 1–3) and cross-checked by the rastersim damage-composition
 suite.
 
 ## Suggested disposition
@@ -157,7 +168,9 @@ fixed behavior (`pinenote/tools/ebc-logic`, cherry-pick record in
 changed variable also sets up the corruption A/B on the rung-7a optical
 model (`doc/hrdl-evaluation.md` §5).
 
-1 and 3 are ordinary memory-safety fixes (small, obviously correct).
+1 and 3 are ordinary memory-safety fixes (small, obviously correct;
+both are now fixed in our tree — 1 by hrdl's own commit, 3 as of
+2026-07-28 — so the ask for each is the backport).
 2 needs a design decision from whoever owns the scheduler (respect
 `do_not_start_before_frame` in both paths, or document why concurrent
 windows are acceptable). 4 should be fixed before anyone builds on
@@ -292,10 +305,11 @@ has been quiet for at least tens of milliseconds when the global starts.
 global exposes:
 
 - `display_end` is a **counting** completion, and only the global path
-  ever re-zeroes it (`reinit_completion`, 3446). The partial path pairs
+  ever re-zeroes it (`reinit_completion`, 3758; line refs in this
+  historical section re-verified 2026-08-06). The partial path pairs
   each `DSP_START` (4058–4060) with one wait (4091–4093) and trusts the
   count.
-- `EBC_FRAME_TIMEOUT` is 25 ms (2942) — **1.59** frame periods at the panel's
+- `EBC_FRAME_TIMEOUT` is 25 ms (2980) — **1.59** frame periods at the panel's
   actual 63.744 Hz, not 2.1 at 85 Hz (corrected 2026-07-29: the 85 Hz in the
   `.wbf` header is authored metadata the driver never reads; the driver clocks
   the panel itself at 200 MHz / (2208 × 1421 sdck) = 15.688 ms/frame, and a
@@ -844,10 +858,12 @@ that list on every frame. `rockchip_ebc_refresh_thread` reads
 `do_one_full_refresh` only at the top of the *outer* loop. So while damage
 keeps arriving faster than areas retire, a global refresh request can be
 starved for an unbounded time. The per-frame wait is `EBC_FRAME_TIMEOUT` =
-**25 ms** (patch:2981, used at patch:4289); at the observed ~63 Hz each frame
+**25 ms** (defined at patch:2980, used in the frame loop at patch:4434 —
+line numbers as of 2026-08-06; the definition and use sites are stable,
+the numbers drift with patch edits); at the observed ~63 Hz each frame
 lands in ~16 ms, comfortably inside it, so the timeout never fires and nothing
 is ever logged — the failure is completely silent from the kernel's side. (The
-3 s `EBC_REFRESH_TIMEOUT` at patch:2982 bounds only a *global* refresh, which
+3 s `EBC_REFRESH_TIMEOUT` at patch:2981 bounds only a *global* refresh, which
 is how we know the thread was never in one: a global would have had to either
 complete or log and poison within 3 s.)
 
@@ -999,3 +1015,56 @@ is fbdev-only, the exact exercising case), with the bracket pinned by a
 host regression (`ebc-suspend-bracket-test`) and documented in
 `doc/kernel-forward-port.md`. The 2026-08-01 poison-observability line
 (`refresh worker poisoned: %d`) was added at the same time.
+
+**Hardware-proven 2026-08-02:** the bracketed kernel passed suspend-ladder
+rungs 1 and 2 on s2idle — the panel recovered without a reboot, and
+post-resume damage painted a full 46-frame pass at both blanked and
+unblanked CRTC states, confirmed on glass (`doc/status.md`). The fix is
+no longer pinned only by the host regression.
+
+## Finding (2026-08-02, offline code-read; fixed in-tree): the resume re-init never seeds the damage-comparison baseline — post-resume damage is diffed against uninitialised memory and silently dropped
+
+**Inherited.** Both `final_atomic_update` and the `suspend_was_requested`
+re-init branch are present verbatim in our original import of the driver
+(`dd99c3f`); this is lineage code, not a wilkbook regression.
+
+**Mechanism**, each link verified in source. `ctx->final_atomic_update`
+is the buffer the blitters write into and diff against, and
+`rockchip_ebc_plane_atomic_update()` **drops any area whose blit reports
+no change** — `list_del` + `kfree`, silently: no error, no frame,
+nothing logged. The buffer is `kmalloc`'d, **not** `kzalloc`'d. A system
+resume is the one path that reaches the refresh thread's outer-loop init
+with a brand-new ctx (`crtc_atomic_check` reallocates whenever
+`mode_changed`, which `drm_atomic_helper_resume`'s duplicated-state
+commit always sets). Both non-suspend init branches seed the buffer —
+`0xff` on first run, `suspend_next` on re-init — and only the
+`suspend_was_requested` branch did not. So after every resume, damage
+was diffed against uninitialised memory, and any rect that happened to
+match it was dropped with no signal anywhere.
+
+**Fixed in-tree** (deployed to the device 2026-08-02): the resume branch
+now restores the baseline from `suspend_next`, the same source as
+`ctx->final` — the panel shows `suspend_next` after the restoring global
+refresh, so that is the correct baseline. The hunk is gated by a
+mutation-tested structural check
+(`pinenote/scripts/preflight/validate-ebc-resume-baseline-hunk.sh`,
+wired into `make suspend-check`) rather than a unit test, because no
+offline harness executes the drop-on-match decision: the rung-7a
+harness's `commit_damage()` appends areas directly and never calls the
+blitter.
+
+**Honesty caveat.** The defect is certain and independently worth
+fixing, but it is **not proven** to be the whole explanation of the
+post-resume dead-write window that led to it. Every hardware probe in
+that program wrote `0x00` onto content that was already black — a
+write drop-on-match correctly treats as a no-op — and that confound was
+only identified on 2026-08-02, when the same black probe against
+non-black content drove a full pass. The 2026-08-02 rung-2 run (46-frame
+passes at both CRTC states post-resume, on the image carrying the fix)
+cannot separate "the fix cured a real stale baseline" from
+"black-on-black was always the artifact"; both predict it.
+
+**Upstream relevance.** Any lineage driver whose client suspends through
+the `suspend_was_requested` re-init path carries the same missing seed;
+the fix is one `memcpy` in that branch. As always, re-check the target
+branch before applying — line numbers and surrounding code here are ours.

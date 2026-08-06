@@ -171,8 +171,10 @@ exactly for this; leave DU/A2 to the phase B workbench.
   target is novel; upstream issues #14017 (full-refresh) and #14694
   (stylus-as-finger) are the relevant conversations for upstreaming.
 - KOReader's canonical e-ink mapping on mxcfb devices: full→GC16-class
-  flash, fast/a2→DU/A2, ui/partial→AUTO with waveform per update — the
-  shape to emulate if per-update selection ever lands in the driver.
+  flash, fast/a2→DU/A2, ui→AUTO, partial→REAGL/GLR16 with waveform per
+  update (corrected 2026-08-06 per the verified device tables,
+  `doc/eink-sota.md` §1.3.15) — the shape to emulate if per-update
+  selection ever lands in the driver.
 
 ## The phase B workbench (built 2026-07-05, `ebc-replay`)
 
@@ -281,7 +283,7 @@ with linear reading).
    for small frequent UI damage (clock, progress bar) — `defio=bands`
    stays the default for honesty.
 
-### Open questions (updated)
+### Open questions (as of 2026-07-05; two since answered below)
 
 - Replay a **real** harvested trace (next hardware session) and compare
   against the synthetic model; run `verify-decisions=1` as the model
@@ -290,13 +292,18 @@ with linear reading).
   A2/DU exit?), and whether it should be GC16-global or a driver-param
   flip around one wash.  The workbench can now cost candidate cadences;
   the optics (how much residue actually accumulates before a clean is
-  *visible*) stay hardware-only.
+  *visible*) stay hardware-only.  **(Answered — finding 11 below,
+  2026-07-12: the idle-washer owns the deep-clean cadence, a GC16
+  global once per long idle span, validated on glass.)**
 - DU partials with binarized content (`bw_mode`), split_area_limit >0
   (rung-2 scheduler quirk E interacts), and cold-bin cadence (GC16 =
   1.5 s at 0 °C; `temp-c=` is a workbench knob now).
 - Harvest next hardware session: `/var/log/reader-session.log` traces,
   evtest captures of a pinch, a palm-while-writing trace, gpio-keys
-  contents.
+  contents.  **(The trace harvests happened at scale — the 2026-07-11
+  optics capture night, "First measured results" below and
+  `doc/optics-dataset-2026-07.md`; the evtest/gpio-keys items were not
+  part of that campaign.)**
 
 ## Portrait page turns cost two refresh passes (2026-07-30, measured on device)
 
@@ -731,9 +738,9 @@ live the moment this image ships — all improvements, none behavior-neutral.
 At delay=50 the extra flush cannot add passes: the measured saturation at 2.0
 (three writes 250 ms apart still cost 76 frames) means late damage coalesces
 into the already-pending second pass. The single-pass portrait page turn
-itself is unproven on glass until the sweep session runs the uinput page-turn
-measurement with the raised value and fsync wiring together — and if a wash
-ever still shows old content there, the signature to distinguish is: drain
+itself was proven on glass by exactly that sweep session (8/8, 2026-08-01,
+recorded above) — and if a wash ever still shows old content, the signature
+to distinguish is: drain
 working = one wash of new content; drain broken = wash of old content plus a
 trailing non-flash partial of the new.
 

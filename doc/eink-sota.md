@@ -6,9 +6,12 @@ stacks, open-source driver ecosystem, rendering & writing), each run with
 claim-level verification against primary sources. Reviewer corrections
 are folded inline; where a verifier could only corroborate at
 report-level (abstract, search snippet, unfetchable page), the claim says
-so. Folklore is marked as folklore. Companion to `doc/eink-research.md`
-(domain background — this doc deliberately does **not** repeat it),
-`doc/refresh-policy.md` (findings 1–12 + Decisions), and
+so. Folklore is marked as folklore. Companion to `doc/eink-research.md`:
+that doc is the curated domain background, kept current; this one is the
+dated, adversarially-verified state-of-the-art survey — it deliberately
+does **not** repeat the background — and carries the ranked steal list
+(§2) and the corrections register (§5). Also builds on
+`doc/refresh-policy.md` (findings 1–12 + Decisions) and
 `doc/pageturn-program.md` (the active latency program). Corrections this
 review forces on those docs are collected in §5.
 
@@ -687,8 +690,9 @@ Candid, in both directions.
 - **The closed loop.** Nothing in the literature closes the loop
   between driver-believed state and measured glass state
   (§1.5.30 — absence-of-evidence). E Ink's own production stack is
-  open-loop by design. EXTRACT_FBS (once ported — it is stubbed in our
-  7.0 kernel, see `doc/pageturn-program.md` §5.2) + the calibrated
+  open-loop by design. EXTRACT_FBS (stubbed in the primary kernel;
+  ported in `linux-pinenote-debug` 2026-07-12 — `doc/pageturn-program.md`
+  §5.2) + the calibrated
   camera is a comparison rig the field does not have. Worth saying
   explicitly in the community-facing report.
 - **Verbatim-driver host execution.** Rung 7a + ebc-replay execute the
@@ -840,26 +844,30 @@ sharpens a few verdicts:
 ## 5. Corrections to fold back into existing docs
 
 Recorded here so the next touch of each doc picks them up (this review
-does not edit them):
+does not edit them). Status: items 1–4 were folded into
+`doc/eink-research.md` on 2026-08-06 (pre-share review); each item keeps
+its fold date below.
 
 1. `doc/eink-research.md` §1: "net charge ≈ 0" → DC balance is the
    pixel-wise **voltage-time integral** (∫V·dt ≈ 0), budgeted
    < 90 V·s/≥ 60 s in the E Ink patent family (§1.1.3). Same intent,
-   correct quantity.
+   correct quantity. **Folded 2026-08-06.**
 2. `doc/eink-research.md` §2 (GLR16/GLD16 row): "= GL16 unless E Ink's
    licensed REGAL preprocessor injects hint states" understates — the
    hint *data* (29/31 transitions) is present in our own file; the
    aliasing is by-design; our 4-bit driver path simply cannot index it
-   (§1.1.6).
+   (§1.1.6). **Folded 2026-08-06.**
 3. `doc/eink-research.md` §2 (A2 row): the from-domain is
    [0, 29, 30, 31] per the AF spec Table 1 — stricter than "B/W only",
-   and the bracketing rule is now primary-sourced.
+   and the bracketing rule is now primary-sourced. **Folded
+   2026-08-06.**
 4. `doc/eink-research.md` §8 (trim_waveform): the "black sometimes
    gray" tradeoff now has a mechanism — trims that eat the activation
-   stage (§1.1.2). Trim from the erase side.
+   stage (§1.1.2). Trim from the erase side. **Folded 2026-08-06.**
 5. `doc/refresh-policy.md` "Context" bullet on KOReader's canonical
    mapping: should read ui→AUTO, **partial→REAGL/GLR16** (not
    "ui/partial→AUTO") per the verified device tables (§1.3.15).
+   **Folded 2026-08-06.**
 6. `doc/refresh-policy.md` finding 2 / Decision 2 framing: "the only
    mechanism that re-scrubs whites is a GC16 deep clean" is true of the
    4-bit driver path, not of the waveform file — note the 29/31

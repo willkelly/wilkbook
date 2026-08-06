@@ -12,6 +12,24 @@ or carries the correction inline. Line numbers cite the verbatim
 extracted driver `pinenote/tools/ebc-logic/build/drivers/gpu/drm/rockchip/rockchip_ebc.c`
 unless noted.
 
+> **Status (2026-08-06): this is the campaign record, not current
+> state.** The portrait two-pass defect this program chased was **fixed
+> on glass 2026-08-01** by publish-on-call: `defio_delay_ms` became a
+> driver parameter (chosen value 250, pinned in
+> `pinenote-apply-ebc-params`), KOReader publishes damage via fsync at
+> every refresh intent, and the global-refresh ioctl drains pending
+> damage before arming the wash — eight of eight uinput-driven portrait
+> turns cost exactly one pass on the deployed image (see
+> `doc/refresh-policy.md` § "The adopted fix: publish-on-call" and
+> `doc/status.md`). Consequences for reading this doc: the §0 cost
+> model (50 ms flush, ~750 ms felt) describes the **pre-fix** image;
+> the 2026-07-15 single-flush-paint candidate and d1's stagger caveat
+> are retired (painting is now single-flush by construction); and
+> candidate d2 is DONE, landed driver-side rather than as the userspace
+> timing proposed below (§3.2). The rest — the attributed corpus, the
+> instrument doctrine, and the still-untried candidates (d1, a, b, e4)
+> — stands.
+
 ## 0. The shape of the problem
 
 A partial page turn today is: KOReader paints → fbdev deferred-io flush
@@ -340,7 +358,7 @@ v2; injector proven; params one-shot carries the candidate config.
 | rank | Policy | Mechanism | Layer | Expected gain (vs ~750 ms felt / 596 ms drive) | Quality risk | Prerequisites |
 |---|---|---|---|---|---|---|
 | 1 | **d1: `delay_b` 100 ms → 2 ms** | Kill the pre-wake sleep (ground truth 3) | One runtime param write | ~−100 ms felt on **every** turn, waveform untouched | **Low, verify coalescing**: delay_b is also a damage-coalescing window — with 2 ms, a paint spread over multiple defio flushes starts driving on the first band with later bands joining mid-call (visibly staggered start the 100 ms currently hides). Replay + rig A/B catch it | `delay_b` in paramspace; wake-delay term in ebc-replay (see ladder rung 0 for the corrected prediction) |
-| 2 | **d2: post-flush wash alignment** | Delay the promoted-full/bundled-wash ioctl one defio period (~60 ms) so the wash paints the NEW page: single 596 ms pass instead of wash-stale + repaint (ground truths 3/5; corpus finding 1.1d) | Plugin timing (idle-washer skeleton) | −596 ms on every promoted/bundled turn; kills the residual "draws then redraws" | ~zero — mis-timing degrades to status quo | defio-settle heuristic in device.lua/idlewasher; workbench-provable now |
+| 2 | **d2: post-flush wash alignment — DONE (2026-07-31, proven on glass 2026-08-01)** | Delay the promoted-full/bundled-wash ioctl one defio period (~60 ms) so the wash paints the NEW page: single 596 ms pass instead of wash-stale + repaint (ground truths 3/5; corpus finding 1.1d) | Plugin timing (idle-washer skeleton) | −596 ms on every promoted/bundled turn; kills the residual "draws then redraws" | ~zero — mis-timing degrades to status quo | defio-settle heuristic in device.lua/idlewasher; workbench-provable now. **Landed differently than proposed**: not this userspace timing but a driver-side drain — `ioctl_trigger_global_refresh` flushes deferred-io + the damage worker before arming the wash, so "the wash paints the new page" holds by construction; `doc/refresh-policy.md` ("The adopted fix: publish-on-call") credits it as fulfilling d2 |
 | 3 | **a: DU turn + delayed GC16-quality repaint** (hrdl's fast-now-clean-later, in userspace) | Reading profile: `default_waveform=2` + `bw_mode=2` (binarize → `next` reachable, avoids ground-truth-4 desync); turn drives DU 298 ms; after 0.5–2.4 s idle, restore `bw_mode=0`+GC16 and re-flush — post-quantization diff repaints only lost-fidelity pixels. Idle-washer debt/timer machinery is the skeleton | KOReader plugin + 2 param flips; zero driver changes | drive 596→298 ms; felt ~750→~452 ms; stacks with d1 | Binarized text during interaction; visible deferred repaint; flip races (see c-risks) can leave DU sticky or land a turn on GC16; needs an images-page escape hatch | paramspace `ko`/`ebc`; flip-verify discipline; E2+E3 replay extensions; 60 fps recalibration for the optical verdict |
 | 4 | **b: DU4 + dither, resident profile** | `default_waveform=3` + `bw_mode=3` set once per session (no per-turn flips → no races); `globre_convert_before=1` as wash-exit bracket (already in the patch — §5.3); task 26 adds dither (fourtone is pure thresholding today) | Param set + task-26 dither | drive 596→377 ms; felt ~750→~531 ms | Antialiasing crushed to 4 tones; images banded without dither; DU4 ghosting "moderate" (eink-research §2); whole-UI 4-tone | task 25 residue (paramspace + rung asserts); task 26; grayramp card kind |
 | 5 | **e2: `dclk_select=1` (250 MHz)** | Higher pixel clock; field-stable per PNDeb dev branch. Boot param (ground truth 6) | Boot param | **REJECTED — no-op on our kernel.** `DCLK_EBC` is a divider-less 3-way mux over {gpll_400m, cpll_333m, gpll_200m} (`clk-rk3568.c:1129`, `:286`) and Linux picks the fastest parent ≤ request (`clk.c:729`, `:626`), so a 250 MHz request lands back on 200 MHz. The *scaling* is now derived exactly (frame = htotal×vtotal/dclk) — 250 MHz would give 79.68 Hz and GC16 ~477 ms — but that rate is unreachable without CRU/DT work (hrdl reach 60–85 Hz by supplying a mode whose `.clock` is honoured) | ~20% less drive integral per phase if frames shorten → undershoot/ghost risk; PNDeb field evidence mitigates | rung-4 live-value assert; cheap piggyback A/B on any session |
@@ -352,12 +370,16 @@ v2; injector proven; params one-shot carries the candidate config.
 ### 3.3 Sequencing (evidence density per hardware-session-minute)
 
 1. **d1** — one param, low risk, one-variable rig A/B. First.
-2. **d2** — workbench-provable now, rides the idle-washer.
+2. **d2** — **DONE** (landed driver-side in publish-on-call
+   2026-07-31, proven on glass 2026-08-01 — see the table row).
 3. **a** — highest ceiling; prove the flip choreography offline
    (rung-7a replay + koreader-input harness) before any glass time.
 4. **b** — the no-race fallback if (a)'s interaction-burst artifacts
    measure ugly; needs task 26 to be judged fairly.
-5. **e2** — piggyback on any session, with the ×1.25 caveat recorded.
+
+(e2 left the sequence 2026-07-30: the table rejects it — `DCLK_EBC`
+is a divider-less mux with no 250 MHz parent, so `dclk_select=1` is a
+no-op on this kernel.)
 
 ## 4. The experiment ladder
 
@@ -545,7 +567,8 @@ thresholding. hrdl's dither constants are extractable.
 ## Where this leaves us
 
 The program in one sentence: fix the two structural latencies that
-cost nothing (d1, d2), then buy the big win (DU + delayed repaint)
+cost nothing (d1, d2 — the latter since landed driver-side, see the
+status note up top), then buy the big win (DU + delayed repaint)
 only after the workbench's new desync shadow and flip scheduler say
 it's sound, with the v2 debug kernel making every camera number
 attributable and the camera keeping the final word on glass.

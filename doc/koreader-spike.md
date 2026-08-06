@@ -1,5 +1,12 @@
 # KOReader on the PineNote (spike → first light)
 
+**Status (2026-08-06): completed spike record, archive candidate.**
+First light was 2026-07-05 and the last hardware update here is
+2026-07-19. §3's cage/SDL dead-end is the enduring do-not-retry
+record. The refresh architecture described in §4/§5 is **superseded**
+(see the dated banner before §4); the live description of what ships
+is `doc/refresh-policy.md`.
+
 Question (ROADMAP track 4, priority raised 2026-07-04 because an
 external user wants to run it): what is the cheapest sound way to get
 KOReader running on wilkbook, and what does the device integration
@@ -89,7 +96,18 @@ Also observed: SDL 3.4 deprioritizes Wayland when the compositor
 lacks the `fifo-v1` protocol (harmless here — no x11 fallback exists
 in the bundle).
 
-## 4. The native port (what actually ships)
+## 4. The native port (the first-light design)
+
+**Superseded (2026-07-31 / 2026-08-01) — §4 and §5 describe the
+pre-publish-on-call design.** The shipped refresh architecture is
+**publish-on-call**: `device.lua` publishes damage explicitly via
+`fsync` on the fb fd at *every* refresh intent (`refreshPartialImp` is
+no longer a no-op), the deferred-io window is a driver parameter
+(`defio_delay_ms`, pinned at 250), and the global-refresh ioctl drains
+pending damage so a wash provably paints the new page — the fix behind
+the single-pass portrait page turn, proven on glass 2026-08-01. See
+`doc/refresh-policy.md` ("publish-on-call"). What follows is the
+historical first-light design, kept as the spike record.
 
 KOReader's e-ink device targets (Kobo, reMarkable, ...) don't use SDL
 at all: fbdev output + evdev input. The desktop bundle contains the
@@ -135,10 +153,14 @@ residuals and restart/replay evidence are in `doc/status.md`.
 
 ## 5. Remaining work
 
+(Historical list — see the superseded banner above §4.)
+
 1. **Refresh polish**: partial refreshes ride deferred-io defaults;
    tune refresh_threshold / explicit flash policy per KOReader's
    refresh hints (it distinguishes partial/UI/full — the plumbing to
    map more of those onto EBC behavior is in place).
+   *Done since: publish-on-call plus the area-thresholded flash policy
+   landed and are hardware-validated (`doc/refresh-policy.md`).*
 2. **Pen niceties**: hover cursor and pressure curves; ws8100 barrel-button
    page turns are already wired.
 3. **Hardening**: unprivileged user, read-only bundle, books dir

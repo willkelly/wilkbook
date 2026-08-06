@@ -49,9 +49,13 @@ baseline) · **needs-verification** (real, but a claim in it is unconfirmed)
 
 ### 1. `rockchip_ebc` findings report — **ready**
 
-Seven latent driver issues found by the host tool suites, written up in
-`doc/driver-findings-report.md` (draft dated 2026-07-04, already addressed
-to the community).
+The full findings report: the seven original host-suite findings, four
+defects in the `v6.19_ebc` EXTRACT_FBS reference implementation, and
+dated hardware-session and code-read findings through 2026-08-02 (the
+silent global-refresh starvation, the suspend-ctx use-after-free, and
+the resume damage-baseline defect). Written up in
+`doc/driver-findings-report.md` (living draft, last updated 2026-08-06,
+already addressed to the community).
 
 **For:** hrdl (`git.sr.ht/~hrdl/linux`) primarily, and ayakael as the
 postmarketOS kernel maintainer — the defect ships to users through
@@ -71,10 +75,22 @@ thread at `:1545`; `rockchip_ebc_partial_refresh` at `:1082`;
 caveat — "equivalent code exists in the hrdl/ayakael 6.19 lineage;
 re-check before applying" — is discharged for this finding.
 
-**Not yet re-checked** against `v6.19_ebc` for findings 2–7. Do that
-before sending; the same fetch method works.
+**Newest entry (2026-08-02): the resume damage-baseline defect.** The
+`suspend_was_requested` re-init branch never seeds the `kmalloc`'d
+`final_atomic_update` diff baseline, so post-resume damage is diffed
+against uninitialised memory and silently dropped by drop-on-match.
+Inherited lineage code (verified present in our original import); fixed
+in our tree behind a mutation-tested structural gate
+(`validate-ebc-resume-baseline-hunk.sh`). The report carries the honesty
+caveat that it is not proven to be the whole dead-write explanation —
+the probes' own black-on-black no-op writes were a major confound.
 
-**Gate:** baseline done. Also re-confirm findings 2–7 still apply.
+**Not yet re-checked** against `v6.19_ebc` for findings 2–7 or the
+resume-baseline finding. Do that before sending; the same fetch method
+works.
+
+**Gate:** baseline done. Also re-confirm findings 2–7 and the
+resume-baseline finding still apply.
 
 ### 2. `DRM_IOCTL_ROCKCHIP_EBC_REFRESH_BARRIER` — **needs-verification**
 
@@ -92,7 +108,7 @@ proposing ours.
 **Gate:** a production caller exists, *and* `v6.19_ebc_custom` doesn't
 already solve it.
 
-### 3. Deferred-io flush period is tunable — **needs-work** (technique note, not a patch)
+### 3. Deferred-io flush period is tunable — **ready** (as a footnote to item 1: in-tree implementation, measured win)
 
 `fbdefio.delay` is a plain writable per-helper field
 (`drm_fbdev_shmem.c:184`, `HZ/20`), `drm_fbdev_shmem_driver_fbdev_probe()`
@@ -105,6 +121,17 @@ worth *telling* hrdl: his driver carries 25 `module_param`s and **zero**
 references to `defio`/`fbdefio` (verified 2026-07-31 against
 `v6.19_ebc`) — the knob is simply unnoticed, and it is directly relevant
 to anyone driving this panel through deferred-io.
+
+**Since 2026-08-01 the offer includes an implementation and measured
+results, not just the technique.** Our forward-port carries the knob as
+the `defio_delay_ms` module parameter (a `.fbdev_probe` wrapper; the
+default 50 preserves vanilla behavior), and the publish-on-call program
+proved its value on glass: with the window at the chosen 250 and
+KOReader fsync-publishing at every refresh intent, eight of eight uinput
+portrait page turns cost exactly one pass (23/23 turns cost two before
+the fix), and publish latency is timer-independent at 133–140 ms from
+EBC-idle to first IRQ. Details in `doc/refresh-policy.md`
+("publish-on-call").
 
 Do **not** pitch it to mainline as a user-tunable module parameter. The
 DRM maintainers' documented position on e-paper driver knobs is hostile to
@@ -179,13 +206,29 @@ dead-write window").
 mainline core-DRM, not `rockchip_ebc`, so the lineage is not the right
 audience. Small and self-contained.
 
-**What has to be true first:** (1) hardware confirmation that finding 1
-is what our device actually hit — the fix is built but unproven on
-glass, and `pinenote/tools/power/fb-damage-gates.sh` is the instrument;
-(2) check current `drm-misc-next`, not 7.0.11 — this is live code and
-may already have moved; (3) the standing baseline gate.
+**Verification state (updated 2026-08-06):** the old condition (1) —
+hardware confirmation of finding 1 — is discharged, with a nuance. The
+fix for finding 1 (a second `set_suspend_unlocked` call from the
+driver's resume, barriered by its own `flush_work`) is **hardware-proven
+2026-08-02**: `fb0.state=0` after resume, the deferred un-suspend
+completes, and suspend-ladder rungs 1–2 pass on s2idle. But the same
+sessions showed finding 1 was **not** what our device's dead-write
+window actually was: with the fix in and every gate reading open, damage
+still painted zero frames, and the window was reattributed to our own
+probes' black-on-black no-op writes plus the inherited resume
+damage-baseline defect (item 1; `doc/driver-findings-report.md`,
+2026-08-02 finding). G1 was real and is fixed; it was not the cause.
+Both core-DRM observations (the unawaited `resume_work`, the discarded
+`-EBUSY`) stand as source-verified mainline behavior — but the local war
+story motivating them is weaker than this row originally implied, and
+any report should say so rather than lean on our symptom.
 
-**Status:** needs-verification. Do not send on source reading alone.
+**What has to be true first:** (1) check current `drm-misc-next`, not
+7.0.11 — this is live code and may already have moved; (2) the standing
+baseline gate.
+
+**Status:** needs-verification (the `drm-misc-next` re-check is the
+outstanding item). Do not send on 7.0.11 source reading alone.
 
 ### 8. `st_accel` has no power management — **needs-work** (real patch, real audience)
 

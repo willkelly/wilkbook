@@ -265,15 +265,16 @@ Read-only inventory confirms:
 Stop before typing any U-Boot command or preparing `os2` unless all of these are
 true:
 
-- `doc/pinenote-gate6-runbook.md` backup checklist is still satisfied.
+- `doc/device-runbook.md` (then `doc/pinenote-gate6-runbook.md`) backup
+  checklist is still satisfied.
 - The 2026-05-08 and 2026-05-10 local and NFS backup sets still verify.
 - We have a confirmed way to reach U-Boot interactively and record output.
 - We have a confirmed way to power-cycle back to stock Debian `os1`.
 - We have chosen a boot source that does not require persistent U-Boot env
   changes.
 - The operator explicitly approves any write to eMMC or `os2`.
-- `doc/pinenote-gate6-serial-uboot.md` has been reviewed against the actual
-  serial/U-Boot discovery output.
+- `doc/archive/gate6-serial-uboot.md` (then `doc/pinenote-gate6-serial-uboot.md`)
+  has been reviewed against the actual serial/U-Boot discovery output.
 
 ## Root filesystem source decision
 

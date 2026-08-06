@@ -1,6 +1,9 @@
 # hrdl's kernel stack — adoption evaluation and methodology comparison
 
-Status: evaluation complete, 2026-07-12. Method per `doc/worked-examples.md`
+Status: evaluation complete, 2026-07-12. This is a **standing
+reference** (the §3 cherry-pick decisions and the §3.3/§5
+corruption-hunt strategy are cited as current by other docs), not an
+archive candidate. Method per `doc/worked-examples.md`
 case study 1: every load-bearing claim below was verified against fetched
 source (shallow git fetch of `git.sr.ht/~hrdl/linux` branches
 `v6.19_pinenote` @46028a0e2658, `v6.19_ebc` @7cb827d1730f,
@@ -438,7 +441,16 @@ quality maintenance to per-pixel redraws — architectural avoidance
 rather than detection. Our finding-10 policy (`auto_refresh=0`,
 userspace-owned washes) converges on the same judgment from evidence.
 
-## 5. What this says about the reopened corruption hunt
+## 5. What this says about the reopened corruption hunt (as of 2026-07-12)
+
+*Currency note (2026-08-06):* the hunt has been dormant since
+2026-07-12 — everything below is the state and plan as of that date,
+not an active track. The quirk-2 overlap fix it names as "authored"
+**landed** that same day (§3.2) and has shipped on every kernel since
+A.2.8-dbg, so every boot since has been running the promised corruption
+A/B — but whether corruption recurred on the fixed kernel is recorded
+nowhere. That unrecorded outcome is the open item; `doc/status.md`
+owns currency.
 
 The straggler-truncation mechanism is refuted on our silicon
 (instrumented run 1, `doc/driver-findings-report.md`), and the hunt is

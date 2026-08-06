@@ -5,7 +5,10 @@ sources (E Ink mode declarations, dri-devel archives, downstream PineNote
 trees, KOReader sources, commercial-device teardowns). Load-bearing claims
 were cross-checked against primary sources; treat single-source details as
 leads, not gospel. This is background for planning — the actionable items
-are folded into `ROADMAP.md`.
+are folded into `ROADMAP.md`. Companion deep review: `doc/eink-sota.md` —
+the dated (2026-07-12), adversarially-verified state-of-the-art survey,
+with the ranked steal list and the corrections register this doc folds
+from.
 
 ## 1. EPD fundamentals that constrain everything
 
@@ -30,9 +33,11 @@ are folded into `ROADMAP.md`.
   extract to `/lib/firmware/rockchip/ebc.wbf` in the initrd). Treat the
   blob as immutable device identity — never bundle a generic one. Kindle
   and Kobo do exactly the same staging-before-driver-bind dance.
-- DC balance matters: drivers/waveforms keep net charge ≈ 0 per
-  transition pair; violating it (e.g. by hand-synthesizing pulses)
-  degrades the film. Never drive the panel outside the shipped LUTs.
+- DC balance matters: drivers/waveforms keep the pixel-wise
+  **voltage-time integral** ≈ 0 (∫V·dt — not net charge; E Ink's patent
+  family budgets imbalance < 90 V·s over ≥ 60 s, `doc/eink-sota.md`
+  §1.1.3); violating it (e.g. by hand-synthesizing pulses) degrades the
+  film. Never drive the panel outside the shipped LUTs.
 - The driver's `prev` (Y4) buffer must always match true panel state:
   every LUT lookup assumes the "from" level is physically on the glass.
   Any divergence (suspend/resume, waveform-family switch) produces wrong
@@ -52,8 +57,8 @@ PineNote's; dmesg `Loaded 4-bit PVI waveform version 0x19` confirms):
 | DU4 | any gray → 4 tones | ~290 ms | moderate | menu text, fast UI |
 | GC16 | full 16-gray, flashy on full update | ~450 ms | very low | page turns (quality), periodic deghost |
 | GL16 | 16-gray for text on white, less flash | ~450 ms | medium | reading-flow page turns |
-| GLR16/GLD16 | = GL16 unless E Ink's licensed REGAL preprocessor injects hint states | ~450 ms | low | treat as GL16 (no REGAL license) |
-| A2 | fastest, B/W only, no flash | ~120 ms | medium | scrolling, pen strokes |
+| GLR16/GLD16 | = GL16 for even states *by design*; the 29/31 hint data **is present in our own ebc.wbf** but the 4-bit driver path cannot index it (`doc/eink-sota.md` §1.1.6) | ~450 ms | low | treat as GL16 until a 5-bit path exists |
+| A2 | fastest, no flash; from-domain [0, 29, 30, 31] only per the AF spec Table 1 — stricter than "B/W only" (sota §1.1.6) | ~120 ms | medium | scrolling, pen strokes |
 
 **Frame-clock note (2026-07-30).** The times above are E Ink's published
 figures, and they reproduce `phases / 85 Hz` against our panel's own decoded
@@ -147,13 +152,18 @@ eventually (map wlroots `app_id` → EBC hint values).
   smallest piece that makes refresh UX scriptable; keep our driver's
   ioctl numbers/param names compatible so it and the community tooling
   run unmodified.
-- KOReader: proven on PineNote via hrdl's image. Two open upstream
-  issues are cheap wins: #14017 (route Dispatcher full-refresh to
-  `DRM_IOCTL_ROCKCHIP_EBC_GLOBAL_REFRESH`) and #14694 (stylus reported
-  as finger; fixable with libinput/udev tags in the image). Long-term, a
-  native `framebuffer_rockchip.lua` (dumb buffer + damage clips + hint
-  property + global-refresh ioctl) would give KOReader its usual
-  refresh-policy control.
+- KOReader: first proven on PineNote via hrdl's image (stock SDL build
+  under sway); **since 2026-07-05 it runs natively on wilkbook's own
+  image** — a `pinenote` device target directly on fbdev, no
+  compositor — hardware-proven with pen and finger input and, as of
+  2026-08-01, publish-on-call refresh (`doc/status.md`,
+  `doc/refresh-policy.md`). Upstream issues #14017 (route Dispatcher
+  full-refresh to `DRM_IOCTL_ROCKCHIP_EBC_GLOBAL_REFRESH`) and #14694
+  (stylus reported as finger) are now the relevant conversations for
+  upstreaming our target, not open gaps in our image. A DRM-native
+  `framebuffer_rockchip.lua` (dumb buffer + damage clips + hint
+  property + global-refresh ioctl) remains an open long-term idea; the
+  shipped design is fbdev + publish-on-call.
 - USB: the community standardized on ECM/RNDIS ethernet gadget + ssh
   rather than our ACM serial console — worth offering both (the Debian
   `usb-otg_eth.sh` is a configfs reference). `gud-gadget` (PineNote as
@@ -224,13 +234,18 @@ session scratchpad (`ebc/`); adoptability verdicts recorded in
   defects corrected; tools in `pinenote/tools/ebc-logic`.)
 - **PNDeb ships field-tested defaults** on m-weigand 6.12: `auto_refresh=1
   refresh_threshold=60 split_area_limit=0 panel_reflection=1 dclk_select=0`
-  (dev branch bumps **`dclk_select=1`**, 250 MHz — evidence the higher pixel
-  clock is now considered stable); user guide recommends `refresh_threshold=20`
+  (dev branch bumps **`dclk_select=1`**, 250 MHz — but see the 2026-07-30
+  correction in the Panel/controller bullet below: the request is a no-op
+  that rounds back to 200 MHz, so their bump is evidence of a no-op, not
+  of 250 MHz stability); user guide recommends `refresh_threshold=20`
   for redraw-heavy apps. They also ship **`trim_waveform.py`** — removes
   frames from the A2 waveform for faster pen writing (accepted tradeoff:
-  black sometimes gray). A shipped, user-validated instance of waveform
-  surgery; concept-portable to a workbench experiment (we have our own
-  decoder; per-device .wbf policy unchanged — the trim happens on-device).
+  black sometimes gray — mechanism now known: trims that eat the
+  particle-**activation** stage; trim from the erase/reset side, never
+  activation — `doc/eink-sota.md` §1.1.2). A shipped, user-validated
+  instance of waveform surgery; concept-portable to a workbench
+  experiment (we have our own decoder; per-device .wbf policy
+  unchanged — the trim happens on-device).
 - **hrdl's driver is a redesign** (sourcehut `~hrdl/linux`, branch
   `v6.19_pinenote`, ~349 patches; web UI 502s, raw/git endpoints work):
   per-pixel waveform scheduling (obsoletes `split_area_limit`), an
@@ -256,7 +271,12 @@ session scratchpad (`ebc/`); adoptability verdicts recorded in
   fails to load the initial waveform"** — worth a defensive check in our
   boot path.
 - **Panel/controller**: `dclk_select` semantics confirmed (-1 mode/0=200 MHz
-  /1=250 MHz); `split_area_limit` = max damage splits per scheduling pass.
+  /1=250 MHz) — but (correction 2026-07-30) those are *request* semantics
+  only: `DCLK_EBC` is a divider-less RK3566 CRU mux over {400, 333, 200} MHz,
+  so the 250 MHz request rounds back to 200 MHz and **`dclk_select=1` is a
+  no-op on this kernel** (`doc/refresh-policy.md` frame-clock note,
+  `doc/pageturn-program.md` e2); `split_area_limit` = max damage splits per
+  scheduling pass.
   ED103TC2C6 datasheet remains unobtainable (403s); search snippets:
   GL16 intended for sparse-on-white, A2 should transition through white,
   DU4 targets gray tones 1/6/11/16 only.

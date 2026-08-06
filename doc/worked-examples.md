@@ -135,6 +135,7 @@ python3 pinenote/scripts/update-patch-file.py \
 
 # 5. gate in ladder order
 make wbf-check ebc-logic-check rastersim-check WBF=...   # minutes
+make suspend-check   # structural gates over patch hunks (see caveat)
 make kernel-drv                                          # seconds
 make kernel                                              # the real build
 ```
@@ -144,6 +145,17 @@ edit within minutes — that is the entire reason the verbatim-extraction
 rule exists. The cross-build then proves the regenerated hunk applies
 and compiles for the real target (check for `Image`, the PineNote DTBs,
 and `rockchip_ebc.ko` in the store output).
+
+One caveat (`doc/testing.md`, 2026-08-01): the host tools compile the
+driver under the shim's config, so code behind an `#ifdef` the shim
+does not define is **invisible** to them — the suite can go green with
+such a branch deleted outright. `CONFIG_DRM_FBDEV_EMULATION` is the
+lone exception since 2026-08-04 (`ebc-fbdev-order-test` defines and
+executes it). For hunks the host tools cannot see — the TPS65185 PM
+section and the fbdev/resume hunks that `make suspend-check`'s
+validators cover — the structural gate is the behavioral check and the
+cross-build is the only compile gate. Before trusting a green suite,
+confirm the harness actually compiles the lines you changed.
 
 **Lessons to reuse.**
 
@@ -159,7 +171,9 @@ and `rockchip_ebc.ko` in the store output).
 
 - The **2026-07-03 fix stack** (three device failures root-caused from
   logs, the os1 SSH oracle, chroot tests, and review — zero reboots):
-  `doc/status.md`, and the conventions in `doc/kernel-forward-port.md`.
+  `doc/status.md`; the device-access conventions it leaned on are
+  `doc/device-access.md`, and the kernel-side lessons are in
+  `doc/kernel-forward-port.md`.
 - Building the **refresh harness itself** (rung 7a) from a scoping
   spike, including the effort pricing that made option (a) obviously
   right: `doc/ebc-harness-spike.md` and the ebc-logic README.

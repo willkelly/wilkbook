@@ -296,7 +296,7 @@ events: c12's trace has **4** fulls vs c6's **8** — the "half the flashes"
 claim, verbatim from the traces. Caveat: c12 itself segmented only 19/48
 transitions (§6), so its 3 samples carry the least weight of the three.
 
-### 3.7 Cliff mapping found no cliff — verified, including the correction
+### 3.7 Cliff mapping found no cliff — verified, including the correction (whose units half was itself re-resolved 2026-07-12; see the note below)
 
 Claim (as corrected): the pooled six-cadence blank-reveal curve is flat
 0–33 turns since a KOReader full (0.093–0.146, 39 samples); c40 segmented
@@ -323,6 +323,23 @@ backstop sentences after the corrective parenthetical, and the older
 "Context" bullet in the same file still describes threshold units as
 ~half-screens; the parenthetical in finding 7, finding 8's "60
 screen-areas", and commit `3610f49` are authoritative (§5.3).
+
+**(Units re-resolved 2026-07-12 — note added 2026-08-06.)** The
+`3610f49` units correction itself over-corrected: the 2026-07-12
+pageturn-program source audit read the accumulator against the driver
+line-by-line — it counts **pixels** of damage against
+`one_screen_area` = 1,314,144 px = **half** the 1872×1404 panel, so
+threshold 60 fires after **~30 full-page turns' worth**, not ~60. The
+authoritative statements are now `doc/refresh-policy.md`'s "Context"
+threshold bullet (marked RESOLVED 2026-07-12) and
+`doc/pageturn-program.md` ground truth 7, **not** finding 8 / commit
+`3610f49`. Consequence for this finding: "beyond every span tested
+here" falls with the units — at ~30 turns the auto-refresh backstop
+was within reach of the longest tested spans, and auto globals are
+invisible to the `[pn-refresh]` trace, so the flat curve's
+disentanglement from the backstop is again undetermined from these
+bundles alone. The question is moot for the shipped image, which runs
+`auto_refresh=0` (finding 10; commit `b9bbc0e`).
 
 ### 3.8 full_refresh_count=never refuted by replication (3/3) — verified
 
@@ -449,6 +466,16 @@ should know them.
    `3610f49` carry the corrected units (whole screen-areas, ~every 60
    turns). The doc history was preserved rather than rewritten; read the
    correction as authoritative.
+   **(Update, note added 2026-08-06: do NOT read that correction as
+   authoritative — it over-corrected. The 2026-07-12 pageturn-program
+   source audit re-resolved the units: the accumulator counts pixels
+   against `one_screen_area` = 1,314,144 px = half the panel, so
+   threshold 60 fires after ~30 full-page turns' worth; the original
+   ~30-turn figure was right after all. `doc/refresh-policy.md`'s
+   "Context" bullet has since been rewritten with the resolution, and
+   `doc/pageturn-program.md` ground truth 7 carries the line-cited
+   source reading — those two are authoritative, not finding 8 /
+   commit `3610f49`. See §3.7's note for the consequence.)**
 4. **Launch-wash accounting.** The doc's flash-event counts ("48 flashes
    instead of 8"; "half the flash events") exclude or include the per-run
    launch wash inconsistently: raw trace counts are 48 vs **9**
@@ -545,3 +572,18 @@ doc/driver-findings-report.md. Consequence shipped: the image and the live
 device now run `auto_refresh=0` (commit b9bbc0e). These bundles' derived
 files are on disk under build/bundles/ but not yet copied into this dataset
 dir; fold them in at the next dataset refresh.
+
+**Evidence availability (2026-08-06, pre-share note).** That refresh has
+not happened. The committed dataset stops at armB — and armB carries only
+`session.json` + `trace.r0.log`, no report. Everything after the catalog
+snapshot exists only under the gitignored
+`pinenote/tools/optics/build/bundles/` on the capture workstation:
+`armB-report.json`, `armB2` (+ report), `armC` (finding 10); the
+`idlewasher-accept*` acceptance bundles (finding 11); the attributed v3
+reports `sweep1.r0{0,1}-report-v3.json` (finding 12); and the `veritas`
+bundle (finding 13). Concretely for a collaborator: findings 1–8 are
+auditable end to end from the repo (this doc plus
+`doc/datasets/2026-07-optics/`, with §5–§6's caveats); finding 9's cell
+numbers were never committed (§3.9); and refresh-policy findings 10–13
+cannot be recomputed from the repo at all — their derived files are
+workstation-only, reproducible from the retained videos on request.
