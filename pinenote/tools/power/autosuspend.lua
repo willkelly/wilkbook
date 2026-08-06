@@ -589,11 +589,42 @@ local function suspend_once()
     -- (Addendum 5, 2026-08-06).  A blind sleep 1 was not enough (a
     -- global is 1-2 s of drive after the ioctl returns), and the gate
     -- guards correctness, not the banner, so it runs overlay or not.
-    wait_ebc_idle()
+    -- Fail CLOSED: a timeout means someone is still painting (found on
+    -- glass 2026-08-06 -- a tap followed by page turns held the gate
+    -- 10 s and then suspended under the user's fingers).  Suspending
+    -- into that is the exact corruption this gate exists to prevent, so
+    -- abort, undo the banner, and let the caller retry.
+    if not wait_ebc_idle() then
+        log("suspend aborted: EBC still active -- will retry")
+        write_file("/sys/class/rtc/rtc0/wakealarm", "0")
+        restore_gadget(saved)
+        if opt.overlay then
+            set_no_off_screen(false)
+            restore_banner_area()
+        end
+        return false
+    end
     write_file("/dev/kmsg", "<0>WILKBOOK: autosuspend entering deep")
     os.execute("sync")
     local t0 = os.time()
-    write_file("/sys/power/state", "mem")
+    if not write_file("/sys/power/state", "mem") then
+        -- The kernel refused or unwound mem entry (busy wakeup source,
+        -- a driver veto).  Drivers may have suspended and resumed on
+        -- the way, so treat the display like any other resume: restore
+        -- and wash.  Without this check a refused suspend is silent --
+        -- it reads as "resumed after 0s" and the banner just sits there
+        -- on a live reader (found on glass 2026-08-06).
+        log("suspend write refused by kernel -- restoring")
+        write_file("/dev/kmsg", "<0>WILKBOOK: autosuspend mem write refused")
+        write_file("/sys/class/rtc/rtc0/wakealarm", "0")
+        restore_gadget(saved)
+        if opt.overlay then
+            set_no_off_screen(false)
+            restore_banner_area()
+        end
+        cleanup_wash()
+        return false
+    end
     local slept = os.time() - t0
     write_file("/dev/kmsg", "<0>WILKBOOK: autosuspend resumed")
     restore_gadget(saved)
@@ -655,13 +686,19 @@ while true do
             log("DRY RUN: would suspend now")
             last_activity = os.time()
         else
-            suspend_once()
+            local slept_ok = suspend_once()
             -- The wake press itself lands as input.  Throw the whole queue
             -- away rather than let it read as either activity or a fresh
             -- suspend request, and hold the button off for the grace period.
             drain_all()
             power_ignore_until = os.time() + opt.power_grace_s
             last_activity = os.time()
+            if not slept_ok then
+                -- An abort (EBC busy, kernel refusal, backstop failure)
+                -- is transient: retry in ~30 s instead of waiting out a
+                -- whole fresh idle period at ~157 mA.
+                last_activity = os.time() - idle_secs() + 30
+            end
         end
     else
         fd_zero()

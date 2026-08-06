@@ -105,22 +105,32 @@
              (lambda _ #f)))
 
          (define (wait-ebc-idle attempts)
-           ;; the campaign's EBC-idle precondition, bounded: two samples
-           ;; 500 ms apart with an unchanged interrupt count.  An
-           ;; in-flight GC16 pass is ~46 frames ~ 1 s, so the 5 s bound
-           ;; outlasts any single refresh; on timeout we proceed anyway
-           ;; (fail-open) but say so.
-           (let ((before (ebc-irq-count)))
-             (usleep 500000)
-             (let ((after (ebc-irq-count)))
-               (cond
-                ((not before) #t)          ; no EBC (virt): nothing to wait for
-                ((equal? before after) #t)
-                ((zero? attempts)
-                 (log "EBC did not go idle in time (irq ~a -> ~a); proceeding"
-                      before after)
-                 #t)
-                (else (wait-ebc-idle (- attempts 1)))))))
+           ;; the campaign's EBC-idle precondition, bounded -- but the
+           ;; IRQ pattern is asymmetric (the standing lesson: a zero IRQ
+           ;; delta means nothing on its own).  A partial ticks once per
+           ;; frame; a GLOBAL emits its single IRQ only at COMPLETION,
+           ;; so one unchanged pair reads exactly like idle while the
+           ;; glass is mid-drive (the 2026-08-06 v3-boot review finding,
+           ;; ported here from autosuspend.lua).  Idle requires the
+           ;; count unchanged across 5 consecutive 500 ms samples --
+           ;; 2.5 s, longer than any measured global -- so a mid-flight
+           ;; global is outwaited, not mistaken for quiet.  On timeout
+           ;; we proceed anyway (fail-open) but say so.
+           (let loop ((quiet 0)
+                      (before (ebc-irq-count))
+                      (attempts attempts))
+             (cond
+              ((not before) #t)           ; no EBC (virt): nothing to wait for
+              ((>= quiet 5) #t)
+              ((zero? attempts)
+               (log "EBC did not go idle in time; proceeding")
+               #t)
+              (else
+               (usleep 500000)
+               (let ((after (ebc-irq-count)))
+                 (if (equal? before after)
+                     (loop (+ quiet 1) before (- attempts 1))
+                     (loop 0 after (- attempts 1))))))))
 
          (define (ddr-at-target?)
            ;; clk_summary row: name enable prepare protect rate ...
@@ -143,8 +153,14 @@
              (lambda _ #f)))
 
          (define (poll-ddr attempts)
-           ;; the probe-time switch completes inside modprobe (~107 ms +
-           ;; the driver's 100 ms MCU wait); ~3 s is belt and braces
+           ;; When the probe runs inside modprobe the switch lands in
+           ;; ~107 ms + the driver's 100 ms MCU wait.  But probe can
+           ;; DEFER (SCMI/OPP dependency not ready) and complete on a
+           ;; later re-probe -- on the 2026-08-06 v3 boot the rate
+           ;; arrived after a 3 s poll had already given up, the console
+           ;; was back, and the unguarded switch scribbled the glass
+           ;; mid-console-paint.  So the poll is long (~15 s) and the
+           ;; quiesce is held for all of it.
            (cond
             ((ddr-at-target?) #t)
             ((zero? attempts) #f)
@@ -155,7 +171,7 @@
          ;; ---- quiesce: no EBC work may overlap the switch ----
          (write-sysfs %fbcon-bind "0")
          (write-sysfs %fb-blank "1")
-         (wait-ebc-idle 10)
+         (wait-ebc-idle 40)
 
          (catch #t
            (lambda ()
@@ -176,11 +192,25 @@
                          (system* #$(file-append util-linux "/bin/mount")
                                   "-t" "debugfs" "none"
                                   "/sys/kernel/debug")))
-                     (if (poll-ddr 30)
+                     (if (poll-ddr 150)
                          (log "DDR at ~a Hz (static low)" #$%dmc-target-rate)
-                         (log "FAILED: DDR did not reach ~a Hz within ~~3 s; \
-reader continues at the boot rate (costs ~~25 mA); see dmesg for wilkbook_dmc"
-                              #$%dmc-target-rate)))
+                         (begin
+                           ;; The switch happens inside the guarded
+                           ;; window or NOT AT ALL: a still-deferred
+                           ;; probe would otherwise complete after the
+                           ;; console is back and fire an unguarded
+                           ;; switch into live EBC scans (the v3-boot
+                           ;; corruption, 2026-08-06).  Removing the
+                           ;; module forecloses that; remove() restores
+                           ;; the boot rate, and any switch it makes
+                           ;; runs inside the still-held quiesce.
+                           (system* #$(file-append kmod "/bin/modprobe")
+                                    "-r" "-d" "/run/booted-system/kernel"
+                                    #$%dmc-module)
+                           (log "FAILED: DDR did not reach ~a Hz within ~~15 s; \
+module removed so no unguarded switch can follow; reader continues at the \
+boot rate (costs ~~25 mA); see dmesg for wilkbook_dmc"
+                                #$%dmc-target-rate))))
                    (log "FAILED: modprobe ~a exited with ~a; \
 reader continues at the boot rate (costs ~~25 mA)"
                         #$%dmc-module status))))
