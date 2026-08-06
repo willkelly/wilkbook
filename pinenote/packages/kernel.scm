@@ -95,7 +95,17 @@
         ;; of_map_mode so regulator-initial-mode = <2> is honoured.
         ;; Acceptance on next boot: vdd_cpu opmode reads "normal" with no
         ;; runtime poke.  Drop this line to revert.
-        (local-file "../patches/linux-pinenote-7.0-vdd-cpu-auto-pfm.patch")))
+        (local-file "../patches/linux-pinenote-7.0-vdd-cpu-auto-pfm.patch")
+        ;; Static-low DDR (2026-08-06): wilkbook_dmc, a minimal devfreq
+        ;; driver over the DRAM SIP, holds DDR at the firmware table's
+        ;; lowest rate (324 MHz).  Measured on glass: ~25 mA saved
+        ;; quiesced vs the 1056 MHz boot rate; a switch costs ~107 ms
+        ;; wall, sub-ms DRAM stall (awake-levers-20260806 addenda).
+        ;; Built =m so the pinenote-dmc one-shot controls switch timing
+        ;; around an idle EBC.  bl31 preserves the rate across
+        ;; suspend/resume (addendum 2), so there are deliberately NO
+        ;; suspend hooks anywhere.  Drop this line to revert.
+        (local-file "../patches/linux-pinenote-7.0-dmc-static-low.patch")))
 
 (define %linux-pinenote-source
   (origin

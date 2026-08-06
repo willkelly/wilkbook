@@ -12,6 +12,8 @@
   #:use-module (pinenote packages orientation)
   #:use-module (pinenote services orientation)
   #:use-module (pinenote services reader-session)
+  #:use-module (pinenote services dmc)
+  #:use-module (pinenote services ddr-boost)
   #:use-module (pinenote services autosuspend)
   #:use-module (pinenote services usb-gadget)
   #:use-module (pinenote services wifi)
@@ -33,6 +35,16 @@ reader ALL=(ALL) NOPASSWD: ALL
 (define pinenote-reader-services
   (append %pinenote-bringup-services
            (list (service pinenote-orientation-bridge-service-type)
+                 ;; Static-low DDR: modprobe wilkbook_dmc with fbcon
+                 ;; quiesced (the probe-time drop to 324 MHz is the
+                 ;; module's only runtime switch, and it must not overlap
+                 ;; an EBC scan), then verify via clk_scmi_ddr.  ~25 mA
+                 ;; measured quiesced (awake-levers-20260806 addendum).
+                 ;; Fails OPEN: any miss logs loudly and exits success --
+                 ;; a reader at 1056 beats no reader (acceptance catches
+                 ;; the miss).
+                 (service pinenote-dmc-service-type)
+                 (service pinenote-ddr-boost-service-type)
                  (service pinenote-reader-session-service-type)
                  ;; Sleep to deep after inactivity: ~7x on measured power
                  ;; (172 mA awake vs 19.3 mA deep, 2026-08-02).  Wake is by
