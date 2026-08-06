@@ -355,9 +355,10 @@ end
 local function makeInput(with_router)
     local input = Input:new{
         device = FakeDevice,
-        -- device.lua's event_map, verbatim
+        -- device.lua's event_map, verbatim.  116 (KEY_POWER) is
+        -- intentionally absent since 2026-08-06: the pwrkey belongs to
+        -- the autosuspend daemon and KOReader no longer opens or maps it.
         event_map = {
-            [116] = "Power",
             [158] = "RPgBack",
             [159] = "RPgFwd",
         },

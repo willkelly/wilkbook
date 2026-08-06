@@ -32,7 +32,12 @@
 ;; the bundle's own luajit: Guile cannot issue the DRM ioctl, and the
 ;; ffi below beats shipping a C helper.  Best-effort on purpose — on
 ;; qemu-virt the ioctl fails harmlessly (no EBC), and a missing fb0
-;; just skips the fill.
+;; just skips the fill.  The fill must be fsync'd before the ioctl:
+;; deferred-io holds fbdev damage for defio_delay_ms and fsync on the
+;; fb fd is the publish, so an unpublished fill lets the refresh run
+;; against the OLD framebuffer content — repainting the boot console
+;; instead of washing it (found 2026-08-06 after a boot whose wash
+;; failed to clear the console).
 ;;
 ;; The wash runs as GC16 regardless of the shipped refresh_waveform:
 ;; under the GL16 policy a global never drives believed-white pixels,
@@ -42,7 +47,7 @@
 ;; wash removed it); the shipped waveform is restored afterwards.
 (define %panel-blank-lua "
 local ffi = require('ffi')
-ffi.cdef('int open(const char*,int); long write(int,const void*,unsigned long); int close(int); int ioctl(int,unsigned long,...); int poll(void*,unsigned long,int);')
+ffi.cdef('int open(const char*,int); long write(int,const void*,unsigned long); int fsync(int); int close(int); int ioctl(int,unsigned long,...); int poll(void*,unsigned long,int);')
 local C = ffi.C
 local fb = C.open('/dev/fb0', 1)
 if fb >= 0 then
@@ -50,12 +55,19 @@ if fb >= 0 then
   local buf = ffi.new('uint8_t[?]', n)
   ffi.fill(buf, n, 0xFF)
   while C.write(fb, buf, n) > 0 do end
+  C.fsync(fb)
   C.close(fb)
 end
 local wf = '/sys/module/rockchip_ebc/parameters/refresh_waveform'
 local prior
 local f = io.open(wf, 'r')
 if f then prior = f:read('*l'); f:close() end
+-- 4 is only ever a wash transient: reading it back means an earlier
+-- wash (here or the autosuspend resume wash) died between set and
+-- restore, and re-saving it would poison every later save/restore
+-- cycle.  Restore the shipped value (services/ebc.scm) instead so any
+-- interrupted or interleaved sequence self-heals on the next cycle.
+if prior == '4' then prior = '6' end
 local function set_wf(v)
   local g = io.open(wf, 'w')
   if g then g:write(v); g:close(); return true end
@@ -66,10 +78,17 @@ local card = C.open('/dev/dri/card0', 2)
 if card >= 0 then
   local arg = ffi.new('uint8_t[1]', 1)
   local rc = C.ioctl(card, 0xC0016440, arg)
+  if rc ~= 0 then
+    io.stderr:write('panel-wash: global-refresh ioctl rc=' .. rc .. ' errno=' .. ffi.errno() .. '\\n')
+  end
   if deep and rc == 0 then C.poll(nil, 0, 3000) end
   C.close(card)
+else
+  io.stderr:write('panel-wash: /dev/dri/card0 open failed errno=' .. ffi.errno() .. '\\n')
 end
-if deep then set_wf(prior) end
+if deep and not set_wf(prior) then
+  io.stderr:write('panel-wash: waveform restore failed\\n')
+end
 ")
 
 (define (pinenote-reader-session-shepherd-service _config)

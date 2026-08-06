@@ -246,7 +246,11 @@ at 324 by the `powersave` governor, plus an input-driven boost daemon
 that raises `min_freq` to the firmware's top rate on any input event
 and drops back to the floor after 10 s quiet
 (`pinenote/tools/power/ddr-boost.lua`; services `pinenote-dmc` and
-`pinenote-ddr-boost` in `pinenote/services/{dmc,ddr-boost}.scm`).  The
+`pinenote-ddr-boost` in `pinenote/services/{dmc,ddr-boost}.scm`).
+**The boost ships disabled** (2026-08-06): without `enabled=1` in
+`/var/lib/pinenote/ddr-boost.conf` the daemon never raises — the
+no-conf state after a reflash must be the validated static-324 floor
+until the boost's wake-boundary behavior is proven on glass.  The
 SMC sequences and their BSP citations are documented in
 `pinenote/tools/ddr-dvfs-test/{procedure,protocol}.md`.  One earlier
 design choice is explicitly **overridden** by newer evidence: the

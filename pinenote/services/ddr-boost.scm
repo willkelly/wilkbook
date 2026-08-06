@@ -10,8 +10,8 @@
 ;; Input-driven DDR boost: policy layer over the wilkbook_dmc devfreq
 ;; driver.  The kernel provides the capability (SIP rate switching, a
 ;; powersave 324 MHz floor, min_freq as the universal hint interface);
-;; this daemon provides the default policy: full bandwidth while the
-;; user interacts, floor after a short quiet period.  Any application
+;; this daemon provides the policy: full bandwidth while the user
+;; interacts, floor after a short quiet period.  Any application
 ;; can override by holding min_freq itself -- the daemon only ever
 ;; raises it on input and lowers it on idle, so an app's own hold wins
 ;; by writing after (last-writer semantics on min_freq are acceptable
@@ -20,6 +20,13 @@
 ;; Measured basis (doc/artifacts/pinenote-awake-levers-20260806/):
 ;; 324 vs 1056 MHz is ~24.8 mA; a rate switch is ~107 ms wall with a
 ;; sub-ms DRAM stall, safe against the EBC's 25 ms frame budget.
+;;
+;; Opt-in (2026-08-06): the daemon defaults to disabled -- without
+;; enabled=1 in its runtime conf it only watches for a conf flip and
+;; never touches min_freq.  /var/lib is wiped by a reflash, so a
+;; conf-based pause cannot survive a redeploy: the no-conf state must
+;; be the validated configuration (the static-324 floor) until the
+;; wake-boundary behavior is proven on glass.
 
 (define-record-type* <pinenote-ddr-boost-configuration>
   pinenote-ddr-boost-configuration make-pinenote-ddr-boost-configuration

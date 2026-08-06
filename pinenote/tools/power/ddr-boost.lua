@@ -20,7 +20,9 @@ was an input edge), and the drop at ~10 s quiet sits well clear of the
 idlewasher (45 s) and auto-suspend (300 s).  Residual mid-scan switch is
 a sub-ms DRAM stall against a 25 ms frame budget: transient artifact at
 worst, not the poison path (measured 2026-08-06,
-doc/artifacts/pinenote-awake-levers-20260806/).
+doc/artifacts/pinenote-awake-levers-20260806/).  A suspend/resume
+boundary (suspend_stats/success count change) suppresses raises for
+~5 s; drops to floor stay allowed.
 
 Boost and floor are self-configured from the driver's own
 available_frequencies (firmware is the single source of truth); override
@@ -31,7 +33,8 @@ and exit 0 -- the governor's 324 floor still stands and a slower reader
 beats no reader.  Runtime tunables (re-read before each wait):
     /var/lib/pinenote/ddr-boost.conf
         hold=10       seconds at floor after last input
-        enabled=0     pause boosting (min_freq left at floor)
+        enabled=1     opt in to boosting (default OFF: no conf, or any
+                      other value, leaves the floor static)
 
 Usage: ddr-boost.lua [--hold S] [--node /sys/class/devfreq/X]
                      [--boost HZ] [--floor HZ] [--config PATH]
@@ -133,16 +136,21 @@ if not FLOOR or not BOOST or FLOOR == BOOST then
 end
 log("node=%s floor=%d boost=%d hold=%ds", node, FLOOR, BOOST, opt.hold)
 
-local runtime = { hold = nil, enabled = true }
+-- Opt-in by default: /var/lib is wiped by a reflash, so a conf-based
+-- pause would not survive a redeploy -- the no-conf state has to be the
+-- validated configuration, and that is the static-324 floor.  Boosting
+-- stays off until its wake-boundary behavior is validated on glass;
+-- enabled=1/true/yes in the conf opts in.
+local runtime = { hold = nil, enabled = false }
 local function reload_config()
-    runtime.hold, runtime.enabled = nil, true
+    runtime.hold, runtime.enabled = nil, false
     local f = io.open(opt.config, "r"); if not f then return end
     for line in f:lines() do
         local k, v = line:match("^%s*([%w_]+)%s*=%s*(%S+)")
         if k == "hold" and tonumber(v) and tonumber(v) >= 1 then
             runtime.hold = math.floor(tonumber(v))
         elseif k == "enabled" then
-            runtime.enabled = not (v == "0" or v == "false" or v == "no")
+            runtime.enabled = (v == "1" or v == "true" or v == "yes")
         end
     end
     f:close()
@@ -162,7 +170,13 @@ if #fds == 0 then
     log("no input devices -- exiting 0 (floor stands)")
     os.exit(0)
 end
-log("watching %d input devices", #fds)
+reload_config()
+if runtime.enabled then
+    log("watching %d input devices (boost enabled via conf)", #fds)
+else
+    log("boost disabled (no conf opt-in); floor stays static -- watching %d input devices for a conf flip",
+        #fds)
+end
 
 local LONG_BITS = 64
 local NWORDS = 1024 / LONG_BITS
@@ -180,9 +194,45 @@ end
 local drain = ffi.new("uint8_t[768]")
 local tv = ffi.new("struct db_tv")
 
+-- Suppress raises around RESUME boundaries, where the EBC runs restore
+-- washes and the wake button itself generates input events (the
+-- 2026-08-06 collision timeline).  Coverage is deliberately partial:
+-- only the resume side is visible (a suspend_stats count change), and
+-- only from the first write attempt after it -- the probe is lazy, so
+-- the window is anchored at detection, not at the boundary, and uses
+-- wall-clock os.time() (an ntp step stretches or collapses it; every
+-- consequence is an unboosted render).  The suspend-ENTRY side (a tap's
+-- raise landing just before autosuspend writes mem) is an accepted
+-- residual: Addendum 5 demoted the DDR switch to defense-in-depth and
+-- the measured evidence (no EBC timeouts) says it is harmless.  A
+-- FAILED suspend unwinds every driver just like a resume does, so the
+-- fail count is watched too; a kernel without the files fails open
+-- ("" == "").
+local SUSPEND_STATS = "/sys/power/suspend_stats"
+local GRACE_SECS = 5
+local function suspend_stamp()
+    return (read_file(SUSPEND_STATS .. "/success") or "")
+        .. ":" .. (read_file(SUSPEND_STATS .. "/fail") or "")
+end
+local last_stamp = suspend_stamp()
+local grace_until = 0
+local function wake_grace()
+    local cur = suspend_stamp()
+    if cur ~= last_stamp then
+        last_stamp = cur
+        grace_until = os.time() + GRACE_SECS
+        log("suspend boundary noticed (suspend_stats changed) -- raises suppressed for %ds",
+            GRACE_SECS)
+    end
+    return os.time() < grace_until
+end
+
 local boosted = false
 local set_fail_logged = false
 local function set_min(hz, label)
+    -- Drops must pass even in grace: suppression must never hold
+    -- min_freq at boost.
+    if wake_grace() and hz ~= FLOOR then return false end
     if write_file(node .. "/min_freq", tostring(hz)) then
         log("%s: min_freq=%d", label, hz)
         return true
@@ -212,6 +262,10 @@ while true do
     end
     local n = C.select(maxfd + 1, fdset, nil, nil, tv)
     if n and n > 0 then
+        -- re-read the conf on the wakeup itself: the loop-top read can
+        -- be hours stale after an idle select, and acting on it would
+        -- make the first tap after `enabled=1` silently do nothing
+        reload_config()
         local saw_input, dead = false, nil
         for i, fd in ipairs(fds) do
             if fd_isset(fd) then
@@ -240,7 +294,10 @@ while true do
             for _, fd in ipairs(fds) do if fd > maxfd then maxfd = fd end end
             if #fds == 0 then
                 log("all input devices gone -- exiting 0 (floor stands)")
-                set_min(FLOOR, "exit floor")
+                -- only undo our own raise: an unboosted daemon writing
+                -- floor here would stomp another application's min_freq
+                -- hold from a process that is supposed to be inert
+                if boosted then set_min(FLOOR, "exit floor") end
                 os.exit(0)
             end
         end

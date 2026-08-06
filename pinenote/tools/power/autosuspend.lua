@@ -418,6 +418,109 @@ local function restore_banner_area()
     return true
 end
 
+-- Sum of the per-CPU counts on the "fdec0000.ebc" line of
+-- /proc/interrupts, or nil when the line is absent (QEMU virt, driver
+-- not loaded).  The hwirq token on the line parses as a number too; that
+-- constant offset is harmless because callers only compare samples for
+-- equality.
+local function ebc_irq_count()
+    local f = io.open("/proc/interrupts", "r")
+    if not f then return nil end
+    local sum
+    for line in f:lines() do
+        if line:find("fdec0000.ebc", 1, true) then
+            sum = 0
+            for tok in line:gmatch("%S+") do
+                local n = tonumber(tok)
+                if n then sum = sum + n end
+            end
+            break
+        end
+    end
+    f:close()
+    return sum
+end
+
+local function sleep_ms(ms)
+    local t = ffi.new("struct as_tv")
+    t.tv_sec = math.floor(ms / 1000)
+    t.tv_usec = (ms % 1000) * 1000
+    ffi.C.select(0, nil, nil, nil, t)
+end
+
+-- Bounded EBC-idle wait.  The IRQ pattern is asymmetric (the standing
+-- lesson: a zero IRQ delta means nothing on its own): a partial ticks
+-- once per frame (~38-46), but a GLOBAL emits its single IRQ only at
+-- COMPLETION -- the count is static for the whole 1-2 s of drive, so
+-- one unchanged pair reads exactly like idle while the glass is
+-- actively driving.  Idle therefore requires the count unchanged across
+-- 2.5 s of consecutive samples, longer than any measured global's
+-- drive, so a mid-flight global is outwaited (its completion tick
+-- resets the streak) instead of mistaken for quiet.  ~10 s bound,
+-- fail-open: a late suspend or an imperfect wash beats a daemon stuck
+-- here.
+local function wait_ebc_idle()
+    local before = ebc_irq_count()
+    if before == nil then return true end
+    local quiet = 0
+    for _ = 1, 20 do
+        sleep_ms(500)
+        local after = ebc_irq_count()
+        if after == before then
+            quiet = quiet + 1
+            if quiet >= 5 then return true end
+        else
+            quiet = 0
+            before = after
+        end
+    end
+    log("EBC still active after ~10s wait -- proceeding anyway")
+    return false
+end
+
+local REFRESH_TOOL = "/run/current-system/profile/bin/pinenote-ebc-refresh"
+local WAVEFORM_PARAM = "/sys/module/rockchip_ebc/parameters/refresh_waveform"
+-- The shipped resting value (services/ebc.scm modprobe options).  4 is
+-- only ever a wash transient: a live read returning it means an earlier
+-- wash died between set and restore, and re-saving it would poison
+-- every later save/restore cycle in BOTH writers (this daemon and
+-- reader-session's boot wash re-capture whatever they read).  Restoring
+-- the constant makes any interrupted or interleaved sequence self-heal
+-- on the next cycle, no lock needed.
+local WAVEFORM_SHIPPED = "6"
+
+-- Post-resume wash, in GC16.  A mid-refresh suspend leaves the glass in
+-- an intermediate optical state that matches no buffer; GL16 is neutral
+-- wherever buffers agree, so it cannot heal that desync -- GC16 drives
+-- all 256 transitions and can (Addendum 5, 2026-08-06).  Every step is
+-- best-effort: a modparam failure logs and falls through to the plain
+-- refresh, because the device must never fail to restore its display
+-- over a sysfs write.
+local function cleanup_wash()
+    local saved = read_file(WAVEFORM_PARAM)
+    if saved == "4" then saved = WAVEFORM_SHIPPED end
+    local switched = false
+    if not saved then
+        log("refresh_waveform unreadable -- washing with the shipped waveform")
+    elseif write_file(WAVEFORM_PARAM, "4") then
+        switched = true
+    else
+        log("refresh_waveform write failed -- washing with the shipped waveform")
+    end
+    local tool = REFRESH_TOOL
+    local f = io.open(tool, "r")
+    if f then f:close() else tool = "pinenote-ebc-refresh" end
+    os.execute(tool .. " >/dev/null 2>&1")
+    if switched then
+        -- the refresh tool returns before the wash completes; restoring
+        -- the waveform mid-pass would hand the tail of it back to GL16
+        wait_ebc_idle()
+        if not write_file(WAVEFORM_PARAM, saved) then
+            log("could not restore refresh_waveform=%s", tostring(saved))
+        end
+    end
+end
+
 local SLEEP_TEXT = "SUSPENDED - PRESS POWER TO RESUME"
 
 local function set_no_off_screen(on)
@@ -478,9 +581,15 @@ local function suspend_once()
         set_no_off_screen(true)
         local ok, err = draw_banner(SLEEP_TEXT, 6)
         if not ok then log("banner failed (%s); sleeping without it", tostring(err)) end
-        -- let the panel finish painting before power goes away
-        os.execute("sleep 1")
     end
+    -- Anything in flight on the EBC -- the banner just drawn, a page
+    -- turn the tap interrupted -- must be fully on glass before
+    -- /sys/power/state is written.  Parking the EBC mid-refresh desyncs
+    -- the driver's glass cache, and GL16 washes cannot heal it
+    -- (Addendum 5, 2026-08-06).  A blind sleep 1 was not enough (a
+    -- global is 1-2 s of drive after the ioctl returns), and the gate
+    -- guards correctness, not the banner, so it runs overlay or not.
+    wait_ebc_idle()
     write_file("/dev/kmsg", "<0>WILKBOOK: autosuspend entering deep")
     os.execute("sync")
     local t0 = os.time()
@@ -495,8 +604,10 @@ local function suspend_once()
         -- put the covered pixels back BEFORE refreshing, or the refresh
         -- just repaints the banner
         restore_banner_area()
-        os.execute("pinenote-ebc-refresh >/dev/null 2>&1")
     end
+    -- The wash is desync recovery, not banner cleanup -- it runs
+    -- overlay or not.
+    cleanup_wash()
     log("resumed after %ds", slept)
     return true
 end

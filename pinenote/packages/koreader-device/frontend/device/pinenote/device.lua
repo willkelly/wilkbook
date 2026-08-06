@@ -376,7 +376,6 @@ function PineNote:init()
     self.input = require("device/input"):new{
         device = self,
         event_map = {
-            [116] = "Power",   -- KEY_POWER (rk805 pwrkey)
             -- ws8100 BLE pen buttons (long presses; see the driver's
             -- input_status map in the forward-port patch): page turns
             -- from the pen barrel.
@@ -393,7 +392,14 @@ function PineNote:init()
     local devs = findInputDevices()
     if devs.pen then self.input:open(devs.pen, "w9013 pen digitizer") end
     if devs.touch then self.input:open(devs.touch, "cyttsp5 touchscreen") end
-    if devs.pwrkey then self.input:open(devs.pwrkey, "rk805 pwrkey") end
+    -- The power key belongs to the autosuspend daemon; KOReader must not
+    -- open it (2026-08-06).  Upstream UIManager registers a Power handler
+    -- unconditionally (onPowerEvent ignores canSuspend), so every press
+    -- fired a full-screen refreshFull that raced the daemon's
+    -- press-to-suspend into a mid-refresh suspend — parking the EBC and
+    -- desyncing the driver's glass cache, which GL16 washes never heal
+    -- for agreeing pixels.  devs.pwrkey stays discovered but unopened;
+    -- the koreader-input harness pins the name→slot mapping.
     if devs.gpiokeys then self.input:open(devs.gpiokeys, "gpio-keys") end
     if devs.penbtn then self.input:open(devs.penbtn, "ws8100 pen buttons") end
     -- The optics injector is opened unconditionally when present: it
