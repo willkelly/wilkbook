@@ -560,11 +560,23 @@ while true do
         local n = ffi.C.select(maxfd + 1, fdset, nil, nil, tv)
         if n and n > 0 then
             local tapped = false
+            local saw_input = false
             for _, d in ipairs(fds) do
                 if fd_isset(d.fd) then
-                    while true do
-                        local got = tonumber(ffi.C.read(d.fd, drain, ffi.sizeof(drain)))
-                        if not got or got <= 0 then break end
+                    local got = tonumber(ffi.C.read(d.fd, drain, ffi.sizeof(drain)))
+                    if got == -1 and ffi.errno() ~= 11 then
+                        -- Device vanished (ENODEV after a uinput destroy,
+                        -- e.g. an orientation-bridge respawn).  Without
+                        -- eviction select() marks the fd readable forever
+                        -- and this loop spins at 100% CPU (measured on
+                        -- ddr-boost, same pattern, 2026-08-06).  Mark it;
+                        -- the eviction pass below closes it and rebuilds
+                        -- the list -- closing here and leaving it in fds
+                        -- would just trade ENODEV-spin for EBADF-spin.
+                        d.dead = true
+                    end
+                    while got and got > 0 do
+                        saw_input = true
                         if d.is_power and power_key_on() then
                             -- Never let a fault in the convenience feature
                             -- take down auto-suspend itself.  A crash here
@@ -579,10 +591,31 @@ while true do
                                     tostring(res))
                             end
                         end
+                        got = tonumber(ffi.C.read(d.fd, drain, ffi.sizeof(drain)))
                     end
                 end
             end
-            last_activity = os.time()
+            local kept = {}
+            for _, d in ipairs(fds) do
+                if d.dead then
+                    ffi.C.close(d.fd)
+                    log("input device %s vanished -- evicted", d.path)
+                else
+                    kept[#kept + 1] = d
+                end
+            end
+            if #kept < #fds then
+                fds = kept
+                maxfd = 0
+                for _, d in ipairs(fds) do
+                    if d.fd > maxfd then maxfd = d.fd end
+                end
+                if #fds == 0 then
+                    log("all input devices gone -- refusing to run blind; exiting")
+                    os.exit(1)
+                end
+            end
+            if saw_input then last_activity = os.time() end
             if tapped then
                 if os.time() < power_ignore_until then
                     -- Almost certainly the press that just woke us.

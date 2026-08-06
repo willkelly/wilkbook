@@ -212,14 +212,43 @@ while true do
     end
     local n = C.select(maxfd + 1, fdset, nil, nil, tv)
     if n and n > 0 then
-        for _, fd in ipairs(fds) do
+        local saw_input, dead = false, nil
+        for i, fd in ipairs(fds) do
             if fd_isset(fd) then
-                while tonumber(C.read(fd, drain, 768)) > 0 do end
+                local got = tonumber(C.read(fd, drain, 768))
+                if got and got > 0 then
+                    saw_input = true
+                    while tonumber(C.read(fd, drain, 768)) > 0 do end
+                elseif got == -1 and ffi.errno() ~= 11 then
+                    -- Not EAGAIN: the device is gone (ENODEV after a
+                    -- uinput destroy, e.g. an orientation-bridge respawn).
+                    -- Without eviction select() marks it readable forever
+                    -- and the loop spins at 100% CPU -- measured 494
+                    -- jiffies/5s on 2026-08-06 before this fix.
+                    dead = dead or {}
+                    dead[#dead + 1] = i
+                end
             end
         end
+        if dead then
+            for j = #dead, 1, -1 do
+                local fd = table.remove(fds, dead[j])
+                C.close(fd)
+                log("input device vanished (fd %d) -- evicted, %d remain", fd, #fds)
+            end
+            maxfd = 0
+            for _, fd in ipairs(fds) do if fd > maxfd then maxfd = fd end end
+            if #fds == 0 then
+                log("all input devices gone -- exiting 0 (floor stands)")
+                set_min(FLOOR, "exit floor")
+                os.exit(0)
+            end
+        end
+        if not saw_input then goto continue end
         last_input = os.time()
         if runtime.enabled and not boosted and not set_fail_logged then
             boosted = set_min(BOOST, "input boost")
         end
     end
+    ::continue::
 end
