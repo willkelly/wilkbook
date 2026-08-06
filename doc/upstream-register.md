@@ -315,6 +315,46 @@ Odroid-M1, Radxa E25 all inherit from that file.
 4. Ideally paired with an explanation of *where* the power does go — see
    the teardown — which is the more useful contribution to that audience.
 
+### 10. `fan53555_set_mode` writes the wrong register on TCS4525 — **needs-verification** (found by source read; NEVER test it live)
+
+Found 2026-08-06 while engineering a runtime regulator-mode A/B on the
+PineNote's `vdd_cpu` (TCS4525, `drivers/regulator/fan53555.c`).
+
+On the FAN53555 proper, the force-PWM mode bit lives inside the active
+VSEL register, so `fan53555_set_mode()` writing `di->vol_reg` for both the
+FAST and NORMAL branches is correct.  On the **TCS4525** the mode bit
+moved to the COMMAND register (0x14 bit 6), and the driver's probe sets
+`mode_reg = COMMAND` accordingly — but the NORMAL branch of `set_mode`
+still writes **`di->vol_reg`** (fan53555.c ~:200, present in 7.0.11, the
+Rockchip BSP, and current mainline).  On a TCS4525 that clears bit 6 of
+the *active voltage selector*, i.e. subtracts 64 × 6.25 mV = **-400 mV
+from the CPU rail in one write**.  Any kernel path that ever requests
+REGULATOR_MODE_NORMAL on this chip hard-hangs the board.
+
+Nobody hits it today only because nothing in-tree calls
+`regulator_set_mode()` on this rail and `regulator-initial-mode` is
+ignored without an `of_map_mode` (which fan53555 lacks).  It is a
+landmine, not an active bug — which is exactly the kind of thing worth
+fixing before someone wires up mode control.
+
+A second, softer observation for the same audience: the TCS4525 powers on
+with force-PWM set and no software in the ecosystem (kernel, u-boot
+mainline or Rockchip downstream) ever clears it, so effectively the whole
+rk3566 fleet runs its CPU rail in forced PWM.  Whether auto-PFM is worth
+anything is being measured on our hardware now; the measured number
+should accompany any submission.
+
+**For:** linux-regulator (fan53555.c maintainers).
+**Shape:** two-line fix (NORMAL branch → `di->mode_reg`/`mode_mask`) plus
+optionally `of_map_mode` support; draft with full reasoning at
+`scratchpad`-stage, to be finalized from
+`pinenote/patches/`-adjacent material when sent.
+**What has to be true first:** the register-level claim re-verified
+against the then-current mainline at send time; the fix itself must NOT
+be "tested" by invoking the broken path on hardware (it provably drops
+the CPU rail 400 mV) — correctness is by inspection plus, if wanted, a
+regmap-level unit test.
+
 ## Standing caveats
 
 - **We are ahead of, not aligned with, the lineage.** Line numbers and

@@ -156,17 +156,19 @@ We already have that machinery — the BSP-SIP suspend patch calls
 `arm_smccc_smc(ROCKCHIP_LEGACY_SIP_SUSPEND_MODE, …)` through the same
 conduit, different function ID.
 
-**Do the read-only query first**, mirroring what worked for cpuidle
-(reading PSCI debugfs answered the firmware question at zero risk and
-saved building anything speculative):
+**ANSWERED 2026-08-06 — GO.** The read-only probe was built
+(`pinenote/tools/ddr-sip-probe/`, cross-built with matching vermagic and
+MODVERSIONS CRCs, insmodded on the running system) and the firmware
+replied:
 
-- `ROCKCHIP_SIP_CONFIG_DRAM_GET_VERSION` — does this bl31 implement the
-  DRAM SIP at all?
-- `ROCKCHIP_SIP_CONFIG_DRAM_GET_FREQ_INFO` — what rates does it offer?
+    DRAM_GET_VERSION fid=0x82000008 -> a0=0x0 (SUCCESS), a1=0x101
 
-Unlike PSCI there is no debugfs for this, so it needs a small kernel
-probe; but it is a read-only SMC and answers the question before any
-driver port is attempted.
+The bl31 implements the DRAM SIP, version 0x101 — above the BSP DMC
+driver's >= 0x100 requirement.  So the missing piece is purely the Linux
+side: a port of the BSP `rockchip_dmc.c`/devfreq wiring.  That is a real
+project (share-mem SIP setup, DT node, OPPs) and the expected win remains
+tens of mA at best; but it is no longer speculative, and the probe tool
+stays in-tree for the next firmware question.
 
 **Expect a modest result, and size it before investing.** Deep suspend is
 20.6 mA *with DRAM in self-refresh*, so retention is cheap — but that
