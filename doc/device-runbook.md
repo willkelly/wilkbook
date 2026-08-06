@@ -58,7 +58,12 @@ shows a different layout, stop and reconcile before anything else.
    `uboot` — hence the separate full `uboot_p1.img`.
 4. **Duplicate to two independent roots** (e.g. workstation plus
    NAS/second machine) and run `sha256sum -c SHA256SUMS` in both.
-5. **Read your device's VCOM** and record it in your ledger *and*
+5. **Stage your per-operator state on the `data` partition (p7)**: your
+   Wi-Fi credentials at `wifi/wlan0.conf` and your SSH public key at
+   `ssh/authorized_keys` (the reader image installs it for root at every
+   boot; nothing operator-specific is baked into the image). Exact
+   commands and formats: `doc/networking.md` §4.1.
+6. **Read your device's VCOM** and record it in your ledger *and*
    somewhere offline (paper survives dead disks). It is per-panel
    calibration; never reuse another device's value:
 
@@ -68,7 +73,7 @@ shows a different layout, stop and reconcile before anything else.
    done
    ```
 
-6. **Record the inventory** the checklist below asks for: the partition
+7. **Record the inventory** the checklist below asks for: the partition
    map with sizes/labels/PARTUUIDs, the current kernel cmdline
    (`cat /proc/cmdline`), and the outputs of the read-only command list
    at the end of this file.

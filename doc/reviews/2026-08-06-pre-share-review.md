@@ -61,11 +61,12 @@ Multi-agent, two passes, all findings skeptic-verified before action:
    shared via GitHub, so no Forgejo provisioning is needed. With item 1
    decided as accepted, the history can be pushed as-is — nothing
    sequences ahead of the first push anymore.
-3. **SSH key parameterization.** `pinenote/systems/pinenote-reader.scm`
-   bakes the author's public key as root's only authorized key. Now
-   documented in `doc/networking.md` §4.1 with the swap-before-build
-   step; the designed `/state`-based authorized_keys mechanism remains
-   the right fix and is unimplemented.
+3. **SSH key parameterization.** *Implemented 2026-08-06.* The baked
+   key is gone; `pinenote-ssh-authorized-keys-service-type`
+   (`pinenote/services/ssh-keys.scm`) installs
+   `/data/ssh/authorized_keys` for root at every boot (see
+   `doc/networking.md` §4.1 and the migration note in `doc/status.md`).
+   Persistent SSH *host* keys on `/data` remain a follow-up.
 4. **Suspend-gate reconciliation.**
    `inspect-pinenote-suspend-gates.sh` still rejects the CPU idle-state
    nodes the shipped (and hardware-proven) kernel carries; the doc

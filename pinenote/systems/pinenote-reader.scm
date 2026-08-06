@@ -15,6 +15,7 @@
   #:use-module (pinenote services dmc)
   #:use-module (pinenote services ddr-boost)
   #:use-module (pinenote services autosuspend)
+  #:use-module (pinenote services ssh-keys)
   #:use-module (pinenote services usb-gadget)
   #:use-module (pinenote services wifi)
   #:use-module (pinenote systems base)
@@ -130,13 +131,18 @@ reader ALL=(ALL) NOPASSWD: ALL
                                       (call-with-output-file f
                                         (lambda (port)
                                           (display "-- seeded by the reader flavor (pinenote-koreader-home-dir)\nreturn {\n    [\"closed_rotation_mode\"] = 1,\n    [\"copt_b_page_margin\"] = 25,\n    [\"copt_font_size\"] = 30,\n    [\"copt_h_page_margins\"] = { [1] = 30, [2] = 30 },\n    [\"copt_t_page_margin\"] = 15,\n    [\"coverbrowser_initial_default_setup_done\"] = true,\n    [\"cre_font\"] = \"Equity A\",\n    [\"cre_header_auto_refresh\"] = 0,\n    [\"cre_partial_rerendering\"] = false,\n    [\"cre_show_progress\"] = false,\n    [\"flash_keyboard\"] = false,\n    [\"flash_ui\"] = false,\n    [\"full_refresh_count\"] = 0,\n    [\"home_dir\"] = \"/data/books\",\n    [\"lock_rotation\"] = true,\n    [\"refresh_on_pages_with_images\"] = false,\n    [\"screensaver_type\"] = \"cover\",\n}\n" port))))))
+                ;; Key-only SSH with NO baked authorized key: root's key
+                ;; is installed at boot from /data/ssh/authorized_keys
+                ;; (ssh-keys.scm), the same out-of-band channel as the
+                ;; Wi-Fi credentials, so the image stays generic and the
+                ;; key survives reflashes.  A device with no staged key
+                ;; boots normally and is reachable over the ACM/UART
+                ;; consoles only.
                 (service openssh-service-type
                          (openssh-configuration
                           (password-authentication? #f)
-                          (permit-root-login 'prohibit-password)
-                          (authorized-keys
-                           `(("root" ,(plain-file "wkelly.pub"
-                                                  "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICMbOSX755vG0PSWm1z9WrGP+x8YRsPqJ0YtUnGjufGP wkelly@pop-os\n"))))))
+                          (permit-root-login 'prohibit-password)))
+                (service pinenote-ssh-authorized-keys-service-type)
                 (service pinenote-usb-acm-gadget-service-type)
                 (service pinenote-usb-acm-console-service-type)
                 ;; NO custom UART getty: %base-services already runs agetty

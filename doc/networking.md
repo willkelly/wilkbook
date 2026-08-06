@@ -70,8 +70,10 @@ The radio and firmware layer works. Verified in the repo and on hardware:
   SSID, passphrase, or per-device credential is committed or bundled.
 - **Remote access.** The current reader image exposes key-only root OpenSSH;
   association, DHCP, SSH, and `scp` were hardware-proven on 2026-07-24.
-  The authorized key is **baked into the image** — collaborators must swap
-  it before building (§4.1).
+  Since 2026-08-06 the authorized key is **no longer baked into the
+  image**: it is installed at every boot from
+  `/data/ssh/authorized_keys` on the persistent data partition (§4.1),
+  the same out-of-band channel as the Wi-Fi credentials.
 - **The `networked` flavor is a size baseline, not a working join.** It
   already wires `dhcpcd-service-type` plus a D-Bus-free
   `wpa-supplicant-service-type` on `wlan0`
@@ -205,7 +207,10 @@ location, consumed by a first-boot provisioning one-shot.** Concretely:
 - The same mechanism carries the SSH authorized key
   (`/state/ssh/authorized_keys`) and, ideally, persistent SSH **host** keys
   (`/state/ssh/host/`), so the device's identity survives a reflash and the
-  image stays generic (§5, §6).
+  image stays generic (§5, §6). *[Implemented for the authorized key
+  2026-08-06 — as `/data/ssh/authorized_keys`, `/data` being where the
+  shipped image mounts the data partition; see §4.1. Persistent host
+  keys remain open (§6).]*
 
 Fallback for a single personal device that does not want to bother with a
 `/state` partition yet: a gitignored build-time local module (the fonts
@@ -244,7 +249,8 @@ simpler.)
      device still boots to KOReader).
 3. A remote-access listener — `openssh-service-type`, **key-only**
    (`(password-authentication? #f)`), reading the authorized key from
-   `/state` and using persistent host keys from `/state` (see §3). This is
+   `/state` *(implemented 2026-08-06, §4.1)* and using persistent host
+   keys from `/state` *(still open)* (see §3). This is
    the control channel §5 needs. Consider `dropbear-service-type` instead
    if closure size matters against the 4 GiB budget — dropbear is much
    smaller; OpenSSH is what os1 already speaks, so it is the lower-surprise
@@ -308,7 +314,8 @@ network={
    services *start* and the reader still comes up.
 3. On os1 over SSH: mount the persistent partition, write
    `/state/wifi/wlan0.conf` (`0600`, PSK-hash) and
-   `/state/ssh/authorized_keys`; confirm the partition survives an os2
+   `/state/ssh/authorized_keys` *(implemented 2026-08-06 as
+   `/data/ssh/authorized_keys`)*; confirm the partition survives an os2
    reflash.
 4. Hardware session: boot os2, confirm `wlan0` associates, gets a DHCP
    lease, and answers SSH on the key. Harvest the association dmesg and
@@ -335,20 +342,39 @@ image (2026-07-24; §6 and `doc/status.md`).
   + `dhcpcd-service-type` to the services and `wpa-supplicant` (brings
   `wpa_supplicant` **and** `wpa_cli` into the profile — Phase 2 needs the
   latter) to the packages.
-- **The SSH authorized key is baked into the image.** The reader flavor's
-  `openssh-service-type` embeds the author's public key as root's **only**
-  authorized key: `pinenote/systems/pinenote-reader.scm` lines 133–139, a
-  `plain-file "wkelly.pub"` ed25519 key in `openssh-configuration`'s
-  `authorized-keys`. **If you are not the author, replace that key with
-  your own public key before building** — an unmodified build produces a
-  device you can never SSH into. The `/state`-based `authorized_keys` (and
-  persistent host keys) described in §3 and §6 remain the intended future
-  mechanism; until that lands, the key is image-baked, which is exactly
-  the "generic, shareable image" gap §3 warns about. Recovery workaround
-  if a wrong-key image is already on os2: the reader shell on the CDC-ACM
-  console has passwordless `sudo` (see the provisioning note below), so a
-  key can be appended to `/root/.ssh/authorized_keys` post-boot — at the
-  cost of part of a hardware session.
+- **The SSH authorized key comes from the data partition** (implemented
+  2026-08-06; previously baked into the image, the "generic, shareable
+  image" gap §3 warned about). `pinenote-ssh-authorized-keys-service-type`
+  (`pinenote/services/ssh-keys.scm`) is a boot one-shot that copies
+  `/data/ssh/authorized_keys` over `/root/.ssh/authorized_keys` (0600,
+  root-owned) every boot — so the key survives os2 reflashes (`/root`
+  does not, `/data` does), the image contains no per-operator state, and
+  a hand edit of `/root/.ssh/authorized_keys` is overwritten at the next
+  boot (edit `/data/ssh/` instead). Deleting the file on a *mounted*
+  `/data` revokes the installed key at the next boot; an unmounted
+  `/data` (virt, transient mount failure) leaves the last-installed key
+  alone so a mount hiccup can never lock SSH out. CRs are stripped
+  during install, so a key file edited on Windows still parses.
+  The copy is deliberately scoped to
+  root: pointing sshd's `AuthorizedKeysFile` at a shared non-`%u` path
+  would authorize the same keys for the `reader` user (which has
+  passwordless sudo). With no staged key the device boots normally and
+  root SSH is simply unreachable — the ACM/UART consoles remain the way
+  in, and a key can be appended over the CDC-ACM console's passwordless
+  `sudo` shell (write it to `/data/ssh/authorized_keys` so it persists).
+  Persistent **host** keys (§3, §6) remain a follow-up. Stage the key
+  the same way as the Wi-Fi credentials (provisioning note below):
+
+  ```sh
+  sudo mkdir -p /data/ssh
+  printf '%s\n' 'ssh-ed25519 AAAA… you@host' | sudo tee /data/ssh/authorized_keys
+  ```
+
+  Offline evidence (2026-08-06): reader closure builds; the built
+  sshd_config honors `.ssh/authorized_keys`; the image's `/etc` carries
+  no authorized key; the one-shot is in the shepherd graph.
+  Hardware-unproven until the next deployed image — see the migration
+  note in `doc/status.md`.
 
 **Provisioning (once, over the USB serial console — no Wi-Fi required).** The
 reader user has passwordless `sudo` (its sudoers), so this works over the
