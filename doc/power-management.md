@@ -163,12 +163,18 @@ replied:
 
     DRAM_GET_VERSION fid=0x82000008 -> a0=0x0 (SUCCESS), a1=0x101
 
-The bl31 implements the DRAM SIP, version 0x101 — above the BSP DMC
-driver's >= 0x100 requirement.  So the missing piece is purely the Linux
-side: a port of the BSP `rockchip_dmc.c`/devfreq wiring.  That is a real
-project (share-mem SIP setup, DT node, OPPs) and the expected win remains
-tens of mA at best; but it is no longer speculative, and the probe tool
-stays in-tree for the next firmware question.
+The bl31 implements the DRAM SIP, version 0x101, and the full campaign
+ran the same day: `pinenote/tools/ddr-dvfs-test/` performed this board's
+first-ever DDR rate change (324 MHz, MCU path, 106.8 ms, memory intact,
+EBC quiesced for every switch) and the measurement is in: **DDR at
+324 MHz saves ~24.8 mA over 1056** (quiesced battery-drain windows, same
+boot, minutes apart).  Firmware table: 324/528/780/1056.  The Linux-side
+integration plan is the design doc's static-low architecture (SIP-only
+driver, `powersave` governor, `opp-suspend` at 1056); the win is real and
+measured, not speculative.  Rules that held and must keep holding: never
+switch with the EBC active (a retraining stall inside a frame can trip
+the terminal-poison timeout), never target above the boot rate (no OPP
+voltage scaling).
 
 **Expect a modest result, and size it before investing.** Deep suspend is
 20.6 mA *with DRAM in self-refresh*, so retention is cheap — but that

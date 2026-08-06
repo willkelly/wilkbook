@@ -101,3 +101,25 @@ Rules for unattended hardware: never touch the Wi-Fi path or the rootfs
 eMMC; read-only SMCs only; risky pokes last with an independent dead-man
 reverter; auto-suspend paused with a timed self-restore so a lost link
 cannot strand the device awake. All held; zero incidents.
+
+## Addendum: DDR DVFS measured on glass (later the same day)
+
+The supervised SET_RATE campaign ran (`pinenote/tools/ddr-dvfs-test/`,
+user at the power button, EBC quiesced for every switch). Firmware table:
+324/528/780/1056 MHz — the TPL trained all four. First switch in this
+board's history: 324 MHz, MCU path, 106.8 ms, memory intact.
+
+Battery-drain windows (absolute, unplugged, same boot, minutes apart):
+
+```
+quiesced @ 324 MHz :  174.4 mA
+quiesced @ 1056 MHz:  199.2 mA     ->  DDR at 324 saves ~24.8 mA
+```
+
+The reader-up@324 window (164.4 mA) is NOT quotable against the earlier
+reader-up@1056 (156.9 mA): the measurement script failed to pin the
+frontlight, so the conditions differ. The quiesced pair is bracketed and
+clean. Daily-use numbers come with the driver.
+
+Session ledger against the 163 mA static floor: vdd_cpu auto-PFM
+~17 realized + DDR@324 ~25 quiesced — the floor is structural no more.
