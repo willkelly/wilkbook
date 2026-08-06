@@ -86,6 +86,30 @@ reader ALL=(ALL) NOPASSWD: ALL
                  ;; lock_rotation remains authoritative for document/FM
                  ;; overrides; input_ignore_gsensor is the sole autorotation
                  ;; on/off setting and is intentionally not seeded here.
+                 ;;
+                 ;; THIS is the seed that wins.  reader-session.scm carries
+                 ;; the same e-ink refresh keys, but both are gated on the
+                 ;; file being absent and activation runs before services,
+                 ;; so on a fresh image this one writes first and the
+                 ;; service's is a no-op.  Found the hard way on 2026-08-05:
+                 ;; the keys were added only to reader-session and shipped
+                 ;; an image with none of them.  Keep the two in sync, or
+                 ;; better, add refresh defaults HERE.
+                 ;;
+                 ;; The six refresh keys and why, in one line each (full
+                 ;; reasoning in reader-session.scm and doc/refresh-policy.md):
+                 ;;   cre_show_progress    -- progress bar fsyncs the whole
+                 ;;                           page every 500 ms mid-render
+                 ;;   cre_partial_rerendering -- 75x75 status icon costs a
+                 ;;                           full-screen pass (partial cost
+                 ;;                           is per-frame, not per-area)
+                 ;;   flash_ui             -- two forceRePaint() per tap
+                 ;;   flash_keyboard       -- same, per keystroke
+                 ;;   cre_header_auto_refresh -- clock digit redraws the page
+                 ;;                           every 60 s (~48 s/hour)
+                 ;;   coverbrowser_initial_default_setup_done -- stops
+                 ;;                           CoverBrowser seeding itself on;
+                 ;;                           leaves the classic filename list
                 (simple-service 'pinenote-koreader-home-dir
                                 activation-service-type
                                 #~(let ((f "/root/.config/koreader/settings.reader.lua"))
@@ -93,7 +117,7 @@ reader ALL=(ALL) NOPASSWD: ALL
                                       (mkdir-p "/root/.config/koreader")
                                       (call-with-output-file f
                                         (lambda (port)
-                                          (display "-- seeded by the reader flavor (pinenote-koreader-home-dir)\nreturn {\n    [\"closed_rotation_mode\"] = 1,\n    [\"copt_b_page_margin\"] = 25,\n    [\"copt_font_size\"] = 30,\n    [\"copt_h_page_margins\"] = { [1] = 30, [2] = 30 },\n    [\"copt_t_page_margin\"] = 15,\n    [\"cre_font\"] = \"Equity A\",\n    [\"full_refresh_count\"] = 0,\n    [\"home_dir\"] = \"/data/books\",\n    [\"lock_rotation\"] = true,\n    [\"refresh_on_pages_with_images\"] = false,\n    [\"screensaver_type\"] = \"cover\",\n}\n" port))))))
+                                          (display "-- seeded by the reader flavor (pinenote-koreader-home-dir)\nreturn {\n    [\"closed_rotation_mode\"] = 1,\n    [\"copt_b_page_margin\"] = 25,\n    [\"copt_font_size\"] = 30,\n    [\"copt_h_page_margins\"] = { [1] = 30, [2] = 30 },\n    [\"copt_t_page_margin\"] = 15,\n    [\"coverbrowser_initial_default_setup_done\"] = true,\n    [\"cre_font\"] = \"Equity A\",\n    [\"cre_header_auto_refresh\"] = 0,\n    [\"cre_partial_rerendering\"] = false,\n    [\"cre_show_progress\"] = false,\n    [\"flash_keyboard\"] = false,\n    [\"flash_ui\"] = false,\n    [\"full_refresh_count\"] = 0,\n    [\"home_dir\"] = \"/data/books\",\n    [\"lock_rotation\"] = true,\n    [\"refresh_on_pages_with_images\"] = false,\n    [\"screensaver_type\"] = \"cover\",\n}\n" port))))))
                 (service openssh-service-type
                          (openssh-configuration
                           (password-authentication? #f)
