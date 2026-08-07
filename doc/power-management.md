@@ -218,6 +218,75 @@ PineNote. So DDR has been pinned at 1056 MHz on every kernel this device
 has ever run, including Rockchip's own. The cheap comparison suggested
 above cannot size the prize, because there is no DVFS on either side.
 
+### DDR rate: 324 MHz corrupts the display — OFF by default, and the open path (2026-08-07)
+
+**The finding.** Static 324 MHz starves the EBC's real-time phase-data
+fetch. The panel comes up striped with a dark vertical band, every boot.
+The controller has **no underrun interrupt** — `EBC_INT_STATUS` carries
+only frame/display-end and line-flag bits — so it fails *silently*: clean
+dmesg, clean checkpoint table, wrecked glass. That silence is why this
+cost two days.
+
+**The A/B that settled it**, one variable, one image, one boot path:
+
+| selector | DDR | panel |
+|---|---|---|
+| `mode=normal` | 324 MHz | striped + dark band, reproducible |
+| `mode=noswitch` | 1056 MHz (module never loaded) | clean |
+
+**The switch EVENT is innocent** and should not be blamed again: the
+instrumented boot shows it landing with the refresh kthread `thr=P`
+(*parked*, not merely idle) and the EBC interrupt count frozen across the
+whole window. It is the RATE, not the transition.
+
+**Console traffic is innocent too.** Dropping `console=tty0` cut boot EBC
+interrupts from ~580 to **79** and changed nothing on the glass. (Kept
+anyway — it is a 7x reduction in panel work and gives a free U-Boot-logo
+splash.)
+
+**What it was worth**, so the trade is on the record: ~24.8 mA measured
+**quiesced**, never confirmed with the reader running. At realistic
+reading hours that is 4-10% of runtime, and **nothing** in deep suspend:
+
+| reading h/day | days @1056 | days @324 | gain | suspend share of budget |
+|---|---|---|---|---|
+| 1 | 6.34 | 6.60 | 4.1% | 75% |
+| 2 | 5.22 | 5.58 | 6.9% | 59% |
+| 4 | 3.85 | 4.25 | 10.5% | 40% |
+
+A corrupted display is not a good trade for that, which is why
+`pinenote/services/dmc.scm` now defaults to `mode=off`. The capability
+survives: `mode=normal` in `/data/wilkbook/dmc.conf` opts back in per
+boot.
+
+#### The path to pursue
+
+1. **Try 528 and 780 MHz** — the two untested middle entries of the
+   firmware table (324/528/780/1056). If either drives the panel cleanly
+   it recovers part of the saving at zero display cost, and it is the
+   cheapest open lever we have. Two boots: write `mode=normal` with
+   `%dmc-target-rate` rebuilt at the candidate rate, boot, and judge with
+   `pinenote/tools/optics/belief-vs-glass.sh` rather than by eye. Bisect:
+   780 first, since it is likeliest to pass and bounds the answer.
+2. **Find the actual threshold, not just a safe rung.** If 528 passes and
+   324 fails, the interesting number is where the EBC's fetch budget runs
+   out — that is a bandwidth/latency figure worth knowing before anyone
+   tries DVFS again on this SoC.
+3. **Do NOT pursue dropping the rate for suspend only.** Measured: the
+   rail-floor audit's 900 s window at 324 read 20.6 mA against 19.3 mA at
+   1056 in the earlier session — same band, 324 if anything marginally
+   worse. Physically expected: in deep suspend the DRAM is in self-refresh
+   with the PHY down, so the interface clock has no meaning. Not worth two
+   windows.
+4. **A per-refresh boost is not viable.** A switch is ~107 ms wall; a page
+   turn is ~600 ms of drive. There is no room to raise the rate around
+   individual refreshes.
+
+The honest summary for anyone reconsidering this: the DDR lever is worth
+single-digit percent of runtime, the display is the product, and the
+failure mode is invisible to every log the system produces. Gate any
+future attempt on `belief-vs-glass.sh`, not on a clean dmesg.
+
 ### Probe the DRAM SIP before porting anything (answered 2026-08-06: GO, and landed)
 
 DDR DVFS on rk356x lives **entirely in bl31**, behind

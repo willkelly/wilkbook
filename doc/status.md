@@ -22,25 +22,20 @@ device. See `doc/device-access.md`.
 2026-08-06). Deep is **~20 mA**: 19.3 mA measured 2026-08-02
 (battery-drain window, pre-cpuidle image) vs 20.6 mA in the 2026-08-06
 rail-floor audit (900 s same-boot windows) — same floor, different
-measurement windows; quote ~20. DDR at 324 MHz saves ~24.8 mA (quiesced);
-`wilkbook_dmc` is live on os2 (static 324; the input boost is present but
-disabled pending the power-key fix below).
+measurement windows; quote ~20. **DDR static-low is OFF**: 324 MHz saves
+~24.8 mA quiesced but corrupts the display (2026-08-07), so
+`wilkbook_dmc` ships disabled and the rate stays at the 1056 boot value;
+the input boost is disabled too. 528/780 untested —
+`doc/power-management.md`.
 
-**On os2**: v5 image `6d64fa34…` (written + readback-verified 2026-08-06
-night, **not yet booted**; the image's own `gnu.system=` reads
-`mxx6ib4y…`, which is the image-flavored system and legitimately differs
-from what `guix system build` prints for the same tree — compare the
-artifact SHA, not the system path). **Deploy the current tree's image
-before booting it**: v5 predates the DMC changes the boot-corruption
-analysis produced (no `rmmod` branch, no fb blank, gated restore, thread
-state + `trans_stat` in the checkpoints). The device auto-suspended in
-os1 mid-transfer and could not be woken without the power button, so the
-newer image is built but undeployed — see the bench-rig artifact. — v3's fix stack plus an early frontlight, a
-DMC service that verifies through devfreq and logs a checkpoint (EBC IRQ
-count + both rate sources) at every step, and a boot-window experiment
-selector on `/data/wilkbook/dmc.conf`. **The UART is down** (see the
-bench-rig artifact), so this image cannot be booted until the debug cable
-is fixed — every unattended reboot lands in os1.
+**On os2**: image `50e7fe1d…` (deployed 2026-08-07). DDR is at the
+**1056 boot rate** — `mode=noswitch` in `/data/wilkbook/dmc.conf`, and
+`pinenote/services/dmc.scm` now defaults to `off` — because **324 MHz
+corrupts the display** (see the 2026-08-07 entry). `console=tty0` is
+hand-stripped from p6's `extlinux.conf` (original at
+`extlinux.conf.tty0bak`); the same change is committed for the next image
+build. os1 currently has `sleep.target`/`suspend.target` **masked** — a
+deliberate temporary change that is owed back.
 
 Superseded, for the record: v3 image `f41cf91f…` — v2 plus the power-key/wash fix stack
 (commit `55c43b0`): KOReader no longer opens the pwrkey, autosuspend
@@ -87,6 +82,34 @@ persisting it.  The first boot of an image built from this tree seeds
 the identity and it is stable across reflashes after that; pin the
 fingerprint in the ledger THEN, not at the v3 boot.
 `doc/networking.md` §4.1.
+
+**2026-08-07 DDR at 324 MHz corrupts the display; static-low is off by
+default.** [wilkbook / wkelly] Root-caused on glass after a long chase.
+324 MHz starves the EBC's real-time phase-data fetch; the controller has
+no underrun interrupt, so it fails **silently** — clean dmesg, clean
+checkpoints, wrecked panel. One-variable A/B on one image: `mode=normal`
+(324) comes up striped with a dark band every time, `mode=noswitch`
+(module never loaded, clk left at 1056) comes up clean. **The switch
+event is innocent** — instrumented boots show it landing with the refresh
+kthread `thr=P` (parked) and the EBC interrupt count frozen — it is the
+RATE. **Console traffic is innocent too**: dropping `console=tty0` cut
+boot EBC interrupts from ~580 to 79 and changed nothing on the glass
+(kept anyway: 7x less panel work, and the U-Boot logo persists as a free
+splash). Four latent bugs fixed on the way: the udev coldplug that the
+modprobe blacklist never stopped (the switch had been firing 865 ms
+BEFORE the guarded window); `use-modules` not importing in a COMPILED
+shepherd gexp, which meant `wait-ebc-idle` had never waited and the mode
+selector had never selected (every `read-line` call threw into a
+`catch #t`); the selector reading `/data` before it was mounted; and
+auto-suspend's pause living only on `/var/lib`, which every reflash
+wiped. New standing instrument:
+`pinenote/tools/optics/belief-vs-glass.sh` renders `/dev/fb0` beside the
+camera view — the framebuffer was immaculate in every corrupted frame,
+which is what proved the divergence is glass-side. Judge the panel with
+it, never by eye off a webcam frame. Power context: the lever was
+~24.8 mA quiesced, never confirmed with the reader running, worth 4-10%
+of runtime and nothing in suspend. Open: 528 and 780 MHz untested
+(`doc/power-management.md`, "the path to pursue").
 
 **2026-08-06 (night, unattended bench session) UART dead, camera good;
 v5 built and deployed to os2; the boot-corruption diagnosis moves off
