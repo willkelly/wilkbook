@@ -379,12 +379,29 @@ local function banner_geometry(scale)
     return ch_h + pad * 2, ch_h, pad
 end
 
+-- Largest integer scale whose rendered width fits the panel's SHORT
+-- axis, not its long one.  The banner is drawn in framebuffer
+-- coordinates, but the device is read in either orientation, so sizing
+-- against FB_W (1872) clips the tail whenever the short axis (1404) is
+-- the one across the reader's view: 33 chars at scale 6 is 1584 px,
+-- which overflows 1404 by 180 px and loses about three characters.
+-- Reported on glass 2026-08-07 after going unmentioned for weeks
+-- because it looked like a cosmetic quirk.
+local function fitting_scale(text, want)
+    local narrow = math.min(FB_W, FB_H)
+    local usable = narrow - 2 * 24            -- keep a margin off both edges
+    for scale = want, 1, -1 do
+        if #text * 8 * scale <= usable then return scale end
+    end
+    return 1
+end
+
 local function draw_banner(text, scale)
-    scale = scale or 6
+    scale = fitting_scale(text, scale or 6)
     local bar_h, ch_h, pad = banner_geometry(scale)
     local ch_w = 8 * scale
     local text_w = #text * ch_w
-    local x0 = math.max(0, math.floor((FB_W - text_w) / 2))
+    local x0 = math.max(0, math.floor((math.min(FB_W, FB_H) - text_w) / 2))
     local y0 = pad
 
     local fh = io.open("/dev/fb0", "r+b")

@@ -106,6 +106,44 @@ the identity and it is stable across reflashes after that; pin the
 fingerprint in the ledger THEN, not at the v3 boot.
 `doc/networking.md` §4.1.
 
+**2026-08-07 (evening) ALPHA SHIP CANDIDATE ACCEPTED ON GLASS — image
+`7eaab343…`.** [wilkbook / wkelly] First full reader acceptance since
+2026-08-01, run on the exact artifact intended to ship, judged by the
+operator's own eyes rather than a camera. **All five checks passed**, two
+of which had never been recorded at all:
+
+1. **Clean panel out of boot** — no striping, no dark bar. The first boot
+   of an image whose DMC default is genuinely `off` in code rather than
+   in prose (`28fda00`; the previous commit claiming it changed only
+   comments).
+2. **Press-to-suspend, the test that had sat at "fix deployed,
+   unproven"** — page plus banner, sleeps, wakes clean on a second press,
+   frontlight off while asleep. Machine account agrees: `power tap --
+   suspending on request` → `resumed`, suspend_stats **2/0**.
+3. **No residue across 10 page turns** in both directions.
+4. All four autorotations.
+5. No double draws, no flashing, in menus or the file browser.
+
+Machine-side confirmation on the same boot: `mode=off` read from
+`/data/wilkbook/dmc.conf`, `clk_scmi_ddr` at **1056000000**, `wilkbook_dmc`
+not loaded, `/etc/wilkbook-build` = `default`, the ACM console service
+absent from shepherd entirely, and zero `NOPASSWD` lines in sudoers — the
+secure build verified on the device, not merely in the closure.
+
+**One real defect found, previously normalised.** The suspend banner is
+truncated, and the operator had never mentioned it because it looked
+cosmetic. It is not: `draw_banner` sizes text against `FB_W` (1872, the
+panel's LONG axis) while the device is read in either orientation, so at
+scale 6 the 33-character string is 1584 px and overflows the 1404 px
+short axis by 180 px — about three characters. Fixed by choosing the
+largest scale that fits `min(FB_W, FB_H)` with a margin, which selects
+scale 5 (1320 px into 1356 px usable). Not yet re-verified on glass.
+
+Alpha status after this session: blockers 1-4 of
+`doc/alpha-checklist.md` are discharged. Remaining: the ultra handshake
+(session B), one end-to-end standby measurement, fresh-clone first boot,
+and the public-repo posture.
+
 **2026-08-07 DDR at 324 MHz corrupts the display; static-low is off by
 default.** [wilkbook / wkelly] Root-caused on glass after a long chase.
 324 MHz starves the EBC's real-time phase-data fetch; the controller has
