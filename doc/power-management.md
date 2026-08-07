@@ -43,6 +43,45 @@ offline tests, and only reads an explicit allowlist.  It never reads
 waveform or VCOM calibration data and never writes sysfs, procfs,
 debugfs, or tracefs.
 
+## Hibernation (suspend-to-disk) — scoped 2026-08-07, not built
+
+Raised as an interim step after the ultra handshake came back
+unwakeable. The appeal is real: `deep` is ~20 mA, so a 3400 mAh battery
+gives ~7 days, while hibernate powers the SoC off entirely and standby
+falls to PMIC/RTC leakage. That is a step change, not a few mA, and it
+would clear the 18-day target rather than creep toward it.
+
+What is already in our favour: the drivers have the hooks.
+`SET_SYSTEM_SLEEP_PM_OPS(rockchip_ebc_suspend, rockchip_ebc_resume)`
+(forward-port patch, ~line 6010) points `.freeze/.thaw/.poweroff/
+.restore` at the same callbacks, and the TPS65185 and WS8100 pen use the
+simple-PM macros that do the same. Nothing is structurally absent — though
+surviving a real image restore is a different claim from having a hook,
+and is unproven.
+
+What is missing, in increasing order of difficulty:
+
+1. `CONFIG_HIBERNATION` appears nowhere in `pinenote_defconfig` or
+   `kernel.scm`. A kernel rebuild.
+2. No swap exists in any system definition. ~4 GB is needed for 4 GB of
+   RAM, and p7 is shared with os1's home, so where it lives is a real
+   decision rather than a detail.
+3. **The blocker: hibernate resume is a cold boot, and it must land on
+   os2 by itself.** The U-Boot menu *is* interactable on the device, so a
+   human can always pick the slot — but a wake that presents a boot menu
+   is not a wake. The default entry finds p5 first (os1 carries
+   `/boot/extlinux/extlinux.conf`), so an untouched power-on resumes
+   nothing and the session is lost. Making os2 the *default* means
+   changing persistent boot state — U-Boot env or p1 — which the deploy
+   protocol deliberately never touches (`doc/hardware-deploy.md`). That
+   is a safety-model decision, not an implementation detail.
+
+**Sequencing.** Do not build this before the one end-to-end standby
+measurement (`doc/alpha-checklist.md` blocker 4). Hibernate's value is
+entirely a function of what real deep standby costs, and no standby
+figure in this repo has ever been measured — the 2026-08-03 precedent
+modelled 8.6 days against a reality of 3.0. Measure first, then decide.
+
 ## Power program: targets, measured gaps, and ordering (2026-08-02, figures refreshed 2026-08-06)
 
 Will's targets, and where we actually stand. All from a 4000 mAh charge

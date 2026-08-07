@@ -52,16 +52,22 @@ physically present (`doc/hardware-deploy.md`).
 
 Not for comfort — for control and recovery. From `doc/device-access.md`:
 
-- **Slot selection is serial-only.** Choosing os2 means picking
-  "Boot OS2 (part 6)" from the U-Boot menu, and that menu exists only on
-  the serial console. Its default entry ("Search for extlinux.conf on
-  all partitions") finds p5 first, because os1 carries
-  `/boot/extlinux/extlinux.conf` — so an unattended reboot lands in
-  **os1**. p3 (`uboot_env`) is an empty FAT12 filesystem, not a raw
-  env, so there is no file-based slot selector to write instead.
-  Deploying to os2 without a UART is safe; *booting* it is not possible.
-  (`doc/alpha-checklist.md` notes the "always lands on os1" claim rests
-  on **one** observation. Treat it as the working model, not a law.)
+- **Slot selection does NOT need the cable.** The U-Boot menu is
+  interactable on the device itself — you can pick "Boot OS2 (part 6)"
+  without a serial console. (Corrected 2026-08-07 from the operator's
+  direct observation; this page and `doc/device-access.md` both asserted
+  the opposite, that booting os2 without a UART was "not possible". It
+  is, and it is how os2 has been booted routinely.)
+
+  What remains true is the **default**: the highlighted entry ("Search
+  for extlinux.conf on all partitions") finds p5 first, because os1
+  carries `/boot/extlinux/extlinux.conf`, so an *unattended* reboot —
+  one where nobody touches the menu — lands in **os1**. p3 (`uboot_env`)
+  is an empty FAT12 filesystem, not a raw env, so there is no file-based
+  slot selector to write instead. Observed twice (2026-08-06, and the
+  2026-08-07 ultra recovery boot). This matters for anything that must
+  come back up on os2 by itself — see the hibernation note in
+  `doc/power-management.md`.
 - **It is the recovery channel.** The UART gives a root shell whenever
   the device is awake, which is what you want when auto-suspend, a
   wedged service, or a bad image misbehaves.
