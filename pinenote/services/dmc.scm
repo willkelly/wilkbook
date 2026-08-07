@@ -129,6 +129,16 @@
            ;; 2.5 s, longer than any measured global -- so a mid-flight
            ;; global is outwaited, not mistaken for quiet.  On timeout
            ;; we proceed anyway (fail-open) but say so.
+           ;;
+           ;; 2.5 s is not a guess.  The supervised campaign's own
+           ;; precondition is an EBC IRQ delta of 0 "over several
+           ;; seconds" (ddr-dvfs-test/protocol.md, "The EBC question"),
+           ;; and this service shipped it as a single 500 ms pair --
+           ;; weaker than the protocol it was derived from, and exactly
+           ;; the gap a mid-flight global fits through.  The same
+           ;; document predicts the symptom when a stall does land
+           ;; inside a frame: "wrong voltages on some pixel region",
+           ;; a ghosting artifact, with no timeout of any kind.
            (let loop ((quiet 0)
                       (before (ebc-irq-count))
                       (attempts attempts))
