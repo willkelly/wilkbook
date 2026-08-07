@@ -226,7 +226,7 @@ new file mode 100644
 index 0000000000000000000000000000000000000000..6f8e72b185bb8e7fd24711b8b840d26c7979db06
 --- /dev/null
 +++ b/drivers/soc/rockchip/rockchip_suspend_activate.c
-@@ -0,0 +1,187 @@
+@@ -0,0 +1,231 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +#include <linux/device.h>
 +#include <linux/errno.h>
@@ -240,6 +240,28 @@ index 0000000000000000000000000000000000000000..6f8e72b185bb8e7fd24711b8b840d26c
 +#include "rockchip_suspend_backend.h"
 +#include "rockchip_suspend_model.h"
 +#include "rockchip_suspend_of.h"
++
++/*
++ * One-shot arm for the ultra-suspend firmware handshake (LINUX_PM_STATE
++ * = 5 instead of 3).  Deliberately NOT a DT property: .prepare runs on
++ * every system suspend, so a DT-baked override is a standing policy that
++ * an idle device would exercise unattended and repeatedly from first
++ * boot, and it cannot express the same-boot control-then-test pair the
++ * measurement methodology requires.  The OF parser therefore still
++ * refuses rockchip,suspend-state-override, and its forbid pins stay
++ * exactly as they are.
++ *
++ * Self-clearing: one armed suspend, then back to the proven mem state.
++ * Not persistent, so any reboot returns to proven behaviour without an
++ * operator having to remember to disarm.  What firmware is told is the
++ * ONLY thing this changes -- regulator-list selection stays derived from
++ * the real Linux suspend state, so this arms the handshake and never a
++ * rail kill.
++ */
++static unsigned int ultra_arm;
++module_param(ultra_arm, uint, 0644);
++MODULE_PARM_DESC(ultra_arm,
++	"write 5 to send LINUX_PM_STATE=5 on the NEXT suspend only (self-clearing)");
 +
 +struct rockchip_suspend_activation {
 +	struct device *dev;
@@ -297,6 +319,28 @@ index 0000000000000000000000000000000000000000..6f8e72b185bb8e7fd24711b8b840d26c
 +		return rockchip_suspend_fail(dev, activation, ret, true);
 +	if (pm_suspend_target_state != PM_SUSPEND_MEM)
 +		return rockchip_suspend_fail(dev, activation, -EOPNOTSUPP, false);
++	/*
++	 * Consume the arm before anything can fail: a suspend that aborts
++	 * after this point must not leave the next one armed by surprise.
++	 * Only the validated value arms; anything else disarms silently
++	 * rather than half-applying.
++	 */
++	activation->policy.value.suspend_state_override.present = false;
++	activation->policy.value.suspend_state_override.value = 0;
++	if (ultra_arm) {
++		unsigned int armed = ultra_arm;
++
++		ultra_arm = 0;
++		if (armed == 5) {
++			activation->policy.value.suspend_state_override.present = true;
++			activation->policy.value.suspend_state_override.value = armed;
++			dev_info(dev, "ultra handshake armed: this suspend sends LINUX_PM_STATE=%u\n",
++				armed);
++		} else {
++			dev_warn(dev, "ignoring ultra_arm=%u (only 5 is a meaningful override)\n",
++				armed);
++		}
++	}
 +	probe_count = rockchip_suspend_model_build_probe(&activation->policy,
 +		activation->probe_events, ARRAY_SIZE(activation->probe_events));
 +	if (probe_count < 0)
