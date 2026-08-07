@@ -51,7 +51,15 @@
   (list
    (shepherd-service
     (provision '(pinenote-dmc))
-    (requirement '(udev))
+    ;; file-system-/data is load-bearing, not cosmetic: shepherd
+    ;; serializes this one-shot BEFORE the file-system services, so
+    ;; without it /data/wilkbook/dmc.conf does not exist yet when the
+    ;; selector reads it and every boot silently falls back to
+    ;; mode=normal.  Observed 2026-08-07: a boot with mode=noswitch
+    ;; written to the file logged mode=normal and switched anyway.  The
+    ;; mount is mount-may-fail? #t, so a machine without the partition
+    ;; (QEMU virt) still reaches this service.
+    (requirement '(udev file-system-/data))
     (documentation "Drop DDR to the lowest firmware rate (fbcon quiesced).")
     (one-shot? #t)
     (start
