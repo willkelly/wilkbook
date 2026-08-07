@@ -193,6 +193,43 @@ resolving, `ebc-irq-count` finally returns a number instead of #f, so
 `wait-ebc-idle` stops interpreting "unreadable" as "no EBC present,
 nothing to wait for".
 
+### What the live checkpoint table shows (first boot with working instruments)
+
+    cp=entry            irq=209  thr=D  devfreq=absent     trans=absent
+    cp=unbound          irq=211  thr=D  devfreq=absent     trans=absent
+    cp=ebc-idle         irq=271  thr=I  devfreq=absent     trans=absent
+    cp=switched         irq=271  thr=I  devfreq=324000000  trans=1
+    cp=console-restored irq=271  thr=I  devfreq=324000000  trans=1
+    cp=restore-drained  irq=388  thr=I  devfreq=324000000  trans=1
+
+Every number earns its place:
+
+- **`devfreq=absent` until `switched`** proves the udev rule works: the
+  module is no longer loaded before this service runs. On the previous
+  boot the same field read `324000000` at `cp=entry`.
+- **`thr=D` at entry and unbound** — the refresh thread was
+  *uninterruptible*, i.e. actively driving the panel, when the service
+  started. The old code would have switched right there.
+- **The entry gate did real work**: 211 → 271 is **60 more interrupts**
+  after the fbcon unbind before the panel went quiet and the thread
+  reached `I`. The switch then happened at `irq=271` — unchanged, thread
+  idle. Perfectly guarded, and measurably so.
+- **The restore gate did more**: 271 → 388 is a **117-interrupt** repaint
+  burst from `bind 1`. The old code walked away mid-burst and handed a
+  driving panel to reader-session — the leading hypothesis, now
+  quantified and closed.
+- **`trans=1` throughout** — exactly one DDR transition, inside the
+  window, never repeated.
+
+### On glass
+
+`after-fix-clean-boot.jpg` is a boot with no suspend in between (the
+earlier photos were all post-resume, which confounded them): the heavy
+vertical striping is **gone**. A residual dark vertical bar remains, and
+`after-fix-plus-gc16.jpg` shows one GC16 global clearing that too — so it
+is also glass-side residue, introduced somewhere after the boot wash and
+not healed by it. Smaller than the original defect and still open.
+
 Two instrument bugs were fixed to get here, and both had been hiding
 their own failure:
 
