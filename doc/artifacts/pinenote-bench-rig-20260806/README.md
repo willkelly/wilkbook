@@ -135,7 +135,46 @@ and dirty under `normal` convicts the switch or the rate; dirty both ways
 exonerates this service and points at the wash (p=0.2). `off` is the
 third leg — no window at all.
 
-## Where the session ended (read this first)
+## RESOLVED 2026-08-07: the switch was escaping the guarded window
+
+The first instrumented os2 boot settled it from two dmesg lines:
+
+    [10.601371] wilkbook-dmc memory-controller: DDR now 324 MHz (100634 us wall)
+    [11.466365] Console: switching to colour dummy device 80x25   <- service unbinds fbcon
+    [11.985670] Console: switching to colour frame buffer device 234x87
+
+The DDR switch lands **865 ms before the guarded window opens**, with
+fbcon actively painting the boot console. udev coldplugs the module and
+the probe-time SET_RATE stalls every AXI master for 100.6 ms in the
+middle of live EBC scans. The service's quiescing was never guarding the
+event it exists to contain — it opened afterwards, every boot.
+
+`/etc/modprobe.d/wilkbook_dmc.conf` was installed and did nothing:
+eudev's kmod builtin loads by modalias without applying modprobe.d
+blacklists. Fixed by clearing the device's `MODALIAS` in
+`60-wilkbook-dmc-noautoload.rules`, before `80-drivers.rules` runs, so
+only the service's explicit modprobe-by-name loads it.
+
+**The failure is glass-side, and GC16 heals it.** `corruption-on-glass.jpg`
+is the panel after that boot: vertical banding across the page, a dark
+vertical bar at the right, a corrupted block top-right — with the
+frontlight raised so it is unambiguous. `corruption-cleared-by-gc16.jpg`
+is the same panel seconds later after ONE global refresh forced to GC16
+(1 IRQ, 668→669). Completely clean.
+
+That before/after is the diagnosis, not just a symptom: had the driver's
+gray4 buffers been corrupted, a faithful global would have re-rendered
+the corruption. They were not. The *glass* held voltages the driver never
+commanded — exactly what a stall inside an active drive produces
+(`ddr-dvfs-test/protocol.md`: "wrong voltages on some pixel region"). It
+also explains the persistence: GL16 is neutral wherever belief agrees, so
+every later wash was a no-op over it, while GC16 drives every pixel
+through a full cycle.
+
+Vertical banding is itself corroborating — a stall corrupts a contiguous
+span of a scan, not a scattered set of pixels.
+
+## Where the earlier session ended (historical)
 
 The device auto-suspended in os1 while a transfer was in flight and
 became unreachable — no UART, no network, no way to wake it without a
