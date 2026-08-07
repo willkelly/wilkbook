@@ -129,11 +129,18 @@ end
 -- file must not leave the device unable to sleep OR unable to wake.
 local runtime = { idle = nil, backstop = nil, enabled = true, charging = nil,
                   power_key = nil }
-local function reload_config()
-    runtime.idle, runtime.backstop, runtime.enabled = nil, nil, true
-    runtime.charging = nil
-    runtime.power_key = nil
-    local f = io.open(opt.config, "r")
+-- Persistent twin of opt.config on the data partition.  /var/lib lives
+-- on the root filesystem, so EVERY os2 reflash wipes a pause set there
+-- -- which on 2026-08-07 repeatedly put the device to sleep moments
+-- after a deploy, and serial is not an armed wake source, so each time
+-- it cost a physical button press to get back.  /data survives
+-- reflashes and is writable from os1, so a pause set before a deploy
+-- still holds after it.  Read first, so the /var/lib file (the runtime
+-- knob) still wins for same-boot changes.
+local persistent_config = "/data/wilkbook/autosuspend.conf"
+
+local function parse_config(path)
+    local f = io.open(path, "r")
     if not f then return end
     for line in f:lines() do
         local k, v = line:match("^%s*([%w_]+)%s*=%s*(%S+)")
@@ -150,6 +157,14 @@ local function reload_config()
         end
     end
     f:close()
+end
+
+local function reload_config()
+    runtime.idle, runtime.backstop, runtime.enabled = nil, nil, true
+    runtime.charging = nil
+    runtime.power_key = nil
+    parse_config(persistent_config)
+    parse_config(opt.config)
 end
 local function idle_secs() return runtime.idle or opt.idle end
 local function backstop_secs() return runtime.backstop or opt.backstop end
