@@ -44,6 +44,54 @@ root ALL=(ALL) ALL
                                  "reader ALL=(ALL) NOPASSWD: ALL\n"
                                  ""))))
 
+;; The KOReader profile seeded onto a fresh image.
+;;
+;; Built HOST-SIDE, as a string, so the font block can be CONDITIONAL.  A
+;; fresh clone has no pinenote/fonts/local (gitignored, licensed), so
+;; pinenote-local-fonts is #f and EXT_FONT_DIR is never set on that path --
+;; naming "Equity A" there points the reader at a font that is not in the
+;; image.  reader-session.scm has always got this right; this seed did not.
+;;
+;; And this is the seed that WINS: activation runs before services and both
+;; are gated on the settings file being absent, so on a fresh image this one
+;; writes and reader-session's is a no-op.  Which means the font block here
+;; must be the FULL one from reader-session.scm, not just cre_font -- with
+;; only cre_font, monospace_font and cre_font_family_fonts were silently
+;; dropped from every fonts-present image.  Keep the two in sync.
+(define %pinenote-koreader-seed
+  (string-append
+   "-- seeded by the reader flavor (pinenote-koreader-home-dir)\n"
+   "return {\n"
+   "    [\"closed_rotation_mode\"] = 1,\n"
+   "    [\"copt_b_page_margin\"] = 25,\n"
+   "    [\"copt_font_size\"] = 30,\n"
+   "    [\"copt_h_page_margins\"] = { [1] = 30, [2] = 30 },\n"
+   "    [\"copt_t_page_margin\"] = 15,\n"
+   "    [\"coverbrowser_initial_default_setup_done\"] = true,\n"
+   (if pinenote-local-fonts
+       (string-append
+        "    [\"cre_font\"] = \"Equity A\",\n"
+        "    [\"monospace_font\"] = \"Triplicate A Code\",\n"
+        "    [\"cre_font_family_fonts\"] = {\n"
+        "        [\"serif\"] = \"Equity A\",\n"
+        "        [\"sans-serif\"] = \"Concourse 4\",\n"
+        "        [\"monospace\"] = \"Triplicate A Code\",\n"
+        "    },\n")
+       "")
+   "    [\"cre_header_auto_refresh\"] = 0,\n"
+   "    [\"cre_partial_rerendering\"] = false,\n"
+   "    [\"cre_show_progress\"] = false,\n"
+   "    [\"flash_keyboard\"] = false,\n"
+   "    [\"flash_ui\"] = false,\n"
+   "    [\"full_refresh_count\"] = 0,\n"
+   "    [\"home_dir\"] = \"/data/books\",\n"
+   "    [\"lock_rotation\"] = true,\n"
+   "    [\"quickstart_shown_version\"] = 2021070000,\n"
+   "    [\"refresh_on_pages_with_images\"] = false,\n"
+   "    [\"screensaver_type\"] = \"cover\",\n"
+   "}\n"))
+
+
 (define pinenote-reader-services
   (append %pinenote-bringup-services
            (list (service pinenote-orientation-bridge-service-type)
@@ -190,7 +238,7 @@ over the serial console.  See doc/install.md in the wilkbook repository.
                                       (mkdir-p "/root/.config/koreader")
                                       (call-with-output-file f
                                         (lambda (port)
-                                          (display "-- seeded by the reader flavor (pinenote-koreader-home-dir)\nreturn {\n    [\"closed_rotation_mode\"] = 1,\n    [\"copt_b_page_margin\"] = 25,\n    [\"copt_font_size\"] = 30,\n    [\"copt_h_page_margins\"] = { [1] = 30, [2] = 30 },\n    [\"copt_t_page_margin\"] = 15,\n    [\"coverbrowser_initial_default_setup_done\"] = true,\n    [\"cre_font\"] = \"Equity A\",\n    [\"cre_header_auto_refresh\"] = 0,\n    [\"cre_partial_rerendering\"] = false,\n    [\"cre_show_progress\"] = false,\n    [\"flash_keyboard\"] = false,\n    [\"flash_ui\"] = false,\n    [\"full_refresh_count\"] = 0,\n    [\"home_dir\"] = \"/data/books\",\n    [\"lock_rotation\"] = true,\n    [\"quickstart_shown_version\"] = 2021070000,\n    [\"refresh_on_pages_with_images\"] = false,\n    [\"screensaver_type\"] = \"cover\",\n}\n" port))))))
+                                          (display #$%pinenote-koreader-seed port))))))
                 ;; Key-only SSH with NO baked authorized key: root's key
                 ;; is installed at boot from /data/ssh/authorized_keys
                 ;; (ssh-keys.scm), the same out-of-band channel as the

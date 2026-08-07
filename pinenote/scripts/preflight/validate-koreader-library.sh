@@ -126,5 +126,23 @@ ver=$(printf '%s' "$seeded" | grep -o '[0-9]\{6,\}' | head -1)
   fail "quickstart_shown_version=$ver is below the 2021070000 threshold, so
    QuickStart:isShown() is still false"
 
+# 10. The seeded font block must be CONDITIONAL and COMPLETE.
+#     Conditional: a fresh clone has no pinenote/fonts/local (gitignored,
+#     licensed), so pinenote-local-fonts is #f and EXT_FONT_DIR is never
+#     set -- naming "Equity A" there points at a font not in the image.
+#     Complete: this activation seed WINS over reader-session's (activation
+#     runs first and both are gated on the file being absent), so carrying
+#     only cre_font silently drops monospace_font and cre_font_family_fonts
+#     from every fonts-present build.
+grep -q '(if pinenote-local-fonts' "$sys" ||
+  fail "the seeded KOReader profile's font block is not conditional on
+   pinenote-local-fonts; a fresh clone would seed a font that is not in
+   the image (reader-session.scm has always done this correctly)"
+if grep -q 'cre_font' "$sys" && ! grep -q 'monospace_font' "$sys"; then
+  fail "the activation seed names cre_font without the rest of the font
+   block; this seed wins over reader-session's, so monospace_font and
+   cre_font_family_fonts are silently dropped"
+fi
+
 echo "PASS: library is created on p7 by an ordered one-shot, the pointer is
       relative, os1's home is untouched, and the first boot lands in it"
