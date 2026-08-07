@@ -54,7 +54,7 @@
     (one-shot? #t)
     (start
      #~(lambda _
-         (use-modules (ice-9 rdelim))
+         (use-modules (ice-9 rdelim) (ice-9 ftw))
 
          (define %fbcon-bind "/sys/class/vtconsole/vtcon1/bind")
          (define %clk-summary "/sys/kernel/debug/clk/clk_summary")
@@ -236,10 +236,52 @@
                                (else (loop))))))))))
              (lambda _ #f)))
 
+         ;; State of the EBC refresh kthread: the DIRECT answer to "is
+         ;; the panel driving right now", where an IRQ delta is only an
+         ;; inference (and a famously misleading one -- a global holds
+         ;; the count still for its whole drive).  D = uninterruptible,
+         ;; i.e. inside a refresh; I/S = parked or waiting.  The thread
+         ;; is created as "ebc-refresh/%s" with dev_name appended, so
+         ;; comm truncates to "ebc-refresh/fde" at 15 chars and matching
+         ;; the full name finds nothing -- match the prefix.  The state
+         ;; is the token after the LAST ')' in /proc/N/stat, because comm
+         ;; is parenthesised and may itself contain punctuation.
+         (define (ebc-thread-state)
+           (catch #t
+             (lambda ()
+               (let loop ((entries (scandir "/proc")))
+                 (cond
+                  ((or (not entries) (null? entries)) #f)
+                  ((not (string->number (car entries)))
+                   (loop (cdr entries)))
+                  (else
+                   (let* ((pid (car entries))
+                          (comm-path (string-append "/proc/" pid "/comm"))
+                          (comm (and (file-exists? comm-path)
+                                     (catch #t
+                                       (lambda ()
+                                         (call-with-input-file comm-path
+                                           read-line))
+                                       (lambda _ #f)))))
+                     (if (and (string? comm)
+                              (string-prefix? "ebc-refresh" comm))
+                         (catch #t
+                           (lambda ()
+                             (let* ((stat (call-with-input-file
+                                              (string-append "/proc/" pid "/stat")
+                                            read-line))
+                                    (tail (substring stat
+                                                     (1+ (string-rindex stat #\))))))
+                               (car (string-tokenize tail))))
+                           (lambda _ #f))
+                         (loop (cdr entries))))))))
+             (lambda _ #f)))
+
          (define (checkpoint label)
-           (log "cp=~a irq=~a devfreq=~a trans=~a clk=~a"
+           (log "cp=~a irq=~a thr=~a devfreq=~a trans=~a clk=~a"
                 label
                 (or (ebc-irq-count) 'none)
+                (or (ebc-thread-state) 'none)
                 (or (devfreq-rate) 'absent)
                 (or (devfreq-transitions) 'absent)
                 (or (clk-summary-rate) 'absent)))
