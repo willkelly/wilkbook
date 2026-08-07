@@ -58,6 +58,14 @@ rootfs is written to the inactive `os2` partition only, observed over UART,
 with stock Debian on `os1` as the rescue path. See `doc/hardware-deploy.md`,
 and `doc/device-runbook.md` for provisioning a device of your own.
 
+## Alpha
+
+Scope, blockers and what is explicitly deferred: `doc/alpha-checklist.md`.
+Alpha is the reader flavor for two people who can build from source and
+drive a UART. The repo is public so other PineNote people can read the
+findings and take what is useful, not because this is installable by
+anyone else.
+
 ## Reading order (humans)
 
 1. This file, then `doc/status.md` (current-state header) — where we are.
