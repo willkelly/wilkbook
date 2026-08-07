@@ -210,4 +210,5 @@ suspend-check:
 	sh pinenote/scripts/preflight/validate-tps65185-pm-hunk.sh
 	sh pinenote/scripts/preflight/validate-ebc-fbdev-resume-hunk.sh
 	sh pinenote/scripts/preflight/validate-ebc-resume-baseline-hunk.sh
+	sh pinenote/scripts/preflight/validate-ebc-timeout-asymmetry.sh
 	guix shell python -- sh pinenote/scripts/preflight/test-validate-ebc-fbdev-resume-hunk.sh
