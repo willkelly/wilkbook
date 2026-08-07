@@ -174,6 +174,43 @@ through a full cycle.
 Vertical banding is itself corroborating — a stall corrupts a contiguous
 span of a scan, not a scattered set of pixels.
 
+### The fix, verified on the next boot
+
+Same three lines, before and after the udev MODALIAS clear:
+
+    BEFORE  [10.601] wilkbook-dmc: DDR now 324 MHz     <- switch
+            [11.466] Console: switching to dummy       <- window opens 865 ms LATE
+            [11.985] Console: switching to frame buffer
+
+    AFTER   [10.662] Console: switching to dummy       <- window opens FIRST
+            [14.886] wilkbook-dmc: DDR now 324 MHz     <- switch, 4.2 s inside
+            [15.214] Console: switching to frame buffer
+
+The switch moved from 865 ms *before* the guarded window to 4.2 s
+*inside* it. That 4.2 s gap is itself a result: it is the EBC-idle gate
+waiting for the first time in this service's history — with `read-line`
+resolving, `ebc-irq-count` finally returns a number instead of #f, so
+`wait-ebc-idle` stops interpreting "unreadable" as "no EBC present,
+nothing to wait for".
+
+Two instrument bugs were fixed to get here, and both had been hiding
+their own failure:
+
+- **`use-modules` inside a shepherd gexp lambda does not import.** The
+  service file is compiled, and the import does not reach the environment
+  the compiled toplevel references resolve against. `read-line` and
+  `scandir` threw *Unbound variable* on every call — inside `catch #t`
+  handlers that turned each throw into a plausible `#f`. The tell was in
+  the checkpoint line: `devfreq`, whose reader uses `read` rather than
+  `read-line`, was the only field that ever reported a value. Fixed with
+  explicit `(@ (ice-9 rdelim) read-line)`.
+- Consequently the v3 boot's "FAILED: DDR did not reach 324000000" was
+  **this**, not the unmounted debugfs it was attributed to above (and
+  which an 11-agent analysis confirmed with high confidence). The
+  debugfs reasoning was sound and the conclusion was still wrong: a
+  simpler failure sat closer to hand, and the confirmation only checked
+  the story, not the ground.
+
 ## Where the earlier session ended (historical)
 
 The device auto-suspended in os1 while a transfer was in flight and
