@@ -230,6 +230,42 @@ vertical striping is **gone**. A residual dark vertical bar remains, and
 is also glass-side residue, introduced somewhere after the boot wash and
 not healed by it. Smaller than the original defect and still open.
 
+### Chasing the residual bar (2026-08-07, still open)
+
+What is established, each from a measurement rather than an argument:
+
+1. **It is glass-side, not content.** A framebuffer dump
+   (`dd if=/dev/fb0`, 1872x1404 XRGB8888) profiled by row shows only
+   text lines — every dark run is 1-20 rows at 200-219 against a mean of
+   240. There is no dark band anywhere in the content, yet the panel
+   plainly shows one.
+2. **One GC16 global clears it** (1 IRQ), and the panel afterwards is
+   uniformly white under a full white fill — so the hardware is fine and
+   the driver's belief is right; only the glass disagrees.
+3. **Ordinary refreshes do not create it.** Clean the panel with GC16,
+   then fire a GL16 global (the shipped waveform, 1 IRQ): the page comes
+   back clean, no bar. The bar is specific to the boot sequence.
+4. **It is not the DDR rate — at least not via the restart path.**
+   `herd restart reader-session` reliably wrecks the panel far worse
+   than boot does (it parks inverted and striped), and it does so
+   **identically at 324 MHz and at 1056 MHz**. That also means the
+   restart is *not* a faithful proxy for the boot path; it is a separate,
+   harsher bug worth its own investigation.
+5. **Geometry points at a time slice.** A vertical bar on screen is a
+   horizontal ROW band in framebuffer space, and the EBC scans by rows —
+   so the affected pixels are contiguous *in scan time*, which is what a
+   stall or an interrupted drive looks like, not what a content bug looks
+   like.
+6. **A 1 fps camera pass over the boot** shows the shape of it: the wash
+   flashes the panel white, the panel then goes DARK with vertical
+   striations for ~8 s, returns light with heavy striping, and finally
+   settles carrying the bar. The bar is the residue of that long messy
+   sequence rather than of one discrete event.
+
+The obvious next experiment — boot with the DDR switch suppressed and
+compare — was blocked by the selector bug in the section above and is now
+unblocked.
+
 Two instrument bugs were fixed to get here, and both had been hiding
 their own failure:
 
