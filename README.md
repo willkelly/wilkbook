@@ -133,6 +133,50 @@ the backup checklist passes, never the bootloader, partition table,
 `waveform`, or `os1` rescue system, and never persists U-Boot environment or
 boot-order changes. Reboots and other destructive steps are user-present.
 
+## Build flags
+
+One knob, off by default: `WILKBOOK_VERY_INSECURE_FOR_CONVENIENCE`.
+
+Bring-up on this device is awkward — one USB-C port, so the debug cable
+and the charger are mutually exclusive, and serial is not an armed wake
+source. An unauthenticated shell is genuinely the difference between a
+five-minute fix and a teardown. That was never the problem. The problem
+was that it shipped **unconditionally and invisibly**: no build said
+whether it carried one, and nobody had to decide.
+
+So it is opt-in:
+
+```make
+# local.mk at the repo root -- gitignored, per-checkout
+export WILKBOOK_VERY_INSECURE_FOR_CONVENIENCE = 1
+```
+
+or `WILKBOOK_VERY_INSECURE_FOR_CONVENIENCE=1 make image-reader` for a
+one-off. A plain clone cannot build the conveniences by accident.
+
+What it gates, listed explicitly in `pinenote/insecure.scm` so that
+adding to the list is a deliberate edit that shows up in review:
+
+- the **USB ACM gadget console**, which execs a shell on `/dev/ttyGS0`
+  with no login prompt at all;
+- **passwordless sudo** for the `reader` account, which is what makes
+  that shell root-equivalent.
+
+The two move together on purpose: a build with the shell but no sudo is
+just latent, and one with sudo but no shell is the worst of both.
+
+**Every build says which one it is.** `/etc/wilkbook-build` is present
+either way and names the build, so a mounted image or a running system
+answers the question without inferring from behaviour:
+
+```
+WILKBOOK_BUILD=default                     # or: very-insecure-for-convenience
+```
+
+Verified by inspecting built systems, not by reading the code: the
+secure closure contains zero `shepherd-pinenote-usb-acm-console` items
+and no `NOPASSWD` line; the insecure one contains both.
+
 ## Hosting
 
 The canonical remote is currently a private Forgejo instance on the

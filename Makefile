@@ -5,6 +5,12 @@
 GUIX = guix
 TARGET = aarch64-linux-gnu
 GUIX_FLAGS = -L . --target=$(TARGET)
+
+# Per-checkout build flags, gitignored.  The only supported knob today is
+# WILKBOOK_VERY_INSECURE_FOR_CONVENIENCE (pinenote/insecure.scm), which is
+# OFF unless this file turns it on -- so a plain checkout cannot build the
+# development conveniences by accident.
+-include local.mk
 # Volatile by design: /tmp does not survive a host reboot, so rebuild
 # (or copy out) anything a later deploy will reference.  The
 # /tmp/opencode root is a historical name (a previous coding tool) that

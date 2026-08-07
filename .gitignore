@@ -14,3 +14,7 @@ __pycache__/
 /power-*-before.scm
 /power-*-after.scm
 /power-*-delta.scm
+
+# per-checkout build flags (e.g. WILKBOOK_VERY_INSECURE_FOR_CONVENIENCE);
+# never committed -- see pinenote/insecure.scm
+/local.mk

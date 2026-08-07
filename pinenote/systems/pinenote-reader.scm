@@ -20,6 +20,7 @@
   #:use-module (pinenote services usb-gadget)
   #:use-module (pinenote services wifi)
   #:use-module (pinenote images pinenote-initramfs)
+  #:use-module (pinenote insecure)
   #:use-module (pinenote systems base)
   #:export (pinenote-reader-operating-system))
 
@@ -29,11 +30,18 @@
 ;; the cage/SDL kiosk was abandoned and how the native port works).
 
 (define pinenote-reader-sudoers
-  (plain-file "sudoers" "\
+  ;; The reader account's passwordless sudo is what makes the gadget
+  ;; console root-equivalent, so it is gated with it rather than left
+  ;; standing on its own -- a secure build with an unauthenticated shell
+  ;; that can still sudo would be the worst of both.
+  (plain-file "sudoers"
+              (string-append "\
 root ALL=(ALL) ALL
 %wheel ALL=(ALL) ALL
-reader ALL=(ALL) NOPASSWD: ALL
-"))
+"
+                             (if %very-insecure-for-convenience?
+                                 "reader ALL=(ALL) NOPASSWD: ALL\n"
+                                 ""))))
 
 (define pinenote-reader-services
   (append %pinenote-bringup-services
@@ -80,6 +88,10 @@ reader ALL=(ALL) NOPASSWD: ALL
                 ;; on the A.2.5 first boot, 2026-07-11), and sshd then fatals on
                 ;; every connection: "/var/empty must be owned by root and not
                 ;; group or world-writable".  Re-assert ownership at activation.
+                (simple-service 'wilkbook-build-marker etc-service-type
+                                (list `("wilkbook-build"
+                                        ,(plain-file "wilkbook-build"
+                                                     (insecure-build-marker)))))
                 (simple-service 'pinenote-fix-var-empty
                                 activation-service-type
                                 #~(when (file-exists? "/var/empty")
@@ -151,8 +163,10 @@ reader ALL=(ALL) NOPASSWD: ALL
                           (password-authentication? #f)
                           (permit-root-login 'prohibit-password)))
                 (service pinenote-ssh-authorized-keys-service-type)
+                ;; The gadget itself is harmless and useful (it is how a
+                ;; host sees the device at all); the CONSOLE on it execs a
+                ;; shell with no login prompt, so only that half is gated.
                 (service pinenote-usb-acm-gadget-service-type)
-                (service pinenote-usb-acm-console-service-type)
                 ;; NO custom UART getty: %base-services already runs agetty
                 ;; on the kernel console (tty #f resolves console=ttyS2 from
                 ;; the cmdline), and a second agetty on the same tty can
@@ -165,7 +179,12 @@ reader ALL=(ALL) NOPASSWD: ALL
                 ;; is the base getty's prompt; the ACM gadget console keeps
                 ;; its own auto-login.
                 )
-          %base-services-without-guix))
+          %base-services-without-guix
+          ;; Development conveniences: opt-in, off by default, and the
+          ;; image says which build it is either way (pinenote/insecure.scm).
+          (if %very-insecure-for-convenience?
+              (list (service pinenote-usb-acm-console-service-type))
+              '())))
 
 (define pinenote-reader-base-os
   (make-pinenote-operating-system
