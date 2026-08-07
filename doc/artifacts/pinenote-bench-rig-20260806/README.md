@@ -153,10 +153,16 @@ Order of operations when you're back:
 1. Flip the USB-C debug plug, then confirm with
    `sudo cat /proc/tty/driver/serial | grep '^2:'` — `rx` must climb as
    you type into the console.
-2. From os1, stage and write the current artifact (build it with
-   `make rootfs-reader` if the host copy is gone), verifying the SHA on
+2. From os1, stage and write the current artifact, verifying the SHA on
    both sides and reading back exactly the written range, per
-   `doc/hardware-deploy.md`.
+   `doc/hardware-deploy.md`. It is already built:
+
+       /tmp/opencode/pinenote-rootfs-artifacts/pinenote-reader-PNGuixRoot-20260806.ext4
+       sha256 238f24a430215adadd9c6b14ac68f9a67ccb7662497895ad7ee2978536f5d589
+       1946193920 bytes = 475145 x 4096
+
+   (`make rootfs-reader` reproduces it from this commit if the host copy
+   is gone; the build is cached, so it costs minutes not hours.)
 3. Leave `/data/wilkbook/dmc.conf` at `mode=normal` for boot 1.
 4. Boot os2 from the U-Boot menu with the camera running, then read the
    `cp=` table out of `/var/log/messages`.
