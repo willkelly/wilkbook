@@ -30,7 +30,12 @@ disabled pending the power-key fix below).
 night, **not yet booted**; the image's own `gnu.system=` reads
 `mxx6ib4y…`, which is the image-flavored system and legitimately differs
 from what `guix system build` prints for the same tree — compare the
-artifact SHA, not the system path) — v3's fix stack plus an early frontlight, a
+artifact SHA, not the system path). **Deploy the current tree's image
+before booting it**: v5 predates the DMC changes the boot-corruption
+analysis produced (no `rmmod` branch, no fb blank, gated restore, thread
+state + `trans_stat` in the checkpoints). The device auto-suspended in
+os1 mid-transfer and could not be woken without the power button, so the
+newer image is built but undeployed — see the bench-rig artifact. — v3's fix stack plus an early frontlight, a
 DMC service that verifies through devfreq and logs a checkpoint (EBC IRQ
 count + both rate sources) at every step, and a boot-window experiment
 selector on `/data/wilkbook/dmc.conf`. **The UART is down** (see the

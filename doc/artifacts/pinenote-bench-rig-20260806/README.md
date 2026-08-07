@@ -135,6 +135,32 @@ and dirty under `normal` convicts the switch or the rate; dirty both ways
 exonerates this service and points at the wash (p=0.2). `off` is the
 third leg — no window at all.
 
+## Where the session ended (read this first)
+
+The device auto-suspended in os1 while a transfer was in flight and
+became unreachable — no UART, no network, no way to wake it without a
+finger on the power button. So:
+
+- **os2 currently holds v5** (`6d64fa34…`), which is bootable and
+  instrumented but predates three fixes the analysis then produced.
+- **The image you actually want is built on the host** and is NOT
+  deployed. Deploy it before booting os2, or the boot spends itself on a
+  service that still has the counterproductive `rmmod` branch, the inert
+  fb blank, and the ungated restore that is the leading suspect.
+
+Order of operations when you're back:
+
+1. Flip the USB-C debug plug, then confirm with
+   `sudo cat /proc/tty/driver/serial | grep '^2:'` — `rx` must climb as
+   you type into the console.
+2. From os1, stage and write the current artifact (build it with
+   `make rootfs-reader` if the host copy is gone), verifying the SHA on
+   both sides and reading back exactly the written range, per
+   `doc/hardware-deploy.md`.
+3. Leave `/data/wilkbook/dmc.conf` at `mode=normal` for boot 1.
+4. Boot os2 from the U-Boot menu with the camera running, then read the
+   `cp=` table out of `/var/log/messages`.
+
 ## Lesson worth keeping
 
 Before an unattended session, prove the console link end to end — the
