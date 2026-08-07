@@ -21,11 +21,26 @@
 ;; than a global refresh can drive — the EBC-idle precondition the
 ;; barrier campaign uses, at the strength protocol.md actually asks for.
 ;;
+;; DISABLED BY DEFAULT SINCE 2026-08-07 — 324 MHz CORRUPTS THE DISPLAY.
+;; A/B on one image and one boot path: at 324 the panel comes up striped
+;; with a dark band, every time; with the module never loaded (clk left
+;; at the 1056 boot rate) it comes up clean.  The switch EVENT is
+;; innocent — it lands with the refresh thread PARKED and the EBC
+;; interrupt count frozen — so what starves is the EBC's real-time
+;; phase-data fetch at that DRAM rate.  The controller has no underrun
+;; interrupt (INT_STATUS carries only frame/display-end and line-flag
+;; bits), so it fails SILENTLY: clean logs, wrecked glass.  Opt back in
+;; per boot with mode=normal in /data/wilkbook/dmc.conf.
+;;
+;; What it was worth, for whoever reconsiders this: ~24.8 mA QUIESCED
+;; (never confirmed with the reader running), which is 4-10% of runtime
+;; at realistic reading hours and nothing at all in deep suspend, where
+;; 59-75% of the daily budget actually goes.  A corrupted display is not
+;; a good trade for that.  Untested and possibly viable: 528 and 780 MHz,
+;; the two middle entries of the firmware table.
+;;
 ;; Failure policy: on ANY failure, log loudly, still restore the console,
-;; and EXIT SUCCESS — a reader at 1056 MHz beats no reader, and the boot
-;; acceptance check (doc: dmc acceptance.md) catches the miss.  Cost of a
-;; miss is ~25 mA (measured quiesced delta, 324 vs 1056 —
-;; doc/artifacts/pinenote-awake-levers-20260806 addendum).
+;; and EXIT SUCCESS — a reader at 1056 MHz beats no reader.
 ;;
 ;; Suspend needs nothing from us: bl31 preserves a non-boot rate across
 ;; suspend/resume (proven twice, addendum 2), so there are no suspend
@@ -85,7 +100,17 @@
          ;; is os1's /home -- so a slot that cannot be reached from the
          ;; U-Boot menu can still have its next boot configured from the
          ;; rescue slot, and a reflash does not erase the choice.
-         ;;   mode=normal    quiesce, switch, verify (the product path)
+         ;; DEFAULT IS "off" SINCE 2026-08-07.  324 MHz corrupts the
+         ;; display: the EBC's real-time phase-data fetch is starved at
+         ;; that DRAM rate, and since the controller has no underrun
+         ;; interrupt it fails SILENTLY -- clean logs, wrecked glass.
+         ;; Proven by A/B on the same image and the same boot path: at
+         ;; 324 the panel comes up striped with a dark band every time;
+         ;; with mode=noswitch (module never loaded, clk stays at the
+         ;; 1056 boot rate) it comes up clean.  The switch EVENT is not
+         ;; the problem -- it lands with the refresh thread parked and
+         ;; the EBC interrupt count frozen -- the RATE is.
+         ;;   mode=normal    quiesce, switch, verify (the old default)
          ;;   mode=noswitch  unbind fbcon, wait, rebind -- everything
          ;;                  except loading the module.  Isolates this
          ;;                  service's console handling from the DDR
