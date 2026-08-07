@@ -115,6 +115,7 @@ write_dts() {
   cover_status=$6
   i2c_status=$7
   pmic_compatible=$8
+  ldo6_suspend=${10:-'regulator-on-in-suspend;'}
   cover_wake=$9
   extra_wake=${10}
   output=${11}
@@ -151,6 +152,24 @@ write_dts() {
 			reg = <0x20>;
 			compatible = $pmic_compatible;
 			wakeup-source;
+
+			regulators {
+				LDO_REG1 {
+					regulator-state-mem {
+						regulator-on-in-suspend;
+					};
+				};
+				LDO_REG3 {
+					regulator-state-mem {
+						regulator-on-in-suspend;
+					};
+				};
+				LDO_REG6 {
+					regulator-state-mem {
+						$ldo6_suspend
+					};
+				};
+			};
 		};
 	};
 	$extra_wake
@@ -303,6 +322,25 @@ for index, property_name in enumerate(policy_properties):
         f'\t\tstatus = "okay";\n\t\t{property_name};',
         1,
     )
+
+# The rail-kill half of ultra: ordinary mainline DT that lives nowhere
+# near /rockchip-suspend, so the property spoofs above cannot reach it.
+# These inject where a real payload would go -- inside the PMIC's
+# regulator children and on the SDIO controller.
+rail_payload = {
+    "rail-ldo6-off": (
+        "LDO_REG6 {\n\t\t\t\t\tregulator-state-mem {\n\t\t\t\t\t\tregulator-on-in-suspend;",
+        "LDO_REG6 {\n\t\t\t\t\tregulator-state-mem {\n\t\t\t\t\t\tregulator-off-in-suspend;"),
+    "rail-mem-ultra-node": (
+        "LDO_REG6 {\n\t\t\t\t\tregulator-state-mem {",
+        "LDO_REG6 {\n\t\t\t\t\tregulator-state-mem-ultra {"),
+}
+for label, (exact, mutated) in rail_payload.items():
+    if good.count(exact) != 1:
+        raise SystemExit(f"FAIL: fixture cannot locate rail-payload anchor for {label}")
+    fixtures[label] = good.replace(exact, mutated, 1)
+fixtures["rail-sdio-power-off"] = good.replace(
+    '\t\tpmic@20 {', '\t\tmmc@fe2b0000 {\n\t\t\tcap-power-off-card;\n\t\t};\n\n\t\tpmic@20 {', 1)
 
 # The activated policy's values are measured, not tunable.  Any drift must
 # fail closed, and so must dropping one of the three entirely.

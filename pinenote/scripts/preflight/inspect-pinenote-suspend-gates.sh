@@ -260,6 +260,52 @@ suspend_descendants = [
 ]
 if suspend_descendants:
     fail(f"/rockchip-suspend must not carry policy child nodes: {suspend_descendants}")
+# 2026-08-07: the rail-kill half of ultra-suspend was UNGATED.  Everything
+# above audits /rockchip-suspend's own property set, but hrdl's ultra
+# payload is not there -- it is ordinary mainline DT: regulator-state-mem
+# flips inside the RK817's regulator children, plus sdmmc1's
+# cap-power-off-card.  A DTS carrying the whole rail kill passed this
+# gate silently, which is the dangerous half being the unprotected half.
+#
+# The rails that must stay ON are not a preference.  vcc_3v3_pmu
+# (LDO_REG6) feeds pmuio1/pmuio2 -- the GPIO0 pad bank carrying EVERY
+# armed wake source on this board: rk817 INT (pwrkey, RTC alarm, battery,
+# charger), touch, pen (its only wake path), Wacom, BT/Wi-Fi host-wake and
+# the hall switch.  Killing it plausibly yields a device that sleeps and
+# never returns.  vcca_1v8_pmu (LDO_REG1) carries Wi-Fi/BT signalling and
+# sdmmc1's vqmmc; vdda_0v9_pmu (LDO_REG3) feeds the SoC's own PMU-domain
+# analog supply and has zero DT consumers, so it cannot be audited from
+# DT at all and is not safe to infer killable.  All three read
+# regulator-on-in-suspend in the shipped DTB (measured 2026-08-07).
+PMU_RAILS_ON_IN_SUSPEND = ("LDO_REG1", "LDO_REG3", "LDO_REG6")
+suspend_states = [
+    node for node in nodes
+    if node["path"].rsplit("/", 1)[-1].startswith("regulator-state-mem")
+]
+for node in suspend_states:
+    parent = node["parent"]
+    rail = parent["path"].rsplit("/", 1)[-1] if parent else "?"
+    if node["path"].rsplit("/", 1)[-1] != "regulator-state-mem":
+        fail(f"{rail} carries {node['path'].rsplit('/', 1)[-1]}: the mem-lite/mem-ultra "
+             "suspend states are ultra-suspend policy and must not appear in a "
+             "production DT")
+    if rail in PMU_RAILS_ON_IN_SUSPEND and "regulator-off-in-suspend" in node["properties"]:
+        fail(f"{rail} is marked regulator-off-in-suspend -- this is a PMU rail carrying "
+             "armed wake sources (GPIO0 pad bank); killing it in suspend is the "
+             "ultra rail payload and is not reviewed for this device")
+seen_rails = {
+    node["parent"]["path"].rsplit("/", 1)[-1]
+    for node in suspend_states if node["parent"]
+}
+for rail in PMU_RAILS_ON_IN_SUSPEND:
+    if seen_rails and rail not in seen_rails:
+        fail(f"{rail} has no regulator-state-mem: its suspend state would be "
+             "unpinned, and these three rails are what the wake path runs on")
+for node in nodes:
+    if "cap-power-off-card" in node["properties"]:
+        fail(f"{node['path']} carries cap-power-off-card: powering the SDIO card off in "
+             "suspend implies full Wi-Fi re-init on resume and is ultra rail policy")
+print("PASS: PMU wake rails stay powered in suspend and no SDIO card-power flip is present")
 print("PASS: effective DT wake capability is exactly cover switch and RK817 PMIC with verified identities")
 print("PASS: dormant Rockchip suspend node is unique, enabled, and policy-free")
 PY
