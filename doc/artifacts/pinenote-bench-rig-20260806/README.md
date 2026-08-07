@@ -230,6 +230,30 @@ vertical striping is **gone**. A residual dark vertical bar remains, and
 is also glass-side residue, introduced somewhere after the boot wash and
 not healed by it. Smaller than the original defect and still open.
 
+### Belief vs glass: the measurement that should have come first
+
+`belief-vs-glass.jpg` — left is `/dev/fb0` rendered, right is the camera
+view of the same instant. The operator's idea, and it retires an entire
+class of argument: judging the panel by eye off a dim webcam frame, which
+produced two wrong "it looks clean" calls from the agent in one session.
+
+The framebuffer is **immaculate** — crisp text, clean logo, the thin
+horizontal progress bar at the bottom reading 1 / 11. The glass carries
+the same page **plus a thick dark vertical bar down the right edge that
+appears nowhere in the framebuffer**, plus vertical striping. Both frames
+are upright and the bottom progress bar lands in the same place in each,
+so the orientations agree and the bar is a genuine extra rather than a
+rotation artifact.
+
+That is the whole diagnosis in one image: **the driver's belief is right
+and the glass is wrong.** Repainting from that framebuffer can never fix
+it, which is exactly why GL16 washes are no-ops over it (neutral wherever
+belief agrees) and only GC16 — which drives every pixel through a full
+cycle regardless of belief — clears it.
+
+The tool is in `pinenote/tools/optics/belief-vs-glass.sh`. Run it at any
+suspicious moment; it needs only ssh and the webcam.
+
 ### Chasing the residual bar (2026-08-07, still open)
 
 What is established, each from a measurement rather than an argument:
