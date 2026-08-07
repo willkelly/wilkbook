@@ -46,6 +46,11 @@ make kernel-drv                       # cheap gate: compute kernel derivation
 make qemu-smoke                       # generic ARM64 userspace check
 ```
 
+Never used Guix? `doc/building.md` opens with a **from-zero** section —
+install Guix, `guix pull -C channels.scm` (nonguix is required and the
+file carries its channel introduction), authorize substitutes, build.
+Guix is the only host dependency; it brings its own toolchain.
+
 Before your first build, read the **host prerequisites** in
 `doc/building.md` (Guix + nonguix channel setup, substitutes, and honest
 build-time expectations — a cold cross-build of the kernel is hours, not

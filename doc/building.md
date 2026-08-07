@@ -19,6 +19,48 @@ Two things to know about the artifact root before relying on it:
 The `Makefile` wraps the common invocations; the raw commands are recorded
 below for when a wrapper is not enough.
 
+## From zero
+
+If you have never used Guix, three steps stand between a clean machine
+and an image. Guix is the only host dependency — it brings its own
+toolchain, so there is nothing else to install and nothing to install
+system-wide.
+
+1. **Install Guix** on any x86_64 GNU/Linux distribution, following the
+   upstream instructions (the binary installation script on a "foreign
+   distro" is the usual path). Nothing here needs Guix System; a Guix
+   *package manager* on Debian/Fedora/Arch is fine.
+
+2. **Pull the channel set this repo builds against.** `channels.scm` in
+   the repo root is a working channel list carrying nonguix and its
+   channel introduction — the signing key that makes `guix pull` trust
+   it. Without nonguix, every build here fails at module resolution,
+   because `linux-pinenote` builds from nonguix's vanilla kernel.org
+   `linux` (linux-libre cannot carry the PineNote display stack).
+
+   ```sh
+   guix pull -C channels.scm
+   hash guix                     # pick up the newly pulled guix
+   guix describe                 # record this; images are only as
+                                 # reproducible as the channels that built them
+   ```
+
+   Expect this to take a while the first time.
+
+3. **Authorize nonguix substitutes before the first kernel build** (see
+   the prerequisites below). This is not optional in any practical
+   sense: with substitutes most of the toolchain arrives prebuilt;
+   without them the cross-built kernel alone is an hours-long build.
+
+Then `make rootfs-reader` produces the artifact, and
+`doc/hardware-deploy.md` covers writing it to a device — a manual,
+os2-only, user-present procedure, deliberately.
+
+**Reality check before you start:** a full image pulls tens of GB into
+`/gnu/store`, and this repo has only ever been built by its author on one
+machine. If something fails at module resolution, the nonguix channel is
+the first thing to check.
+
 ## Host prerequisites
 
 - An x86_64 GNU/Linux host with Guix installed and current-ish
