@@ -655,7 +655,9 @@ local function suspend_once()
     -- overlay or not.
     cleanup_wash()
     log("resumed after %ds", slept)
-    return true
+    -- Hand the duration back: the caller uses it to tell an RTC-backstop
+    -- wake (nobody here) from a button wake (somebody here).
+    return true, slept
 end
 
 -- Development aid: paint the sleep screen and exit, so the banner can be
@@ -701,7 +703,7 @@ while true do
             log("DRY RUN: would suspend now")
             last_activity = os.time()
         else
-            local slept_ok = suspend_once()
+            local slept_ok, slept = suspend_once()
             -- The wake press itself lands as input.  Throw the whole queue
             -- away rather than let it read as either activity or a fresh
             -- suspend request, and hold the button off for the grace period.
@@ -713,6 +715,21 @@ while true do
                 -- is transient: retry in ~30 s instead of waiting out a
                 -- whole fresh idle period at ~157 mA.
                 last_activity = os.time() - idle_secs() + 30
+            elseif slept and slept >= backstop_secs() - 5 then
+                -- THE BACKSTOP FIRED, so nobody pressed anything and
+                -- nobody is looking at this device.  Waiting out a fresh
+                -- full idle period here is what made standby cost far
+                -- more than the suspend floor suggests: at the shipped
+                -- 300 s idle / 900 s backstop a device alone in a bag
+                -- spends 300 s of every 1200 s awake at ~157 mA, so it
+                -- averages ~55 mA rather than the ~20.6 mA deep floor --
+                -- flat in ~3 days instead of ~8.  The 2026-08-03 soak
+                -- measured exactly this and nobody read it as a bug:
+                -- 65/60/57 s awake after each RTC resume.  Go back down
+                -- after a short settle instead.  A button wake still
+                -- gets the full idle period, because someone who just
+                -- woke the device deserves more than 20 s.
+                last_activity = os.time() - idle_secs() + 20
             end
         end
     else
