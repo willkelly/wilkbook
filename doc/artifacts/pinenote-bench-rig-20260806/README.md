@@ -91,39 +91,49 @@ and its devfreq device existed. Verification now reads devfreq first
 
 ## What the next os2 boot should settle
 
-v5's `pinenote-dmc` logs a checkpoint at `entry`, `blanked`, `ebc-idle`,
-`switched`/`removed`, and `console-restored`, each carrying the EBC
-interrupt count and the rate from both devfreq and clk_summary. Three
-questions fall out of one boot:
+The 11-agent analysis (5 traces, each adversarially re-derived, plus a
+synthesis) ranked the causes. Two candidates it ELIMINATED from source,
+which is why the service changed shape rather than gaining more waiting:
 
-1. **Does the fb blank cost a full-screen refresh?** Two independent
-   source analyses agree the blank does NOT park the worker or disable
-   the CRTC in any way this driver acts on — every EBC hook is gated on
-   `mode_changed`, which an fbdev DPMS blank never sets. But the commit
-   carries no damage blob, so the still-visible plane is committed as
-   one area covering the whole 1872x1404 panel, and whether that area is
-   dropped is a runtime data condition (`final_atomic_update` is seeded
-   0xff white while the shmem fbdev buffer is zero/black, and fbcon's
-   damage work races the blank). If `entry -> blanked -> ebc-idle` shows
-   the count climbing by ~38-46, the blank is driving a full-screen
-   **GC16 partial** — `default_waveform`, not the shipped GL16 — for
-   0.6-1 s. That is pure cost: the fbcon unbind is what actually stops
-   the damage producer, so the blank should then be deleted from the
-   quiesce rather than waited out. (`echo 0 > blank` is a true no-op by
-   the same analysis, asymmetrically, because the blit writes the
-   destination buffer even when it reports "unchanged".)
-2. **Was the EBC actually idle when the switch landed?** `ebc-idle`
-   vs `switched` answers it directly, and the gate now demands 2.5 s of
-   unchanged count rather than a single 500 ms pair.
-3. **Did the switch ever fail, or only fail to be seen?** `devfreq=` on
-   every checkpoint reports the driver's own view with no debugfs
-   involved.
+- *Late unguarded switch* (p=0.03). `wilkbook_dmc` cannot defer — no
+  clock, regulator or OPP phandle, synchronous probe, and the switch
+  happens inside `devfreq_add_device()`, which unregisters the device if
+  it fails. A live devfreq node IS a completed, firmware-verified switch.
+- *Blank/unblank desyncing the gray4 cache* (p=0.06). Every EBC hook is
+  gated on `crtc_state->mode_changed`; an fbdev DPMS blank sets only
+  `active_changed`. No park, no ctx realloc, no off-screen wash. The
+  blank was therefore deleted outright rather than measured — it bought
+  no quiescing while committing a damage-clip-less full-plane update at
+  the moment the service believed it was quiescing.
+
+The **leading hypothesis (p=0.34) is the ungated RESTORE half**: `bind 1`
+repaints the whole visible console, and fbcon damage reaches the panel
+immediately — `defio_delay_ms` governs only the mmap path, not fbcon's
+`schedule_work` — so the service handed a still-driving panel to
+reader-session, whose GC16 boot wash then interleaved with it. The
+service now waits for EBC idle *after* the rebind too, and logs a
+`restore-drained` checkpoint. Runner-up (p=0.2): the boot wash itself is
+inherently fragile and the DMC window merely changed the timing that
+exposes it — on that reading the corruption reproduces with `mode=off`.
+
+So, from one boot, read the `cp=` lines in `/var/log/messages`:
+
+1. `unbound -> ebc-idle`: how much EBC work was still draining when the
+   old code would already have switched (it demanded one 500 ms pair;
+   `protocol.md` asks for "several seconds").
+2. `console-restored -> restore-drained`: the size of the repaint burst
+   the old code walked away from. If this is tens of IRQs, the leading
+   hypothesis is confirmed mechanically.
+3. `trans=` must read 1 from `switched` onward, at every later
+   checkpoint. A 2 anywhere is a DDR switch nobody ordered.
+4. `devfreq=` reports the driver's own rate with no debugfs involved —
+   the thing whose absence produced the v3 false negative.
 
 Then flip `/data/wilkbook/dmc.conf` to `noswitch` and boot again: same
-blanking, same everything, no DDR switch and the rate left at 1056. If
-the panel is clean there and dirty under `normal`, the switch (or the
-rate) is convicted; if it is dirty both ways, this service is exonerated
-and the cause is elsewhere in the v2+ images.
+window, same repaint, no switch, rate left at the boot value. Clean there
+and dirty under `normal` convicts the switch or the rate; dirty both ways
+exonerates this service and points at the wash (p=0.2). `off` is the
+third leg — no window at all.
 
 ## Lesson worth keeping
 
