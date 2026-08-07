@@ -1,0 +1,22 @@
+2026-08-06 23:30:29 localhost shepherd[1]: Starting service pinenote-ebc-params...
+2026-08-06 23:30:29 localhost shepherd[1]: Service pinenote-ebc-params started.
+2026-08-06 23:30:29 localhost shepherd[1]: Service pinenote-ebc-params running with value #t.
+2026-08-06 23:30:29 localhost shepherd[1]: Service pinenote-ebc-params has been started.
+2026-08-06 23:30:31 localhost shepherd[1]: Starting service pinenote-dmc...
+2026-08-06 23:30:35 localhost shepherd[1]: pinenote-dmc: FAILED: DDR did not reach 324000000 Hz within ~3 s; reader continues at the boot rate (costs ~25 mA); see dmesg for wilkbook_dmc
+2026-08-06 23:30:35 localhost shepherd[1]: Starting service pinenote-waveform...
+2026-08-06 23:30:35 localhost shepherd[1]: Service pinenote-dmc started.
+2026-08-06 23:30:35 localhost shepherd[1]: Service pinenote-dmc running with value #t.
+2026-08-06 23:30:35 localhost shepherd[1]: Service pinenote-dmc has been started.
+2026-08-06 23:30:35 localhost shepherd[1]: Starting service pinenote-ddr-boost...
+2026-08-06 23:30:35 localhost shepherd[1]: Service pinenote-ddr-boost started.
+2026-08-06 23:30:35 localhost shepherd[1]: Service pinenote-ddr-boost running with value #<<process> id: 238 command: ("/gnu/store/l3g2wn5h066kljfc020wgwc4g31vhky1-koreader-bin-2026.03/lib/koreader/luajit" "/gnu/store/kldfb084i42yfi18304fhfjlbqfqlymg-ddr-boost.lua" "--hold" "10" "--config" "/var/lib/pinenote/ddr-boost.conf")>.
+2026-08-06 23:30:35 localhost shepherd[1]: Service pinenote-ddr-boost has been started.
+2026-08-06 23:30:35 localhost shepherd[1]: Service pinenote-waveform started.
+2026-08-06 23:30:35 localhost shepherd[1]: Service pinenote-waveform running with value #t.
+2026-08-06 23:30:35 localhost shepherd[1]: Service pinenote-waveform has been started.
+2026-08-06 23:30:36 localhost shepherd[1]: Starting service pinenote-usb-acm-gadget...
+2026-08-06 23:30:36 localhost shepherd[1]: Registering new logger for pinenote-usb-acm-gadget.
+2026-08-06 23:30:36 localhost shepherd[1]: Registering new logger for pinenote-usb-acm-gadget.
+2026-08-06 23:30:35 [ddr-boost] node=/sys/class/devfreq/memory-controller floor=324000000 boost=1056000000 hold=10s
+2026-08-06 23:30:35 [ddr-boost] boost disabled (no conf opt-in); floor stays static -- watching 7 input devices for a conf flip
