@@ -27,7 +27,10 @@ measurement windows; quote ~20. DDR at 324 MHz saves ~24.8 mA (quiesced);
 disabled pending the power-key fix below).
 
 **On os2**: v5 image `6d64fa34…` (written + readback-verified 2026-08-06
-night, **not yet booted**) — v3's fix stack plus an early frontlight, a
+night, **not yet booted**; the image's own `gnu.system=` reads
+`mxx6ib4y…`, which is the image-flavored system and legitimately differs
+from what `guix system build` prints for the same tree — compare the
+artifact SHA, not the system path) — v3's fix stack plus an early frontlight, a
 DMC service that verifies through devfreq and logs a checkpoint (EBC IRQ
 count + both rate sources) at every step, and a boot-window experiment
 selector on `/data/wilkbook/dmc.conf`. **The UART is down** (see the
