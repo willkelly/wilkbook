@@ -88,7 +88,7 @@ than merely deferred. Record:
       duty-cycle bug, was written up as an argument for the setting that
       made it worse, and the model said 8.6 days while reality was 3.0.
 
-### 5. Fresh-clone first boot — MOSTLY DONE 2026-08-07
+### 5. ~~Fresh-clone first boot~~ — DONE 2026-08-07
 
 Investigated properly (8-agent design + 3 adversarial lenses). What was
 written here as "one mkdir in activation" is four defects, three of them
@@ -122,19 +122,45 @@ invisible to every gate we have:
       and exits 0, while every gate stays green because the developer's
       workstation has a full PATH. `wifi.scm:26` records this lesson
       already; `ssh-keys.scm:75` has the incantation.
-- [ ] **STILL OPEN.** The build works without the gitignored licensed
-      fonts — and the seeded profile hardcodes `cre_font = "Equity A"`,
-      so make it conditional (`directory-has-fonts?` already exists in
-      `fonts.scm`). That build has never been booted anywhere.
-- [ ] **STILL OPEN.** `make qemu-virt-check` against a genuinely fresh
-      clone, used as an actual release gate. It exists and has never once
-      been used as one.
+- [x] **The build works without the gitignored licensed fonts.** DONE —
+      and it was two defects, not one. The seed is now built host-side so
+      the font block can be conditional on `pinenote-local-fonts`; and
+      because *this* seed wins over `reader-session`'s, it now carries the
+      FULL block (`monospace_font` and `cre_font_family_fonts` were being
+      silently dropped from every fonts-present image we ever built).
+- [x] **`make qemu-virt-check` against a genuinely fresh clone.** DONE,
+      and used as a release gate for the first time in the project's
+      history. A clone of `ultra-handshake-arm` with no
+      `pinenote/fonts/local` cross-built to
+      `3b35f8df730476070722dfe3fbd00b6b7718fa9a29d8d79f24ebeff52c9ee5e7`
+      — the fonts-absent build that "has never been booted anywhere" —
+      and every assertion passed in 68 s: all 10 boot milestones, all 9
+      service milestones including **`reader-session started`**, all 6
+      forbidden regressions absent, clean poweroff.
 
-All of the above is offline work and none of it is hardware-verified.
-`make library-check` is structural and negative-tested against seven ways
-it must be able to fail; `guix system build --dry-run` evaluates. What no
-gate can tell us is what the friend actually sees on first boot — that
-needs one fresh-provisioned device, or the QEMU-virt rung.
+      That `reader-session started` line is the one that mattered: it now
+      *requires* `pinenote-library`, so an unsatisfiable
+      `file-system-/data` on a machine with no data partition would have
+      deadlocked the reader. It did not.
+
+      Verified in the built system rather than assumed: `pinenote-library`
+      is in the booted `shepherd.conf`, and the shadowed fallback is in
+      the activation snippets. (Both looked absent at first — an artifact
+      of grepping a closure whose entries are symlinks, and then of
+      grepping `activate.scm`, which is a 2 KB stub containing none of the
+      snippets it references. The known-good koreader seed was the control
+      that caught it.)
+
+`make library-check` is structural and negative-tested against nine ways
+it must be able to fail. Both font branches evaluate under
+`guix system build --dry-run --target=aarch64-linux-gnu`: fonts-present in
+the working tree, fonts-absent in the clone.
+
+**What this still does not prove.** QEMU-virt has no e-ink panel, so
+nothing here says what the first boot LOOKS like; and the case that
+motivated the whole change — a p7 carrying a real stock-Debian home, where
+the "Debian home" pointer should appear and resolve — is untested, because
+the QEMU disk has no such partition. Those need a device.
 
 **Premise correction worth keeping:** `/data/books` is not a wilkbook
 invention. p7's root *is* os1's `/home`, so `/data/books` already **is**
