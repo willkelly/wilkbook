@@ -20,6 +20,11 @@ GUIX_FLAGS = -L . --target=$(TARGET)
 # loudly on anything outside it).  Renaming the root is an open task
 # that must move those scripts in the same change.
 ARTIFACTS ?= /tmp/opencode/pinenote-rootfs-artifacts
+# Which synthetic p7 qemu-data-check boots against:
+#   os1-used     a lived-in Debian home, no library yet (the migrating friend)
+#   with-library an existing /books that must be left alone (author's device)
+#   empty        no Debian home at all (reprovisioned p7)
+FIXTURE ?= os1-used
 
 # reader-debug = reader with the EXTRACT_FBS diagnostic kernel
 # (linux-pinenote-debug); remove with the debug patch when done.
@@ -120,6 +125,27 @@ qemu-virt-check:
 	  pinenote/scripts/preflight/stage-boot-bundle-from-rootfs.sh '$(ROOTFS)' \"$$bundle\" && \
 	  pinenote/scripts/qemu/make-virt-disk.sh '$(ROOTFS)' \"$$disk\" $(WAVEFORM) && \
 	  pinenote/scripts/qemu/run-virt-assertions.sh \"$$bundle\" \"$$disk\""
+
+# QEMU-virt WITH a data partition (offline ladder rung 4d): the same boot,
+# on a synthetic p7 that looks like a PineNote whose stock Debian os1 has
+# been lived in.  Answers the questions no other rung can: does the library
+# get created on a disk that already has a Debian home, does the pointer to
+# that home resolve, is os1's home left byte-for-byte alone, and does
+# KOReader come up pointed at the right place and stay up.  Usage:
+#   make qemu-data-check ROOTFS=<rootfs.ext4> [WAVEFORM=<file>] [FIXTURE=...]
+qemu-data-check:
+	@test -n "$(ROOTFS)" || { echo "usage: make qemu-data-check ROOTFS=<rootfs.ext4> [WAVEFORM=<file>] [FIXTURE=os1-used|with-library|empty]"; exit 2; }
+	@set -e; \
+	stamp=$$(date +%Y%m%d-%H%M%S); \
+	mkdir -p $(ARTIFACTS); \
+	bundle=$(ARTIFACTS)/pinenote-datachk-bundle-$$stamp; \
+	disk=$(ARTIFACTS)/pinenote-datachk-disk-$$stamp.img; \
+	data=$(ARTIFACTS)/pinenote-datachk-data-$$stamp.img; \
+	guix shell e2fsprogs gptfdisk qemu -- sh -c "\
+	  pinenote/scripts/qemu/make-data-fixture.sh $(FIXTURE) \"$$data\" && \
+	  pinenote/scripts/preflight/stage-boot-bundle-from-rootfs.sh '$(ROOTFS)' \"$$bundle\" && \
+	  pinenote/scripts/qemu/make-virt-disk.sh '$(ROOTFS)' \"$$disk\" '$(WAVEFORM)' \"$$data\" && \
+	  VIRTCHK_EXPECT_DATA=$(FIXTURE) pinenote/scripts/qemu/run-virt-assertions.sh \"$$bundle\" \"$$disk\""
 
 # QEMU-virt visual loop (offline ladder rung 4v): same boot plus a
 # virtio-gpu framebuffer at panel resolution and scripted virtio input;

@@ -65,6 +65,23 @@ bundle=$1
 disk=$2
 log=${3:-}
 
+# Set VIRTCHK_EXPECT_DATA to the make-data-fixture.sh variant the disk
+# carries -- os1-used, with-library or empty -- or leave it unset for a disk
+# with no p7 at all (what qemu-virt-check has always exercised).
+#
+# The three variants have DIFFERENT correct answers, which is the whole
+# point: os1-used must GAIN a library and a pointer; with-library must be
+# left strictly alone, pointer and all; empty must gain a library and NO
+# pointer, because there is no Debian home to point at.  Asserting one set
+# against all three would have passed the case it was written for and said
+# nothing about the other two.
+expect_data=${VIRTCHK_EXPECT_DATA:-none}
+case $expect_data in
+  none|os1-used|with-library|empty) ;;
+  1) expect_data=os1-used ;;
+  *) printf 'FAIL: unknown VIRTCHK_EXPECT_DATA: %s\n' "$expect_data" >&2; exit 2 ;;
+esac
+
 command -v qemu-system-aarch64 >/dev/null 2>&1 || \
   fail "qemu-system-aarch64 not found; run via: guix shell qemu -- $0 ..."
 command -v guile >/dev/null 2>&1 || \
@@ -212,6 +229,18 @@ probe_round() {
     "if grep -q '^wilkbook-orientation\$' /sys/class/input/event*/device/name 2>/dev/null; then n=yes; else n=no; fi; echo VIRTCHK-ORI-NODE-\$n" \
     "if grep -q 'Service reader-session has been started' /var/log/messages; then r=yes; else r=no; fi; echo VIRTCHK-RDR-\$r" \
     "if command -v pinenote-ebc-sleep-frame-test >/dev/null 2>&1 && pinenote-ebc-sleep-frame-test --help >/dev/null 2>&1; then b=yes; else b=no; fi; echo VIRTCHK-BARRIER-\$b" \
+    "if mountpoint -q /data; then m=yes; else m=no; fi; echo VIRTCHK-DATA-MNT-\$m" \
+    "if [ -d /data/books ]; then d=yes; else d=no; fi; echo VIRTCHK-LIB-DIR-\$d" \
+    "t=\$(readlink '/data/books/Debian home' 2>/dev/null || echo none); echo VIRTCHK-LIB-PTR-\$t" \
+    "if [ -f '/data/books/Debian home/Documents/A Book I Was Reading.epub' ]; then r=yes; else r=no; fi; echo VIRTCHK-LIB-RESOLVE-\$r" \
+    "echo VIRTCHK-DEB-TOP-\$(ls /data/user 2>/dev/null | tr '\\n' ',')" \
+    "echo VIRTCHK-DEB-DOCS-\$(ls /data/user/Documents 2>/dev/null | wc -l | tr -d ' ')" \
+    "if grep -q /data/books /root/.config/koreader/settings.reader.lua 2>/dev/null; then h=yes; else h=no; fi; echo VIRTCHK-PROF-HOME-\$h" \
+    "if grep -q quickstart_shown_version /root/.config/koreader/settings.reader.lua 2>/dev/null; then q=yes; else q=no; fi; echo VIRTCHK-PROF-QS-\$q" \
+    "if grep -lq luajit /proc/[0-9]*/comm >/dev/null 2>&1; then k=yes; else k=no; fi; echo VIRTCHK-KO-ALIVE-\$k" \
+    "if [ -f '/data/books/Existing Book.epub' ]; then x=yes; else x=no; fi; echo VIRTCHK-LIB-KEPT-\$x" \
+    "if [ -f '/data/books/Existing Book.sdr/metadata.epub.lua' ]; then y=yes; else y=no; fi; echo VIRTCHK-LIB-KEPTSDR-\$y" \
+    "echo VIRTCHK-LIB-COUNT-\$(ls /data/books 2>/dev/null | wc -l | tr -d ' ')" \
     "if [ \"\$r\" = yes ]; then timeout 20 herd stop reader-session > /dev/null 2>&1; fi" \
     2>/dev/null || true
 }
@@ -224,7 +253,11 @@ all_sentinels_present() {
   grep -aq 'VIRTCHK-ORI-SVC-yes' "$log" && \
   grep -aq 'VIRTCHK-ORI-NODE-yes' "$log" && \
   grep -aq 'VIRTCHK-RDR-yes'  "$log" && \
-  grep -aq 'VIRTCHK-BARRIER-yes' "$log"
+  grep -aq 'VIRTCHK-BARRIER-yes' "$log" && \
+  { [ "$expect_data" = "none" ] || {
+      grep -aq 'VIRTCHK-DATA-MNT-yes' "$log" && \
+      grep -aq 'VIRTCHK-LIB-DIR-yes' "$log" && \
+      grep -aq 'VIRTCHK-KO-ALIVE-yes' "$log"; }; }
 }
 
 # Phase 1: wait for the console login prompt (or early death/stall).
@@ -332,6 +365,47 @@ require 'orientation evdev exists'       'VIRTCHK-ORI-NODE-yes'
 require 'reader-session started'       'VIRTCHK-RDR-yes'
 require 'inert EBC barrier command packaged' 'VIRTCHK-BARRIER-yes'
 require 'clean poweroff'               'reboot: Power down'
+
+if [ "$expect_data" != "none" ]; then
+  printf '\nRequired data-partition milestones (fixture: %s):\n' "$expect_data"
+  require 'p7 mounts at /data'            'VIRTCHK-DATA-MNT-yes'
+  require 'library exists on p7'          'VIRTCHK-LIB-DIR-yes'
+  require 'profile points at the library' 'VIRTCHK-PROF-HOME-yes'
+  require 'quickstart suppressed'         'VIRTCHK-PROF-QS-yes'
+  require 'KOReader still running'        'VIRTCHK-KO-ALIVE-yes'
+
+  case $expect_data in
+    os1-used)
+      # RELATIVE, because os1 mounts this same partition at /home and an
+      # absolute /data/user target would dangle from the rescue slot.
+      require 'Debian-home pointer is ../user'  'VIRTCHK-LIB-PTR-\.\./user'
+      require 'pointer resolves to real books'  'VIRTCHK-LIB-RESOLVE-yes'
+      require 'library holds only the pointer'  'VIRTCHK-LIB-COUNT-1'
+      ;;
+    with-library)
+      # The author's device.  /root does not survive a reflash, so this
+      # one-shot runs again on every deploy -- it must not add a pointer to
+      # a library someone has been using, and must not disturb its contents.
+      require 'existing library left alone (no pointer)' 'VIRTCHK-LIB-PTR-none'
+      require 'existing book still present'     'VIRTCHK-LIB-KEPT-yes'
+      require 'existing .sdr sidecar intact'    'VIRTCHK-LIB-KEPTSDR-yes'
+      require 'nothing added to the library'    'VIRTCHK-LIB-COUNT-2'
+      ;;
+    empty)
+      # A reprovisioned p7 with no Debian home: create the library, and do
+      # NOT create a pointer to a directory that does not exist.
+      require 'no pointer without a Debian home' 'VIRTCHK-LIB-PTR-none'
+      require 'library created and empty'        'VIRTCHK-LIB-COUNT-0'
+      ;;
+  esac
+
+  if [ "$expect_data" != "empty" ]; then
+    # os1's home must come through byte-for-byte.
+    require "os1's home untouched (top level)" \
+      'VIRTCHK-DEB-TOP-Desktop,Documents,Downloads,Music,Pictures,Public,Templates,Videos,'
+    require "os1's home untouched (Documents)" 'VIRTCHK-DEB-DOCS-3'
+  fi
+fi
 
 printf '\nForbidden regressions:\n'
 forbid 'waveform partition not found'  'PineNote initrd: warning: waveform partition not found'

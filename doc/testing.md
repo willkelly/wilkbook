@@ -313,3 +313,48 @@ Sensor-specific but worth stealing: `STATUS_REG` reading all-ones
 (`0xff` — data-ready **plus** overrun on every axis) is the signature of
 "sampling fine, nobody consuming" — a dead interrupt path wearing a
 healthy register dump.
+
+## Rung 4d — QEMU-virt with a data partition (2026-08-07)
+
+`make qemu-data-check ROOTFS=<rootfs.ext4> [FIXTURE=...]`
+
+The same boot as rung 4, on a synthetic p7 built rootless by
+`pinenote/scripts/qemu/make-data-fixture.sh`. It exists because every rung
+before it booted a disk with **no p7 at all**, so the entire library and
+migration story — the thing an alpha user meets first — was testable only
+on the one physical device.
+
+The panel is deliberately not in scope. Whether pixels land on e-ink or on
+nothing at all does not change the startup flow, and the startup flow is
+the question: *do we come up pointed at the right place, on a disk someone
+has already been using?*
+
+Three fixtures, with **different** correct answers — asserting one set
+against all three would pass the case it was written for and say nothing
+about the others:
+
+| `FIXTURE=` | the disk | must happen |
+|---|---|---|
+| `os1-used` (default) | a lived-in stock-Debian home, no library | library created; `Debian home` pointer added, **relative**, resolving to a real book; os1's home untouched |
+| `with-library` | an existing `/books` with a book and its `.sdr` | **nothing changes** — no pointer, contents intact |
+| `empty` | no Debian home at all | library created, **no** pointer |
+
+The `with-library` case is the one guarding the author's device: `/root`
+does not survive a reflash, so the one-shot re-runs on every deploy and
+must not decorate a library someone is using.
+
+Common to all three: p7 mounts, the seeded profile points at the library,
+the quickstart is suppressed, and **KOReader is still running** at probe
+time.
+
+Evidence the probes discriminate rather than always agreeing — the same
+three sentinels across the three runs:
+
+    os1-used      LIB-PTR-../user  LIB-COUNT-1  LIB-KEPT-no   DEB-DOCS-3
+    with-library  LIB-PTR-none     LIB-COUNT-2  LIB-KEPT-yes  DEB-DOCS-3
+    empty         LIB-PTR-none     LIB-COUNT-0  LIB-KEPT-no   DEB-DOCS-0
+
+**What it still cannot tell you.** There is no panel, so nothing here
+speaks to what the first screen looks like, only to what it is pointed at.
+And `ls`-shaped assertions catch a directory gaining entries, not a file
+being rewritten in place.
