@@ -58,6 +58,11 @@ code review — before a single reboot. That's the standard.
 - `doc/hardware-deploy.md` + `doc/device-runbook.md` — the os2 write
   protocol, and the per-device inventory/backup ledger (including the
   provision-your-own-device path).
+- `doc/install.md` — what has to be true *before* the write protocol
+  applies, for an operator installing on their own device: cable,
+  backups, waveform/VCOM, data-partition staging, root posture, and the
+  open questions about a first boot. Unverified by construction — no
+  second person has done it.
 - `doc/device-access.md` — how to reach and safely use the device: os1
   oracle, ACM console, UART, SSH, post-mortem harvest, and their traps.
 - `doc/kernel-forward-port.md` — how to refresh the patches for a new
