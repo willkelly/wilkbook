@@ -106,6 +106,41 @@ the identity and it is stable across reflashes after that; pin the
 fingerprint in the ledger THEN, not at the v3 boot.
 `doc/networking.md` §4.1.
 
+**2026-08-07 (night) ULTRA ANSWERED: firmware honours state 5, nothing
+wakes from it.** [wilkbook / wkelly] Session B run on the ship candidate
+`7eaab343…`, UART proven both directions first (`tx` 1701→1730 with a
+host-read marker, `rx` 0→34). One variable, 65 s apart, same boot:
+
+    R9 control  PM-STATE: mem   (ultra: 0, mem: 3, cfg: 0x5ec), pmic: 0x14, 0x25  -> rc=0, slept 60s
+    R10 armed   PM-STATE: ultra (ultra: 1, mem: 3, cfg: 0x5ec), pmic: 0x14, 0x25  -> NO RESUME
+
+`ultra:` incremented for the first time ever; `mem:` held at 3. **Both
+pmic words are identical**, confirming on hardware what the offline
+disassembly claimed: the ultra branch touches no PMIC, so this was a pure
+firmware handshake with the proven `mem` rail configuration and zero DT
+changes. Ultra ran strictly more stages (`1234567abcdeghij789sram2wfi`
+against the control's `abcdeghij701M`) and ended in WFI from SRAM.
+
+Then nothing. RTC alarm at +60 s never fired; UART silent for a further
+110 s; SSH timed out; **ICMP went dead too**, which is itself evidence —
+under ordinary deep this device answers pings via brcmfmac offload.
+**A short power-button press also did nothing**, tried deliberately
+before any long-press: had it woken, ultra would still have been a usable
+reader state. It is not. Only a forced power-off exits.
+
+**Ultra is closed for alpha, and not because of the rail payload — we
+never adopted one.** `deep` at ~20 mA stands as the shipping suspend.
+Recovery: long-press, cold boot, U-Boot autoboot landed on os1. Full
+record and raw UART:
+`doc/artifacts/pinenote-ultra-handshake-20260807/RESULT.md`.
+
+Two procedure bugs this run found, both now fixed: PROCEDURE.md named the
+wrong sysfs path (`rockchip_suspend_activate` vs the real
+`rockchip_suspend_mode_drv`), which would have produced a silent false
+"firmware ignored state 5"; and "gadget quiesced" was unspecified — the
+first control attempt died at 5 s on `dwc3 … returns -11` because the ACM
+gadget stays bound to the UDC even in the secure build.
+
 **2026-08-07 (evening) ALPHA SHIP CANDIDATE ACCEPTED ON GLASS — image
 `7eaab343…`.** [wilkbook / wkelly] First full reader acceptance since
 2026-08-01, run on the exact artifact intended to ship, judged by the

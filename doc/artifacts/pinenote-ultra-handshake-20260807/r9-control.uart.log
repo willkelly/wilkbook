@@ -1,0 +1,59 @@
+### WILKBOOK r9-control ENTERING SUSPEND arm=0 ###
+[ 3845.948068] PM: suspend entry (deep)
+[ 3845.948895] Filesystems sync: 0.000 seconds
+[ 3845.949284] Freezing user space processes
+[ 3845.950422] Freezing user space processes completed (elapsed 0.001 seconds)
+[ 3845.950435] OOM killer disabled.
+[ 3845.950437] Freezing remaining freezable tasks
+[ 3845.951854] Freezing remaining freezable tasks completed (elapsed 0.001 seconds)
+v2.3():v2.3-210-g4af361e4c:zwx
+PM-STATE: mem (ultra: 0, mem: 3, cfg: 0x5ec), pmic: 0x14, 0x25
+abcdeghij701MI/TC: Secondary CPU 1 initializing
+I/TC: Secondary CPU 1 switching to normal world boot
+I/TC: Secondary CPU 2 initializing
+I/TC: Secondary CPU 2 switching to normal world boot
+I/TC: Secondary CPU 3 initializing
+I/TC: Secondary CPU 3 switching to normal world boot
+[ 3845.975143] rockchip_ebc_suspend
+[ 3846.644672] PM: suspend devices took 0.691 seconds
+[ 3846.653034] Disabling non-boot CPUs ...
+[ 3846.665107] psci: CPU3 killed (polled 0 ms)
+[ 3846.671008] psci: CPU2 killed (polled 0 ms)
+[ 3846.679975] psci: CPU1 killed (polled 1 ms)
+[ 3846.682205] Enabling non-boot CPUs ...
+[ 3846.683204] Detected VIPT I-cache on CPU1
+[ 3846.683261] GICv3: CPU1: found redistributor 100 region 0:0x00000000fd480000
+[ 3846.683329] CPU1: Booted secondary processor 0x0000000100 [0x412fd050]
+[ 3846.684493] CPU1 is up
+[ 3846.685411] Detected VIPT I-cache on CPU2
+[ 3846.685457] GICv3: CPU2: found redistributor 200 region 0:0x00000000fd4a0000
+[ 3846.685515] CPU2: Booted secondary processor 0x0000000200 [0x412fd050]
+[ 3846.686631] CPU2 is up
+[ 3846.687542] Detected VIPT I-cache on CPU3
+[ 3846.687589] GICv3: CPU3: found redistributor 300 region 0:0x00000000fd4c0000
+[ 3846.687644] CPU3: Booted secondary processor 0x0000000300 [0x412fd050]
+[ 3846.688843] CPU3 is up
+[ 3846.754186] rockchip_ebc_resume
+[ 3846.754205] ebc: rockchip_ebc_plane_reset
+[ 3846.754604] ebc: rockchip_ebc_ctx_release
+[ 3846.754616] EBC: rockchip_ebc_ctx_free
+[ 3846.912061] PM: resume devices took 0.216 seconds
+[ 3846.926976] OOM killer enabled.
+[ 3846.926991] Restarting tasks: Starting
+[ 3846.928748] Restarting tasks: Done
+[ 3846.929565] PM: suspend exit
+### WILKBOOK r9-control RESUMED rc=0 slept=60s ###
+[ 3847.371135] sdhci-dwcmshc fe310000.mmc: Can't reduce the clock below 52MHz in HS200/HS400 mode
+[ 3847.371258] sdhci-dwcmshc fe310000.mmc: Can't reduce the clock below 52MHz in HS200/HS400 mode
+[ 3847.371297] sdhci-dwcmshc fe310000.mmc: Can't reduce the clock below 52MHz in HS200/HS400 mode
+[ 3849.183183] net_ratelimit: 13 callbacks suppressed
+[ 3849.183216] brcmfmac: brcmf_set_channel: set chanspec 0x100c fail, reason -52
+[ 3849.185181] brcmfmac: brcmf_set_channel: set chanspec 0x100d fail, reason -52
+[ 3849.186991] brcmfmac: brcmf_set_channel: set chanspec 0x100e fail, reason -52
+[ 3849.188773] brcmfmac: brcmf_set_channel: set chanspec 0xd022 fail, reason -52
+[ 3849.301839] brcmfmac: brcmf_set_channel: set chanspec 0xd026 fail, reason -52
+[ 3849.412734] brcmfmac: brcmf_set_channel: set chanspec 0xd02a fail, reason -52
+[ 3849.530630] brcmfmac: brcmf_set_channel: set chanspec 0xd02e fail, reason -52
+[ 3849.646982] brcmfmac: brcmf_set_channel: set chanspec 0xd034 fail, reason -52
+[ 3849.648720] brcmfmac: brcmf_set_channel: set chanspec 0xd038 fail, reason -52
+[ 3849.650762] brcmfmac: brcmf_set_channel: set chanspec 0xd03c fail, reason -52

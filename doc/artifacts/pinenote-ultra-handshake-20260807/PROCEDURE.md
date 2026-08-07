@@ -61,8 +61,8 @@ before and after, panel intact. Anything less — **abort**.
 ### R10 — the attempt
 
 ```sh
-cat /sys/module/rockchip_suspend_activate/parameters/ultra_arm   # 0
-echo 5 > /sys/module/rockchip_suspend_activate/parameters/ultra_arm
+cat /sys/module/rockchip_suspend_mode_drv/parameters/ultra_arm   # 0
+echo 5 > /sys/module/rockchip_suspend_mode_drv/parameters/ultra_arm
 ```
 
 Then one suspend with a short RTC backstop (60 s), gadget quiesced,

@@ -62,14 +62,17 @@ yield.
 - [ ] **A clean suspend/resume on the shipping stack** — an alpha user
       exercises this every five idle minutes.
 
-### 3. Hardware session B — the ultra handshake, once
+### 3. ~~Hardware session B — the ultra handshake~~ — DONE 2026-08-07
 
-- [ ] Run `doc/artifacts/pinenote-ultra-handshake-20260807/PROCEDURE.md`
-      as written. ~100% battery *before* the cable goes on, UART proven
-      both directions **that session** via the SoC `tx`/`rx` counters,
-      operator on the power button, control suspend first.
-- [ ] Record the outcome whatever it is. "Firmware ignores state 5" is a
-      complete answer and closes ultra for this bl31.
+Run, and answered. The firmware **does** honour `LINUX_PM_STATE=5`
+(`ultra:` incremented 0→1, the first time ever) — and nothing wakes the
+device from it: not the RTC at +60 s, not a short power-button press.
+Only a forced power-off exits. Both pmic words were identical to the
+control, so this was a pure handshake with the proven `mem` rails and no
+DT change. **Ultra is closed for this bl31**; `deep` at ~20 mA is the
+shipping suspend, and the deferred rail payload below is now moot rather
+than merely deferred. Record:
+`doc/artifacts/pinenote-ultra-handshake-20260807/RESULT.md`.
 
 ### 4. One end-to-end standby measurement
 
@@ -109,10 +112,10 @@ yield.
 
 On the record as decisions, not oversights.
 
-- **The ultra rail payload** — the half that carries hrdl's saving.
-  DT/safety-model change, needs branch + review, `suspend-check` rejects
-  it by design, and its failure mode is a device that sleeps and never
-  wakes.
+- **The ultra rail payload** — now **moot, not deferred**. The 2026-08-07
+  handshake showed the device cannot wake from ultra even with the proven
+  `mem` rails untouched, so the payload could only make the unwakeable
+  state cheaper. Reopening it needs a firmware/wake fix first.
 - **DDR at 528/780 MHz.** Never measured. Worth 4–10% of awake runtime,
   zero standby benefit.
 - **Wi-Fi off by default** (10.3 mA, and that was `wlan0 down`, not radio
