@@ -58,6 +58,19 @@
          (define %fbcon-bind "/sys/class/vtconsole/vtcon1/bind")
          (define %fb-blank "/sys/class/graphics/fb0/blank")
          (define %clk-summary "/sys/kernel/debug/clk/clk_summary")
+         (define %devfreq "/sys/class/devfreq/memory-controller")
+         ;; Experiment selector on the PERSISTENT data partition, which
+         ;; is os1's /home -- so a slot that cannot be reached from the
+         ;; U-Boot menu can still have its next boot configured from the
+         ;; rescue slot, and a reflash does not erase the choice.
+         ;;   mode=normal    quiesce, switch, verify (the product path)
+         ;;   mode=noswitch  quiesce and restore, but never load the
+         ;;                  module -- isolates the blank/unblank cycle
+         ;;                  from the DDR switch
+         ;;   mode=off       do nothing at all -- the baseline that says
+         ;;                  whether this service is implicated in the
+         ;;                  boot-time display corruption at all
+         (define %mode-file "/data/wilkbook/dmc.conf")
 
          (define (log message . arguments)
            (apply format #t
@@ -132,9 +145,27 @@
                      (loop (+ quiet 1) before (- attempts 1))
                      (loop 0 after (- attempts 1))))))))
 
-         (define (ddr-at-target?)
-           ;; clk_summary row: name enable prepare protect rate ...
-           ;; the SCMI ddr clock is bl31's own view of the rate
+         (define (devfreq-rate)
+           ;; The driver's own view, and the ONLY one that needs no
+           ;; debugfs.  The 2026-08-06 v3 boot reported "DDR did not
+           ;; reach 324000000" while the module was in fact loaded and
+           ;; its devfreq device registered -- pinenote-usb-acm-gadget,
+           ;; which mounts debugfs, does not start until AFTER this
+           ;; service runs, so clk_summary was very likely absent and the
+           ;; failure report was about the INSTRUMENT, not the switch.
+           (catch #t
+             (lambda ()
+               (let ((path (string-append %devfreq "/cur_freq")))
+                 (and (file-exists? path)
+                      (call-with-input-file path
+                        (lambda (port)
+                          (let ((v (read port)))
+                            (and (number? v) v)))))))
+             (lambda _ #f)))
+
+         (define (clk-summary-rate)
+           ;; bl31's view, kept as the cross-check when debugfs happens
+           ;; to be mounted.  Row: name enable prepare protect rate ...
            (catch #t
              (lambda ()
                (and (file-exists? %clk-summary)
@@ -147,10 +178,27 @@
                              ((string-contains line "clk_scmi_ddr")
                               (let ((tokens (string-tokenize line)))
                                 (and (> (length tokens) 4)
-                                     (string=? (list-ref tokens 4)
-                                               #$%dmc-target-rate))))
+                                     (string->number (list-ref tokens 4)))))
                              (else (loop)))))))))
              (lambda _ #f)))
+
+         (define (ddr-at-target?)
+           (let ((rate (devfreq-rate)))
+             (if rate
+                 (= rate (string->number #$%dmc-target-rate))
+                 (equal? (clk-summary-rate)
+                         (string->number #$%dmc-target-rate)))))
+
+         ;; One line per checkpoint, carrying the three numbers that
+         ;; discriminate every hypothesis about this window: wall time,
+         ;; cumulative EBC interrupts (is the panel driving?), and the
+         ;; rate from both sources (did the switch land, and when?).
+         (define (checkpoint label)
+           (log "~a: irq=~a devfreq=~a clk=~a"
+                label
+                (or (ebc-irq-count) 'none)
+                (or (devfreq-rate) 'absent)
+                (or (clk-summary-rate) 'absent)))
 
          (define (poll-ddr attempts)
            ;; When the probe runs inside modprobe the switch lands in
@@ -168,59 +216,103 @@
              (usleep 100000)
              (poll-ddr (- attempts 1)))))
 
-         ;; ---- quiesce: no EBC work may overlap the switch ----
-         (write-sysfs %fbcon-bind "0")
-         (write-sysfs %fb-blank "1")
-         (wait-ebc-idle 40)
+         (define mode
+           ;; first word of the first mode= line; anything unrecognised
+           ;; means the product path, because a typo in a diagnostic file
+           ;; must never silently disable the power saving
+           (catch #t
+             (lambda ()
+               (if (file-exists? %mode-file)
+                   (call-with-input-file %mode-file
+                     (lambda (port)
+                       (let loop ()
+                         (let ((line (read-line port)))
+                           (cond
+                            ((eof-object? line) "normal")
+                            ((string-prefix? "mode=" line)
+                             (let ((v (string-trim-both
+                                       (substring line 5))))
+                               (if (member v '("normal" "noswitch" "off"))
+                                   v
+                                   "normal")))
+                            (else (loop)))))))
+                   "normal"))
+             (lambda _ "normal")))
 
-         (catch #t
-           (lambda ()
-             (let ((status (system* #$(file-append kmod "/bin/modprobe")
-                                    ;; -d: only the profile under
-                                    ;; /run/booted-system/kernel carries
-                                    ;; modules.dep (usb-gadget.scm,
-                                    ;; lesson of 2026-06-11)
-                                    "-d" "/run/booted-system/kernel"
-                                    #$%dmc-module)))
-               (if (zero? status)
-                   (begin
-                     ;; clk_summary lives in debugfs; the usb-gadget
-                     ;; service usually mounts it first, but do not
-                     ;; depend on ordering
-                     (unless (file-exists? %clk-summary)
-                       (when (file-exists? "/sys/kernel/debug")
-                         (system* #$(file-append util-linux "/bin/mount")
-                                  "-t" "debugfs" "none"
-                                  "/sys/kernel/debug")))
-                     (if (poll-ddr 150)
-                         (log "DDR at ~a Hz (static low)" #$%dmc-target-rate)
-                         (begin
-                           ;; The switch happens inside the guarded
-                           ;; window or NOT AT ALL: a still-deferred
-                           ;; probe would otherwise complete after the
-                           ;; console is back and fire an unguarded
-                           ;; switch into live EBC scans (the v3-boot
-                           ;; corruption, 2026-08-06).  Removing the
-                           ;; module forecloses that; remove() restores
-                           ;; the boot rate, and any switch it makes
-                           ;; runs inside the still-held quiesce.
-                           (system* #$(file-append kmod "/bin/modprobe")
-                                    "-r" "-d" "/run/booted-system/kernel"
-                                    #$%dmc-module)
-                           (log "FAILED: DDR did not reach ~a Hz within ~~15 s; \
+         (log "mode=~a (selector ~a)" mode %mode-file)
+         (checkpoint "entry")
+
+         (define (load-and-verify)
+           (catch #t
+             (lambda ()
+               (let ((status (system* #$(file-append kmod "/bin/modprobe")
+                                      ;; -d: only the profile under
+                                      ;; /run/booted-system/kernel carries
+                                      ;; modules.dep (usb-gadget.scm,
+                                      ;; lesson of 2026-06-11)
+                                      "-d" "/run/booted-system/kernel"
+                                      #$%dmc-module)))
+                 (if (zero? status)
+                     (begin
+                       ;; only the clk_summary cross-check needs this;
+                       ;; devfreq works without it, which is why the
+                       ;; verdict no longer hinges on the mount
+                       (unless (file-exists? %clk-summary)
+                         (when (file-exists? "/sys/kernel/debug")
+                           (system* #$(file-append util-linux "/bin/mount")
+                                    "-t" "debugfs" "none"
+                                    "/sys/kernel/debug")))
+                       (if (poll-ddr 150)
+                           (begin
+                             (checkpoint "switched")
+                             (log "DDR at ~a Hz (static low)"
+                                  #$%dmc-target-rate))
+                           (begin
+                             ;; The switch happens inside the guarded
+                             ;; window or NOT AT ALL: a still-deferred
+                             ;; probe would otherwise complete after the
+                             ;; console is back and fire an unguarded
+                             ;; switch into live EBC scans.  remove()
+                             ;; restores the boot rate, and any switch it
+                             ;; makes runs inside the still-held quiesce.
+                             ;; This now fires only when BOTH rate
+                             ;; sources disagree with the target for 15 s
+                             ;; -- the old debugfs-only check cried
+                             ;; failure on a switch that had landed.
+                             (system* #$(file-append kmod "/bin/modprobe")
+                                      "-r" "-d" "/run/booted-system/kernel"
+                                      #$%dmc-module)
+                             (checkpoint "removed")
+                             (log "FAILED: DDR did not reach ~a Hz within ~~15 s; \
 module removed so no unguarded switch can follow; reader continues at the \
 boot rate (costs ~~25 mA); see dmesg for wilkbook_dmc"
-                                #$%dmc-target-rate))))
-                   (log "FAILED: modprobe ~a exited with ~a; \
+                                  #$%dmc-target-rate))))
+                     (log "FAILED: modprobe ~a exited with ~a; \
 reader continues at the boot rate (costs ~~25 mA)"
-                        #$%dmc-module status))))
-           (lambda (key . args)
-             (log "FAILED: ~a ~s; reader continues at the boot rate"
-                  key args)))
+                          #$%dmc-module status))))
+             (lambda (key . args)
+               (log "FAILED: ~a ~s; reader continues at the boot rate"
+                    key args))))
 
-         ;; ---- ALWAYS restore the console, reverse order ----
-         (write-sysfs %fb-blank "0")
-         (write-sysfs %fbcon-bind "1")
+         (define (run-quiesced)
+           ;; no EBC work may overlap the switch
+           (write-sysfs %fbcon-bind "0")
+           (write-sysfs %fb-blank "1")
+           (checkpoint "blanked")
+           (wait-ebc-idle 40)
+           (checkpoint "ebc-idle")
+           (if (string=? mode "noswitch")
+               (log "mode=noswitch: quiesced and restoring WITHOUT loading ~a"
+                    #$%dmc-module)
+               (load-and-verify))
+           ;; ALWAYS restore the console, reverse order
+           (write-sysfs %fb-blank "0")
+           (write-sysfs %fbcon-bind "1")
+           (checkpoint "console-restored"))
+
+         (if (string=? mode "off")
+             (log "mode=off: leaving the display and the DDR rate alone")
+             (run-quiesced))
 
          ;; one-shot success regardless: never block the reader on a
          ;; power optimization
