@@ -16,8 +16,9 @@
 ;; to 324 MHz — the module's only runtime switch under the powersave
 ;; governor — therefore runs with fbcon unbound (no cursor-blink damage
 ;; stream; the 2026-07-30 finding measured 63 Hz of EBC work from a bound
-;; fbcon) and fb0 blanked, and only after the EBC interrupt count holds
-;; still, the same EBC-idle precondition the barrier campaign uses.
+;; fbcon), and only after the EBC interrupt count holds still for longer
+;; than a global refresh can drive — the EBC-idle precondition the
+;; barrier campaign uses, at the strength protocol.md actually asks for.
 ;;
 ;; Failure policy: on ANY failure, log loudly, still restore the console,
 ;; and EXIT SUCCESS — a reader at 1056 MHz beats no reader, and the boot
@@ -56,7 +57,6 @@
          (use-modules (ice-9 rdelim))
 
          (define %fbcon-bind "/sys/class/vtconsole/vtcon1/bind")
-         (define %fb-blank "/sys/class/graphics/fb0/blank")
          (define %clk-summary "/sys/kernel/debug/clk/clk_summary")
          (define %devfreq "/sys/class/devfreq/memory-controller")
          ;; Experiment selector on the PERSISTENT data partition, which
@@ -64,9 +64,11 @@
          ;; U-Boot menu can still have its next boot configured from the
          ;; rescue slot, and a reflash does not erase the choice.
          ;;   mode=normal    quiesce, switch, verify (the product path)
-         ;;   mode=noswitch  quiesce and restore, but never load the
-         ;;                  module -- isolates the blank/unblank cycle
-         ;;                  from the DDR switch
+         ;;   mode=noswitch  unbind fbcon, wait, rebind -- everything
+         ;;                  except loading the module.  Isolates this
+         ;;                  service's console handling from the DDR
+         ;;                  switch: same window, same repaint, rate left
+         ;;                  at the boot value
          ;;   mode=off       do nothing at all -- the baseline that says
          ;;                  whether this service is implicated in the
          ;;                  boot-time display corruption at all
@@ -99,7 +101,11 @@
            ;; total interrupt count of the EBC's line, from
            ;; /proc/interrupts; #f when no such line (QEMU virt).  The
            ;; driver requests its IRQ as dev_name(dev), so the line reads
-           ;; "fdec0000.ebc" (ebc@fdec0000 in rk356x-base.dtsi).
+           ;; "fdec0000.ebc" (ebc@fdec0000 in rk356x-base.dtsi).  The sum
+           ;; also picks up the GIC hwirq printed mid-line; that is a
+           ;; CONSTANT per boot, so every delta and equality test here is
+           ;; unaffected -- but the absolute number is not an interrupt
+           ;; count and should not be quoted as one.
            (catch #t
              (lambda ()
                (call-with-input-file "/proc/interrupts"
@@ -159,10 +165,13 @@
            ;; The driver's own view, and the ONLY one that needs no
            ;; debugfs.  The 2026-08-06 v3 boot reported "DDR did not
            ;; reach 324000000" while the module was in fact loaded and
-           ;; its devfreq device registered -- pinenote-usb-acm-gadget,
-           ;; which mounts debugfs, does not start until AFTER this
-           ;; service runs, so clk_summary was very likely absent and the
-           ;; failure report was about the INSTRUMENT, not the switch.
+           ;; its devfreq device registered.  debugfs is mounted by
+           ;; Guix's own %debug-file-system (a member of
+           ;; %base-file-systems, which systems/base.scm takes verbatim),
+           ;; and shepherd was serialised through this one-shot -- the
+           ;; file-system-* services appear in the log only after it
+           ;; returns -- so clk_summary was absent and the failure report
+           ;; was about the INSTRUMENT, not the switch.
            (catch #t
              (lambda ()
                (let ((path (string-append %devfreq "/cur_freq")))
@@ -203,11 +212,36 @@
          ;; discriminate every hypothesis about this window: wall time,
          ;; cumulative EBC interrupts (is the panel driving?), and the
          ;; rate from both sources (did the switch land, and when?).
+         ;; Count of rate transitions over the devfreq device's life.
+         ;; This is the number that settles "did anything switch the DDR
+         ;; when we were not looking": it must read 1 immediately after
+         ;; modprobe and STILL 1 at every later checkpoint.  A 2 anywhere
+         ;; downstream is a switch this service did not order.
+         (define (devfreq-transitions)
+           (catch #t
+             (lambda ()
+               (let ((path (string-append %devfreq "/trans_stat")))
+                 (and (file-exists? path)
+                      (call-with-input-file path
+                        (lambda (port)
+                          (let loop ()
+                            (let ((line (read-line port)))
+                              (cond
+                               ((eof-object? line) #f)
+                               ((string-contains line "total transition")
+                                (let ((tokens (filter string->number
+                                                      (string-tokenize line))))
+                                  (and (pair? tokens)
+                                       (string->number (car (reverse tokens))))))
+                               (else (loop))))))))))
+             (lambda _ #f)))
+
          (define (checkpoint label)
-           (log "~a: irq=~a devfreq=~a clk=~a"
+           (log "cp=~a irq=~a devfreq=~a trans=~a clk=~a"
                 label
                 (or (ebc-irq-count) 'none)
                 (or (devfreq-rate) 'absent)
+                (or (devfreq-transitions) 'absent)
                 (or (clk-summary-rate) 'absent)))
 
          (define (poll-ddr attempts)
@@ -277,26 +311,25 @@
                              (checkpoint "switched")
                              (log "DDR at ~a Hz (static low)"
                                   #$%dmc-target-rate))
-                           (begin
-                             ;; The switch happens inside the guarded
-                             ;; window or NOT AT ALL: a still-deferred
-                             ;; probe would otherwise complete after the
-                             ;; console is back and fire an unguarded
-                             ;; switch into live EBC scans.  remove()
-                             ;; restores the boot rate, and any switch it
-                             ;; makes runs inside the still-held quiesce.
-                             ;; This now fires only when BOTH rate
-                             ;; sources disagree with the target for 15 s
-                             ;; -- the old debugfs-only check cried
-                             ;; failure on a switch that had landed.
-                             (system* #$(file-append kmod "/bin/modprobe")
-                                      "-r" "-d" "/run/booted-system/kernel"
-                                      #$%dmc-module)
-                             (checkpoint "removed")
-                             (log "FAILED: DDR did not reach ~a Hz within ~~15 s; \
-module removed so no unguarded switch can follow; reader continues at the \
-boot rate (costs ~~25 mA); see dmesg for wilkbook_dmc"
-                                  #$%dmc-target-rate))))
+                           ;; Report and leave the module alone.  An
+                           ;; earlier version rmmod'd here, on the theory
+                           ;; that a deferred probe could still fire an
+                           ;; unguarded switch later.  The driver refutes
+                           ;; every step: the probe takes no clock,
+                           ;; regulator or OPP phandle so it has no
+                           ;; -EPROBE_DEFER path, it runs synchronously
+                           ;; inside modprobe, and its one switch happens
+                           ;; inside devfreq_add_device() -- which
+                           ;; unregisters the device if the switch fails.
+                           ;; A live devfreq node therefore IS a
+                           ;; completed, firmware-verified switch, and
+                           ;; unloading on a failed READ would discard a
+                           ;; working module because the instrument
+                           ;; broke.  That is what happened 2026-08-06.
+                           (log "FAILED: DDR did not read back as ~a Hz within ~~15 s; \
+module left loaded (a live devfreq node means the switch itself succeeded); \
+see the checkpoint lines and dmesg for wilkbook_dmc"
+                                #$%dmc-target-rate)))
                      (log "FAILED: modprobe ~a exited with ~a; \
 reader continues at the boot rate (costs ~~25 mA)"
                           #$%dmc-module status))))
@@ -305,20 +338,36 @@ reader continues at the boot rate (costs ~~25 mA)"
                     key args))))
 
          (define (run-quiesced)
-           ;; no EBC work may overlap the switch
+           ;; Unbinding fbcon is the WHOLE quiesce: it removes the damage
+           ;; producer (63 Hz of EBC work from a bound fbcon, measured
+           ;; 2026-07-30).  There is deliberately no fb0 blank here.  It
+           ;; used to be, and it bought nothing: an fbdev DPMS blank sets
+           ;; only active_changed, while every EBC hook
+           ;; (crtc_atomic_check / _disable / _enable) is gated on
+           ;; mode_changed -- so the worker is never parked and no
+           ;; off-screen wash runs.  What the blank DOES do is commit a
+           ;; damage-clip-less full-plane update at the exact moment this
+           ;; service believes it is quiescing.
            (write-sysfs %fbcon-bind "0")
-           (write-sysfs %fb-blank "1")
-           (checkpoint "blanked")
+           (checkpoint "unbound")
            (wait-ebc-idle 40)
            (checkpoint "ebc-idle")
            (if (string=? mode "noswitch")
                (log "mode=noswitch: quiesced and restoring WITHOUT loading ~a"
                     #$%dmc-module)
                (load-and-verify))
-           ;; ALWAYS restore the console, reverse order
-           (write-sysfs %fb-blank "0")
+           ;; ALWAYS restore the console as a rescue path -- but do not
+           ;; walk away while it is still painting.  `bind 1` runs
+           ;; redraw_screen over the whole visible console, and those
+           ;; draws reach the panel IMMEDIATELY: defio_delay_ms governs
+           ;; only the mmap path, not fbcon's damage, which goes straight
+           ;; to schedule_work.  Leaving that burst in flight is how the
+           ;; service hands a still-driving panel to reader-session,
+           ;; whose GC16 boot wash then interleaves with it.
            (write-sysfs %fbcon-bind "1")
-           (checkpoint "console-restored"))
+           (checkpoint "console-restored")
+           (wait-ebc-idle 40)
+           (checkpoint "restore-drained"))
 
          (if (string=? mode "off")
              (log "mode=off: leaving the display and the DDR rate alone")
