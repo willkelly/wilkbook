@@ -53,8 +53,37 @@ Will's targets, and where we actually stand. All from a 4000 mAh charge
 
 | target | needs | measured | verdict |
 | --- | --- | --- | --- |
-| **~40 h active use** | ≤100 mA average | awake floor **156.9 mA** (25.5 h) since the 2026-08-06 vdd_cpu fix; was 171.6 mA (23.3 h) | **not reachable awake** — reachable only by suspending between interactions |
-| **a week idle, most of a charge left** | ≤6.0 mA to leave 75% | deep floor **20.6 mA**, but an idle device never sat there: **delivered** standby was **54.7 mA** (the 2026-08-03 → 08-07 duty-cycle bug, ~3.0 days), **~22.6 mA** after the 2026-08-07 fix (~7.4 days) — arithmetic, never measured | **~3.4x short even at the floor**, and the floor was the wrong number to quote — see "The idle duty cycle" |
+| **>= 25 h active reading** | <= 160 mA | awake floor **156.9 mA** (25.5 h) since the vdd_cpu fix | **met on the floor, thinly** — and the floor was measured at frontlight ZERO, so this is "25.5 h in daylight". Two switchable domains take it to 144.6 mA / **27.7 h** (below), leaving **15.4 mA of budget for the frontlight** before 25 h is at risk. The frontlight's cost is unmeasured — that is the open term. |
+| **>= 18 days suspend** (accepted) | <= 9.2 mA idle average | delivered standby **~22.6 mA** (~7.4 d) after the 2026-08-07 duty-cycle fix — arithmetic, never measured | **~2.5x short.** No awake-side lever touches it. Only ultra-suspend can close it, and its own pessimistic end (9 mA) lands *exactly* here: 17.0 d at a 1 h backstop, **18.1 d at 4 h**. |
+| **> 30 days suspend** (desired) | <= 5.56 mA idle average | as above | needs ultra at **<= 4.71 mA** (1 h backstop) or **<= 5.35 mA** (4 h) — the optimistic half of hrdl's unreplicated bracket. Wanted, not counted on. |
+
+Targets revised 2026-08-07 to Kindle-class: >= 25 h reading, >= 18 days
+standby accepted with > 30 desired. They supersede the older "~40 h
+active / a week idle" pair, which priced the program against a standby
+figure the duty-cycle bug made fictional.
+
+**Why 18 days changes the ultra question.** It turns "does ultra hit its
+best case?" into "does ultra work at all?" — worth knowing, because even
+the pessimistic 9 mA end clears it. It also makes the backstop length
+load-bearing for the first time: at 9 mA, 1 h gives 17.0 d (miss) and 4 h
+gives 18.1 d (meet). That is a runtime knob, not a rebuild.
+
+**The awake path to comfortable margin**, from the 2026-08-06 domain
+teardown — only 14 mA of the awake draw is switchable at all, and two of
+the three are things a reader has no business running by default:
+
+| lever | measured | running total | hours |
+| --- | --- | --- | --- |
+| today | — | 156.9 mA | 25.5 |
+| Wi-Fi off | 10.3 mA | 146.6 mA | 27.3 |
+| USB gadget off | 2.0 mA | 144.6 mA | 27.7 |
+| KOReader idle work | 4.1 mA | 140.5 mA | 28.5 |
+
+Wi-Fi is needed to fetch books, not to read them; the gadget console is a
+development affordance. Neither should be on by default in the reader
+flavor. The panel itself measured **0.0 mA** — on e-ink a static page is
+genuinely free, which is why the frontlight is the only awake term left
+worth measuring.
 
 **Which suspend-draw number to quote (19.3 vs 20.6 mA):** both are
 real measurements of the same deep draw at different dates and
