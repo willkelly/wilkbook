@@ -41,7 +41,7 @@ help:
 	@echo "  koreader-input-check  KOReader input, touch, and virtual-node lifecycle tests"
 	@echo "  orientation-check SC7A20 classifier and uinput bridge tests"
 	@echo "  optics-check      deterministic recorder/bundle/analysis tests"
-	@echo "  power-check       fake-root tests for the read-only Guile power recorder"
+	@echo "  power-check       fake-root tests for the read-only Guile power recorder; auto-suspend post-wake policy"
 	@echo "  rockchip-pm-check dormant BSP SIP/PM model, DTB, and zero-call checks"
 	@echo "  activation-positive-check  fake capabilities/coordinator + active PM scenario; production hard-off"
 	@echo "  suspend-check     offline fail-closed e-reader suspend qualification gates"
@@ -186,9 +186,11 @@ optics-check:
 	guix shell python python-numpy python-scipy python-pillow ffmpeg -- $(MAKE) -C pinenote/tools/optics check
 
 # Read-only power snapshot/delta recorder tests.  Guile is present in the
-# final4 system profile and the tool uses only base Guile modules.
+# final4 system profile and the tool uses only base Guile modules.  luajit
+# joins for the auto-suspend post-wake policy gate, which executes the
+# daemon's own extracted source.
 power-check:
-	guix shell guile python -- $(MAKE) -C pinenote/tools/power check
+	guix shell guile python luajit -- $(MAKE) -C pinenote/tools/power check
 
 rockchip-pm-check:
 	guix shell dtc gcc-toolchain git python -- $(MAKE) -C pinenote/tools/rockchip-pm check

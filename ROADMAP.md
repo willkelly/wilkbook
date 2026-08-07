@@ -276,9 +276,12 @@ the start of this track — no panel required. Policy background in
       `doc/power-management.md`.
 - [ ] Suspend program, remaining direction: the week-scale unplugged soak
       (a first short unplugged soak passed clean 2026-08-03 — no spurious
-      wakes at the 240 s dwell; the ~8-day standby figure, 8.6 d at the
-      19.3 mA measurement or 8.1 d at the 20.6 mA audit floor, still
-      rests on extrapolation); wake attribution and the cover wake source; the
+      wakes at the 240 s dwell; its 64.4 mA duty-cycle average was itself
+      the RTC-rewake bug fixed 2026-08-07, so standby is still unmeasured:
+      the deep floor is 8.1 d at 20.6 mA but no idle device ever sat
+      there, and the post-fix ~7.4 d is arithmetic —
+      `doc/power-management.md`, "The idle duty cycle"); wake attribution
+      and the cover wake source; the
       unexplained TPS `ENABLE` 2f->20 delta after deep; resume latency as
       a UX metric (~1.1 s kernel time today; measure one full
       wake+render+refresh cycle); ultra-suspend (rail-kill) for the

@@ -1,5 +1,19 @@
 # power — read-only PineNote power evidence
 
+`autosuspend.lua` is the deployed daemon (`pinenote/services/autosuspend.scm`),
+not a test tool. `test-autosuspend-policy.lua` is its offline gate: the daemon
+cannot be loaded on a host — it opens `/dev/input/event*`, exits when there are
+none, and then never leaves its main loop — so the test extracts `suspend_once()`
+and the caller's post-wake branch *verbatim* and runs them against injected
+fakes and a virtual clock. It pins the 2026-08-07 duty-cycle fix: an RTC-backstop
+wake means nobody is present and must re-suspend after a short settle, while a
+button wake still gets the whole idle period. It also checks the resulting
+idle-average arithmetic and that `autosuspend.scm`'s `idle`/`backstop` defaults —
+the ones that actually ship, since the service passes them explicitly — still
+match the daemon's own. Runs under `make power-check`; the un-fixed daemon
+fails it. Rationale and acceptance procedure: `doc/power-management.md`,
+"The idle duty cycle".
+
 `test-power-capabilities.lua` proves the separate, unimported provider boundary
 accepts only the exact capability set and forwards state/results/errors without
 adding authority or no-op fallbacks. `test-power-coordinator.lua` exercises the isolated

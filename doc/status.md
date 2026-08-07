@@ -51,8 +51,12 @@ v3 boot acceptance is the tap test; see the 2026-08-06 night entry.
 
 **Next actions**: (1) the week-scale unplugged soak — a first short
 unplugged soak passed clean 2026-08-03 (2 full-duration sleeps, no
-spurious wakes, 64.4 mA duty cycle), but the 8.6-day standby figure still
-rests on extrapolation; (2) wake attribution — only RTC and power-button
+spurious wakes, 64.4 mA duty cycle), and that 64.4 mA is now known to be
+the RTC-rewake bug fixed 2026-08-07, so **standby has never been
+measured**: the old 8.6-day figure was the deep floor, which an idle
+device never sat at, and the post-fix ~7.4 days is arithmetic
+(`doc/power-management.md`, "The idle duty cycle" — the fix's acceptance
+is a log read, defined there); (2) wake attribution — only RTC and power-button
 wake are proven; (3) the unexplained TPS `ENABLE 2f → 20` after deep
 resume; (4) the pre-suspend `nobody cared` trace seen once on the
 st_accel-PM image (soak artifact, open question); (5) SSH state on `/data`:
@@ -63,6 +67,25 @@ at the first boot of a post-v3 image (see the host-keys entry below).
 
 Entries below are newest-first; the ## sections after the parity table
 are a historical document.
+
+**2026-08-07 auto-suspend duty-cycle fix — in tree, NOT in any deployed
+image.** Every deployed image from 2026-08-03 onward re-armed a full
+300 s idle period after an RTC-backstop wake, so a device left alone ran
+900 s asleep at 20.6 mA then 300 s awake at 156.9 mA forever: 25 % awake,
+54.7 mA, flat in ~3 days rather than the ~8 the deep floor implies.
+`626cb02` re-suspends after a 20 s settle when the sleep lasted
+essentially the whole backstop (a button wake still gets the full idle
+period), and the default backstop moved 900 s → 3600 s now that each
+backstop wake is pure cost. **No hardware evidence yet** — the numbers
+are arithmetic on the measured 156.9/20.6 mA, the 1 h dwell is 4x the
+longest this device has slept, and the acceptance procedure (a log read)
+is in `doc/power-management.md`, "The idle duty cycle". Offline evidence:
+`pinenote/tools/power/test-autosuspend-policy.lua` under `make
+power-check`, which runs the daemon's own extracted source and fails on
+the pre-fix file. The finding was already in the 2026-08-03 soak record
+four days earlier and was read as an argument for a *longer* idle default.
+(`626cb02`'s message says "eleven weeks"; the record says 2026-08-03 →
+2026-08-07.)
 
 **2026-08-06 (after the v3 write) persistent SSH host keys — in tree,
 NOT in any deployed image.** The same `pinenote-ssh-authorized-keys`

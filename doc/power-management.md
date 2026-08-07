@@ -1,6 +1,6 @@
 # PineNote power management: evidence first
 
-**Current state (2026-08-06).** What is hardware-proven, in one place:
+**Current state (2026-08-07).** What is hardware-proven, in one place:
 
 - **Deep suspend works** (2026-08-02): BSP SIP activation is live and
   bound (`cfg: 0x5ec`, wakeup-config `0x10`); the device enters `deep`,
@@ -13,6 +13,13 @@
   inhibit, short-press-to-suspend). Consequence: **ssh is
   intermittent** — see `doc/device-access.md` for the runtime
   `enabled=0` pause before working on the device.
+- **Standby has never been measured, and what shipped was not the deep
+  floor** (2026-08-07, offline): every deployed daemon re-armed a full
+  idle period after an RTC-backstop wake, so an idle device ran ~25 %
+  awake — 54.7 mA, flat in ~3 days, not the ~8 the floor implies. Fixed
+  in tree (`626cb02`), default backstop 900 s → 1 h; **not deployed, and
+  every post-fix figure is arithmetic.** Numbers and acceptance: "The
+  idle duty cycle" below.
 - **The awake floor fell twice on 2026-08-06**: vdd_cpu auto-PFM is
   accepted on hardware (settled reader idle 174 → **156.9 mA**,
   ~25.5 h), and DDR DVFS landed (`wilkbook_dmc` + input-driven boost;
@@ -47,7 +54,7 @@ Will's targets, and where we actually stand. All from a 4000 mAh charge
 | target | needs | measured | verdict |
 | --- | --- | --- | --- |
 | **~40 h active use** | ≤100 mA average | awake floor **156.9 mA** (25.5 h) since the 2026-08-06 vdd_cpu fix; was 171.6 mA (23.3 h) | **not reachable awake** — reachable only by suspending between interactions |
-| **a week idle, most of a charge left** | ≤6.0 mA to leave 75% | deep **20.6 mA** (leaves ~13%) | **~3.4x short** |
+| **a week idle, most of a charge left** | ≤6.0 mA to leave 75% | deep floor **20.6 mA**, but an idle device never sat there: **delivered** standby was **54.7 mA** (the 2026-08-03 → 08-07 duty-cycle bug, ~3.0 days), **~22.6 mA** after the 2026-08-07 fix (~7.4 days) — arithmetic, never measured | **~3.4x short even at the floor**, and the floor was the wrong number to quote — see "The idle duty cycle" |
 
 **Which suspend-draw number to quote (19.3 vs 20.6 mA):** both are
 real measurements of the same deep draw at different dates and
@@ -79,6 +86,106 @@ verdict stands — no awake floor reaches a 100 mA average — but
 "irreducible" was falsified within hours of being measured
 (`doc/artifacts/pinenote-awake-levers-20260806/`: "the floor is
 structural no more").
+
+### The idle duty cycle: standby was never the deep floor (2026-08-07)
+
+**The week-idle row used to read "deep 20.6 mA (leaves ~13%)", which
+assumes an idle device sits at the deep floor. It did not.** From the
+2026-08-03 deployment to 2026-08-07 the auto-suspend daemon stamped
+`last_activity = os.time()` after *every* resume, with no branch
+separating an RTC-backstop wake (nobody present) from a button wake
+(somebody present). A device alone in a bag therefore ran a loop: 900 s
+asleep at 20.6 mA, then a **fresh 300 s idle period awake at 156.9 mA**,
+repeat.
+
+| daemon | awake duty | average | 4000 mAh lasts |
+| --- | --- | --- | --- |
+| as shipped, `idle=300 backstop=900` | 25 % | 54.7 mA | 3.0 days |
+| fixed, 900 s backstop | 2.2 % | 23.6 mA | 7.1 days |
+| fixed, 3600 s backstop (the new default) | 0.6 % | 21.4 mA | 7.8 days |
+
+**Every figure in that table is arithmetic on measured inputs (156.9 mA
+awake, 20.6 mA deep, 4000 mAh), not a measurement.** It is also
+optimistic, because it charges the awake window at settled idle draw: the
+2026-08-03 soak measured **64.4 mA where the same component model
+predicted 49.8**, and that 14.6 mA over a ~300 s cycle is **~1.2 mAh of
+per-cycle resume work** — Wi-Fi re-association, banner restore, the GC16
+wash. Carrying that constant across gives **~28.3 mA / ~5.9 days** at a
+900 s backstop and **~22.6 mA / ~7.4 days** at 3600 s. That is why the
+default backstop moved to 1 h in the same change: post-fix, a backstop
+wake buys nothing by construction, so its only remaining term is how
+often it happens. What the longer period costs is the worst-case wait for
+a device whose button wake has regressed (15 min → 1 h); bounded
+self-recovery survives that, and `backstop=` remains a runtime knob for
+anyone who wants denser cycles. **No measured standby number exists yet
+— the multi-day unplugged soak still has not been run.**
+
+**The durable lesson: the measurement was already in the record, and had
+been read.** The 2026-08-03 unplugged soak
+(`doc/artifacts/pinenote-autosuspend-soak-unplugged-20260803/`) recorded a
+64.4 mA average at "~20 % awake duty cycle" with awake windows of ~60 s
+at `idle=60 backstop=240` — this bug, measured, on the day the daemon was
+declared working. It was written up as an argument *for* the long 300 s
+idle default ("the gap is the argument for a long idle timeout"), which
+is the exact opposite of the conclusion: a longer idle default made every
+unattended wake more expensive, not less. **A soak that reports a duty
+cycle is reporting a policy result.** Read the awake windows against what
+*should* have been awake — here, nothing at all, because nobody was
+present for any of those wakes.
+
+Fix in `626cb02`: `suspend_once()` returns the sleep duration, and a sleep
+within 5 s of the backstop re-suspends after a 20 s settle while a button
+wake still gets the whole idle period. Pinned offline by
+`pinenote/tools/power/test-autosuspend-policy.lua` (`make power-check`),
+which executes the daemon's own extracted `suspend_once()` and post-wake
+branch against a virtual clock and reproduces the 25 % / 54.7 mA numbers
+from the un-fixed source.
+
+**Still on the table**: an unobserved wake also pays for the banner
+restore and a full-panel GC16 wash, because `cleanup_wash()` runs
+unconditionally — a device in a bag washes its glass once per backstop
+cycle for nobody, and that is most of the ~1.2 mAh. Skipping display
+recovery when the wake was the alarm was not taken here: a wash deferred
+once has to still be correct after the *next* resume, and GC16 on every
+resume is what heals a mid-refresh suspend desync today (Addendum 5,
+2026-08-06).
+
+#### Acceptance on the next session (log read, no supervision needed)
+
+The daemon logs one timestamped line per resume and nothing at suspend
+time, so the quantity in dispute — the awake window — is the gap between
+consecutive resumes minus the sleep the second one reports:
+
+```sh
+awk '/resumed after/ {
+       split($2, c, ":"); t = c[1]*3600 + c[2]*60 + c[3];
+       n = $0; sub(/.*resumed after /, "", n); sub(/s.*/, "", n);
+       if (prev != "") printf "%s  awake %ds, then slept %ds\n", $2, t - prev - n, n;
+       prev = t }' /var/log/pinenote-autosuspend.log
+```
+
+1. **Quick confirmation first** (~15 min): write `backstop=240` to
+   `/var/lib/pinenote/autosuspend.conf`, leave the device alone unplugged,
+   and read three cycles. **PASS: `awake 20s` (±3), so `resumed after
+   240s` lines ~260 s apart.** `awake 300s` / ~540 s apart means the fix
+   is not in the running image. Remove the override afterwards.
+2. **Then the default period, which has never been tested**: the 1 h
+   backstop is 4x the longest dwell this device has ever slept. Expect
+   `resumed after 3600s` (±3) roughly hourly, each followed by `awake
+   20s`. **If the resume lines stop, the alarm is not re-arming** — that
+   is a fail, and the device is then relying on button wake alone.
+3. **A button wake must still get the full idle period**: press power,
+   touch nothing, and confirm that cycle reports **`awake 300s`**, not
+   `awake 20s`. A regression here sleeps the device under a reader's
+   hands.
+4. `/sys/power/suspend_stats/{success,fail}`: `success` should equal the
+   count of `resumed after` lines. Any `fail` growth is the EBC-busy or
+   gadget-veto abort path (30 s retry), not this change.
+5. **The first measured standby number this program has ever had**:
+   `charge_now` before and after ≥ 6 h unplugged and untouched. The model
+   says ~22.6 mA. A materially higher reading means per-cycle resume cost
+   is bigger than the 2026-08-03 extrapolation, and the backstop should go
+   longer still.
 
 ### The reframe that makes target 1 achievable
 

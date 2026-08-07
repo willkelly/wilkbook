@@ -180,6 +180,10 @@ gitignored `build/`, or the reader's static address.
   it (`doc/device-access.md`). Not yet proven: the multi-day unplugged
   soak; wake sources beyond RTC + power button; the TPS `ENABLE` 2f→20
   delta is unexplained. Ultra-suspend (rail-kill) remains unadopted.
+  **Standby has never been measured**: every deployed daemon burned a
+  full idle period awake after each RTC-backstop wake (~25 % duty,
+  54.7 mA, ~3 days), fixed in tree 2026-08-07 with the default backstop
+  at 1 h — `doc/power-management.md`, "The idle duty cycle".
 - **Power**: awake reader idle ~157 mA after the vdd_cpu auto-PFM fix
   (was ~174); deep ~20 mA (rail-floor audit 2026-08-06). DDR DVFS landed
   (wilkbook_dmc + input-driven boost). Ledger and next levers:

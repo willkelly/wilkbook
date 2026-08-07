@@ -22,7 +22,9 @@ Design notes, all of them earned on hardware:
   * An RTC backstop is armed on every cycle.  If a future kernel or DT
     change breaks button wake, the device still returns instead of
     becoming a brick in a bag.  This is cheap insurance and should not be
-    removed.
+    removed.  It is insurance against never waking, not a reason to wake
+    often: a backstop wake means nobody is present, so it re-suspends
+    after a short settle and every one of them is pure cost.
 
 Activity is any readable event on any /dev/input/event*, so touch, pen,
 buttons and the cover all count.
@@ -56,7 +58,20 @@ local FD_SETSIZE = 1024
 -- config file below, which is re-read before each idle wait.
 local opt = {
     idle = 300,
-    backstop = 900,
+    -- RTC safety wake, seconds.  Raised 900 -> 3600 on 2026-08-07, once a
+    -- backstop wake stopped costing a whole idle period awake: the wake
+    -- buys nothing by construction (the alarm firing IS the evidence that
+    -- nobody is here), and each one spends ~1.2 mAh of resume work --
+    -- Wi-Fi re-association, banner restore, a full-panel GC16 wash nobody
+    -- sees.  Arithmetic on the measured 156.9/20.6 mA with that per-cycle
+    -- cost included: 28.3 mA at 900 s vs 22.6 mA at 3600 s, ~5.9 vs
+    -- ~7.4 days of idle -- the difference between missing and clearing
+    -- the week-idle target.  What is traded is the worst-case wait for a
+    -- device whose button wake has regressed: 15 min -> 1 h.  Bounded
+    -- self-recovery survives that; do not trade it further, and never for
+    -- no alarm at all.  A soak wanting denser cycles sets backstop= in
+    -- the runtime config -- no rebuild, no redeploy.
+    backstop = 3600,
     dry = false,
     verbose = true,
     overlay = true,
@@ -123,7 +138,7 @@ end
 -- Runtime tunables.  Written by anyone with root; picked up on the next
 -- idle wait without restarting the daemon:
 --     idle=120        seconds of no input before suspending
---     backstop=900    RTC safety wake, seconds
+--     backstop=3600   RTC safety wake, seconds
 --     enabled=0       pause auto-suspend entirely
 -- Unknown or malformed keys are ignored rather than fatal: a typo in this
 -- file must not leave the device unable to sleep OR unable to wake.

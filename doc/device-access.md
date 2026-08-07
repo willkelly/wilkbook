@@ -143,6 +143,15 @@ UART or a human at the menu.
   several seconds of it after each wake. To work on the device, first
   write `enabled=0` to `/var/lib/pinenote/autosuspend.conf` (re-read
   before every idle wait; no restart needed).
+- **Wake it with the power button, not by waiting for the RTC.** Since
+  2026-08-07 an RTC-backstop wake re-suspends after ~20 s (nobody is
+  present when the alarm fires — `doc/power-management.md`, "The idle
+  duty cycle"), and neither an SSH session nor UART traffic counts as
+  activity: only `/dev/input` events do. A button press still grants the
+  full idle window, which is the one you want for a login. The runtime
+  pause on `/data/wilkbook/autosuspend.conf` survives reflashes and is
+  writable from os1, so set it there before a deploy rather than racing
+  a 20 s window afterwards.
 - After a broken scp, sshd's `PerSourcePenalties` can temporarily ban the
   host — pings fine, TCP accepted, handshake drops. Rapid retries DEEPEN
   the ban: stop for 5+ minutes, then one clean try.

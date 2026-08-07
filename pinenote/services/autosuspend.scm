@@ -35,7 +35,7 @@
 ;;   run time   -- /var/lib/pinenote/autosuspend.conf, re-read before every
 ;;                 idle wait, no restart needed:
 ;;                   idle=120      seconds of no input before suspending
-;;                   backstop=900  RTC safety wake, seconds
+;;                   backstop=3600 RTC safety wake, seconds
 ;;                   enabled=0     pause auto-suspend entirely
 ;; The runtime file wins when present.  A malformed value is ignored rather
 ;; than fatal: a typo must not leave the device unable to sleep or, worse,
@@ -53,7 +53,14 @@
   ;; regresses, the device still comes back instead of becoming a brick in
   ;; a bag.  Do not remove this to save power -- an RTC alarm costs
   ;; nothing and the failure it guards against is unrecoverable in the field.
-  (backstop-seconds pinenote-autosuspend-backstop-seconds (default 900))
+  ;; The PERIOD is not free, though, and 900 -> 3600 on 2026-08-07 because
+  ;; a backstop wake now re-suspends after a ~20 s settle instead of
+  ;; burning a fresh idle period: nobody is present when the alarm fires,
+  ;; so each wake is ~1.2 mAh of resume work and a wash nobody sees.  The
+  ;; cost of the change is the worst-case wait for a device with regressed
+  ;; button wake, 15 min -> 1 h.  Rationale and arithmetic:
+  ;; doc/power-management.md, "The idle duty cycle".
+  (backstop-seconds pinenote-autosuspend-backstop-seconds (default 3600))
   ;; Draw the sleep screen (current framebuffer + banner) before suspending.
   (overlay?         pinenote-autosuspend-overlay?         (default #t))
   ;; Suspend even while plugged in.  Off by default: on a charger there is
