@@ -89,6 +89,42 @@ a report about the **instrument**, not the switch: the module had loaded
 and its devfreq device existed. Verification now reads devfreq first
 (`pinenote/services/dmc.scm`), which needs no debugfs at all.
 
+## What the next os2 boot should settle
+
+v5's `pinenote-dmc` logs a checkpoint at `entry`, `blanked`, `ebc-idle`,
+`switched`/`removed`, and `console-restored`, each carrying the EBC
+interrupt count and the rate from both devfreq and clk_summary. Three
+questions fall out of one boot:
+
+1. **Does the fb blank cost a full-screen refresh?** Two independent
+   source analyses agree the blank does NOT park the worker or disable
+   the CRTC in any way this driver acts on — every EBC hook is gated on
+   `mode_changed`, which an fbdev DPMS blank never sets. But the commit
+   carries no damage blob, so the still-visible plane is committed as
+   one area covering the whole 1872x1404 panel, and whether that area is
+   dropped is a runtime data condition (`final_atomic_update` is seeded
+   0xff white while the shmem fbdev buffer is zero/black, and fbcon's
+   damage work races the blank). If `entry -> blanked -> ebc-idle` shows
+   the count climbing by ~38-46, the blank is driving a full-screen
+   **GC16 partial** — `default_waveform`, not the shipped GL16 — for
+   0.6-1 s. That is pure cost: the fbcon unbind is what actually stops
+   the damage producer, so the blank should then be deleted from the
+   quiesce rather than waited out. (`echo 0 > blank` is a true no-op by
+   the same analysis, asymmetrically, because the blit writes the
+   destination buffer even when it reports "unchanged".)
+2. **Was the EBC actually idle when the switch landed?** `ebc-idle`
+   vs `switched` answers it directly, and the gate now demands 2.5 s of
+   unchanged count rather than a single 500 ms pair.
+3. **Did the switch ever fail, or only fail to be seen?** `devfreq=` on
+   every checkpoint reports the driver's own view with no debugfs
+   involved.
+
+Then flip `/data/wilkbook/dmc.conf` to `noswitch` and boot again: same
+blanking, same everything, no DDR switch and the rate left at 1056. If
+the panel is clean there and dirty under `normal`, the switch (or the
+rate) is convicted; if it is dirty both ways, this service is exonerated
+and the cause is elsewhere in the v2+ images.
+
 ## Lesson worth keeping
 
 Before an unattended session, prove the console link end to end — the
