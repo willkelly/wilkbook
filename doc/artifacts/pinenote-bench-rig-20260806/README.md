@@ -159,7 +159,7 @@ Order of operations when you're back:
 
        /tmp/opencode/pinenote-rootfs-artifacts/pinenote-reader-PNGuixRoot-20260806.ext4
        sha256 238f24a430215adadd9c6b14ac68f9a67ccb7662497895ad7ee2978536f5d589
-       1946193920 bytes = 475145 x 4096
+       1946185728 bytes = 475143 x 4096   (bs=4096 count=475143)
 
    (`make rootfs-reader` reproduces it from this commit if the host copy
    is gone; the build is cached, so it costs minutes not hours.)
