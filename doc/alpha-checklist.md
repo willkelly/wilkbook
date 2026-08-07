@@ -17,6 +17,12 @@ The disclaimer carries that.
 pass. Publishing a number we never measured is not. Alpha ships measured
 numbers or no numbers.
 
+**Alpha is cut by a person, not by a green test run.**
+`doc/alpha-signoff.md` carries the human QC cycle, the quality bar
+("a cold, not covid"), the list of things the machine already proves so
+they are not re-checked by hand, the known colds we ship deliberately,
+and the sign-off record to fill in.
+
 ---
 
 ## Blockers

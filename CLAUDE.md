@@ -51,6 +51,8 @@ code review — before a single reboot. That's the standard.
   after every hardware session; it records what's actually been proven.
   Newest entries at the top.
 - `doc/testing.md` — the testing philosophy, host tools, validation ladder.
+- `doc/alpha-checklist.md` + `doc/alpha-signoff.md` — what alpha is and
+  what blocks it; and the human QC cycle that actually cuts it.
 - `doc/worked-examples.md` — the philosophy applied: replayable case
   studies. Read these before your first non-trivial change.
 - `doc/building.md` — host prerequisites and exact build/QEMU/extraction
