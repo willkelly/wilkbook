@@ -2,6 +2,7 @@
   #:use-module (gnu services)
   #:use-module (gnu services shepherd)
   #:use-module (gnu packages linux)
+  #:use-module (gnu services base)
   #:use-module (guix gexp)
   #:export (pinenote-dmc-service-type))
 
@@ -32,12 +33,13 @@
 
 (define %dmc-module "wilkbook_dmc")
 
-;; Without this, udev's coldplug (80-drivers.rules, kmod builtin, which
-;; applies blacklists) would modalias-load wilkbook_dmc as soon as the
-;; dmc platform device appears — long before this service quiesces the
-;; console — and the probe-time switch would race the boot text's EBC
-;; scans.  `blacklist` only suppresses alias-based loading; the explicit
-;; modprobe-by-name below still works.
+;; Belt half of a belt-and-braces pair.  This alone does NOT stop the
+;; coldplug -- measured 2026-08-07, the module loaded and switched the
+;; DDR at 10.60 s with this file installed -- because eudev's kmod
+;; builtin loads by modalias without applying modprobe.d blacklists.
+;; The braces are %dmc-udev-rule below.  Kept because it costs nothing
+;; and does bind any modprobe path that DOES honour blacklists; the
+;; explicit modprobe-by-name this service runs is unaffected either way.
 (define %dmc-modprobe-options
   "blacklist wilkbook_dmc\n")
 
@@ -54,7 +56,19 @@
     (one-shot? #t)
     (start
      #~(lambda _
-         (use-modules (ice-9 rdelim) (ice-9 ftw))
+         ;; Resolve these EXPLICITLY, never via use-modules.  A
+         ;; shepherd service file is COMPILED, and a `use-modules` in a
+         ;; lambda body does not import into the environment the compiled
+         ;; toplevel references resolve against -- every call throws
+         ;; Unbound variable, and every one of them here sits inside a
+         ;; `catch #t` that turns the throw into a plausible-looking #f.
+         ;; Consequence, live on the 2026-08-07 boot: wait-ebc-idle never
+         ;; waited (a #f count reads as "no EBC, nothing to wait for"),
+         ;; the mode selector always fell back to "normal", and every
+         ;; checkpoint field but devfreq -- the one function using `read`
+         ;; rather than `read-line` -- logged "none"/"absent".
+         (define read-line* (@ (ice-9 rdelim) read-line))
+         (define scandir* (@ (ice-9 ftw) scandir))
 
          (define %fbcon-bind "/sys/class/vtconsole/vtcon1/bind")
          (define %clk-summary "/sys/kernel/debug/clk/clk_summary")
@@ -111,7 +125,7 @@
                (call-with-input-file "/proc/interrupts"
                  (lambda (port)
                    (let loop ()
-                     (let ((line (read-line port)))
+                     (let ((line (read-line* port)))
                        (cond
                         ((eof-object? line) #f)
                         ((string-contains line "fdec0000.ebc")
@@ -149,7 +163,14 @@
                       (before (ebc-irq-count))
                       (attempts attempts))
              (cond
-              ((not before) #t)           ; no EBC (virt): nothing to wait for
+              ((not before)
+               ;; No readable count.  Genuinely absent on QEMU virt --
+               ;; but it is ALSO what a broken reader looks like, and
+               ;; that silence hid a dead gate for a week (2026-08-07).
+               ;; Say so rather than reporting quiet.
+               (log "WARNING: EBC interrupt count unreadable -- \
+proceeding WITHOUT an idle gate")
+               #t)
               ((>= quiet 5) #t)
               ((zero? attempts)
                (log "EBC did not go idle in time; proceeding")
@@ -191,7 +212,7 @@
                     (call-with-input-file %clk-summary
                       (lambda (port)
                         (let loop ()
-                          (let ((line (read-line port)))
+                          (let ((line (read-line* port)))
                             (cond
                              ((eof-object? line) #f)
                              ((string-contains line "clk_scmi_ddr")
@@ -225,10 +246,10 @@
                       (call-with-input-file path
                         (lambda (port)
                           (let loop ()
-                            (let ((line (read-line port)))
+                            (let ((line (read-line* port)))
                               (cond
                                ((eof-object? line) #f)
-                               ((string-contains line "total transition")
+                               ((string-contains line "Total transition")
                                 (let ((tokens (filter string->number
                                                       (string-tokenize line))))
                                   (and (pair? tokens)
@@ -249,7 +270,7 @@
          (define (ebc-thread-state)
            (catch #t
              (lambda ()
-               (let loop ((entries (scandir "/proc")))
+               (let loop ((entries (scandir* "/proc")))
                  (cond
                   ((or (not entries) (null? entries)) #f)
                   ((not (string->number (car entries)))
@@ -261,7 +282,7 @@
                                      (catch #t
                                        (lambda ()
                                          (call-with-input-file comm-path
-                                           read-line))
+                                           read-line*))
                                        (lambda _ #f)))))
                      (if (and (string? comm)
                               (string-prefix? "ebc-refresh" comm))
@@ -269,7 +290,7 @@
                            (lambda ()
                              (let* ((stat (call-with-input-file
                                               (string-append "/proc/" pid "/stat")
-                                            read-line))
+                                            read-line*))
                                     (tail (substring stat
                                                      (1+ (string-rindex stat #\))))))
                                (car (string-tokenize tail))))
@@ -312,7 +333,7 @@
                    (call-with-input-file %mode-file
                      (lambda (port)
                        (let loop ()
-                         (let ((line (read-line port)))
+                         (let ((line (read-line* port)))
                            (cond
                             ((eof-object? line) "normal")
                             ((string-prefix? "mode=" line)
@@ -424,15 +445,34 @@ reader continues at the boot rate (costs ~~25 mA)"
   (list `("modprobe.d/wilkbook_dmc.conf"
           ,(plain-file "wilkbook_dmc.conf" %dmc-modprobe-options))))
 
+;; The modprobe.d blacklist above is NOT sufficient, proven on glass
+;; 2026-08-07: the module still coldplugged and switched the DDR at
+;; kernel time 10.60 s, 865 ms BEFORE this service unbound fbcon at
+;; 11.47 s -- i.e. the 100 ms all-master stall landed in live console
+;; scans, which is the whole hazard the guarded window exists to
+;; prevent.  eudev's kmod builtin loads by modalias without applying
+;; modprobe.d blacklists, so the only thing that reliably stops the
+;; coldplug is removing the modalias from the device before
+;; 80-drivers.rules runs.  An explicit `modprobe wilkbook_dmc` by name
+;; is unaffected, which is exactly what this service does inside the
+;; window.
+(define %dmc-udev-rule
+  "SUBSYSTEM==\"platform\", KERNEL==\"memory-controller\", ENV{MODALIAS}=\"\"\n")
+
 (define pinenote-dmc-service-type
   (service-type
    (name 'pinenote-dmc)
    (extensions
     (list (service-extension shepherd-root-service-type
                              pinenote-dmc-shepherd-service)
-          ;; keep udev coldplug's hands off the module (see
-          ;; %dmc-modprobe-options)
+          ;; keep udev coldplug's hands off the module -- BOTH of these
+          ;; are needed; the modprobe.d blacklist alone demonstrably is
+          ;; not (see %dmc-udev-rule)
           (service-extension etc-service-type
-                             pinenote-dmc-etc-files)))
+                             pinenote-dmc-etc-files)
+          (service-extension udev-service-type
+                             (const (list (udev-rule
+                                           "60-wilkbook-dmc-noautoload.rules"
+                                           %dmc-udev-rule))))))
    (default-value #f)
    (description "Load the wilkbook DMC driver with fbcon quiesced, pinning DDR at the lowest firmware rate.")))

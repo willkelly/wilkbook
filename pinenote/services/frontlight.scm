@@ -50,7 +50,13 @@
       (one-shot? #t)
       (start
        #~(lambda _
-           (use-modules (ice-9 ftw))
+           ;; Explicit module reference, NOT use-modules: a shepherd
+           ;; service file is compiled, and a `use-modules` in a lambda
+           ;; body does not import into the environment the compiled
+           ;; toplevel references resolve against.  This service failed
+           ;; its first boot (2026-08-07) with "Unbound variable:
+           ;; scandir" for exactly that reason.
+           (define scandir* (@ (ice-9 ftw) scandir))
 
            (define (log message . arguments)
              (apply format #t
@@ -89,7 +95,7 @@
                      #f))))
 
            (if (file-exists? #$%backlight-root)
-               (let ((names (scandir #$%backlight-root
+               (let ((names (scandir* #$%backlight-root
                                      (lambda (n)
                                        (not (member n '("." "..")))))))
                  (if (null? (or names '()))
