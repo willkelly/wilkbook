@@ -100,9 +100,15 @@ end
     ;; would light the panel.  pinenote-dmc orders the DDR drop (and
     ;; its fbcon-quiesce window) ahead of the reader; it exits success
     ;; even on failure, so it can delay the reader but never block it.
+    ;; pinenote-library creates /data/books.  Shepherd starts services
+    ;; CONCURRENTLY, so without this edge the reader can open its file
+    ;; browser before the library exists -- and KOReader does not recover
+    ;; from an unresolvable home_dir, it lands in the store directory.
+    ;; Like pinenote-dmc, the one-shot exits success even when it does
+    ;; nothing, so it can delay the reader but never block it.
     (requirement '(udev user-processes orientation-bridge
                    pinenote-waveform pinenote-ebc-params
-                   pinenote-dmc))
+                   pinenote-dmc pinenote-library))
     (documentation "KOReader running natively on the e-ink framebuffer.")
     (respawn? #t)
     (start

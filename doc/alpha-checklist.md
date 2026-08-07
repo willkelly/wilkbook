@@ -88,13 +88,13 @@ than merely deferred. Record:
       duty-cycle bug, was written up as an argument for the setting that
       made it worse, and the model said 8.6 days while reality was 3.0.
 
-### 5. Fresh-clone first boot must survive — SCOPED 2026-08-07, harder than it looked
+### 5. Fresh-clone first boot — MOSTLY DONE 2026-08-07
 
 Investigated properly (8-agent design + 3 adversarial lenses). What was
 written here as "one mkdir in activation" is four defects, three of them
 invisible to every gate we have:
 
-- [ ] **`/data/books` is created by nothing.** It exists on the one
+- [x] **`/data/books` is created by nothing.** DONE — `pinenote/services/library.scm`, a shepherd one-shot requiring `file-system-/data`. It exists on the one
       device because a human made it. **It must be created by a shepherd
       one-shot requiring `file-system-/data`, not by activation** —
       verified 2026-08-07: the boot script mentions `/data` zero times
@@ -102,31 +102,39 @@ invisible to every gate we have:
       starts *after* activation. A `mkdir -p` in activation lands on the
       os2 root filesystem, underneath the mount, invisible forever. Same
       class as the DMC regression (`dmc.scm:69-77` has the pattern).
-- [ ] **A `home_dir` that does not resolve does not fall back.**
+- [x] **A `home_dir` that does not resolve does not fall back.** DONE — the directory now always exists, and a shadowed activation fallback on the os2 rootfs covers the never-mounted case with a readable explanation instead of a store path.
       `realpath` returns nil, `root_path` drops through to
       `lfs.currentdir()` — the read-only Guix store. A fresh device's
       first view of "your library" is `/gnu/store/…/lib/koreader`
       listing `luajit` and `reader.lua`. This closes the open question
       at `doc/install.md`.
-- [ ] **On a true first session the seeded `home_dir` is bypassed
-      entirely.** KOReader forces the quickstart guide, and every route
+- [x] **On a true first session the seeded `home_dir` is bypassed
+      entirely.** DONE — `quickstart_shown_version` seeded at the verified 2021070000 threshold. KOReader forces the quickstart guide, and every route
       out of it passes the open document's path, so the browser opens in
       the quickstart's directory. Proven by grepping all 14
       `showFileManager` call sites; PineNote maps no Back key, so there
       is no fourth route. Fixing this needs `quickstart_shown_version`
       seeded, not a `home_dir` change.
-- [ ] **Any shell one-shot must `export PATH` as its first line.**
+- [x] **Any shell one-shot must `export PATH` as its first line.** DONE, and gated.
       Shepherd start-lambdas inherit PID 1's environment, which on this
       device is `PATH=/gnu/store/…-e2fsck-static/sbin` — one binary. A
       script using `stat`/`mkdir`/`ln` silently takes its failure branch
       and exits 0, while every gate stays green because the developer's
       workstation has a full PATH. `wifi.scm:26` records this lesson
       already; `ssh-keys.scm:75` has the incantation.
-- [ ] The build works without the gitignored licensed fonts — and the
-      seeded profile hardcodes `cre_font = "Equity A"`, so make it
-      conditional. That build has never been booted anywhere.
-- [ ] `make qemu-virt-check` against a genuinely fresh clone, used as an
-      actual release gate. It exists and has never once been used as one.
+- [ ] **STILL OPEN.** The build works without the gitignored licensed
+      fonts — and the seeded profile hardcodes `cre_font = "Equity A"`,
+      so make it conditional (`directory-has-fonts?` already exists in
+      `fonts.scm`). That build has never been booted anywhere.
+- [ ] **STILL OPEN.** `make qemu-virt-check` against a genuinely fresh
+      clone, used as an actual release gate. It exists and has never once
+      been used as one.
+
+All of the above is offline work and none of it is hardware-verified.
+`make library-check` is structural and negative-tested against seven ways
+it must be able to fail; `guix system build --dry-run` evaluates. What no
+gate can tell us is what the friend actually sees on first boot — that
+needs one fresh-provisioned device, or the QEMU-virt rung.
 
 **Premise correction worth keeping:** `/data/books` is not a wilkbook
 invention. p7's root *is* os1's `/home`, so `/data/books` already **is**

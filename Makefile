@@ -213,6 +213,11 @@ activation-positive-check:
 
 # Fail-closed suspend qualification checks. These prove only static config,
 # approved DT wake capability, and restricted KOReader policy evaluation.
+# The reader's library directory and first-boot landing.  Structural, and
+# negative-tested against six ways it has to be able to fail.
+library-check:
+	sh pinenote/scripts/preflight/validate-koreader-library.sh
+
 suspend-check:
 	guix shell dtc python luajit -- sh pinenote/scripts/preflight/test-inspect-pinenote-suspend-gates.sh
 	sh pinenote/scripts/preflight/validate-tps65185-pm-hunk.sh

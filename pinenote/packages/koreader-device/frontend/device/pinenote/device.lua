@@ -220,7 +220,12 @@ local PineNote = Generic:extend{
     hasOTAUpdates = no,
     hasWifiManager = no,
     display_dpi = 227,
-    home_dir = "/root",
+    -- Not a duplicate of the seeded home_dir setting.  This is what
+    -- filemanagerutil.getDefaultDir() returns, and what
+    -- FileChooser:goHome() falls back to when the setting does not
+    -- stat as a directory.  "/root" put the Home button in the Guix
+    -- root account's dotfiles.
+    home_dir = "/data/books",
 }
 
 function PineNote:init()

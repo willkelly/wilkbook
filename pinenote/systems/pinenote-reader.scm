@@ -13,6 +13,7 @@
   #:use-module (pinenote services orientation)
   #:use-module (pinenote services reader-session)
   #:use-module (pinenote services dmc)
+  #:use-module (pinenote services library)
   #:use-module (pinenote services frontlight)
   #:use-module (pinenote services ddr-boost)
   #:use-module (pinenote services autosuspend)
@@ -61,6 +62,11 @@ root ALL=(ALL) ALL
                  ;; the miss).
                  (service pinenote-dmc-service-type)
                  (service pinenote-ddr-boost-service-type)
+                 ;; Creates /data/books before the reader opens its file
+                 ;; browser on it.  Ordering is declared in
+                 ;; reader-session's requirement, not implied by this
+                 ;; list -- shepherd starts services concurrently.
+                 (service pinenote-library-service-type)
                  (service pinenote-reader-session-service-type)
                  ;; Sleep to deep after inactivity: ~7x on measured power
                  ;; (172 mA awake vs 19.3 mA deep, 2026-08-02).  Wake is by
@@ -143,6 +149,40 @@ root ALL=(ALL) ALL
                  ;;   coverbrowser_initial_default_setup_done -- stops
                  ;;                           CoverBrowser seeding itself on;
                  ;;                           leaves the classic filename list
+                ;; Shadowed fallback for the case where p7 never mounts.
+                ;; pinenote-library (a shepherd one-shot) correctly refuses to
+                ;; create the library when /data is not a mount point -- but
+                ;; then home_dir does not resolve, and KOReader does NOT
+                ;; recover from that: realpath returns nil, root_path falls
+                ;; through to lfs.currentdir(), and the user's first sight of
+                ;; "their library" is the read-only Guix store directory
+                ;; listing luajit and reader.lua.
+                ;;
+                ;; Activation runs BEFORE /data is mounted, so this always
+                ;; writes to the os2 root filesystem -- which is exactly the
+                ;; point.  When p7 is present the real mount shadows it and
+                ;; nobody ever sees it.  When p7 is absent or its mount
+                ;; failed, it is what the file browser opens on, and it says
+                ;; so in a sentence instead of showing a store path.
+                (simple-service 'pinenote-library-fallback
+                                activation-service-type
+                                #~(let ((f "/data/books/DATA-PARTITION-DID-NOT-MOUNT.txt"))
+                                    (unless (file-exists? f)
+                                      (mkdir-p "/data/books")
+                                      (call-with-output-file f
+                                        (lambda (port)
+                                          (display "\
+If you can read this file in the reader, the shared data partition did not
+mount, and this is NOT your library -- it is a placeholder on the OS
+partition.
+
+Your books live on the data partition (the one labelled \"data\", which the
+stock Debian system mounts as /home).  Nothing here is lost: this directory
+is normally hidden underneath that mount.
+
+Check that the partition exists and is healthy from the other OS slot, or
+over the serial console.  See doc/install.md in the wilkbook repository.
+" port))))))
                 (simple-service 'pinenote-koreader-home-dir
                                 activation-service-type
                                 #~(let ((f "/root/.config/koreader/settings.reader.lua"))
@@ -150,7 +190,7 @@ root ALL=(ALL) ALL
                                       (mkdir-p "/root/.config/koreader")
                                       (call-with-output-file f
                                         (lambda (port)
-                                          (display "-- seeded by the reader flavor (pinenote-koreader-home-dir)\nreturn {\n    [\"closed_rotation_mode\"] = 1,\n    [\"copt_b_page_margin\"] = 25,\n    [\"copt_font_size\"] = 30,\n    [\"copt_h_page_margins\"] = { [1] = 30, [2] = 30 },\n    [\"copt_t_page_margin\"] = 15,\n    [\"coverbrowser_initial_default_setup_done\"] = true,\n    [\"cre_font\"] = \"Equity A\",\n    [\"cre_header_auto_refresh\"] = 0,\n    [\"cre_partial_rerendering\"] = false,\n    [\"cre_show_progress\"] = false,\n    [\"flash_keyboard\"] = false,\n    [\"flash_ui\"] = false,\n    [\"full_refresh_count\"] = 0,\n    [\"home_dir\"] = \"/data/books\",\n    [\"lock_rotation\"] = true,\n    [\"refresh_on_pages_with_images\"] = false,\n    [\"screensaver_type\"] = \"cover\",\n}\n" port))))))
+                                          (display "-- seeded by the reader flavor (pinenote-koreader-home-dir)\nreturn {\n    [\"closed_rotation_mode\"] = 1,\n    [\"copt_b_page_margin\"] = 25,\n    [\"copt_font_size\"] = 30,\n    [\"copt_h_page_margins\"] = { [1] = 30, [2] = 30 },\n    [\"copt_t_page_margin\"] = 15,\n    [\"coverbrowser_initial_default_setup_done\"] = true,\n    [\"cre_font\"] = \"Equity A\",\n    [\"cre_header_auto_refresh\"] = 0,\n    [\"cre_partial_rerendering\"] = false,\n    [\"cre_show_progress\"] = false,\n    [\"flash_keyboard\"] = false,\n    [\"flash_ui\"] = false,\n    [\"full_refresh_count\"] = 0,\n    [\"home_dir\"] = \"/data/books\",\n    [\"lock_rotation\"] = true,\n    [\"quickstart_shown_version\"] = 2021070000,\n    [\"refresh_on_pages_with_images\"] = false,\n    [\"screensaver_type\"] = \"cover\",\n}\n" port))))))
                 ;; Key-only SSH with NO baked authorized key: root's key
                 ;; is installed at boot from /data/ssh/authorized_keys
                 ;; (ssh-keys.scm), the same out-of-band channel as the
