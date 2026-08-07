@@ -229,6 +229,24 @@ MCU-path switch takes ~107 ms) and produce `EBC_FRAME_TIMEOUT` -- and
 the harvested dmesg has zero timeouts and no poison. The mechanism
 predicts evidence that is absent.
 
+> **RETRACTED 2026-08-06 (night).** That paragraph is wrong, and it is
+> the reason DDR got demoted too early. The 25 ms `EBC_FRAME_TIMEOUT` is
+> armed ONLY in the partial path, once per frame; a global refresh is a
+> single hardware transaction under ONE 3000 ms `EBC_REFRESH_TIMEOUT`
+> covering ~600 ms of drive, so a 107 ms stall fits four times over and
+> is invisible by construction. The controller has no underrun interrupt
+> either (`INT_STATUS` carries only frame/display-end and line-flag
+> bits), so a starved fetch drives wrong voltages and reports nothing.
+> For the global path, "no timeouts in dmesg" is the PREDICTED signature
+> of a disturbed refresh, not evidence against one. Source-verified and
+> adversarially checked; now pinned by
+> `pinenote/scripts/preflight/validate-ebc-timeout-asymmetry.sh`.
+>
+> This does not resurrect the boost/suspend collision as the cause of the
+> TAP corruption -- the power-key double ownership below is independently
+> established from source -- but it does mean the DDR mechanism was never
+> ruled out, only unproven, and both fixes were correctly kept.
+
 **The actual mechanism (source-proven chain):**
 
 1. KOReader has opened the rk805 pwrkey node and mapped `116 -> "Power"`
