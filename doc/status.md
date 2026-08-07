@@ -26,8 +26,15 @@ measurement windows; quote ~20. DDR at 324 MHz saves ~24.8 mA (quiesced);
 `wilkbook_dmc` is live on os2 (static 324; the input boost is present but
 disabled pending the power-key fix below).
 
-**On os2**: v3 image `f41cf91f…` (written + readback-verified 2026-08-06
-late night, **not yet booted**) — v2 plus the power-key/wash fix stack
+**On os2**: v5 image `6d64fa34…` (written + readback-verified 2026-08-06
+night, **not yet booted**) — v3's fix stack plus an early frontlight, a
+DMC service that verifies through devfreq and logs a checkpoint (EBC IRQ
+count + both rate sources) at every step, and a boot-window experiment
+selector on `/data/wilkbook/dmc.conf`. **The UART is down** (see the
+bench-rig artifact), so this image cannot be booted until the debug cable
+is fixed — every unattended reboot lands in os1.
+
+Superseded, for the record: v3 image `f41cf91f…` — v2 plus the power-key/wash fix stack
 (commit `55c43b0`): KOReader no longer opens the pwrkey, autosuspend
 gates `mem` behind a sustained-quiet EBC-idle wait and washes GC16 on
 resume, both waveform save/restore sites self-heal, ddr-boost ships
