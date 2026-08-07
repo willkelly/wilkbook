@@ -45,42 +45,148 @@ debugfs, or tracefs.
 
 ## Hibernation (suspend-to-disk) — scoped 2026-08-07, not built
 
-Raised as an interim step after the ultra handshake came back
-unwakeable. The appeal is real: `deep` is ~20 mA, so a 3400 mAh battery
-gives ~7 days, while hibernate powers the SoC off entirely and standby
-falls to PMIC/RTC leakage. That is a step change, not a few mA, and it
-would clear the 18-day target rather than creep toward it.
+Raised as an interim step the same night the ultra handshake came back
+unwakeable. It deserves the serious treatment because it is the only
+remaining lever that is a **step change** rather than a few mA.
 
-What is already in our favour: the drivers have the hooks.
-`SET_SYSTEM_SLEEP_PM_OPS(rockchip_ebc_suspend, rockchip_ebc_resume)`
-(forward-port patch, ~line 6010) points `.freeze/.thaw/.poweroff/
-.restore` at the same callbacks, and the TPS65185 and WS8100 pen use the
-simple-PM macros that do the same. Nothing is structurally absent — though
-surviving a real image restore is a different claim from having a hook,
-and is unproven.
+### Why it is attractive
 
-What is missing, in increasing order of difficulty:
+`deep` costs ~20 mA. On the measured 3392 mAh in this device's gauge that
+is ~7 days of pure standby, and the shipped duty cycle makes it less.
+Hibernation powers the SoC off outright: standby draw becomes PMIC/RTC
+leakage, which is a different order of magnitude. The 18-day target stops
+being a stretch and becomes slack.
 
-1. `CONFIG_HIBERNATION` appears nowhere in `pinenote_defconfig` or
-   `kernel.scm`. A kernel rebuild.
-2. No swap exists in any system definition. ~4 GB is needed for 4 GB of
-   RAM, and p7 is shared with os1's home, so where it lives is a real
-   decision rather than a detail.
-3. **The blocker: hibernate resume is a cold boot, and it must land on
-   os2 by itself.** The U-Boot menu *is* interactable on the device, so a
-   human can always pick the slot — but a wake that presents a boot menu
-   is not a wake. The default entry finds p5 first (os1 carries
-   `/boot/extlinux/extlinux.conf`), so an untouched power-on resumes
-   nothing and the session is lost. Making os2 the *default* means
-   changing persistent boot state — U-Boot env or p1 — which the deploy
-   protocol deliberately never touches (`doc/hardware-deploy.md`). That
-   is a safety-model decision, not an implementation detail.
+It is also the only lever that gets *better* the longer the device sits,
+which is exactly the failure case we care about — a reader that went into
+a bag on Friday and is expected to work on Monday.
 
-**Sequencing.** Do not build this before the one end-to-end standby
-measurement (`doc/alpha-checklist.md` blocker 4). Hibernate's value is
-entirely a function of what real deep standby costs, and no standby
-figure in this repo has ever been measured — the 2026-08-03 precedent
-modelled 8.6 days against a reality of 3.0. Measure first, then decide.
+### What is already in our favour
+
+**The drivers have the hooks.** `SET_SYSTEM_SLEEP_PM_OPS(rockchip_ebc_suspend,
+rockchip_ebc_resume)` (forward-port patch, ~line 6010) points
+`.freeze`, `.thaw`, `.poweroff` and `.restore` at the same callbacks the
+proven `deep` path already uses; the TPS65185 and the WS8100 pen use the
+simple-PM macros, which do the same. So the hibernation phases would at
+least be *called* on every device we care about.
+
+Note the size of that claim: having a hook is not the same as surviving a
+real image restore, where the kernel that reads the image is a different
+boot of the same kernel and every device has been through a full power
+cycle. Unproven, and not cheaply provable offline.
+
+### What is missing, in increasing order of difficulty
+
+**1. `CONFIG_HIBERNATION`.** Appears nowhere in `pinenote_defconfig` or
+`kernel.scm`. A kernel rebuild, and a `make kernel-drv` gate first.
+
+**2. Swap, ~4 GB for 4 GB of RAM.** There is no swap in any system
+definition. Placement is a genuine decision, not a detail:
+
+- *A swapfile on p7.* Easiest, and it needs `resume=` plus
+  `resume_offset=`, which is per-device state the image cannot carry —
+  the same class of problem as the waveform. Worse, p7 is os1's `/home`:
+  a 4 GB file appears in the Debian user's home, where they can move or
+  delete it, and a hibernation image referenced by a stale offset is a
+  corrupt restore rather than a clean failure.
+- *A new partition.* Clean addressing by partlabel, no offset, but it
+  means repartitioning a device whose partition table is currently
+  treated as untouchable, and there is no free space without shrinking
+  p7.
+- *Shrink os2 and swap inside it.* Self-contained and reflashable, but
+  our image is written as a whole-partition `dd`, so swap would be
+  re-created on every deploy — acceptable, since a hibernation image
+  never needs to survive a reflash.
+
+The third is the only one that does not put per-device state or a
+deletable 4 GB file into os1's home, and it is probably the answer.
+
+**3. The blocker: resume must land on os2 by itself.** Resume from
+hibernation is a cold boot that must reach the os2 kernel, which then
+finds the image and restores it. As of 2026-08-07 the boot behaviour is
+settled and it is exactly wrong for this:
+
+- The U-Boot menu **is** interactable on the device — a human can always
+  pick "Boot OS2 (part 6)" without a serial console.
+- But the **default** entry searches all partitions and finds p5 first,
+  because os1 carries `/boot/extlinux/extlinux.conf`. With nobody
+  touching the device the countdown elapses to os1 — captured on UART
+  during the ultra recovery boot, 15→0 with no keypress.
+
+**A hibernate wake is unattended by definition.** The user presses power
+expecting their page back; they get os1's Debian login, and the
+hibernation image is never read. Making os2 the default means changing
+persistent boot state (U-Boot env, or p1), which `doc/hardware-deploy.md`
+deliberately never touches. That is a safety-model decision for the
+operators, not an implementation detail — and it is the first thing to
+settle, because everything else is wasted work without it.
+
+There is a second-order hazard in the same area: if os1 ever boots while
+a hibernation image is live and touches the swap, the image is stale and
+restoring it later corrupts the running system. Any design must make the
+image self-invalidating across an os1 boot.
+
+### The shape worth building, if it is built
+
+Not "hibernate instead of deep" — **suspend-then-hibernate**. Deep is
+instant to wake and costs ~20 mA; hibernation is near-free to hold and
+expensive to leave. So:
+
+    idle -> deep (instant wake, the normal case)
+      -> after N hours still idle, wake on the RTC backstop and hibernate
+
+That keeps the reader's felt behaviour identical for every ordinary
+use — pick it up within a few hours and it resumes instantly — and only
+pays the slow wake in the case where the device was genuinely abandoned,
+which is the case where the user is not waiting anyway.
+
+`autosuspend.lua` already has the machinery: it wakes on an RTC backstop,
+it knows how long it slept, and it already fails closed. The escalation
+is a new branch at the top of the backstop wake, not a new daemon.
+
+### What the user would actually see
+
+This has to be designed, not discovered on glass. A restore reads ~1-2 GB
+off eMMC; call it 10-30 s, against `deep`'s effectively-instant resume.
+On e-ink, that window is not blank — it is whatever the panel last held,
+because the display holds its image with no power. So the device would
+show the user's page, frozen and unresponsive, for up to half a minute.
+That is a worse experience than a blank screen with a progress
+indicator, and it is precisely the kind of thing the frozen-page
+ambiguity would get reported as "it hung".
+
+Mitigation is cheap and must be in scope from the start: paint a
+"resuming" banner before entering hibernation — the same
+`draw_banner` path the suspend banner already uses, with the geometry fix
+from 2026-08-07 — so the frozen image is one that explains itself.
+
+### What to prove offline, in ladder order, before any hardware
+
+1. `CONFIG_HIBERNATION` builds and the kernel derivation computes
+   (`make kernel-drv`).
+2. The image boots in QEMU virt with swap and completes a
+   hibernate/restore cycle there. This is the rung that would catch a
+   driver whose `.restore` is wrong, without a device.
+3. Structural gates: swap present, `resume=` on the cmdline, the
+   escalation logic in `autosuspend.lua` under `luac -p` plus the
+   existing suspend gates.
+4. Only then, one supervised hardware session with the UART capturing the
+   restore — with the boot-default question **already resolved**, because
+   a hardware session that resumes into os1 proves nothing.
+
+### Sequencing
+
+**Do not build this before the one end-to-end standby measurement**
+(`doc/alpha-checklist.md`). Hibernate's entire value is the delta against
+real deep standby, and no standby figure in this repo has ever been
+measured end to end. The precedent is exact and expensive: the
+2026-08-03 soak measured the duty-cycle bug, was written up as an
+argument for the setting that made it worse, and the model said 8.6 days
+while reality was 3.0 — wrong by 2.4x, in the direction that flatters.
+
+If real standby comes back near the arithmetic, hibernation is a large
+lift for a target already close. If it comes back at 2x the model, it is
+the whole ballgame. One night decides which.
 
 ## Power program: targets, measured gaps, and ordering (2026-08-02, figures refreshed 2026-08-06)
 

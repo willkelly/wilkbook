@@ -30,37 +30,42 @@ negative-tests against the broken version. *Kept here because it is the
 model failure for this project: no runtime signal exists, so only a human
 looking at the glass would ever have caught it.*
 
-### 2. Hardware session A — deploy a ship candidate and accept it
+### 2. ~~Hardware session A~~ — DONE 2026-08-07
 
-One supervised sitting, in this order. Discharges five open items at once
-and uses the scarce resource (charged device + cable + human) at maximum
-yield.
+Ship candidate `7eaab343…` deployed (dd + readback SHA) and accepted on
+glass, **5/5**, judged by the operator's eye on the exact artifact
+intended to ship: clean panel out of boot; press-to-suspend with banner
+and clean second-press resume; no residue over 10 page turns both ways;
+all four autorotations; no double draws or flashing. Machine account
+agreed — `mode=off` read from p7, `clk_scmi_ddr` 1056000000,
+`wilkbook_dmc` unloaded, `suspend_stats` 2/0, and the secure build
+verified *on the device* (no ACM console service, zero `NOPASSWD`).
 
-- [ ] **Settle what is actually on os2 first.** The repo says image
-      `50e7fe1d`, written by a commit that *precedes* the RTC-rewake fix;
-      the working assumption is that the ultra-arm image (which carries
-      it) was written later. One log read decides it: `awake 20s` versus
-      `awake 300s` in `/var/log/pinenote-autosuspend.log`. This is a
-      3-day-battery difference — do not overwrite it before reading it.
-- [ ] **Deploy the ship candidate** (dd + readback SHA, os1-side,
-      `doc/hardware-deploy.md`). Not free: cable connected and logging
-      before boot, one USB-C port so no charger for the run.
-- [ ] **Confirm the boot-slot claim.** The repo says an unattended reboot
-      "always" lands on os1; the evidence is *one* observation. One
-      deliberate power cycle with the UART capturing the menu.
-- [ ] **Reader acceptance on the exact artifact being shipped.** No
-      reader validation exists on any image since 2026-08-01. Real book,
-      not the quickstart; finger taps, not uinput; all four edges; file
-      browser on a real `/data/books`. Judge with
-      `pinenote/tools/optics/belief-vs-glass.sh`, never by eye — that
-      rule exists because eye-judging produced two wrong calls in one
-      session.
-- [ ] **The awake power-tap test**, which has never been recorded and is
-      still listed as "fix deployed, unproven". Press-to-suspend is the
-      alpha user's primary power gesture and its failure mode was silent
-      panel corruption that GL16 washes cannot heal.
-- [ ] **A clean suspend/resume on the shipping stack** — an alpha user
-      exercises this every five idle minutes.
+Two of those had never been recorded on any image: the clean boot, and
+**the awake power-tap test**, which had sat at "fix deployed, unproven"
+since the corruption it caused.
+
+Found in the same session and fixed: the suspend banner sizes against
+`FB_W` (1872, the long axis) while the device is read in either
+orientation, so scale 6 overflowed the 1404 px short axis by ~3
+characters. The operator had normalised it as cosmetic for weeks.
+
+**The boot-slot question is also settled, and it was the #1 blocker in
+two of the four alpha assessments.** The tree looked contradictory: two
+records of os2 coming up "with no console intervention" (2026-07-05,
+2026-07-26) against one of os1 (2026-08-06). All four records reconcile
+once you separate *attended* from *unattended*: the U-Boot menu is
+interactable **on the device**, so a human present can always pick os2
+without a serial console; with nobody present the countdown elapses and
+the default ("search all partitions") finds p5 first, because os1 carries
+`/boot/extlinux/extlinux.conf`. Tonight's ultra recovery boot captured
+the countdown running 15→0 untouched, then landing on os1.
+
+So: **not an alpha blocker** — an installer is a human at their device.
+It *is* the blocker for anything that must come back up on os2 by itself,
+which is why hibernation is gated on it (`doc/power-management.md`).
+`doc/install.md` and `doc/device-access.md` both claimed booting os2
+without a UART was impossible; corrected 2026-08-07.
 
 ### 3. ~~Hardware session B — the ultra handshake~~ — DONE 2026-08-07
 
@@ -83,13 +88,53 @@ than merely deferred. Record:
       duty-cycle bug, was written up as an argument for the setting that
       made it worse, and the model said 8.6 days while reality was 3.0.
 
-### 5. Fresh-clone first boot must survive
+### 5. Fresh-clone first boot must survive — SCOPED 2026-08-07, harder than it looked
 
-- [ ] `/data/books` is created by activation, not by hand. It exists on
-      the one device because someone made it; the seeded profile
-      hardcodes it as `home_dir`.
-- [ ] The build works without the gitignored licensed fonts.
-- [ ] `make qemu-virt-check` against a genuinely fresh clone.
+Investigated properly (8-agent design + 3 adversarial lenses). What was
+written here as "one mkdir in activation" is four defects, three of them
+invisible to every gate we have:
+
+- [ ] **`/data/books` is created by nothing.** It exists on the one
+      device because a human made it. **It must be created by a shepherd
+      one-shot requiring `file-system-/data`, not by activation** —
+      verified 2026-08-07: the boot script mentions `/data` zero times
+      and only runs `activate`; the mount is a shepherd service that
+      starts *after* activation. A `mkdir -p` in activation lands on the
+      os2 root filesystem, underneath the mount, invisible forever. Same
+      class as the DMC regression (`dmc.scm:69-77` has the pattern).
+- [ ] **A `home_dir` that does not resolve does not fall back.**
+      `realpath` returns nil, `root_path` drops through to
+      `lfs.currentdir()` — the read-only Guix store. A fresh device's
+      first view of "your library" is `/gnu/store/…/lib/koreader`
+      listing `luajit` and `reader.lua`. This closes the open question
+      at `doc/install.md`.
+- [ ] **On a true first session the seeded `home_dir` is bypassed
+      entirely.** KOReader forces the quickstart guide, and every route
+      out of it passes the open document's path, so the browser opens in
+      the quickstart's directory. Proven by grepping all 14
+      `showFileManager` call sites; PineNote maps no Back key, so there
+      is no fourth route. Fixing this needs `quickstart_shown_version`
+      seeded, not a `home_dir` change.
+- [ ] **Any shell one-shot must `export PATH` as its first line.**
+      Shepherd start-lambdas inherit PID 1's environment, which on this
+      device is `PATH=/gnu/store/…-e2fsck-static/sbin` — one binary. A
+      script using `stat`/`mkdir`/`ln` silently takes its failure branch
+      and exits 0, while every gate stays green because the developer's
+      workstation has a full PATH. `wifi.scm:26` records this lesson
+      already; `ssh-keys.scm:75` has the incantation.
+- [ ] The build works without the gitignored licensed fonts — and the
+      seeded profile hardcodes `cre_font = "Equity A"`, so make it
+      conditional. That build has never been booted anywhere.
+- [ ] `make qemu-virt-check` against a genuinely fresh clone, used as an
+      actual release gate. It exists and has never once been used as one.
+
+**Premise correction worth keeping:** `/data/books` is not a wilkbook
+invention. p7's root *is* os1's `/home`, so `/data/books` already **is**
+`/home/books`, and os1's own KOReader has been reading from it — its
+profile carries `["lastfile"] = "/home/books/The Chronicles of Prydain…"`.
+Progress does not flow symmetrically, though: os2 writes root-owned
+`.sdr` sidecars that os1's uid-1000 user cannot rewrite, so os1 silently
+forks into its private `docsettings` tree.
 
 ### 6. Public-repo posture
 
@@ -107,6 +152,21 @@ than merely deferred. Record:
       Point at them from the README.
 
 ---
+
+### 7. Numbers the repo repeats that are not derived
+
+Cheap, offline, and they are the numbers a public repo gets judged on.
+
+- [ ] **The "9 mA pessimistic end"** in the targets table has no
+      derivation anywhere in the tree, and `68dfbba` attributes it to
+      hrdl, who never wrote it. Derive it or drop it.
+- [ ] **"4x the longest dwell"** for the 3600 s backstop, in
+      `doc/status.md` and `doc/power-management.md`: it is **1.33x**. The
+      4x is against the retired 900 s default.
+- [ ] **`doc/status.md`'s "38-frame cold, 46 warm"** is backwards per
+      `doc/refresh-policy.md`.
+- [ ] The felt-latency model **double-counts `delay_b`**, which is
+      already inside the measured 132-140 ms pipeline floor.
 
 ## Explicitly deferred to the pre-1.0 optimization pass
 
