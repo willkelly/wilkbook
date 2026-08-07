@@ -219,4 +219,5 @@ suspend-check:
 	sh pinenote/scripts/preflight/validate-ebc-fbdev-resume-hunk.sh
 	sh pinenote/scripts/preflight/validate-ebc-resume-baseline-hunk.sh
 	sh pinenote/scripts/preflight/validate-ebc-timeout-asymmetry.sh
+	sh pinenote/scripts/preflight/validate-dmc-default-off.sh
 	guix shell python -- sh pinenote/scripts/preflight/test-validate-ebc-fbdev-resume-hunk.sh

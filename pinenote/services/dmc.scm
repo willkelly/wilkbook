@@ -357,9 +357,13 @@ proceeding WITHOUT an idle gate")
              (poll-ddr (- attempts 1)))))
 
          (define mode
-           ;; first word of the first mode= line; anything unrecognised
-           ;; means the product path, because a typo in a diagnostic file
-           ;; must never silently disable the power saving
+           ;; First word of the first mode= line.  EVERY path that is not
+           ;; an explicit, recognised opt-in resolves to "off": no file,
+           ;; /data not mounted yet, an unrecognised value, a typo, or any
+           ;; throw.  324 MHz corrupts the display silently -- the EBC has
+           ;; no underrun interrupt, so a mis-defaulted boot looks perfect
+           ;; in dmesg and wrong on the glass -- so the safe state must be
+           ;; what you get when anything at all goes sideways.
            (catch #t
              (lambda ()
                (if (file-exists? %mode-file)
@@ -368,16 +372,16 @@ proceeding WITHOUT an idle gate")
                        (let loop ()
                          (let ((line (read-line* port)))
                            (cond
-                            ((eof-object? line) "normal")
+                            ((eof-object? line) "off")
                             ((string-prefix? "mode=" line)
                              (let ((v (string-trim-both
                                        (substring line 5))))
                                (if (member v '("normal" "noswitch" "off"))
                                    v
-                                   "normal")))
+                                   "off")))
                             (else (loop)))))))
-                   "normal"))
-             (lambda _ "normal")))
+                   "off"))
+             (lambda _ "off")))
 
          (log "mode=~a (selector ~a)" mode %mode-file)
          (checkpoint "entry")
