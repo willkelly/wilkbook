@@ -98,6 +98,40 @@ required — the runtime `console_suspend=N` knob does not hold the 8250 up
 through its own dev_pm_ops. UART gives passwordless root whenever the
 device is awake; it is the recovery channel if auto-suspend misbehaves.
 
+### Proving the link end to end (2026-08-06)
+
+Silence on the host does not say *where* the link is broken. The SoC's
+own counters do, and they cost one SSH command:
+
+```sh
+sudo cat /proc/tty/driver/serial | grep '^2:'
+# 2: uart:16550A mmio:0xFE660000 irq:19 tx:8252 rx:0 RTS|DTR
+```
+
+Transmit a marker to `/dev/ttyS2` and read it again: **tx climbing**
+means bytes really left the SoC, so any host-side silence is the cable or
+the adapter, not the device. **`rx:0`** means the device has never
+received a byte since boot — if it stays 0 while you send from the host,
+that direction is dead too.
+
+**Both directions dead at once is the signature of a flipped USB-C
+plug.** SBU1/SBU2 swap when the connector is inserted the other way up,
+which swaps TX and RX; the port still refuses to charge (the debug cable
+occupies it), so "not charging" is *not* evidence the link works. Flip
+the connector at the device end and re-test. Observed 2026-08-06: SoC
+`tx` climbing normally, `rx:0`, host receiving nothing at either 1500000
+or 115200 — a dead line, not a baud mismatch (a wrong baud gives
+garbage, not zero bytes).
+
+**Consequence when the UART is down: you cannot choose a boot slot.** The
+U-Boot menu is serial-only, and its default entry ("Search for
+extlinux.conf on all partitions") finds p5 first because os1 carries
+`/boot/extlinux/extlinux.conf` — so every unattended reboot lands in
+**os1**. p3 (`uboot_env`) is an empty FAT12 filesystem, not a raw env, so
+there is no file-based slot selector to write either. Deploying to os2 is
+still safe and useful without UART; *booting* it needs either a working
+UART or a human at the menu.
+
 ## SSH to the deployed reader
 
 - Key-only `root@<reader-addr>`; scp works. Each reflash wipes `/root`
