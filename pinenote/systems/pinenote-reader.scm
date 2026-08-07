@@ -13,6 +13,7 @@
   #:use-module (pinenote services orientation)
   #:use-module (pinenote services reader-session)
   #:use-module (pinenote services dmc)
+  #:use-module (pinenote services frontlight)
   #:use-module (pinenote services ddr-boost)
   #:use-module (pinenote services autosuspend)
   #:use-module (pinenote services ssh-keys)
@@ -36,6 +37,11 @@ reader ALL=(ALL) NOPASSWD: ALL
 (define pinenote-reader-services
   (append %pinenote-bringup-services
            (list (service pinenote-orientation-bridge-service-type)
+                 ;; Light the panel before anything paints on it: a
+                 ;; reflective display with no frontlight is
+                 ;; indistinguishable from a hung boot, and every camera
+                 ;; observation of the boot window is blind without it.
+                 (service pinenote-frontlight-service-type)
                  ;; Static-low DDR: modprobe wilkbook_dmc with fbcon
                  ;; quiesced (the probe-time drop to 324 MHz is the
                  ;; module's only runtime switch, and it must not overlap
