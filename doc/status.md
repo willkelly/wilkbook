@@ -80,6 +80,44 @@ the identity and it is stable across reflashes after that; pin the
 fingerprint in the ledger THEN, not at the v3 boot.
 `doc/networking.md` §4.1.
 
+**2026-08-06 (night, unattended bench session) UART dead, camera good;
+v5 built and deployed to os2; the boot-corruption diagnosis moves off
+DDR-exoneration.** [wilkbook / wkelly] Operator AFK with a camera box and
+a UART cable; half the rig worked. **Camera works** and can watch a boot
+(`doc/artifacts/pinenote-bench-rig-20260806/`), but only while the panel
+is lit — the frontlight is off through the whole boot window, hence the
+new `pinenote-frontlight` service. **UART is dead in both directions**,
+localised to the cable from the SoC's own counters (`tx` climbing,
+`rx:0`) — the flipped-USB-C-plug signature. Consequence, confirmed by a
+test reboot: with no serial there is no slot selection, and the device
+returns to os1 in 47 s every time, so **os2 could not be booted at all
+this session**. Before overwriting p6 the v3 boot logs were harvested off
+it; their service ordering shows `pinenote-usb-acm-gadget` (which mounts
+debugfs) starting *after* `pinenote-dmc`, while `ddr-boost` found the
+devfreq node in the same second the DMC service reported failure — so
+that "FAILED: DDR did not reach 324000000" was about the INSTRUMENT, not
+the switch. An 11-agent adversarial analysis then overturned two earlier
+conclusions: (1) **"no EBC timeouts" does not exonerate a DDR stall** —
+the 25 ms `EBC_FRAME_TIMEOUT` is armed only in the PARTIAL path, a global
+arms one 3000 ms wait for ~596 ms of drive, and `INT_STATUS` has no
+underrun bit at all, so data starvation is structurally silent (this
+retracts the argument used in awake-levers Addendum 5); (2) the fb
+**blank is a no-op** on this driver — every EBC hook is gated on
+`mode_changed`, which an fbdev DPMS blank never sets — so the DMC
+"quiesce" was only ever the fbcon unbind, and no blank-driven wash or
+cache desync exists. Also established: `wilkbook_dmc` **cannot defer**
+(no clocks/regulators/OPP phandles, synchronous probe, and a failed
+switch would unregister the devfreq device), so the late-unguarded-switch
+theory is dead. What remains is that the old idle gate was a single
+500 ms pair where `ddr-dvfs-test/protocol.md` requires zero IRQ delta
+"over several seconds" — a gap exactly the width of a mid-flight global,
+whose only IRQ arrives at completion. v5 (`6d64fa34…`, on os2, unbooted)
+carries the 2.5 s sustained-quiet gate, devfreq-first verification,
+per-step checkpoints (EBC IRQ + both rate sources), the early frontlight,
+and a boot-window experiment selector at `/data/wilkbook/dmc.conf`
+(`normal` / `noswitch` / `off`) — p7, which os1 mounts at `/home`, so the
+next os2 boot is configurable from the rescue slot without a rebuild.
+
 **2026-08-06 (late night) v3 fix image written to os2 — not yet
 booted.** [wilkbook / wkelly] The Addendum 5 fix stack (commit
 `55c43b0`, each diff adversarially reviewed; the review caught the
