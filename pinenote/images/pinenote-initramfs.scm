@@ -1,12 +1,14 @@
 (define-module (pinenote images pinenote-initramfs)
   #:use-module (gnu packages linux)
+  #:use-module (srfi srfi-1)
   #:use-module (gnu system linux-initrd)
   #:use-module (guix gexp)
   #:export (%pinenote-display-initrd-modules
             pinenote-initrd
             pinenote-initrd-6.6
             pinenote-initramfs-note
-            pinenote-kernel-arguments))
+            pinenote-kernel-arguments
+            pinenote-reader-kernel-arguments))
 
 (define pinenote-initramfs-note
   "PineNote initrd keeps storage handling close to Guix defaults, but tries to
@@ -258,6 +260,29 @@ partition and loading PineNote display modules from the initrd.")
      ;; Revert with the suspend program if that ever changes.
      "no_console_suspend"
      "fw_devlink=off"))
+
+;; The reader's cmdline: everything above EXCEPT console=tty0.
+;;
+;; console=tty0 makes the e-ink panel a printk console, and with
+;; ignore_loglevel that means every kernel message of the boot is painted
+;; onto the glass.  On this display a console line is a damage rect and a
+;; damage rect is a partial refresh, so the boot's single largest source
+;; of EBC work is text nobody reads -- and it lands in exactly the window
+;; where the 2026-08-06/07 display corruption appears.  Dropping it costs
+;; no diagnostics: console=ttyS2 still carries the full log at
+;; ignore_loglevel verbosity, and that is the channel anyone debugging a
+;; boot is actually watching.
+;;
+;; It also gives a splash for free.  The panel is bistable and U-Boot
+;; already paints the logo partition, so with nothing overwriting it the
+;; logo simply STAYS until KOReader paints the first page.
+;;
+;; The bringup flavors (usb-console, dev, minimal) keep console=tty0 --
+;; there the panel IS the diagnostic channel and the reader is not
+;; running to own it.
+(define pinenote-reader-kernel-arguments
+  (filter (lambda (argument) (not (string=? argument "console=tty0")))
+          pinenote-kernel-arguments))
 
 ;; Do NOT put rockchip_ebc.* parameters on the kernel command line: they
 ;; are inert.  module.param=value cmdline tokens only reach loadable

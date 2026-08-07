@@ -19,6 +19,7 @@
   #:use-module (pinenote services ssh-keys)
   #:use-module (pinenote services usb-gadget)
   #:use-module (pinenote services wifi)
+  #:use-module (pinenote images pinenote-initramfs)
   #:use-module (pinenote systems base)
   #:export (pinenote-reader-operating-system))
 
@@ -187,6 +188,10 @@ reader ALL=(ALL) NOPASSWD: ALL
 (define pinenote-reader-operating-system
   (operating-system
     (inherit pinenote-reader-base-os)
+    ;; No console=tty0: the panel is the product surface, not a printk
+    ;; sink.  See pinenote-reader-kernel-arguments for why this is also a
+    ;; display-integrity change and not just cosmetics.
+    (kernel-arguments pinenote-reader-kernel-arguments)
     ;; The persistent data partition at /data: the library lives in
     ;; /data/books and survives os2 reflashes.  Addressed by GPT partlabel
     ;; (the PineNote community convention; same key pinenote-wifi uses) --
