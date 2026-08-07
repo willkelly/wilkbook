@@ -190,8 +190,13 @@ gitignored `build/`, or the reader's static address.
   54.7 mA, ~3 days), fixed in tree 2026-08-07 with the default backstop
   at 1 h — `doc/power-management.md`, "The idle duty cycle".
 - **Power**: awake reader idle ~157 mA after the vdd_cpu auto-PFM fix
-  (was ~174); deep ~20 mA (rail-floor audit 2026-08-06). DDR DVFS landed
-  (wilkbook_dmc + input-driven boost). Ledger and next levers:
+  (was ~174); deep ~20 mA (rail-floor audit 2026-08-06). **DDR DVFS is built but SHIPS DISABLED**: 324 MHz
+  starves the EBC's phase-data fetch and corrupts the display silently
+  (no underrun interrupt), proven by one-variable A/B 2026-08-07, so
+  `wilkbook_dmc` defaults to `mode=off` and the boost is off too.
+  Standby: the RTC-rewake duty-cycle fix (2026-08-07) took delivered
+  idle from ~55 mA to ~22.6 mA — arithmetic, never measured end to end.
+  Ledger and next levers:
   `doc/power-management.md`.
 - **Display**: the portrait double-refresh is fixed on glass
   (publish-on-call + `defio_delay_ms=250`); the generation barrier is

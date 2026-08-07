@@ -12,9 +12,18 @@
 # Usage: belief-vs-glass.sh <tag>
 set -eu
 
+# The device address and known-hosts file are per-operator and are
+# deliberately NOT written into this repo (CLAUDE.md commit rules,
+# doc/device-access.md).  Set them in the environment:
+#
+#   PINENOTE_HOST=<addr> [PINENOTE_KNOWN_HOSTS=<file>] belief-vs-glass.sh <tag>
+#
+# Find the address from your router or `ip neigh` (hostname
+# pinenote-reader) and keep it in your own device ledger.
 TAG=${1:-cmp}
-KH=/home/wkelly/.ssh/known_hosts_pinenote
-HOST=192.168.86.145
+HOST=${PINENOTE_HOST:?set PINENOTE_HOST to your device address}
+KH=${PINENOTE_KNOWN_HOSTS:-$HOME/.ssh/known_hosts_pinenote}
+CAM=${PINENOTE_CAMERA:-/dev/video0}
 W=1872; H=1404
 
 user=root
@@ -30,7 +39,7 @@ ffmpeg -hide_banner -loglevel error -f rawvideo -pixel_format bgra \
 
 # 2. the glass: camera, rotated to match the framebuffer's orientation
 ffmpeg -hide_banner -loglevel error -f v4l2 -video_size 1920x1080 \
-       -i /dev/video0 -vsync 0 -frames:v 25 -update 1 -y "$TAG-cam.jpg"
+       -i "$CAM" -vsync 0 -frames:v 25 -update 1 -y "$TAG-cam.jpg"
 
 # 3. side by side, both scaled to the same height
 ffmpeg -hide_banner -loglevel error -i "$TAG-belief.png" -i "$TAG-cam.jpg" \
