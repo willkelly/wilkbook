@@ -33,6 +33,20 @@ The genuinely valuable part of this repo, for anyone who is not the
 author, is below: the host tools and the findings. Those you can read,
 run, and lift **without touching your device at all**.
 
+## Reproducing a build
+
+We publish no binaries. `channels.scm` pins Guix and every extra channel
+by commit, so a tagged tree rebuilds byte-identically anywhere:
+
+```sh
+guix time-machine -C channels.scm -- \
+  system image -t raw-with-offset -L . --target=aarch64-linux-gnu \
+  pinenote/systems/pinenote-reader.scm
+```
+
+`doc/release.md` has the full procedure. This is a claim about
+*reproducibility*, not about quality — see the banner above.
+
 ## What to steal
 
 Written for other PineNote people. Nothing in this section requires

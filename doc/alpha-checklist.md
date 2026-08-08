@@ -176,7 +176,30 @@ Progress does not flow symmetrically, though: os2 writes root-owned
 `.sdr` sidecars that os1's uid-1000 user cannot rewrite, so os1 silently
 forks into its private `docsettings` tree.
 
-### 6. Public-repo posture
+### 6. Release mechanics — SCAFFOLDED 2026-08-07
+
+The machinery now exists; the acts themselves wait for sign-off.
+
+- [x] **`channels.scm` committed** — Guix plus every extra channel pinned
+      by commit with introductions. This is the reproducibility claim:
+      `guix time-machine -C channels.scm` rebuilds the identical closure.
+      Regenerate with `make channels-pin` *before* building the shipping
+      artifact.
+- [x] **`make release-manifest ROOTFS=…`** writes `SHA256SUMS` carrying
+      the hash, the git description and the channel pointer, so the hash
+      lands inside signed history rather than beside a download.
+- [x] **`doc/release.md`** — the procedure, and what we deliberately do
+      not do (no hosted binary, no update path, no detached signatures
+      until there is a binary to sign).
+- [ ] The annotated tag itself, naming the image hash. **After** QC.
+- [ ] Merge the shippable half of `ultra-handshake-arm` to main.
+
+Calibration, from surveying hrdl's `pinenote-dist` on 2026-08-07: they
+have zero tags across 66 commits and 14 months, a mutable artifact URL,
+no published SHA-256, and no `gpg --verify` anywhere. The bar is low; one
+tag, one channel pin and one hash clears it.
+
+### 7. Public-repo posture
 
 - [ ] The disclaimer, stated plainly and early: hardly tested, largely
       AI-written, will probably break your device, no support.
@@ -193,7 +216,7 @@ forks into its private `docsettings` tree.
 
 ---
 
-### 7. Numbers the repo repeats that are not derived
+### 8. Numbers the repo repeats that are not derived
 
 Cheap, offline, and they are the numbers a public repo gets judged on.
 
@@ -207,6 +230,31 @@ Cheap, offline, and they are the numbers a public repo gets judged on.
       `doc/refresh-policy.md`.
 - [ ] The felt-latency model **double-counts `delay_b`**, which is
       already inside the measured 132-140 ms pipeline floor.
+
+### 9. Reader-quality fixes found 2026-08-07 (mining hrdl's dist)
+
+Both were verified in our own tree before being believed, and both are
+fixed in `pinenote/tools/power/autosuspend.lua` — but **neither has been
+seen on glass**, so both belong in the QC cycle.
+
+- [x] **The cover no longer delays suspend.** It was counted as activity
+      (the daemon's header said "buttons and the cover all count"), so the
+      gesture meaning "I am putting this away" re-armed the idle timer and
+      held the device awake a further period at ~157 mA. Now a suspend
+      request; cover-open remains activity.
+- [x] **The frontlight is saved, zeroed and restored across suspend.** It
+      was never touched: designed, modelled, never shipped. Mainline
+      `lm3630a_bl.c` has no `dev_pm_ops`, so after the rail drops the panel
+      can return dark while sysfs reports the old value —
+      `doc/hardware-deploy.md:184` already told the operator to re-set it
+      by hand "or the box is pitch black", which *is* this bug.
+- [ ] **Verify both on glass** — QC §2.2 (cycle with the light ON and
+      check `actual_brightness` after) and §2.3 (close the cover, confirm
+      it sleeps promptly; open it, confirm it wakes).
+- [ ] **The cover as a WAKE source has never been exercised.** Our own
+      suspend gate declares exactly two armed DT wake paths and the cover
+      switch is one of them; every test we have ever run used the other
+      (the PMIC leg). Free to try, and it matters to the ultra question.
 
 ## Explicitly deferred to the pre-1.0 optimization pass
 

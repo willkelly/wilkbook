@@ -239,6 +239,29 @@ activation-positive-check:
 
 # Fail-closed suspend qualification checks. These prove only static config,
 # approved DT wake capability, and restricted KOReader policy evaluation.
+# Pin the exact channel set this tree builds against.  channels.scm IS the
+# reproducibility claim: `guix time-machine -C channels.scm -- ...` rebuilds
+# the identical closure on any machine, which is the one thing a rolling
+# binary distribution structurally cannot offer.  Regenerate and COMMIT it
+# with each release.
+channels-pin:
+	guix describe -f channels > channels.scm
+	@echo "channels.scm updated -- commit it with the release"
+
+# What was built, from what, and its hash.  Committed at the tag, so the
+# hash lives inside signed history rather than beside a download.
+release-manifest:
+	@test -n "$(ROOTFS)" || { echo "usage: make release-manifest ROOTFS=<rootfs.ext4>"; exit 2; }
+	@test -f channels.scm || { echo "no channels.scm -- run: make channels-pin"; exit 2; }
+	@set -e; \
+	  { printf '# wilkbook release manifest\n'; \
+	    printf '# git:      %s\n' "$$(git describe --always --dirty --tags)"; \
+	    printf '# built:    %s\n' "$$(date -u +%Y-%m-%dT%H:%M:%SZ)"; \
+	    printf '# channels: channels.scm at this commit (guix time-machine -C)\n'; \
+	    printf '# verify:   sha256sum -c SHA256SUMS\n'; \
+	    sha256sum "$(ROOTFS)" | sed 's|  .*/|  |'; } > SHA256SUMS
+	@cat SHA256SUMS
+
 # The reader's library directory and first-boot landing.  Structural, and
 # negative-tested against six ways it has to be able to fail.
 library-check:
