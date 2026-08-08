@@ -67,14 +67,23 @@ for token in linux-pinenote-ultra ultra-rails; do
   fi
 done
 
-# 5. The bench flavor must ship auto-suspend OFF.  Rails-off + mem is as
-#    unsupported as the rails-on + ultra already proven unwakeable, so an
-#    image that idles into suspend unattended reproduces the failure by
-#    accident.
-grep -q "enabled=0" "$flavor" ||
-  fail "the bench flavor does not ship auto-suspend disabled; a device that
-   idles into a rails-off suspend unattended is the exact accident this
-   flavor exists to avoid"
+# 5. The bench flavor must NOT INSTALL the auto-suspend service at all.
+#    Rails-off + mem is as unsupported as the rails-on + ultra already
+#    proven unwakeable, so an image that idles into suspend unattended
+#    reproduces the failure by accident.  "Configured off" is not enough:
+#    the daemon reads its config from p7, which survives reflashes and may
+#    carry enabled=1 from the reader -- the first cut of this flavor shipped
+#    an /etc file the daemon never opens, and this gate passed on it.
+#    Absence is checkable; intent is not.
+grep -q "remove" "$flavor" && grep -q "pinenote-autosuspend-service-type" "$flavor" ||
+  fail "the bench flavor does not REMOVE pinenote-autosuspend-service-type;
+   configured-off is not sufficient (the daemon's config lives on p7 and
+   survives reflashes), the service must be absent"
+if grep -q "enabled=0" "$flavor"; then
+  fail "the bench flavor carries an enabled=0 config file; that was the
+   decorative first cut -- nothing reads it, and its presence suggests the
+   service is installed-but-off when it must be absent"
+fi
 
 # 6. The payload must still be what we think it is: three PMU rails flipped
 #    to off-in-suspend, and sdmmc1 moved off keep-power. A payload that
