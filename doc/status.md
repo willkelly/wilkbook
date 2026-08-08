@@ -68,6 +68,20 @@ at the first boot of a post-v3 image (see the host-keys entry below).
 Entries below are newest-first; the ## sections after the parity table
 are a historical document.
 
+**2026-08-08 (night) THE ULTRA SOAK IS RUNNING.** [wilkbook / wkelly]
+Promoted image `9a08803e…` deployed to os2 (readback-verified), p7
+`enabled=1`, and the first PRODUCTION ultra cycle observed end to end:
+the daemon idled 300 s, drew the banner, gated the EBC, quiesced the
+gadget, saved the frontlight, and entered ultra — banner
+`PM-STATE: ultra (…, cfg: 0x5ec), pmic: 0x14, 0x00` — then woke on a
+single power press after 677 s with the new self-telemetry line:
+`resumed after 677s (charge_now=3848844)`. Battery 97 % at soak start,
+~23:58 UTC. Exit criteria (pre-committed in `doc/alpha-checklist.md`
+§3c): ≥3 days, zero non-wakes, no peripheral degradation, and the
+standby figure computed from the daemon's own charge_now series. If a
+wake ever fails: note the time, do NOT force off until the U-Boot
+INT_STS forensics are taken.
+
 **2026-08-08 R12: THE ULTRA WAKE PROBLEM IS SOLVED — rails-off resumes,
 4.64 mA measured.** [wilkbook / wkelly] hrdl's configuration (three
 `*_pmu` rails off-in-suspend + `sdmmc1 cap-power-off-card` + the cyttsp5
