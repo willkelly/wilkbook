@@ -313,9 +313,15 @@ def validate_production_sources(sources: dict[str, str]) -> None:
                   "rockchip,wakeup-config = <0x10>;",
                   "rockchip,sleep-debug-en = <0x00>;"):
         require(dts, token, "PineNote measured suspend policy")
-    # Everything beyond those three stays out.  Baseline deep only: the
-    # ultra-suspend surface and the rail-kill payload remain unadopted, and
-    # the rail-kill wake collision is still an open question.
+    # Everything beyond those three stays out of THIS patch's DT hunk --
+    # deliberately, and the reason changed on 2026-08-08.  The ultra
+    # payload IS adopted now, but it lives whole in
+    # linux-pinenote-7.0-ultra-rails.patch: the override and the rail
+    # flips are a matched pair (either half alone is a proven-broken
+    # configuration -- R10/R11 vs R12), so this pin is what prevents the
+    # override from ever being reintroduced here, decoupled from the
+    # rails.  validate-ultra-coupling.sh enforces the pair from the other
+    # side.
     for token in ("rockchip,power-ctrl", "rockchip,regulator-on-in-",
                   "rockchip,regulator-off-in-", "rockchip,suspend-state-override",
                   "rockchip,virtual-poweroff", "rockchip,pwm-regulator-config",
@@ -423,11 +429,18 @@ def validate_production_sources(sources: dict[str, str]) -> None:
         "rockchip,regulator-off-in-mem-lite",
         "rockchip,regulator-on-in-mem-ultra",
         "rockchip,regulator-off-in-mem-ultra",
-        # ultra override is a policy property, host-model-only until an
-        # active reviewed DT policy exists; production stays narrower.
-        "rockchip,suspend-state-override",
     ):
         forbid(parser, forbidden_property, "production OF parser")
+    # The standing ultra override is ACCEPTED as of 2026-08-08: R12 proved
+    # the matched rails+override payload resumes (RTC + power button) at
+    # 4.64 mA (doc/artifacts/pinenote-ultra-r12-20260808).  The parser must
+    # carry the scalar-table entry, and .prepare must restore the DT
+    # snapshot rather than resetting the override to absent.
+    require(parser, '"rockchip,suspend-state-override", '
+                    'OPTIONAL_OFFSET(suspend_state_override)',
+            "production OF parser accepts the standing ultra override")
+    require(parser, "dt_state_override",
+            "prepare restores the DT override snapshot")
 
     for token in (
         "consumer = (struct regulator *)regulator",
@@ -550,9 +563,12 @@ def validate_patch(patch: str) -> None:
                   "of_node_put(provider)",
                   "regulator_put((struct regulator *)regulators->on[i])"):
         require(parser, token, "canonical patch retained regulator parser")
-    for forbidden_property in ("rockchip,virtual-poweroff", "mem-lite", "mem-ultra",
-                               "suspend-state-override"):
+    for forbidden_property in ("rockchip,virtual-poweroff", "mem-lite", "mem-ultra"):
         forbid(parser, forbidden_property, "canonical patch production parser")
+    # suspend-state-override moved from forbidden to REQUIRED on 2026-08-08
+    # (R12); the acceptance-side require lives with the main parser pins.
+    require(parser, "suspend-state-override",
+            "canonical patch production parser carries the standing override")
     forbid(backend, "of_regulator_get_by_node", "canonical patch backend")
     forbid(backend, "regulator_put", "canonical patch backend")
     forbid(backend, "rockchip_suspend_executor_run", "canonical patch backend")

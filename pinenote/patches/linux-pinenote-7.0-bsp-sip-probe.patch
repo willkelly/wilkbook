@@ -226,7 +226,7 @@ new file mode 100644
 index 0000000000000000000000000000000000000000..6f8e72b185bb8e7fd24711b8b840d26c7979db06
 --- /dev/null
 +++ b/drivers/soc/rockchip/rockchip_suspend_activate.c
-@@ -0,0 +1,281 @@
+@@ -0,0 +1,304 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +#include <linux/device.h>
 +#include <linux/errno.h>
@@ -243,13 +243,19 @@ index 0000000000000000000000000000000000000000..6f8e72b185bb8e7fd24711b8b840d26c
 +
 +/*
 + * One-shot arm for the ultra-suspend firmware handshake (LINUX_PM_STATE
-+ * = 5 instead of 3).  Deliberately NOT a DT property: .prepare runs on
-+ * every system suspend, so a DT-baked override is a standing policy that
-+ * an idle device would exercise unattended and repeatedly from first
-+ * boot, and it cannot express the same-boot control-then-test pair the
-+ * measurement methodology requires.  The OF parser therefore still
-+ * refuses rockchip,suspend-state-override, and its forbid pins stay
-+ * exactly as they are.
++ * = 5 instead of 3).
++ *
++ * History: this began as the ONLY way to reach state 5 -- the OF parser
++ * refused rockchip,suspend-state-override so that an unmeasured standing
++ * policy could not ship by accident, and the one-shot expressed the
++ * same-boot control-then-test pair the measurement methodology required.
++ * That measurement campaign is DONE (R10-R12, 2026-08-07/08): state 5
++ * with the rails payload resumes on both the RTC and the power button at
++ * 4.64 mA measured, and the production DT now carries the override as a
++ * standing policy, parsed at probe and re-applied on every .prepare.
++ * The one-shot remains as a bench instrument: on a DT WITHOUT the
++ * override it arms exactly one ultra suspend; on the production DT it is
++ * redundant (the DT already says 5 every time).
 + *
 + * Self-clearing: one armed suspend, then back to the proven mem state.
 + * Not persistent, so any reboot returns to proven behaviour without an
@@ -292,6 +298,15 @@ index 0000000000000000000000000000000000000000..6f8e72b185bb8e7fd24711b8b840d26c
 +	struct device *dev;
 +	struct rockchip_suspend_backend_context backend;
 +	struct rockchip_suspend_model_policy policy;
++	/*
++	 * The DT's suspend-state override, snapshotted at probe.  .prepare
++	 * historically reset policy.value.suspend_state_override to absent
++	 * before consuming the one-shot arm -- correct when runtime arming
++	 * was the only source, but it would silently discard a DT-provided
++	 * standing policy on the first suspend.  .prepare now RESTORES this
++	 * snapshot instead, then lets the one-shot override it on top.
++	 */
++	struct rockchip_suspend_model_optional dt_state_override;
 +	struct rockchip_suspend_model_event probe_events[
 +		ROCKCHIP_SUSPEND_MODEL_MAX_PROBE_EVENTS];
 +	struct rockchip_suspend_model_event prepare_events[
@@ -345,13 +360,15 @@ index 0000000000000000000000000000000000000000..6f8e72b185bb8e7fd24711b8b840d26c
 +	if (pm_suspend_target_state != PM_SUSPEND_MEM)
 +		return rockchip_suspend_fail(dev, activation, -EOPNOTSUPP, false);
 +	/*
-+	 * Consume the arm before anything can fail: a suspend that aborts
-+	 * after this point must not leave the next one armed by surprise.
-+	 * Only the validated value arms; anything else disarms silently
-+	 * rather than half-applying.
++	 * Start every suspend from the DT's standing policy (absent on a
++	 * DT without the override), then let the one-shot arm override it.
++	 * The arm is consumed before anything can fail: a suspend that
++	 * aborts after this point must not leave the next one armed by
++	 * surprise.  Only the validated value arms; anything else disarms
++	 * silently rather than half-applying.
 +	 */
-+	activation->policy.value.suspend_state_override.present = false;
-+	activation->policy.value.suspend_state_override.value = 0;
++	activation->policy.value.suspend_state_override =
++		activation->dt_state_override;
 +	if (ultra_arm) {
 +		unsigned int armed = ultra_arm;
 +
@@ -475,6 +492,12 @@ index 0000000000000000000000000000000000000000..6f8e72b185bb8e7fd24711b8b840d26c
 +		return dev_err_probe(&pdev->dev, -ENODATA,
 +			"activation requires sleep-mode and wakeup policy\n");
 +	}
++	activation->dt_state_override =
++		activation->policy.value.suspend_state_override;
++	if (activation->dt_state_override.present)
++		dev_info(&pdev->dev,
++			"DT standing suspend-state override: LINUX_PM_STATE=%u on every suspend\n",
++			activation->dt_state_override.value);
 +	ret = devm_add_action_or_reset(&pdev->dev, rockchip_suspend_release_policy,
 +		activation);
 +	if (ret)
@@ -1331,7 +1354,7 @@ new file mode 100644
 index 0000000000000000000000000000000000000000..0f941a5ffad032a6198fefd68f52ad539b055229
 --- /dev/null
 +++ b/drivers/soc/rockchip/rockchip_suspend_of.c
-@@ -0,0 +1,264 @@
+@@ -0,0 +1,271 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +#include <linux/device.h>
 +#include <linux/errno.h>
@@ -1362,6 +1385,13 @@ index 0000000000000000000000000000000000000000..0f941a5ffad032a6198fefd68f52ad53
 +	{ "rockchip,wakeup-config", OPTIONAL_OFFSET(wakeup) },
 +	{ "rockchip,pwm-regulator-config", OPTIONAL_OFFSET(pwm_regulator) },
 +	{ "rockchip,sleep-debug-en", OPTIONAL_OFFSET(sleep_debug) },
++	/*
++	 * The standing ultra policy.  Accepted as of 2026-08-08 (R12: the
++	 * matched rails+override payload measured and proven to resume);
++	 * the model validation still rejects every value except exactly 5,
++	 * so a DT carrying 0-4 or 6+ fails probe rather than half-arming.
++	 */
++	{ "rockchip,suspend-state-override", OPTIONAL_OFFSET(suspend_state_override) },
 +	{ "rockchip,apios-suspend", OPTIONAL_OFFSET(apios_suspend) },
 +};
 +

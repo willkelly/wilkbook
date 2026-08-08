@@ -73,38 +73,49 @@ which is why hibernation is gated on it (`doc/power-management.md`).
 `doc/install.md` and `doc/device-access.md` both claimed booting os2
 without a UART was impossible; corrected 2026-08-07.
 
-### 3. ~~Hardware session B — the ultra handshake~~ — DONE 2026-08-07, REOPENED 2026-08-08
+### 3. ~~Ultra suspend~~ — SOLVED AND PROMOTED 2026-08-08
 
-**Reopened, deliberately and once.** The 2026-08-07 answer stands as far
-as it goes — firmware honours state 5, nothing woke — but the "one last
-hard push" found two things that make a second attempt worth its cost,
-both of which say the first attempt was under-instrumented rather than
-conclusive:
+The arc, in four sessions: R10 proved firmware honours state 5 and nothing
+wakes it (rails on).  R11 instrumented it — identical arming on the mem
+suspend that woke and the ultra suspend that did not, so the failure was
+downstream of arming — and measured what ultra is worth.  The operator
+then directed adopting hrdl's configuration whole; R12 ran it: **three
+consecutive rails-off resumes** (RTC backstop `slept=60s`, power button
+`slept=28s`, 40-minute alarm on the second), **4.64 mA measured** against
+deep's ~20 mA, touch/Wi-Fi/display all recovered, verified on glass.
 
-- **We ship bl31's own suspend diagnostics switched off.** SIP control
-  0x05 is already emitted on every suspend carrying the DT-pinned 0. On,
-  firmware prints a hardware **readback** of `PMU_WAKEUP_INT_CON` — the
-  only on-device observability of the wake word that exists. Landed as a
-  runtime knob (`sleep_debug_arm`), because the gates rightly reject a DT
-  that ships it enabled.
-- **The cover switch has never been tried.** Our own gate declares
-  exactly two armed DT wake paths; every test we have ever run used the
-  other one. RTC alarm and power button are both rk817-internal and
-  arrive over the same PMIC-INT → GPIO0 line.
+**Promoted to production the same day, on the operator's direction:** the
+matched pair (standing `rockchip,suspend-state-override = <5>` + three
+`*_pmu` rails off + `sdmmc1 cap-power-off-card` + the cyttsp5 resume
+workaround) ships in `linux-pinenote-7.0-ultra-rails.patch` on the
+primary kernel.  The OF parser accepts the override (exactly 5); the
+suspend gates pin the whole pair; `make ultra-coupling-check` forbids the
+halves from ever separating — either half alone is a proven-broken
+configuration.  The bench kernel and flavor are retired.
 
-R11 is staged and offline-complete:
-`doc/artifacts/pinenote-ultra-r11-20260808/PROCEDURE.md`. It carries no
-rail payload — Phase 1 is the *proven* mem path with firmware talking,
-which is recoverable by construction and may answer the question before
-anything risky happens.
+**Consequence, documented not hidden:** during suspend the GPIO0 pad bank
+is unpowered, so the only wake sources are rk817-internal (RTC alarm,
+power button, charger).  The cover — already unactuatable on this device
+— and the pen cannot wake it.  A cold touch controller times out once on
+resume and is reset by the carried workaround.
 
-**Not in R11, and the next decision point:** hrdl's rails-off
-configuration is the only known-working ultra, its policy words are
-identical to ours, and its author states mode 5 "is needed for the system
-to resume". Adopting it is a DT/safety-model change that wants the other
-operator's eyes. The operator's position on the gate is on record —
-it was written to prevent a device that needs a long-press, and R10
-needed one anyway, so it did not buy the protection it was named for.
+### 3c. NEW BLOCKER — the multi-day ultra soak
+
+The operator's call: ultra ships in alpha, "if we have to soak for
+multiple days, so be it."  Three suspends are proof of mechanism, not of
+endurance.  The soak is the endurance proof:
+
+- [ ] Deploy the promoted reader image (auto-suspend ON, ultra standing).
+- [ ] ≥3 days unplugged, normal light use: pick it up, read, put it down.
+      Every idle suspend is an ultra cycle; every backstop wake logs
+      `charge_now` (the daemon now records it per resume), so the soak is
+      self-instrumenting.
+- [ ] Exit criteria: zero non-wakes (a single long-press-required event
+      fails the soak), no touch/Wi-Fi/display degradation across
+      hundreds of cycles, and a measured multi-day standby figure to
+      publish in place of the 4.64 mA × arithmetic.
+- [ ] The R12 measurement predicts ~28–36 days standby; the soak says
+      what a *lived-in* device actually gets.
 
 ### 3b. ~~Original session B~~ — DONE 2026-08-07
 

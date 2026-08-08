@@ -235,13 +235,19 @@ if quoted_tokens(suspend["properties"].get("name", "")) != ["rockchip-suspend"]:
 if quoted_tokens(suspend["properties"].get("status", "")) != ["okay"]:
     fail("/rockchip-suspend status is not exactly okay")
 # 2026-08-02: activation is ON, so the node now carries policy -- but
-# EXACTLY the three properties measured from os1's booted DTB (the kernel
-# on which deep demonstrably works on this device), with exactly those
-# values, and nothing else.  The whole ultra-suspend surface stays out.
+# EXACTLY the reviewed policy, with exactly these values, and nothing else.
+# The first three were measured from os1's booted DTB (the kernel on which
+# deep demonstrably works); the fourth is the standing ultra override,
+# adopted 2026-08-08 after R12 proved the matched rails+override payload
+# resumes on both wake legs at 4.64 mA
+# (doc/artifacts/pinenote-ultra-r12-20260808).  Override and rails are a
+# MATCHED PAIR: this dict requires the override, and the rail checks below
+# require the rails, so any DTB this gate passes carries both halves.
 ACTIVATED_POLICY = {
     "rockchip,sleep-mode-config": 0x5ec,
     "rockchip,wakeup-config": 0x10,
     "rockchip,sleep-debug-en": 0x00,
+    "rockchip,suspend-state-override": 0x5,
 }
 allowed = {"compatible", "name", "status"} | set(ACTIVATED_POLICY)
 if set(suspend["properties"]) != allowed:
@@ -260,24 +266,22 @@ suspend_descendants = [
 ]
 if suspend_descendants:
     fail(f"/rockchip-suspend must not carry policy child nodes: {suspend_descendants}")
-# 2026-08-07: the rail-kill half of ultra-suspend was UNGATED.  Everything
-# above audits /rockchip-suspend's own property set, but hrdl's ultra
-# payload is not there -- it is ordinary mainline DT: regulator-state-mem
-# flips inside the RK817's regulator children, plus sdmmc1's
-# cap-power-off-card.  A DTS carrying the whole rail kill passed this
-# gate silently, which is the dangerous half being the unprotected half.
+# 2026-08-07: this gate REJECTED the rail payload; 2026-08-08 it REQUIRES
+# it.  The history matters and is kept: with the rails ON, ultra parks at
+# sram2wfi with GPIO0 wake armed and nothing -- not the RTC, not the power
+# button -- ever wakes it (R10, R11).  With the rails OFF, wake is
+# PMIC-mediated (rk817-internal alarm and PWRON restore the rails) and the
+# kernel genuinely resumes: three consecutive proofs on this device, 4.64
+# mA measured (R12).  So the OLD danger (rails-off = unwakeable) was
+# real only in the configuration this gate used to protect; the ACTUAL
+# invariant is the matched pair, and both halves are now pinned.
 #
-# The rails that must stay ON are not a preference.  vcc_3v3_pmu
-# (LDO_REG6) feeds pmuio1/pmuio2 -- the GPIO0 pad bank carrying EVERY
-# armed wake source on this board: rk817 INT (pwrkey, RTC alarm, battery,
-# charger), touch, pen (its only wake path), Wacom, BT/Wi-Fi host-wake and
-# the hall switch.  Killing it plausibly yields a device that sleeps and
-# never returns.  vcca_1v8_pmu (LDO_REG1) carries Wi-Fi/BT signalling and
-# sdmmc1's vqmmc; vdda_0v9_pmu (LDO_REG3) feeds the SoC's own PMU-domain
-# analog supply and has zero DT consumers, so it cannot be audited from
-# DT at all and is not safe to infer killable.  All three read
-# regulator-on-in-suspend in the shipped DTB (measured 2026-08-07).
-PMU_RAILS_ON_IN_SUSPEND = ("LDO_REG1", "LDO_REG3", "LDO_REG6")
+# vcc_3v3_pmu still powers the GPIO0 pad bank, so every SoC-side GPIO
+# wake source (touch, pen, Wacom, BT/Wi-Fi host-wake, the cover) is dead
+# during suspend BY DESIGN.  The wake sources are the PMIC paths.  A
+# future wake source that is not rk817-internal will not work until this
+# policy is revisited -- that is a documented consequence, not a bug.
+PMU_RAILS_OFF_IN_SUSPEND = ("LDO_REG1", "LDO_REG3", "LDO_REG6")
 suspend_states = [
     node for node in nodes
     if node["path"].rsplit("/", 1)[-1].startswith("regulator-state-mem")
@@ -287,24 +291,31 @@ for node in suspend_states:
     rail = parent["path"].rsplit("/", 1)[-1] if parent else "?"
     if node["path"].rsplit("/", 1)[-1] != "regulator-state-mem":
         fail(f"{rail} carries {node['path'].rsplit('/', 1)[-1]}: the mem-lite/mem-ultra "
-             "suspend states are ultra-suspend policy and must not appear in a "
+             "suspend states are BSP surface we do not use and must not appear in a "
              "production DT")
-    if rail in PMU_RAILS_ON_IN_SUSPEND and "regulator-off-in-suspend" in node["properties"]:
-        fail(f"{rail} is marked regulator-off-in-suspend -- this is a PMU rail carrying "
-             "armed wake sources (GPIO0 pad bank); killing it in suspend is the "
-             "ultra rail payload and is not reviewed for this device")
+    if rail in PMU_RAILS_OFF_IN_SUSPEND and "regulator-off-in-suspend" not in node["properties"]:
+        fail(f"{rail} is not regulator-off-in-suspend -- the reviewed ultra "
+             "configuration kills this rail (R12); a rails-on DT with the "
+             "standing override is the R10/R11 configuration, proven unwakeable")
 seen_rails = {
     node["parent"]["path"].rsplit("/", 1)[-1]
     for node in suspend_states if node["parent"]
 }
-for rail in PMU_RAILS_ON_IN_SUSPEND:
+for rail in PMU_RAILS_OFF_IN_SUSPEND:
     if seen_rails and rail not in seen_rails:
         fail(f"{rail} has no regulator-state-mem: its suspend state would be "
-             "unpinned, and these three rails are what the wake path runs on")
-for node in nodes:
-    if "cap-power-off-card" in node["properties"]:
-        fail(f"{node['path']} carries cap-power-off-card: powering the SDIO card off in "
-             "suspend implies full Wi-Fi re-init on resume and is ultra rail policy")
+             "unpinned, and these three rails ARE the reviewed payload")
+# sdmmc1 must declare the card powered off in suspend: vqmmc (vcca_1v8_pmu)
+# dies, so keep-power would hand the mmc core a stale card on resume.
+sdmmc_nodes = [n for n in nodes if "cap-power-off-card" in n["properties"]]
+if len(sdmmc_nodes) != 1 or not sdmmc_nodes[0]["path"].endswith("mmc@fe2b0000"):
+    fail(f"cap-power-off-card must appear on exactly /mmc@fe2b0000 (sdmmc1), "
+         f"found on {[n['path'] for n in sdmmc_nodes]}")
+for n in nodes:
+    if "keep-power-in-suspend" in n["properties"]:
+        fail(f"{n['path']} carries keep-power-in-suspend: its supply dies in "
+             "suspend under the reviewed rail policy")
+print("PASS: the matched ultra pair is pinned -- override 5 plus the three rails off, sdmmc1 card-power-off")
 print("PASS: PMU wake rails stay powered in suspend and no SDIO card-power flip is present")
 print("PASS: effective DT wake capability is exactly cover switch and RK817 PMIC with verified identities")
 print("PASS: dormant Rockchip suspend node is unique, enabled, and policy-free")

@@ -1,70 +1,79 @@
-Ultra suspend: hrdl's rail payload, adopted whole.
+Ultra suspend, production: hrdl's configuration, validated on this device.
 
-THIS PATCH MUST NEVER REACH A PRODUCTION IMAGE.  It is carried only by the
-`linux-pinenote-ultra' kernel, which is used only by the
-`pinenote-reader-ultra' flavor, which exists only to answer the wake
-question on a supervised bench.  `pinenote/scripts/preflight/validate-ultra-
-rails-quarantine.sh' fails the build if it appears anywhere else.
+Promoted from bench quarantine to the primary kernel on 2026-08-08, on the
+operator's direction, after R12 answered the question the quarantine
+existed to ask.  Three rails-off ultra suspends on this exact stack: resume
+on the RTC backstop (slept=60s), resume on the power button (slept=28s),
+and a 40-minute alarm window measured at 4.64 mA -- against deep's ~20 mA.
+Touch, Wi-Fi, pen and the display all recovered; the operator verified the
+panel and touch on glass.  Full record:
+doc/artifacts/pinenote-ultra-r12-20260808/ (and -r11-, and
+-handshake-20260807 for how the wrong half of this configuration fails).
 
-WHY, and why the whole thing rather than a subset.
+THE PAYLOAD IS A MATCHED PAIR AND MUST NEVER BE SPLIT:
 
-The 2026-08-07 handshake proved bl31 honours LINUX_PM_STATE=5, and the
-device then woke from nothing.  R11 (2026-08-08) instrumented it: with
-firmware diagnostics on, a WORKING mem suspend and the NON-RETURNING ultra
-suspend were shown to receive bit-for-bit identical configuration --
-cfg 0x5ec, wakeup 0x10, and in both cases bl31 printing "Enable GPIO0
-interrupt as wakeup source".  So the failure is not misconfiguration; it is
-downstream of arming.
+  1. rockchip,suspend-state-override = <5> -- every suspend is ultra.
+  2. vcca_1v8_pmu / vdda_0v9_pmu / vcc_3v3_pmu regulator-off-in-suspend,
+     and sdmmc1 keep-power-in-suspend -> cap-power-off-card.
 
-What R11 also measured, for the first time on this device: ultra draws
-roughly 3 mA against deep's ~20 mA (upper bound 10.2 mA even attributing
-nothing to the recovery boot).  That is the difference between ~7 days of
-standby and ~35, so the wake question is worth solving rather than closing.
+Either half alone is a proven-broken configuration:
+  * override WITHOUT rails (R10/R11): firmware arms GPIO0 wake, parks at
+    sram2wfi, and nothing -- not the RTC, not the power button -- ever
+    wakes it.  Only a forced power-off exits.
+  * rails WITHOUT override (rails-off + mem): never run by anyone;
+    hrdl's DT makes it structurally unreachable and ours now does too.
+Wake under this configuration is PMIC-mediated: the rk817 wakes on its
+internal alarm or PWRON and restores the rails; the kernel genuinely
+resumes (hrdl commit ee2c553f78: the override "is needed for the system
+to resume").  vcc_3v3_pmu powers the GPIO0 pad bank, so every SoC-side
+GPIO wake source is dead during suspend BY DESIGN; the PMIC paths (RTC
+alarm, power button, charger) are the wake sources.
 
-The remaining difference from the only configuration anyone has working is
-these five lines.  hrdl's commit ee2c553f78 states the mode-5 override "is
-needed for the system to resume" -- i.e. rails-off and state 5 are a matched
-pair, and our 2026-08-07 attempt ran the half nobody runs.  Their
-sleep-mode-config (0x5ec) and wakeup-config (0x10) are already identical to
-ours; the rails ARE the entire delta.
+Consequences carried deliberately:
+  * Wi-Fi/BT die across suspend (vcca_1v8_pmu feeds VCCIO4);
+    cap-power-off-card makes the mmc core re-init the card on resume --
+    proven working R12 A1.
+  * The cyttsp5 touch controller loses vdd (fed by vcc_3v3_pmu) and can
+    time out its first HID power command on resume; the cyttsp5 hunk
+    below resets it and continues (hrdl's [HACK] 693fee19, adapted;
+    their startup call is commented out in the original and this carries
+    the same known-incomplete recovery).  Proven on glass R12.
+  * vdda_0v9_pmu has zero DT consumers (SoC PMU-domain analog); killed
+    because the working configuration kills it.
 
-WHAT THIS TURNS OFF, and the consequence to expect:
+The suspend gates pin this payload exactly (inspect-pinenote-suspend-
+gates.sh); validate-ultra-coupling.sh enforces the matched pair.
 
-  vcca_1v8_pmu (LDO_REG1)  VCCIO4 -- Wi-Fi SDIO and BT signalling, sdmmc1
-                           vqmmc.  Wi-Fi/BT die across suspend; sdmmc1 is
-                           therefore moved to cap-power-off-card so the
-                           driver re-initialises the card instead of
-                           assuming it kept power.
-  vdda_0v9_pmu (LDO_REG3)  the SoC's own PMU-domain analog supply.  It has
-                           zero DT consumers, so nothing in the tree can
-                           tell you what breaks; hrdl kills it, so we do.
-  vcc_3v3_pmu  (LDO_REG6)  pmuio1/pmuio2 -- the GPIO0 pad bank carrying
-                           EVERY external wake interrupt on this board:
-                           rk817 INT (pwrkey, RTC alarm, charger), touch,
-                           pen, Wacom, BT/Wi-Fi host-wake and the cover.
-
-That last one is the counter-intuitive part and it is the point.  Killing
-the pad bank should make SoC GPIO wake impossible -- yet hrdl's device
-resumes, which means wake in a working ultra is PMIC-mediated, not a GPIO0
-interrupt.  Our rails-ON attempt kept the pad bank alive and still could not
-wake, which is exactly what a configuration nobody supports looks like.
-
-The cyttsp5 hunk is hrdl's [HACK] (693fee19), adapted: vcc_3v3_pmu feeds the
-touch controller's vdd, so it returns cold and its power-on handshake can
-fail.  Reset and continue rather than losing touch for the session.  Their
-startup call is commented out in the original and remains so here -- this is
-a known-incomplete recovery, carried because the alternative is no touch at
-all after resume.
-
-Origin: https://git.sr.ht/~hrdl/linux branch v6.19_ultra_suspend, commits
-ee2c553f78 (DTS) and 693fee19 (cyttsp5).  Regenerated against our patched
-7.0.11 tree rather than cherry-picked, because our forward-port patch shifts
-the DTS line numbers.
+Origin: https://git.sr.ht/~hrdl/linux v6.19_ultra_suspend, commits
+ee2c553f78 (DTS) and 693fee19 (cyttsp5), regenerated against our patched
+7.0.11 tree.  The override property is accepted by our OF parser as of
+the companion bsp-sip-probe change (exactly <5>, all other values
+rejected at parse).
 
 diff -uNr a/arch/arm64/boot/dts/rockchip/rk3566-pinenote.dtsi b/arch/arm64/boot/dts/rockchip/rk3566-pinenote.dtsi
 --- a/arch/arm64/boot/dts/rockchip/rk3566-pinenote.dtsi	2026-08-08 13:32:11.491717819 -0600
-+++ b/arch/arm64/boot/dts/rockchip/rk3566-pinenote.dtsi	2026-08-08 13:32:11.502744235 -0600
-@@ -449,7 +449,7 @@
++++ b/arch/arm64/boot/dts/rockchip/rk3566-pinenote.dtsi	2026-08-08 16:23:41.045192929 -0600
+@@ -26,6 +26,19 @@
+ 		rockchip,sleep-mode-config = <0x5ec>;
+ 		rockchip,wakeup-config = <0x10>;
+ 		rockchip,sleep-debug-en = <0x00>;
++		/*
++		 * Every suspend is ultra (LINUX_PM_STATE = 5).  This property
++		 * and the three regulator-off-in-suspend flips in this same
++		 * patch are a MATCHED PAIR and must never be separated:
++		 * rails-off + mem has never been run by anyone, and
++		 * override-without-rails is the R10/R11 configuration, proven
++		 * unwakeable (doc/artifacts/pinenote-ultra-handshake-20260807,
++		 * -r11-20260808).  Together they are hrdl's working
++		 * configuration, validated on this device 2026-08-08: three
++		 * resumes (RTC backstop, power button, 40-min alarm), 4.64 mA
++		 * measured (doc/artifacts/pinenote-ultra-r12-20260808).
++		 */
++		rockchip,suspend-state-override = <5>;
+ 	};
+ 
+ 	/*
+@@ -449,7 +462,7 @@
  				regulator-max-microvolt = <1800000>;
  
  				regulator-state-mem {
@@ -73,7 +82,7 @@ diff -uNr a/arch/arm64/boot/dts/rockchip/rk3566-pinenote.dtsi b/arch/arm64/boot/
  				};
  			};
  
-@@ -471,7 +471,7 @@
+@@ -471,7 +484,7 @@
  				regulator-max-microvolt = <900000>;
  
  				regulator-state-mem {
@@ -82,7 +91,7 @@ diff -uNr a/arch/arm64/boot/dts/rockchip/rk3566-pinenote.dtsi b/arch/arm64/boot/
  				};
  			};
  
-@@ -504,7 +504,7 @@
+@@ -504,7 +517,7 @@
  				regulator-max-microvolt = <3300000>;
  
  				regulator-state-mem {
@@ -91,7 +100,7 @@ diff -uNr a/arch/arm64/boot/dts/rockchip/rk3566-pinenote.dtsi b/arch/arm64/boot/
  				};
  			};
  
-@@ -894,7 +894,7 @@
+@@ -894,7 +907,7 @@
  	bus-width = <4>;
  	cap-sd-highspeed;
  	cap-sdio-irq;

@@ -28,7 +28,7 @@ FIXTURE ?= os1-used
 
 # reader-debug = reader with the EXTRACT_FBS diagnostic kernel
 # (linux-pinenote-debug); remove with the debug patch when done.
-FLAVORS = minimal slim networked dev usb-console usb-console-linux-6-6 reader reader-debug reader-ultra
+FLAVORS = minimal slim networked dev usb-console usb-console-linux-6-6 reader reader-debug
 
 .PHONY: help packages kernel kernel-drv qemu-smoke qemu-virt qemu-virt-check \
          check-host wbf-check ebc-logic-check ebc-barrier-check rastersim-check koreader-input-check orientation-check optics-check power-check rockchip-pm-check activation-positive-check suspend-check \
@@ -171,7 +171,7 @@ qemu-virt-visual:
 check-host: $(if $(WBF),wbf-check) ebc-logic-check ebc-barrier-check \
         rastersim-check koreader-input-check orientation-check optics-check \
         power-check rockchip-pm-check activation-positive-check suspend-check \
-        library-check ultra-quarantine-check
+        library-check ultra-coupling-check
 
 # Host-side waveform parser tests (offline ladder rung 1); needs the
 # per-device .wbf (never committed): make wbf-check WBF=/path/to/ebc.wbf
@@ -274,10 +274,11 @@ release-manifest:
 library-check:
 	sh pinenote/scripts/preflight/validate-koreader-library.sh
 
-# The ultra rail payload is allowed to EXIST (that is how it gets tested) and
-# is prevented from escaping into a release flavor.
-ultra-quarantine-check:
-	sh pinenote/scripts/preflight/validate-ultra-rails-quarantine.sh
+# The ultra payload is a matched pair (standing override + rails) that must
+# ship whole in one patch on the primary kernel; either half alone is a
+# proven-broken configuration.
+ultra-coupling-check:
+	sh pinenote/scripts/preflight/validate-ultra-coupling.sh
 
 suspend-check:
 	guix shell dtc python luajit -- sh pinenote/scripts/preflight/test-inspect-pinenote-suspend-gates.sh

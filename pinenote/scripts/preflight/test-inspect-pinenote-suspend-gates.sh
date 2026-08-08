@@ -115,7 +115,7 @@ write_dts() {
   cover_status=$6
   i2c_status=$7
   pmic_compatible=$8
-  ldo6_suspend=${10:-'regulator-on-in-suspend;'}
+  ldo6_suspend=${10:-'regulator-off-in-suspend;'}
   cover_wake=$9
   extra_wake=${10}
   output=${11}
@@ -132,6 +132,11 @@ write_dts() {
 		rockchip,sleep-mode-config = <0x5ec>;
 		rockchip,wakeup-config = <0x10>;
 		rockchip,sleep-debug-en = <0x00>;
+		rockchip,suspend-state-override = <0x5>;
+	};
+	mmc@fe2b0000 {
+		reg = <0xfe2b0000 0x4000>;
+		cap-power-off-card;
 	};
 	gpio-keys {
 		compatible = $gpio_compatible;
@@ -156,12 +161,12 @@ write_dts() {
 			regulators {
 				LDO_REG1 {
 					regulator-state-mem {
-						regulator-on-in-suspend;
+						regulator-off-in-suspend;
 					};
 				};
 				LDO_REG3 {
 					regulator-state-mem {
-						regulator-on-in-suspend;
+						regulator-off-in-suspend;
 					};
 				};
 				LDO_REG6 {
@@ -203,6 +208,7 @@ suspend = '''\trockchip-suspend {
 \t\trockchip,sleep-mode-config = <0x5ec>;
 \t\trockchip,wakeup-config = <0x10>;
 \t\trockchip,sleep-debug-en = <0x00>;
+\t\trockchip,suspend-state-override = <0x5>;
 \t};
 '''
 if good.count(suspend) != 1:
@@ -238,8 +244,8 @@ fixtures = {
     # anchor on the LAST property: dtc requires properties before subnodes,
     # and the activated node now has policy properties after status.
     "suspend-child-policy": good.replace(
-        '\t\trockchip,sleep-debug-en = <0x00>;',
-        '\t\trockchip,sleep-debug-en = <0x00>;\n\t\tpolicy {\n\t\t\trockchip,sleep-mode-config;\n\t\t};',
+        '\t\trockchip,suspend-state-override = <0x5>;',
+        '\t\trockchip,suspend-state-override = <0x5>;\n\t\tpolicy {\n\t\t\trockchip,sleep-mode-config;\n\t\t};',
         1,
     ),
     "suspend-extra-property": good.replace(
@@ -309,10 +315,10 @@ policy_properties = (
     "rockchip,regulator-off-in-mem-ultra",
     "regulator-suspend-microvolt",
     "regulator-suspend-mode",
-    # ultra-suspend policy surface (2026-08-01): the firmware-handshake
-    # override and the SDIO card-power flip are policy, never metadata;
-    # a production DT carrying either must refuse to bind.
-    "rockchip,suspend-state-override",
+    # cap-power-off-card belongs on the sdmmc1 node and nowhere else; a
+    # copy inside /rockchip-suspend is policy in the wrong place.  (The
+    # suspend-state-override moved from this spoof list into the GOOD
+    # fixture on 2026-08-08 -- R12 made it the reviewed standing policy.)
     "cap-power-off-card",
 )
 for index, property_name in enumerate(policy_properties):
@@ -328,12 +334,21 @@ for index, property_name in enumerate(policy_properties):
 # These inject where a real payload would go -- inside the PMIC's
 # regulator children and on the SDIO controller.
 rail_payload = {
-    "rail-ldo6-off": (
-        "LDO_REG6 {\n\t\t\t\t\tregulator-state-mem {\n\t\t\t\t\t\tregulator-on-in-suspend;",
-        "LDO_REG6 {\n\t\t\t\t\tregulator-state-mem {\n\t\t\t\t\t\tregulator-off-in-suspend;"),
+    # Inverted 2026-08-08: the reviewed policy is rails OFF, so the spoof
+    # is a rail drifting back ON (the R10/R11 unwakeable configuration).
+    "rail-ldo6-on": (
+        "LDO_REG6 {\n\t\t\t\t\tregulator-state-mem {\n\t\t\t\t\t\tregulator-off-in-suspend;",
+        "LDO_REG6 {\n\t\t\t\t\tregulator-state-mem {\n\t\t\t\t\t\tregulator-on-in-suspend;"),
     "rail-mem-ultra-node": (
         "LDO_REG6 {\n\t\t\t\t\tregulator-state-mem {",
         "LDO_REG6 {\n\t\t\t\t\tregulator-state-mem-ultra {"),
+    # The card-power declaration is load-bearing both ways round.
+    "rail-sdio-keep-power": (
+        "\tmmc@fe2b0000 {\n\t\treg = <0xfe2b0000 0x4000>;\n\t\tcap-power-off-card;",
+        "\tmmc@fe2b0000 {\n\t\treg = <0xfe2b0000 0x4000>;\n\t\tkeep-power-in-suspend;\n\t\tcap-power-off-card;"),
+    "rail-sdio-missing": (
+        "\tmmc@fe2b0000 {\n\t\treg = <0xfe2b0000 0x4000>;\n\t\tcap-power-off-card;\n\t};\n",
+        "\tmmc@fe2b0000 {\n\t\treg = <0xfe2b0000 0x4000>;\n\t};\n"),
 }
 for label, (exact, mutated) in rail_payload.items():
     if good.count(exact) != 1:
@@ -351,6 +366,8 @@ activated_policy = {
                "rockchip,wakeup-config = <0x11>;"),
     "sleep-debug": ("rockchip,sleep-debug-en = <0x00>;",
                     "rockchip,sleep-debug-en = <0x01>;"),
+    "state-override": ("rockchip,suspend-state-override = <0x5>;",
+                       "rockchip,suspend-state-override = <0x3>;"),
 }
 for label, (exact, mutated) in activated_policy.items():
     if good.count("\t\t" + exact) != 1:

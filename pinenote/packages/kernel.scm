@@ -105,7 +105,13 @@
         ;; around an idle EBC.  bl31 preserves the rate across
         ;; suspend/resume (addendum 2), so there are deliberately NO
         ;; suspend hooks anywhere.  Drop this line to revert.
-        (local-file "../patches/linux-pinenote-7.0-dmc-static-low.patch")))
+        (local-file "../patches/linux-pinenote-7.0-dmc-static-low.patch")
+        ;; Ultra suspend: hrdl's matched rails+override payload, validated
+        ;; on this device 2026-08-08 (R12: three resumes, 4.64 mA).  MUST
+        ;; apply after the bsp-sip patch -- it adds the standing override
+        ;; to the /rockchip-suspend node that patch creates.  See the
+        ;; patch header for why the pair must never be split.
+        (local-file "../patches/linux-pinenote-7.0-ultra-rails.patch")))
 
 (define %linux-pinenote-source
   (origin
@@ -152,43 +158,6 @@ or mutate bootloader state.")
     (license license:gpl2)))
 
 
-
-;; BENCH-ONLY kernel: linux-pinenote plus hrdl's ultra rail payload.
-;;
-;; This kernel suspends with the three *_pmu rails OFF, including
-;; vcc_3v3_pmu, which powers the GPIO0 pad bank carrying every external
-;; wake interrupt on the board.  If the wake question is not answered the
-;; way hrdl's device answers it, a device that suspends on this kernel may
-;; need a ten-second power-button hold to come back.  It exists to be run
-;; on a bench with an operator watching a UART, and nothing else.
-;;
-;; It is deliberately NOT referenced by any release flavor.  The only
-;; consumer is pinenote/systems/pinenote-reader-ultra.scm, and
-;; pinenote/scripts/preflight/validate-ultra-rails-quarantine.sh fails if
-;; that changes.  See the patch header for why the payload is adopted whole
-;; rather than in pieces, and doc/artifacts/pinenote-ultra-r11-20260808/
-;; for the measurement that made it worth attempting.
-(define-public linux-pinenote-ultra
-  (package
-    (inherit linux-pinenote)
-    (name "linux-pinenote-ultra")
-    (source
-     (origin
-       (inherit (package-source %linux-pinenote-base))
-       (patches
-        (append (origin-patches (package-source %linux-pinenote-base))
-                %linux-pinenote-patches
-                (list (local-file
-                       "../patches/linux-pinenote-7.0-ultra-rails.patch"))))))
-    (synopsis "PineNote kernel with hrdl's ultra-suspend rail payload (BENCH ONLY)")
-    (description
-     "The linux-pinenote kernel with the three PMU rails marked
-off-in-suspend and sdmmc1 moved to cap-power-off-card, matching the only
-known-working ultra-suspend configuration (hrdl's v6.19_ultra_suspend).
-Carries hrdl's cyttsp5 resume workaround, since the touch controller's
-supply is one of the rails being cut.  A device suspending on this kernel
-may require a forced power-off to recover; it is for supervised bench use
-and must never appear in a release flavor.")))
 
 ;; Diagnostic kernel: linux-pinenote plus the stacked debug patches.
 ;; Currently carried (order matters; the ebc-logic harness's dbg variant

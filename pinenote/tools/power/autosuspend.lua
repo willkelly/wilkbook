@@ -763,7 +763,14 @@ local function suspend_once()
     -- overlay or not.
     cleanup_wash()
     frontlight_restore(lights)
-    log("resumed after %ds", slept)
+    -- The gauge reading turns the daemon's own log into soak telemetry:
+    -- one line per cycle with the coulomb count at wake, so a multi-day
+    -- soak needs no extra instrumentation -- the standby current IS the
+    -- charge_now series divided by the sleep intervals (the R12 method,
+    -- which produced the 4.64 mA figure).
+    local gauge = read_file("/sys/class/power_supply/rk817-battery/charge_now")
+    log("resumed after %ds (charge_now=%s)", slept,
+        gauge and gauge:match("%d+") or "?")
     -- Hand the duration back: the caller uses it to tell an RTC-backstop
     -- wake (nobody here) from a button wake (somebody here).
     return true, slept
