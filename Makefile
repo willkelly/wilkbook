@@ -273,6 +273,11 @@ release-manifest:
 library-check:
 	sh pinenote/scripts/preflight/validate-koreader-library.sh
 
+# The ultra rail payload is allowed to EXIST (that is how it gets tested) and
+# is prevented from escaping into a release flavor.
+ultra-quarantine-check:
+	sh pinenote/scripts/preflight/validate-ultra-rails-quarantine.sh
+
 suspend-check:
 	guix shell dtc python luajit -- sh pinenote/scripts/preflight/test-inspect-pinenote-suspend-gates.sh
 	sh pinenote/scripts/preflight/validate-tps65185-pm-hunk.sh

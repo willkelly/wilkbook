@@ -1,0 +1,139 @@
+Ultra suspend: hrdl's rail payload, adopted whole.
+
+THIS PATCH MUST NEVER REACH A PRODUCTION IMAGE.  It is carried only by the
+`linux-pinenote-ultra' kernel, which is used only by the
+`pinenote-reader-ultra' flavor, which exists only to answer the wake
+question on a supervised bench.  `pinenote/scripts/preflight/validate-ultra-
+rails-quarantine.sh' fails the build if it appears anywhere else.
+
+WHY, and why the whole thing rather than a subset.
+
+The 2026-08-07 handshake proved bl31 honours LINUX_PM_STATE=5, and the
+device then woke from nothing.  R11 (2026-08-08) instrumented it: with
+firmware diagnostics on, a WORKING mem suspend and the NON-RETURNING ultra
+suspend were shown to receive bit-for-bit identical configuration --
+cfg 0x5ec, wakeup 0x10, and in both cases bl31 printing "Enable GPIO0
+interrupt as wakeup source".  So the failure is not misconfiguration; it is
+downstream of arming.
+
+What R11 also measured, for the first time on this device: ultra draws
+roughly 3 mA against deep's ~20 mA (upper bound 10.2 mA even attributing
+nothing to the recovery boot).  That is the difference between ~7 days of
+standby and ~35, so the wake question is worth solving rather than closing.
+
+The remaining difference from the only configuration anyone has working is
+these five lines.  hrdl's commit ee2c553f78 states the mode-5 override "is
+needed for the system to resume" -- i.e. rails-off and state 5 are a matched
+pair, and our 2026-08-07 attempt ran the half nobody runs.  Their
+sleep-mode-config (0x5ec) and wakeup-config (0x10) are already identical to
+ours; the rails ARE the entire delta.
+
+WHAT THIS TURNS OFF, and the consequence to expect:
+
+  vcca_1v8_pmu (LDO_REG1)  VCCIO4 -- Wi-Fi SDIO and BT signalling, sdmmc1
+                           vqmmc.  Wi-Fi/BT die across suspend; sdmmc1 is
+                           therefore moved to cap-power-off-card so the
+                           driver re-initialises the card instead of
+                           assuming it kept power.
+  vdda_0v9_pmu (LDO_REG3)  the SoC's own PMU-domain analog supply.  It has
+                           zero DT consumers, so nothing in the tree can
+                           tell you what breaks; hrdl kills it, so we do.
+  vcc_3v3_pmu  (LDO_REG6)  pmuio1/pmuio2 -- the GPIO0 pad bank carrying
+                           EVERY external wake interrupt on this board:
+                           rk817 INT (pwrkey, RTC alarm, charger), touch,
+                           pen, Wacom, BT/Wi-Fi host-wake and the cover.
+
+That last one is the counter-intuitive part and it is the point.  Killing
+the pad bank should make SoC GPIO wake impossible -- yet hrdl's device
+resumes, which means wake in a working ultra is PMIC-mediated, not a GPIO0
+interrupt.  Our rails-ON attempt kept the pad bank alive and still could not
+wake, which is exactly what a configuration nobody supports looks like.
+
+The cyttsp5 hunk is hrdl's [HACK] (693fee19), adapted: vcc_3v3_pmu feeds the
+touch controller's vdd, so it returns cold and its power-on handshake can
+fail.  Reset and continue rather than losing touch for the session.  Their
+startup call is commented out in the original and remains so here -- this is
+a known-incomplete recovery, carried because the alternative is no touch at
+all after resume.
+
+Origin: https://git.sr.ht/~hrdl/linux branch v6.19_ultra_suspend, commits
+ee2c553f78 (DTS) and 693fee19 (cyttsp5).  Regenerated against our patched
+7.0.11 tree rather than cherry-picked, because our forward-port patch shifts
+the DTS line numbers.
+
+diff -uNr a/arch/arm64/boot/dts/rockchip/rk3566-pinenote.dtsi b/arch/arm64/boot/dts/rockchip/rk3566-pinenote.dtsi
+--- a/arch/arm64/boot/dts/rockchip/rk3566-pinenote.dtsi	2026-08-08 13:32:11.491717819 -0600
++++ b/arch/arm64/boot/dts/rockchip/rk3566-pinenote.dtsi	2026-08-08 13:32:11.502744235 -0600
+@@ -449,7 +449,7 @@
+ 				regulator-max-microvolt = <1800000>;
+ 
+ 				regulator-state-mem {
+-					regulator-on-in-suspend;
++					regulator-off-in-suspend;
+ 				};
+ 			};
+ 
+@@ -471,7 +471,7 @@
+ 				regulator-max-microvolt = <900000>;
+ 
+ 				regulator-state-mem {
+-					regulator-on-in-suspend;
++					regulator-off-in-suspend;
+ 				};
+ 			};
+ 
+@@ -504,7 +504,7 @@
+ 				regulator-max-microvolt = <3300000>;
+ 
+ 				regulator-state-mem {
+-					regulator-on-in-suspend;
++					regulator-off-in-suspend;
+ 				};
+ 			};
+ 
+@@ -894,7 +894,7 @@
+ 	bus-width = <4>;
+ 	cap-sd-highspeed;
+ 	cap-sdio-irq;
+-	keep-power-in-suspend;
++	cap-power-off-card;
+ 	mmc-pwrseq = <&sdio_pwrseq>;
+ 	non-removable;
+ 	pinctrl-0 = <&sdmmc1_bus4>, <&sdmmc1_clk>, <&sdmmc1_cmd>;
+diff -uNr a/drivers/input/touchscreen/cyttsp5.c b/drivers/input/touchscreen/cyttsp5.c
+--- a/drivers/input/touchscreen/cyttsp5.c	2026-08-08 13:32:11.491774847 -0600
++++ b/drivers/input/touchscreen/cyttsp5.c	2026-08-08 13:32:11.512433689 -0600
+@@ -956,11 +956,30 @@
+ static int __maybe_unused cyttsp5_resume(struct device *dev)
+ {
+ 	struct cyttsp5 *ts = dev_get_drvdata(dev);
++	int error = 0;
+ 
+-	if (!device_may_wakeup(dev))
+-		cyttsp5_power_control(ts, true);
++	if (!device_may_wakeup(dev)) {
++		error = cyttsp5_power_control(ts, true);
+ 
+-	return 0;
++		/*
++		 * Under ultra suspend vcc_3v3_pmu is off, which takes this
++		 * controller's vdd with it, so the chip comes back cold and
++		 * the power-on handshake can fail.  Reset it and carry on
++		 * rather than propagating the error and losing touch for the
++		 * rest of the session.  Adapted from hrdl's [HACK] commit
++		 * 693fee19 -- their startup call is left commented out there
++		 * too, so this is a known-incomplete recovery.
++		 */
++		if (error) {
++			gpiod_set_value_cansleep(ts->reset_gpio, 1);
++			msleep(10);
++			gpiod_set_value_cansleep(ts->reset_gpio, 0);
++			msleep(20);
++			error = 0;
++		}
++	}
++
++	return error;
+ }
+ 
+ static SIMPLE_DEV_PM_OPS(cyttsp5_pm, cyttsp5_suspend, cyttsp5_resume);
