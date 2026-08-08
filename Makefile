@@ -250,12 +250,18 @@ channels-pin:
 
 # What was built, from what, and its hash.  Committed at the tag, so the
 # hash lives inside signed history rather than beside a download.
+#
+# The git description is captured BEFORE the redirect: `>` truncates
+# SHA256SUMS first, which dirties the tree, so an inline
+# $(git describe --dirty) inside the block always reported -dirty no matter
+# how clean the checkout was.
 release-manifest:
 	@test -n "$(ROOTFS)" || { echo "usage: make release-manifest ROOTFS=<rootfs.ext4>"; exit 2; }
 	@test -f channels.scm || { echo "no channels.scm -- run: make channels-pin"; exit 2; }
 	@set -e; \
+	  desc=$$(git describe --always --dirty --tags); \
 	  { printf '# wilkbook release manifest\n'; \
-	    printf '# git:      %s\n' "$$(git describe --always --dirty --tags)"; \
+	    printf '# git:      %s\n' "$$desc"; \
 	    printf '# built:    %s\n' "$$(date -u +%Y-%m-%dT%H:%M:%SZ)"; \
 	    printf '# channels: channels.scm at this commit (guix time-machine -C)\n'; \
 	    printf '# verify:   sha256sum -c SHA256SUMS\n'; \
