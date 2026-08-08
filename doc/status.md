@@ -68,6 +68,32 @@ at the first boot of a post-v3 image (see the host-keys entry below).
 Entries below are newest-first; the ## sections after the parity table
 are a historical document.
 
+**2026-08-08 R12: THE ULTRA WAKE PROBLEM IS SOLVED — rails-off resumes,
+4.64 mA measured.** [wilkbook / wkelly] hrdl's configuration (three
+`*_pmu` rails off-in-suspend + `sdmmc1 cap-power-off-card` + the cyttsp5
+resume workaround), adopted whole into a quarantined bench flavor,
+resumed from ultra suspend on our bl31 v2.3-210 + 7.0.11 stack — on BOTH
+wake legs: the RTC alarm (slept=60s, exactly on the backstop) and the
+power button (slept=28s). Third suspend slept 2400 s on the dot and gave
+the cleanest current bracket ever taken here: **4.64 mA** (3,096 µAh over
+40.0 min, both reads in-process seconds around the sleep), against deep's
+~20 mA. ~36 days of pure suspend on a full charge; the 18-day target now
+has 2× slack.
+
+The pre-registered go/no-go held: bl31's banner printed `pmic: 0x14,
+0x00` — the payload cleared exactly the three `POWER_SLP_EN` bits R11's
+rails-on runs read as `0x25`. Wake is PMIC-mediated and it is a genuine
+RESUME with kernel continuity, which fully explains R10: rails-on ultra
+is the one configuration with no wake path at all. Wi-Fi re-initialised
+from a powered-off SDIO card; the cyttsp5 [HACK] validated on glass
+(one cold-controller timeout, reset-and-continue, operator confirms
+panel clean / touch works / pages turn). `suspend_stats 3/0`.
+
+Record: `doc/artifacts/pinenote-ultra-r12-20260808/`. Not yet done: the
+multi-day soak, and the adoption decision (the payload is quarantined
+out of production by `make ultra-quarantine-check`; promoting it is a
+safety-model change).
+
 **2026-08-07 auto-suspend duty-cycle fix — in tree, NOT in any deployed
 image.** Every deployed image from 2026-08-03 onward re-armed a full
 300 s idle period after an RTC-backstop wake, so a device left alone ran

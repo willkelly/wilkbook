@@ -55,9 +55,27 @@ measured by wall clock in the same process).
 
 ## A3 — the measured window
 
-Pre-A3 bracket: `charge_now = 3,281,760 µAh` at 2026-08-08T21:32:27Z,
-82%. 40-minute armed window, RTC +2400 s, hands off.
-*(Result appended after the window.)*
+The cleanest suspend measurement in the project's history: both gauge
+reads from the runner's own process, seconds either side of the sleep —
+no boot confound, no attribution model.
+
+    entry : 3,281,760 µAh   2026-08-08T21:32:27Z
+    resume: 3,278,664 µAh   2026-08-08T22:12:30Z  (slept exactly 2400 s, rc=0)
+    delta =     3,096 µAh over 40.0 min  ->  **4.64 mA**
+
+Third consecutive successful rails-off wake; `suspend_stats 3/0`.
+
+Context: deep (rails-on mem) measured ~20 mA; R11's rails-on ultra
+estimate (~3 mA, wide error bars) is now calibrated — the ≤10.2 mA hard
+bound held, the point estimate was optimistic; hrdl's ~11 mW ≈ 3.0 mA
+claim is independently corroborated at the same order of magnitude on
+our stack.
+
+Standby arithmetic at 4.64 mA: 4000 mAh full charge → ~36 days of pure
+suspend; with backstop-wake overhead, roughly ~28 effective. The 18-day
+alpha target now carries ~2× slack, and the >30-day desired outcome is
+in reach. (Arithmetic, labelled as such — the multi-day soak remains the
+proof.)
 
 ## Deviations and notes
 
