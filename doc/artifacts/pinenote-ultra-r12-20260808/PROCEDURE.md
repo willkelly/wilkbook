@@ -22,6 +22,20 @@ register retention across a forced power-off, and vdda_0v9_pmu-off vs
 the SoC's PMU-domain analog — both bounded only by hrdl's
 board-identical device recovering routinely.
 
+## The artifact
+
+    /tmp/opencode/r12/pinenote-reader-ultra-PNGuixRoot-20260808.ext4
+    sha256 e1374a799aec6e3395b9b2040cfe04ebdbcbd3d1305c3e76c1e311f95772a15f
+
+Verified in the artifact, not the source: the image's own extlinux
+APPEND carries `rockchip_suspend_mode_drv.sleep_debug_arm=1`; the
+compiled DTB has all three rails `regulator-off-in-suspend` and sdmmc1
+`cap-power-off-card`; the booted `shepherd.conf` contains zero
+`pinenote-autosuspend` references (with `pinenote-dmc` present as the
+positive control); hostname `pinenote-reader-ultra`. `qemu-virt-check`
+green on this exact file. Review: `cancel_build` empty, all six findings
+applied (the workflow record is the session transcript).
+
 ## Rules that differ from every previous session
 
 1. **Every suspend is armed. There is no mem control on this image.**
