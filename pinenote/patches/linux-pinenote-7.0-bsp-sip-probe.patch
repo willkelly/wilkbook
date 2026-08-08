@@ -226,7 +226,7 @@ new file mode 100644
 index 0000000000000000000000000000000000000000..6f8e72b185bb8e7fd24711b8b840d26c7979db06
 --- /dev/null
 +++ b/drivers/soc/rockchip/rockchip_suspend_activate.c
-@@ -0,0 +1,231 @@
+@@ -0,0 +1,281 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +#include <linux/device.h>
 +#include <linux/errno.h>
@@ -262,6 +262,31 @@ index 0000000000000000000000000000000000000000..6f8e72b185bb8e7fd24711b8b840d26c
 +module_param(ultra_arm, uint, 0644);
 +MODULE_PARM_DESC(ultra_arm,
 +	"write 5 to send LINUX_PM_STATE=5 on the NEXT suspend only (self-clearing)");
++
++/*
++ * Firmware-side suspend diagnostics, at runtime.
++ *
++ * bl31 implements SIP control 0x05 (SUSPEND_DEBUG_ENABLE) and we already
++ * emit it on every suspend -- carrying the DT-pinned 0.  Switched on, the
++ * firmware prints its own decode of what it was told, including
++ *
++ *     WAKEUP: PMU_WAKEUP_INT_CON:0x%x, reg: 0x%x
++ *
++ * a hardware READBACK of the armed wake register.  That is the only
++ * on-device observability of the wake word that exists, and we have been
++ * shipping it switched off -- which is why the 2026-08-07 ultra attempt
++ * could only report "UART silent, cause unknown".
++ *
++ * Diagnostic ONLY: it changes what firmware prints, never what it does
++ * with rails or states.  Deliberately sticky rather than one-shot,
++ * because a supervised session wants it across several suspends; a
++ * reboot returns to the device tree, since the policy is re-parsed at
++ * probe.  -1 (the default) means "use the device tree".
++ */
++static int sleep_debug_arm = -1;
++module_param(sleep_debug_arm, int, 0644);
++MODULE_PARM_DESC(sleep_debug_arm,
++	"-1 = use DT; 0/1 = override rockchip,sleep-debug-en until reboot (firmware verbosity only)");
 +
 +struct rockchip_suspend_activation {
 +	struct device *dev;
@@ -339,6 +364,31 @@ index 0000000000000000000000000000000000000000..6f8e72b185bb8e7fd24711b8b840d26c
 +		} else {
 +			dev_warn(dev, "ignoring ultra_arm=%u (only 5 is a meaningful override)\n",
 +				armed);
++		}
++	}
++	/*
++	 * The debug override is applied after the state override and is
++	 * independent of it: the most useful single run is a PROVEN mem
++	 * suspend with firmware debug on, which reads back the wake register
++	 * without changing anything about the suspend itself.
++	 */
++	if (sleep_debug_arm >= 0) {
++		unsigned int want = (unsigned int)sleep_debug_arm;
++
++		if (want <= 1) {
++			bool had = activation->policy.value.sleep_debug.present;
++			unsigned int was = activation->policy.value.sleep_debug.value;
++
++			if (!had || was != want) {
++				activation->policy.value.sleep_debug.present = true;
++				activation->policy.value.sleep_debug.value = want;
++				dev_info(dev, "firmware suspend debug = %u (diagnostic override; was %u%s)\n",
++					want, was, had ? "" : ", unset in DT");
++			}
++		} else {
++			dev_warn(dev, "ignoring sleep_debug_arm=%d (0 or 1 only)\n",
++				sleep_debug_arm);
++			sleep_debug_arm = -1;
 +		}
 +	}
 +	probe_count = rockchip_suspend_model_build_probe(&activation->policy,
