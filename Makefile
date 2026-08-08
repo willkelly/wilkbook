@@ -28,7 +28,7 @@ FIXTURE ?= os1-used
 
 # reader-debug = reader with the EXTRACT_FBS diagnostic kernel
 # (linux-pinenote-debug); remove with the debug patch when done.
-FLAVORS = minimal slim networked dev usb-console usb-console-linux-6-6 reader reader-debug
+FLAVORS = minimal slim networked dev usb-console usb-console-linux-6-6 reader reader-debug reader-ultra
 
 .PHONY: help packages kernel kernel-drv qemu-smoke qemu-virt qemu-virt-check \
          check-host wbf-check ebc-logic-check ebc-barrier-check rastersim-check koreader-input-check orientation-check optics-check power-check rockchip-pm-check activation-positive-check suspend-check \
@@ -170,7 +170,8 @@ qemu-virt-visual:
 # and skip their waveform-gated tests without it.
 check-host: $(if $(WBF),wbf-check) ebc-logic-check ebc-barrier-check \
         rastersim-check koreader-input-check orientation-check optics-check \
-        power-check rockchip-pm-check activation-positive-check suspend-check
+        power-check rockchip-pm-check activation-positive-check suspend-check \
+        library-check ultra-quarantine-check
 
 # Host-side waveform parser tests (offline ladder rung 1); needs the
 # per-device .wbf (never committed): make wbf-check WBF=/path/to/ebc.wbf

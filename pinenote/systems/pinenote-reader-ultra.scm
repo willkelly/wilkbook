@@ -3,6 +3,7 @@
   #:use-module (gnu services)
   #:use-module (gnu system)
   #:use-module (guix gexp)
+  #:use-module (pinenote images pinenote-initramfs)
   #:use-module (pinenote packages kernel)
   #:use-module (pinenote services autosuspend)
   #:use-module (pinenote systems pinenote-reader)
@@ -49,6 +50,16 @@
     (inherit pinenote-reader-operating-system)
     (host-name "pinenote-reader-ultra")
     (kernel linux-pinenote-ultra)
+    ;; Firmware suspend diagnostics ON FROM BOOT.  The sleep_debug_arm
+    ;; module param resets to the DT default (0) on every reboot -- so
+    ;; after a mid-session long-press recovery, a sysfs-armed session
+    ;; would narrate nothing on exactly the suspend where evidence
+    ;; matters most.  The param is built in, so the cmdline reaches it
+    ;; before any shell exists.  Diagnostic only: changes what firmware
+    ;; prints, never what it does.  (Review finding, 2026-08-08.)
+    (kernel-arguments
+     (cons "rockchip_suspend_mode_drv.sleep_debug_arm=1"
+           pinenote-reader-kernel-arguments))
     (services
      (remove (lambda (service)
                (eq? (service-kind service) pinenote-autosuspend-service-type))

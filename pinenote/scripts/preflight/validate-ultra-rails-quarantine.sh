@@ -41,7 +41,9 @@ grep -q "linux-pinenote-ultra" "$kernel" ||
   fail "kernel.scm has no linux-pinenote-ultra package"
 
 # 2. The payload must NOT be in the shared patch list every kernel gets.
-if awk '/define %linux-pinenote-patches/,/^$/' "$kernel" | grep -q "ultra-rails"; then
+#    The range ends at the list's closing paren, not the first blank line --
+#    a blank line inside the list would silently truncate the scan.
+if awk '/define %linux-pinenote-patches/{f=1} f{print} f&&/\)\)\)$/{exit}' "$kernel" | grep -q "ultra-rails"; then
   fail "the ultra rails patch is in %linux-pinenote-patches -- that list is
    applied to the PRIMARY kernel and would ship the rail kill to every flavor"
 fi
@@ -57,6 +59,14 @@ $(printf '%s\n' "$users" | sed 's|^|     |')
 esac
 [ "$users" = "$flavor" ] ||
   fail "linux-pinenote-ultra is used by $users, not the bench flavor"
+
+# 3b. Nor may any other flavor reach the payload by INHERITING the bench
+#     OS instead of naming the kernel -- demonstrated bypass of check 3.
+inheritors=$(grep -l "pinenote-reader-ultra" "$systems"/*.scm 2>/dev/null | grep -v "pinenote-reader-ultra.scm" || true)
+[ -z "$inheritors" ] ||
+  fail "these system files reference pinenote-reader-ultra (inherit-based
+   escape from check 3):
+$(printf '%s\n' "$inheritors" | sed 's|^|     |')"
 
 # 4. The production reader must not name the bench kernel or the payload.
 prod=$systems/pinenote-reader.scm
