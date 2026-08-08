@@ -1,7 +1,14 @@
 #!/bin/sh
 # One supervised suspend for the ultra firmware-handshake test.
-#   $1 = label (r9-control | r10-armed)
+#   $1 = label (e.g. p1-mem-debug | p2-ultra-debug)
 #   $2 = ultra_arm value written immediately before the suspend (0 or 5)
+#   $3 = sleep_debug_arm: -1 leave alone, 0 off, 1 ON (firmware narrates)
+#
+# R11 addition: with $3=1 bl31 prints its own decode of the words it was
+# given, including a hardware READBACK of PMU_WAKEUP_INT_CON.  That is the
+# only on-device observability of the wake word, and it is why R10 could
+# only report "UART silent, cause unknown".  Diagnostic only -- it changes
+# what firmware prints, never what it does.
 #
 # Mirrors the PROVEN path in pinenote/tools/power/autosuspend.lua, because
 # a hand-rolled `echo mem > /sys/power/state` does NOT reach firmware:
@@ -12,8 +19,9 @@
 #   * the EBC must be quiet before entry or the glass cache desyncs
 # Evidence lands on p7 so it survives an os2 reflash AND a no-resume.
 set -u
-LBL="$1"; ARM="${2:-0}"
+LBL="$1"; ARM="${2:-0}"; DBG="${3:--1}"
 P=/sys/module/rockchip_suspend_mode_drv/parameters/ultra_arm
+DP=/sys/module/rockchip_suspend_mode_drv/parameters/sleep_debug_arm
 UDC=/sys/kernel/config/usb_gadget/pinenote-acm/UDC
 OUT=/data/wilkbook/ultra-$LBL.log
 B=/sys/class/power_supply/rk817-battery
@@ -56,6 +64,17 @@ echo "udc now=[$(cat $UDC 2>/dev/null)]"
 # 4. arm (or explicitly disarm) the firmware handshake
 echo "$ARM" > "$P"
 echo "ultra_arm armed to: $(cat $P)"
+# Firmware diagnostics.  Sticky until reboot by design, so a session sets
+# it once -- but write it every run so the log records what was in force.
+if [ "$DBG" != "-1" ]; then
+  if [ -w "$DP" ]; then
+    echo "$DBG" > "$DP"
+    echo "sleep_debug_arm = $(cat $DP)  (1 = bl31 narrates this suspend)"
+  else
+    echo "WARNING: $DP absent -- this image predates the diagnostic knob;"
+    echo "         the suspend will still run, but firmware stays silent."
+  fi
+fi
 
 # 5. RTC backstop
 echo 0 > /sys/class/rtc/rtc0/wakealarm
@@ -64,7 +83,7 @@ echo $((NOW + 60)) > /sys/class/rtc/rtc0/wakealarm
 echo "wakealarm=$(cat /sys/class/rtc/rtc0/wakealarm) now=$NOW"
 sync
 
-echo "### WILKBOOK $LBL ENTERING SUSPEND arm=$ARM ###" > /dev/console
+echo "### WILKBOOK $LBL ENTERING SUSPEND arm=$ARM debug=$DBG ###" > /dev/console
 T0=$(cat /sys/class/rtc/rtc0/since_epoch)
 echo mem > /sys/power/state
 RC=$?
