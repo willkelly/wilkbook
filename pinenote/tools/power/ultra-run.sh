@@ -19,7 +19,7 @@
 #   * the EBC must be quiet before entry or the glass cache desyncs
 # Evidence lands on p7 so it survives an os2 reflash AND a no-resume.
 set -u
-LBL="$1"; ARM="${2:-0}"; DBG="${3:--1}"
+LBL="$1"; ARM="${2:-0}"; DBG="${3:--1}"; BACKSTOP="${4:-60}"
 P=/sys/module/rockchip_suspend_mode_drv/parameters/ultra_arm
 DP=/sys/module/rockchip_suspend_mode_drv/parameters/sleep_debug_arm
 UDC=/sys/kernel/config/usb_gadget/pinenote-acm/UDC
@@ -79,7 +79,7 @@ fi
 # 5. RTC backstop
 echo 0 > /sys/class/rtc/rtc0/wakealarm
 NOW=$(cat /sys/class/rtc/rtc0/since_epoch)
-echo $((NOW + 60)) > /sys/class/rtc/rtc0/wakealarm
+echo $((NOW + BACKSTOP)) > /sys/class/rtc/rtc0/wakealarm
 echo "wakealarm=$(cat /sys/class/rtc/rtc0/wakealarm) now=$NOW"
 sync
 
