@@ -68,7 +68,7 @@ All live in `pinenote/packages/kernel.scm`:
 
 `%linux-pinenote-patches` in `pinenote/packages/kernel.scm` is the
 authoritative list; the comments there carry each patch's rationale and
-revert instruction. As of 2026-08-06 it is six patches, applied in list
+revert instruction. As of 2026-08-08 it is seven patches, applied in list
 order on top of the vanilla source:
 
 1. `linux-pinenote-7.0-forward-port.patch` — the EBC display stack,
@@ -97,17 +97,27 @@ order on top of the vanilla source:
 6. `linux-pinenote-7.0-dmc-static-low.patch` — `wilkbook_dmc`: holds
    DDR at the firmware table's lowest rate (324 MHz) over the DRAM SIP,
    ~25 mA saved quiesced, measured 2026-08-06 (`doc/power-management.md`).
+7. `linux-pinenote-7.0-ultra-rails.patch` — ultra suspend, hrdl's
+   configuration adopted whole: the standing
+   `rockchip,suspend-state-override = <5>` **and** the three `*_pmu`
+   rails off-in-suspend + `sdmmc1 cap-power-off-card` + the cyttsp5
+   resume workaround. A MATCHED PAIR that must never be split (either
+   half alone is proven broken — R10/R11 vs R12); `make
+   ultra-coupling-check` enforces it, and this patch must apply **after**
+   the bsp-sip patch whose `/rockchip-suspend` node it extends. 4.64 mA
+   suspend measured on glass 2026-08-08
+   (`doc/artifacts/pinenote-ultra-r12-20260808/`).
 
 `linux-pinenote-debug` stacks `linux-pinenote-debug-extract-fbs.patch`
-on top of the same six.
+on top of the same seven.
 
-**A patch refresh must carry all six.** The refresh procedure below
+**A patch refresh must carry all seven.** The refresh procedure below
 regenerates only the forward-port patch — the other five are separate
 files that a refreshed `kernel.scm` still applies, and nothing in the
 procedure touches them, so the failure mode is *omission*: forgetting
 they exist, or rebasing the forward-port onto a base where one of them
 no longer applies. After any base change, `git apply --check` each of
-the six against the new source before building, and re-read the
+the seven against the new source before building, and re-read the
 kernel.scm comments — several are deliberate, revertable experiments,
 not permanent carry.
 

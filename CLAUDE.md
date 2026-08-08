@@ -180,7 +180,8 @@ gitignored `build/`, or the reader's static address.
   Wi-Fi with out-of-band credentials, key-only SSH, ACM gadget console.
 - **Kernel**: 7.0.x forward port is the hardware-proven primary
   (display, PREEMPT_RT, Wi-Fi/BT, gadget — 2026-07-04); 6.6.30 is
-  regression-isolation only. Six patches total; see the inventory in
+  regression-isolation only. Seven patches total (ultra suspend included
+  since 2026-08-08); see the inventory in
   `doc/kernel-forward-port.md`.
 - **Suspend**: **deep suspend works** (2026-08-02: BSP SIP activation
   live and bound, cfg `0x5ec`; RTC wake; display recovery at both CRTC
