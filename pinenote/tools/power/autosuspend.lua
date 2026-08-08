@@ -26,8 +26,11 @@ Design notes, all of them earned on hardware:
     often: a backstop wake means nobody is present, so it re-suspends
     after a short settle and every one of them is pure cost.
 
-Activity is any readable event on any /dev/input/event*, so touch, pen,
-buttons and the cover all count.
+Activity is any readable event on any /dev/input/event*, so touch, pen
+and buttons all count -- but NOT the cover.  Closing the cover is the
+gesture for "I am putting this away"; counting it as activity did the
+opposite of what the user meant and held the device awake for a further
+idle period.  Cover-close is a suspend REQUEST; cover-open is activity.
 
 Usage: autosuspend.lua [--idle SECONDS] [--backstop SECONDS] [--dry-run]
 --]]
@@ -49,6 +52,9 @@ struct as_input_event {
 ]]
 
 local EV_KEY, KEY_POWER = 1, 116
+-- EV_SYN accompanies every batch, so it can never count as activity or the
+-- cover's own terminating SYN would re-arm the idle timer by itself.
+local EV_SYN, EV_SW, SW_LID = 0, 5, 0
 local INPUT_EVENT_SIZE = 24
 
 local O_RDONLY, O_NONBLOCK = 0, 2048
@@ -313,6 +319,72 @@ local function scan_power_events(d, nbytes)
         end
     end
     return tapped
+end
+
+-- Split a drained buffer into "real activity" and cover transitions.
+--
+-- This runs for EVERY device, not just the power key: gpio-keys publishes
+-- the cover on whichever event node it lands on, and matching by name is
+-- fragile (the node is named for the gpio-keys parent, not the switch).
+-- Classifying by event TYPE is exact and needs no ioctl.
+local function scan_activity_and_cover(nbytes)
+    local ev = ffi.cast("struct as_input_event *", drain)
+    local count = math.floor(tonumber(nbytes) / INPUT_EVENT_SIZE)
+    local activity, closed, opened = false, false, false
+    for i = 0, count - 1 do
+        local e = ev[i]
+        if e.type == EV_SW and e.code == SW_LID then
+            if e.value == 1 then closed = true
+            elseif e.value == 0 then opened = true end
+        elseif e.type ~= EV_SYN then
+            activity = true
+        end
+    end
+    return activity, closed, opened
+end
+
+-- Frontlight across suspend.  Not optional, for two independent reasons:
+--   * vcc_3v3 is off-in-suspend on this board and mainline 7.0.11's
+--     lm3630a_bl.c carries no dev_pm_ops -- the chip returns at its
+--     power-on default while sysfs still reports the old value, so the
+--     panel can come back dark with brightness reading 153.
+--     doc/hardware-deploy.md:184 already tells the operator to re-set
+--     these by hand "or the box is pitch black"; that is this bug, worked
+--     around manually.
+--   * every current figure in doc/power-management.md was taken at
+--     frontlight ZERO.  A reader that falls asleep lit is not the device
+--     those numbers describe.
+-- Names are explicit because this luajit has no io.popen, the same reason
+-- the input list is probed rather than globbed.
+local BACKLIGHT_NAMES = { "backlight_cool", "backlight_warm" }
+
+local function frontlight_save_and_off()
+    local saved = {}
+    for _, name in ipairs(BACKLIGHT_NAMES) do
+        local dir = "/sys/class/backlight/" .. name
+        local cur = read_file(dir .. "/brightness")
+        local value = cur and cur:match("(%d+)")
+        if value then
+            saved[#saved + 1] = { dir = dir, name = name, value = value }
+            write_file(dir .. "/brightness", "0")
+        end
+    end
+    return saved
+end
+
+local function frontlight_restore(saved)
+    for _, d in ipairs(saved or {}) do
+        write_file(d.dir .. "/brightness", d.value)
+        -- This sysfs rejects out-of-range writes outright (EINVAL, seen
+        -- 2026-08-06), and after a rail drop the chip may ignore us
+        -- entirely -- so verify rather than assume.
+        local back = read_file(d.dir .. "/brightness")
+        local got = back and back:match("(%d+)")
+        if got ~= d.value then
+            log("frontlight %s did not take: wrote %s, reads %s",
+                d.name, d.value, tostring(got))
+        end
+    end
 end
 
 -- Discard anything queued on every input device.  Called after a resume so
@@ -651,6 +723,9 @@ local function suspend_once()
         end
         return false
     end
+    -- After the banner is on glass, before the rails go: the user sees the
+    -- banner lit, then the light goes out with the device.
+    local lights = frontlight_save_and_off()
     write_file("/dev/kmsg", "<0>WILKBOOK: autosuspend entering deep")
     os.execute("sync")
     local t0 = os.time()
@@ -670,6 +745,7 @@ local function suspend_once()
             restore_banner_area()
         end
         cleanup_wash()
+        frontlight_restore(lights)
         return false
     end
     local slept = os.time() - t0
@@ -686,6 +762,7 @@ local function suspend_once()
     -- The wash is desync recovery, not banner cleanup -- it runs
     -- overlay or not.
     cleanup_wash()
+    frontlight_restore(lights)
     log("resumed after %ds", slept)
     -- Hand the duration back: the caller uses it to tell an RTC-backstop
     -- wake (nobody here) from a button wake (somebody here).
@@ -773,6 +850,7 @@ while true do
         if n and n > 0 then
             local tapped = false
             local saw_input = false
+            local cover_closed = false
             for _, d in ipairs(fds) do
                 if fd_isset(d.fd) then
                     local got = tonumber(ffi.C.read(d.fd, drain, ffi.sizeof(drain)))
@@ -788,7 +866,11 @@ while true do
                         d.dead = true
                     end
                     while got and got > 0 do
-                        saw_input = true
+                        -- Classify first: a cover-close must NOT re-arm the
+                        -- idle timer, and its trailing EV_SYN must not either.
+                        local act, closed, opened = scan_activity_and_cover(got)
+                        if act or opened then saw_input = true end
+                        if closed then cover_closed = true end
                         if d.is_power and power_key_on() then
                             -- Never let a fault in the convenience feature
                             -- take down auto-suspend itself.  A crash here
@@ -828,16 +910,19 @@ while true do
                 end
             end
             if saw_input then last_activity = os.time() end
-            if tapped then
-                if os.time() < power_ignore_until then
+            if tapped or cover_closed then
+                local why = tapped and "power tap" or "cover closed"
+                -- The resume grace exists to swallow the press that WOKE us;
+                -- a cover-close is never that, so it is not gated by it.
+                if tapped and os.time() < power_ignore_until then
                     -- Almost certainly the press that just woke us.
                     log("power tap within resume grace -- ignoring")
                 elseif not runtime.enabled then
-                    log("power tap but auto-suspend is paused (enabled=0) -- ignoring")
+                    log("%s but auto-suspend is paused (enabled=0) -- ignoring", why)
                 elseif opt.dry then
-                    log("DRY RUN: power tap would suspend now")
+                    log("DRY RUN: %s would suspend now", why)
                 else
-                    log("power tap -- suspending on request")
+                    log("%s -- suspending on request", why)
                     suspend_once()
                     drain_all()
                     power_ignore_until = os.time() + opt.power_grace_s

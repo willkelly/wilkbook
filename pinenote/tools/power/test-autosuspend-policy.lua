@@ -150,10 +150,30 @@ local function cycle(s)
     env.set_no_off_screen = function() end
     env.draw_banner = function() return true end
     env.restore_banner_area = function() return true end
+    -- Frontlight ordering is load-bearing, so the fakes record a trace
+    -- rather than just satisfying the call: the light must go out only
+    -- AFTER the EBC gate has passed (an aborted suspend must not darken a
+    -- live reader) and must come back only AFTER the wash (or the user is
+    -- shown a lit banner instead of their page).
+    local fl_order, fl_restored = {}, nil
+    s._fl_order, s._fl = fl_order, nil
+    env.frontlight_save_and_off = function()
+        fl_order[#fl_order + 1] = "off"
+        return { { dir = "/sys/class/backlight/backlight_cool",
+                   name = "backlight_cool", value = "153" } }
+    end
+    env.frontlight_restore = function(saved)
+        fl_order[#fl_order + 1] = "restore"
+        fl_restored = saved
+        s._fl = saved
+    end
     -- Resume work (Wi-Fi re-association, banner restore, the GC16 wash)
     -- runs after the sleep duration is captured and before the caller
     -- stamps the idle timer, so it must not be able to reclassify a wake.
-    env.cleanup_wash = function() now = now + (s.resume_work or 0) end
+    env.cleanup_wash = function()
+        fl_order[#fl_order + 1] = "wash"
+        now = now + (s.resume_work or 0)
+    end
     env.wait_ebc_idle = function() return s.ebc_idle ~= false end
     env.drain_all = function() end
     env.SLEEP_TEXT = "SUSPENDED - PRESS POWER TO RESUME"
@@ -277,6 +297,123 @@ do
         tostring(svc_idle) .. " vs " .. tostring(d_idle))
     report(svc_backstop == d_backstop, "service backstop default matches the daemon's",
         tostring(svc_backstop) .. " vs " .. tostring(d_backstop))
+end
+
+-- ---------------------------------------------------------------- --
+-- Frontlight across suspend (2026-08-07).
+--
+-- The daemon never touched the frontlight.  Two failure modes, either
+-- sufficient: a reader that falls asleep lit burns LED current for the
+-- whole sleep (and every current figure in doc/power-management.md was
+-- taken at frontlight ZERO), and mainline lm3630a_bl.c has no
+-- dev_pm_ops, so after the rail drops the panel can return dark while
+-- sysfs still reports the old brightness.  doc/hardware-deploy.md:184
+-- already told the operator to re-set these by hand "or the box is pitch
+-- black" -- that note IS this bug, worked around by hand.
+
+local function order_of(s)
+    cycle(s)
+    return table.concat(s._fl_order, ",")
+end
+
+report(order_of({ idle = IDLE, backstop = BACKSTOP, slept = 30 }) == "off,wash,restore",
+    "normal cycle: light out before sleeping, restored after the wash",
+    order_of({ idle = IDLE, backstop = BACKSTOP, slept = 30 }))
+
+report(order_of({ idle = IDLE, backstop = BACKSTOP, slept = 0, mem_refused = true })
+       :find("restore", 1, true) ~= nil,
+    "a refused suspend still restores the frontlight",
+    "otherwise the reader is left dark AND awake, which reads as a dead device")
+
+report(order_of({ idle = IDLE, backstop = BACKSTOP, slept = 0, ebc_idle = false }) == "",
+    "an EBC-abort never touches the frontlight",
+    "a suspend that does not happen must not darken a reader in use")
+
+do
+    local sc = { idle = IDLE, backstop = BACKSTOP, slept = 30 }
+    cycle(sc)
+    report(sc._fl and sc._fl[1] and sc._fl[1].value == "153",
+        "the SAVED brightness is restored, not a hardcoded value",
+        sc._fl and sc._fl[1] and tostring(sc._fl[1].value))
+end
+
+-- ---------------------------------------------------------------- --
+-- Cover classification (2026-08-07).
+--
+-- The daemon counted ANY readable input event as activity, and its own
+-- header said so: "buttons and the cover all count".  So closing the
+-- cover -- the gesture meaning "I am putting this away" -- RESET the idle
+-- timer and held the device awake for a further idle period at ~157 mA.
+
+local ffi = require("ffi")
+ffi.cdef[[
+struct as_input_event {
+    long tv_sec; long tv_usec;
+    unsigned short type; unsigned short code; int value;
+};
+]]
+
+local classify_src = extract_function("scan_activity_and_cover")
+
+local function classify(events)
+    local buf = ffi.new("struct as_input_event[?]", #events)
+    for i, e in ipairs(events) do
+        buf[i - 1].type, buf[i - 1].code, buf[i - 1].value = e[1], e[2], e[3]
+    end
+    local env = {
+        ffi = ffi, math = math, tonumber = tonumber,
+        drain = buf, INPUT_EVENT_SIZE = 24,
+        EV_SYN = 0, EV_SW = 5, SW_LID = 0,
+    }
+    local chunk = loadstring(classify_src ..
+        "\nreturn scan_activity_and_cover(...)", "@classify")
+    if not chunk then fatal("scan_activity_and_cover does not compile standalone") end
+    setfenv(chunk, env)
+    return chunk(#events * 24)
+end
+
+local T_SYN, T_KEY, T_ABS, T_SW = 0, 1, 3, 5
+
+do
+    local act, closed, opened = classify({ { T_SW, 0, 1 }, { T_SYN, 0, 0 } })
+    report(closed and not act and not opened,
+        "cover CLOSE is a suspend request, not activity",
+        string.format("activity=%s closed=%s opened=%s",
+                      tostring(act), tostring(closed), tostring(opened)))
+end
+
+do
+    local _, closed, opened = classify({ { T_SW, 0, 0 }, { T_SYN, 0, 0 } })
+    report(opened and not closed,
+        "cover OPEN counts as activity -- someone is picking the device up",
+        string.format("opened=%s closed=%s", tostring(opened), tostring(closed)))
+end
+
+report(not (classify({ { T_SYN, 0, 0 } })), "a bare EV_SYN is not activity",
+    "a lone SYN re-arming the timer is how the cover fix would defeat itself")
+
+report(classify({ { T_ABS, 0, 512 }, { T_SYN, 0, 0 } }), "a touch IS activity",
+    "EV_ABS must still keep the device awake")
+
+report(classify({ { T_KEY, 116, 1 }, { T_SYN, 0, 0 } }), "a key press IS activity",
+    "EV_KEY must still keep the device awake")
+
+do
+    local act, closed = classify({ { T_ABS, 0, 7 }, { T_SW, 0, 1 }, { T_SYN, 0, 0 } })
+    report(act and closed, "a mixed batch reports BOTH activity and the close",
+        string.format("activity=%s closed=%s", tostring(act), tostring(closed)))
+end
+
+-- The decision wiring lives in the main loop, which this harness does not
+-- extract; assert it structurally instead.
+do
+    local src = table.concat(lines, "\n")
+    report(src:find("if tapped or cover_closed then", 1, true) ~= nil,
+        "a cover-close reaches the same suspend decision as a power tap",
+        "cover_closed would be classified but never acted on")
+    report(src:find("if tapped and os.time() < power_ignore_until", 1, true) ~= nil,
+        "the resume grace gates only the power tap, never the cover",
+        "the grace swallows the press that WOKE us; a cover-close is never that")
 end
 
 -- Cheapest gate available on a daemon nothing else on the host can run.
