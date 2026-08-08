@@ -36,6 +36,34 @@ rails are even the right next move.
    PMIC-INT → GPIO0 line. The cover sits on its own GPIO0 pin. It has
    never been tried as a wake source, and it is free.
 
+## The artifact
+
+Built and gated 2026-08-08, ready to write:
+
+    /tmp/opencode/r11/pinenote-reader-PNGuixRoot-20260808.ext4
+    sha256 387d20c1c207281e8d96585b509f261339c9a8b67d21e2a64d96a1afc728c229
+
+Verified *in the built kernel*, not assumed: `strings` on the shipped
+`Image` carries `rockchip_suspend_mode_drv.sleep_debug_arm`. The parameter
+is **built in, not a module** (`CONFIG_ROCKCHIP_SUSPEND_MODE=y`), which
+has a useful consequence — it can also be set on the kernel command line:
+
+    rockchip_suspend_mode_drv.sleep_debug_arm=1
+
+so firmware diagnostics can be live from the very first suspend of a boot,
+before any shell exists. Use that if a suspend ever happens too early to
+instrument by hand.
+
+Offline ladder, all green on this exact artifact: `make check-host`,
+`qemu-virt-check`, and `qemu-data-check` on all three fixtures
+(`os1-used`, `with-library`, `empty`).
+
+This image also carries the 2026-08-08 reader fixes — cover-close now
+suspends instead of delaying suspend, and the frontlight is saved/zeroed/
+restored across suspend. **Neither has been seen on glass**, so watch for
+them: the light should go out with the device and come back after resume,
+and closing the cover should put it to sleep promptly.
+
 ## Preconditions — all of them
 
 1. Battery ≥ 90 % **before** the UART cable goes on (one port: the session
