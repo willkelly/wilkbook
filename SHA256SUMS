@@ -1,6 +1,6 @@
 # wilkbook release manifest
-# git:      38c150c
-# built:    2026-08-08T17:07:27Z
+# git:      af32ce8
+# built:    2026-08-08T22:47:41Z
 # channels: channels.scm at this commit (guix time-machine -C)
 # verify:   sha256sum -c SHA256SUMS
-387d20c1c207281e8d96585b509f261339c9a8b67d21e2a64d96a1afc728c229  pinenote-reader-PNGuixRoot-20260808.ext4
+9a08803e647954437db12087c789747e33c50beec8626299a0507a20784ed424  pinenote-reader-PNGuixRoot-20260808.ext4
