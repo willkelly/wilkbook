@@ -91,6 +91,10 @@ code review — before a single reboot. That's the standard.
 - `doc/upstream-register.md` — the standing list of what we owe the
   community, where it would go, and what has to be true first. Add rows as
   you find things; don't send.
+- `doc/reference-register.md` — the inbound counterpart: external trees
+  worth *watching* (hrdl's kernel + pinenote-dist, m-weigand, PNDeb,
+  rkbin, the schematic), what each is authoritative for, and the access
+  traps. Look here before theorising about a hard PineNote problem.
 - `doc/pinenote-flavors.md` — the system flavors.
 - `doc/koreader-spike.md` + `doc/ebc-harness-spike.md` — completed
   spike/decision records (kept for their still-cited evidence).
