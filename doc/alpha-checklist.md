@@ -284,10 +284,15 @@ seen on glass**, so both belong in the QC cycle.
 - [ ] **Verify both on glass** — QC §2.2 (cycle with the light ON and
       check `actual_brightness` after) and §2.3 (close the cover, confirm
       it sleeps promptly; open it, confirm it wakes).
-- [ ] **The cover as a WAKE source has never been exercised.** Our own
-      suspend gate declares exactly two armed DT wake paths and the cover
-      switch is one of them; every test we have ever run used the other
-      (the PMIC leg). Free to try, and it matters to the ultra question.
+- [x] **The cover as a WAKE source** — tried 2026-08-08, and it cannot be
+      tested on this device. The switch is correctly wired and armed
+      (`gpio-23`, ACTIVE LOW, IRQ, SW_LID, wakeup-enabled) but the
+      operator's cover does not actuate it: shut, the pin still reads
+      `hi` and `event_count` stays 0. No magnet, or misaligned.
+      **Consequence for the cover fix above: it can never fire on this
+      device, so it cannot be validated on glass here.** The code stays
+      (it is correct for anyone with a magnetic cover) but is recorded as
+      unexercisable, not as tested.
 
 ## Explicitly deferred to the pre-1.0 optimization pass
 

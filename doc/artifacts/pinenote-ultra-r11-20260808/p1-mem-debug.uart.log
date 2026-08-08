@@ -1,0 +1,72 @@
+[  113.213933] dwc3 fcc00000.usb: wait for SETUP phase timed out
+[  113.215805] dwc3 fcc00000.usb: failed to set STALL on ep0out
+[  113.217950] dwc3 fcc00000.usb: ep0 out start transfer failed: -110
+### WILKBOOK p1-mem-debug ENTERING SUSPEND arm=0 debug=1 ###
+[  117.725495] PM: suspend entry (deep)
+[  117.726030] Filesystems sync: 0.000 seconds
+[  117.727696] Freezing user space processes
+[  117.729683] Freezing user space processes completed (elapsed 0.001 seconds)
+[  117.729704] OOM killer disabled.
+[  117.729707] Freezing remaining freezable tasks
+[  117.731172] Freezing remaining freezable tasks completed (elapsed 0.001 seconds)
+v2.3():v2.3-210-g4af361e4c:zwx
+PM-STATE: mem (ultra: 0, mem: 1, cfg: 0x5ec), pmic: 0x14, 0x25
+abcdeghINFO:    sleep mode config[0x5ec]:
+INFO:    	mode: RKPM_SLP_CENTER_PD
+INFO:    	mode: RKPM_SLP_ARMOFF_LOGOFF
+INFO:    	mode: RKPM_SLP_PMIC_LP
+INFO:    	mode: RKPM_SLP_HW_PLLS_PD
+INFO:    	mode: RKPM_SLP_PMUALIVE_32K
+INFO:    	mode: RKPM_SLP_OSC_DIS
+INFO:    	mode: RKPM_SLP_32K_PVTM
+INFO:    wakeup source config[0x10]:
+INFO:    	Enable GPIO0 interrupt as wakeup source
+ij701MI/TC: Secondary CPU 1 initializing
+I/TC: Secondary CPU 1 switching to normal world boot
+I/TC: Secondary CPU 2 initializing
+I/TC: Secondary CPU 2 switching to normal world boot
+I/TC: Secondary CPU 3 initializing
+I/TC: Secondary CPU 3 switching to normal world boot
+[  117.732897] rockchip-suspend-mode rockchip-suspend: firmware suspend debug = 1 (diagnostic override; was 0)
+[  117.747430] rockchip_ebc_suspend
+[  118.396283] PM: suspend devices took 0.663 seconds
+[  118.406791] Disabling non-boot CPUs ...
+[  118.417935] psci: CPU3 killed (polled 0 ms)
+[  118.422875] psci: CPU2 killed (polled 0 ms)
+[  118.427707] psci: CPU1 killed (polled 0 ms)
+[  118.429432] Enabling non-boot CPUs ...
+[  118.430430] Detected VIPT I-cache on CPU1
+[  118.430489] GICv3: CPU1: found redistributor 100 region 0:0x00000000fd480000
+[  118.430557] CPU1: Booted secondary processor 0x0000000100 [0x412fd050]
+[  118.431805] CPU1 is up
+[  118.432731] Detected VIPT I-cache on CPU2
+[  118.432778] GICv3: CPU2: found redistributor 200 region 0:0x00000000fd4a0000
+[  118.432838] CPU2: Booted secondary processor 0x0000000200 [0x412fd050]
+[  118.433934] CPU2 is up
+[  118.434849] Detected VIPT I-cache on CPU3
+[  118.434898] GICv3: CPU3: found redistributor 300 region 0:0x00000000fd4c0000
+[  118.434954] CPU3: Booted secondary processor 0x0000000300 [0x412fd050]
+[  118.436077] CPU3 is up
+[  118.500635] rockchip_ebc_resume
+[  118.500682] ebc: rockchip_ebc_plane_reset
+[  118.501071] ebc: rockchip_ebc_ctx_release
+[  118.501081] EBC: rockchip_ebc_ctx_free
+[  118.655824] PM: resume devices took 0.213 seconds
+[  118.670270] OOM killer enabled.
+[  118.670287] Restarting tasks: Starting
+[  118.672062] Restarting tasks: Done
+[  118.672446] PM: suspend exit
+### WILKBOOK p1-mem-debug RESUMED rc=0 slept=60s ###
+[  119.068454] sdhci-dwcmshc fe310000.mmc: Can't reduce the clock below 52MHz in HS200/HS400 mode
+[  119.068579] sdhci-dwcmshc fe310000.mmc: Can't reduce the clock below 52MHz in HS200/HS400 mode
+[  119.068618] sdhci-dwcmshc fe310000.mmc: Can't reduce the clock below 52MHz in HS200/HS400 mode
+[  120.137202] brcmfmac: brcmf_set_channel: set chanspec 0x100c fail, reason -52
+[  120.141244] brcmfmac: brcmf_set_channel: set chanspec 0x100d fail, reason -52
+[  120.143374] brcmfmac: brcmf_set_channel: set chanspec 0x100e fail, reason -52
+[  120.144856] brcmfmac: brcmf_set_channel: set chanspec 0xd022 fail, reason -52
+[  120.262964] brcmfmac: brcmf_set_channel: set chanspec 0xd026 fail, reason -52
+[  120.383532] brcmfmac: brcmf_set_channel: set chanspec 0xd02a fail, reason -52
+[  120.495108] brcmfmac: brcmf_set_channel: set chanspec 0xd02e fail, reason -52
+[  120.605434] brcmfmac: brcmf_set_channel: set chanspec 0xd034 fail, reason -52
+[  120.606815] brcmfmac: brcmf_set_channel: set chanspec 0xd038 fail, reason -52
+[  120.607989] brcmfmac: brcmf_set_channel: set chanspec 0xd03c fail, reason -52
