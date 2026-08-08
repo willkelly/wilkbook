@@ -73,11 +73,20 @@ integration, published signed images. Small (66 commits at 2026-06-23).
 Verified reachable 2026-08-07.
 
 **Authoritative for:** image build and distribution mechanics, and the
-**`rkdeveloptool` recovery path** — their README documents
-`rkdeveloptool write-partition os2 <img>` as the recommended method *when
-os1 is not bootable*. That is the recovery path this repo does not have,
-and its absence is what currently blocks us from ever changing
-persistent boot state (`doc/power-management.md`, hibernation).
+**shape of a flashable artifact** — `rkdeveloptool write-partition os2
+<img>` takes a raw ext4 *partition* image, byte-for-byte the same class
+of file our own build already produces and `doc/hardware-deploy.md` dd's.
+
+**Correction, 2026-08-07 (this entry first said they were authoritative
+for the recovery *path*, which overstates it and would send the next
+reader looking for a document that does not exist):** hrdl has not solved
+recovery either. Their whole treatment is four README lines — no
+maskrom/loader-mode entry, no cable requirement, no tool version, no
+failure modes. What they solved is the artifact, and we already have
+that. So our gap is narrower than it looked: **device entry**, not
+format. That is a documentation problem, and it is load-bearing — every
+persistent-boot-state change we have deferred (slot default, hibernation)
+is gated on having a way back.
 
 **Watch for:** release mechanics we could copy for alpha (signing,
 hosting, checksums), and board-revision handling — their extlinux names
