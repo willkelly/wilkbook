@@ -73,7 +73,40 @@ which is why hibernation is gated on it (`doc/power-management.md`).
 `doc/install.md` and `doc/device-access.md` both claimed booting os2
 without a UART was impossible; corrected 2026-08-07.
 
-### 3. ~~Hardware session B — the ultra handshake~~ — DONE 2026-08-07
+### 3. ~~Hardware session B — the ultra handshake~~ — DONE 2026-08-07, REOPENED 2026-08-08
+
+**Reopened, deliberately and once.** The 2026-08-07 answer stands as far
+as it goes — firmware honours state 5, nothing woke — but the "one last
+hard push" found two things that make a second attempt worth its cost,
+both of which say the first attempt was under-instrumented rather than
+conclusive:
+
+- **We ship bl31's own suspend diagnostics switched off.** SIP control
+  0x05 is already emitted on every suspend carrying the DT-pinned 0. On,
+  firmware prints a hardware **readback** of `PMU_WAKEUP_INT_CON` — the
+  only on-device observability of the wake word that exists. Landed as a
+  runtime knob (`sleep_debug_arm`), because the gates rightly reject a DT
+  that ships it enabled.
+- **The cover switch has never been tried.** Our own gate declares
+  exactly two armed DT wake paths; every test we have ever run used the
+  other one. RTC alarm and power button are both rk817-internal and
+  arrive over the same PMIC-INT → GPIO0 line.
+
+R11 is staged and offline-complete:
+`doc/artifacts/pinenote-ultra-r11-20260808/PROCEDURE.md`. It carries no
+rail payload — Phase 1 is the *proven* mem path with firmware talking,
+which is recoverable by construction and may answer the question before
+anything risky happens.
+
+**Not in R11, and the next decision point:** hrdl's rails-off
+configuration is the only known-working ultra, its policy words are
+identical to ours, and its author states mode 5 "is needed for the system
+to resume". Adopting it is a DT/safety-model change that wants the other
+operator's eyes. The operator's position on the gate is on record —
+it was written to prevent a device that needs a long-press, and R10
+needed one anyway, so it did not buy the protection it was named for.
+
+### 3b. ~~Original session B~~ — DONE 2026-08-07
 
 Run, and answered. The firmware **does** honour `LINUX_PM_STATE=5`
 (`ultra:` incremented 0→1, the first time ever) — and nothing wakes the
