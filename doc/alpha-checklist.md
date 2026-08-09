@@ -235,8 +235,14 @@ The machinery now exists; the acts themselves wait for sign-off.
 - [x] **`doc/release.md`** — the procedure, and what we deliberately do
       not do (no hosted binary, no update path, no detached signatures
       until there is a binary to sign).
-- [ ] The annotated tag itself, naming the image hash. **After** QC.
-- [ ] Merge the shippable half of `ultra-handshake-arm` to main.
+- [x] **Merged to main and public**: `ultra-handshake-arm` fast-forwarded
+      into main (`586016c`) and pushed to
+      `https://github.com/willkelly/wilkbook` on 2026-08-08, with
+      `v0.1.0-prealpha` cut as an annotated tag + prerelease naming image
+      `9a08803e…`. The DHCP-lease addresses in historical docs went out
+      with it, per the recorded 2026-08-06 exposure decision.
+- [ ] The **alpha** tag, naming the QC'd image. After sign-off and the
+      soak verdict — the prealpha tag explicitly is not it.
 
 Calibration, from surveying hrdl's `pinenote-dist` on 2026-08-07: they
 have zero tags across 66 commits and 14 months, a mutable artifact URL,
