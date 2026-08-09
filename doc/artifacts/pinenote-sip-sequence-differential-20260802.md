@@ -8,8 +8,9 @@ sequence, prove it is the same sequence the known-working kernel sends.
 ## Reference (independent, derived from the BSP source — not copied)
 
 `rockchip_pm_config.c` from hrdl's `v6.19_rk_suspend_driver`
-(`scratchpad/hrdl/v6.19_rk_suspend_driver__rockchip_pm_config.c`, 291
-lines) with control codes from its `rockchip_sip.h`:
+(291 lines — cached in an uncommitted session scratchpad at analysis
+time; re-fetch from git.sr.ht/~hrdl/linux branch `v6.19_rk_suspend_driver`
+to reproduce) with control codes from its `rockchip_sip.h`:
 
 | control | code |
 | --- | --- |

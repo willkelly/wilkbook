@@ -102,7 +102,9 @@ order on top of the vanilla source:
    `rockchip,suspend-state-override = <5>` **and** the three `*_pmu`
    rails off-in-suspend + `sdmmc1 cap-power-off-card` + the cyttsp5
    resume workaround. A MATCHED PAIR that must never be split (either
-   half alone is proven broken — R10/R11 vs R12); `make
+   half alone is proven broken — the 2026-08-07/08 ultra hardware sessions
+   R10/R11 (rails-on: no wake) vs R12 (rails-off: wakes); records under
+   `doc/artifacts/pinenote-ultra-*/`); `make
    ultra-coupling-check` enforces it, and this patch must apply **after**
    the bsp-sip patch whose `/rockchip-suspend` node it extends. 4.64 mA
    suspend measured on glass 2026-08-08
@@ -112,7 +114,7 @@ order on top of the vanilla source:
 on top of the same seven.
 
 **A patch refresh must carry all seven.** The refresh procedure below
-regenerates only the forward-port patch — the other five are separate
+regenerates only the forward-port patch — the other six are separate
 files that a refreshed `kernel.scm` still applies, and nothing in the
 procedure touches them, so the failure mode is *omission*: forgetting
 they exist, or rebasing the forward-port onto a base where one of them

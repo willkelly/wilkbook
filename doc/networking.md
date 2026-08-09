@@ -545,8 +545,8 @@ ledger and still need a decision or an os2 session:
   stable across an os2 reflash. Note the fingerprint changes **once
   more** at the first boot of the first deployed image that carries the
   sync (fresh keys are generated, then seeded) — pin the new
-  fingerprint in your ledger then. The v3 image written to os2 on
-  2026-08-06 predates the sync: its first boot changes the fingerprint
+  fingerprint in your ledger then. The v3 image (see `doc/status.md`,
+  the 2026-08-06 entries) written to os2 on 2026-08-06 predates the sync: its first boot changes the fingerprint
   without persisting it.
 - **/state partition reality — RESOLVED (reuse `data` p7).** The reader
   flavor mounts p7 rw at `/data` (books, Wi-Fi credentials, SSH state

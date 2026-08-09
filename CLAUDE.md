@@ -30,9 +30,9 @@ code review — before a single reboot. That's the standard.
   `pinenote_defconfig`. This single patch is the most rebase-fragile,
   highest-value artifact in the repo. Treat edits to it with care; it is
   also **treated as permanent** (mainline has no EPD infrastructure and
-  won't for years — see `doc/eink-research.md`). Five smaller patches ride
+  won't for years — see `doc/eink-research.md`). Six smaller patches ride
   alongside it (BSP SIP suspend, cpuidle, vdd_cpu PFM, DDR DVFS, st_accel
-  PM) — the inventory lives in `doc/kernel-forward-port.md`.
+  PM, ultra rails-off suspend) — the inventory lives in `doc/kernel-forward-port.md`.
 - `pinenote/services/`, `pinenote/images/`, `pinenote/systems/` — Guix
   system services, initrd, and flavor entrypoints.
 - `pinenote/tools/` — twelve host-side test and diagnostic tools; the
@@ -53,6 +53,8 @@ code review — before a single reboot. That's the standard.
 - `doc/testing.md` — the testing philosophy, host tools, validation ladder.
 - `doc/alpha-checklist.md` + `doc/alpha-signoff.md` — what alpha is and
   what blocks it; and the human QC cycle that actually cuts it.
+- `doc/alpha-expectations.md` — the tester-facing brief: what the reader
+  should feel like, what is known-broken, how to report.
 - `doc/worked-examples.md` — the philosophy applied: replayable case
   studies. Read these before your first non-trivial change.
 - `doc/building.md` — host prerequisites and exact build/QEMU/extraction
@@ -172,46 +174,53 @@ truth is per-device, so never overwrite another operator's entries; add
 your own. Don't commit the per-device waveform, anything under a tool's
 gitignored `build/`, or the reader's static address.
 
-## Where we are (2026-08-06)
+## Where we are (2026-08-08)
 
 - **Product**: the reader image on os2 — KOReader natively on fbdev with
   pen/finger input, four orientations, publish-on-call single-pass page
   turns (8/8 on glass, 2026-08-01), the GL16 partial policy + idle washer,
-  Wi-Fi with out-of-band credentials, key-only SSH, ACM gadget console.
+  Wi-Fi with out-of-band credentials, key-only SSH, ACM gadget (console
+  shell opt-in via `WILKBOOK_VERY_INSECURE_FOR_CONVENIENCE`).
+  `v0.1.0-prealpha` is tagged and the repo is public
+  (github.com/willkelly/wilkbook); the alpha sign-off has NOT happened
+  (`doc/alpha-signoff.md`, `doc/alpha-checklist.md`).
 - **Kernel**: 7.0.x forward port is the hardware-proven primary
   (display, PREEMPT_RT, Wi-Fi/BT, gadget — 2026-07-04); 6.6.30 is
-  regression-isolation only. Seven patches total (ultra suspend included
-  since 2026-08-08); see the inventory in
+  regression-isolation only. Seven patches total (ultra rails-off
+  suspend included since 2026-08-08); see the inventory in
   `doc/kernel-forward-port.md`.
-- **Suspend**: **deep suspend works** (2026-08-02: BSP SIP activation
-  live and bound, cfg `0x5ec`; RTC wake; display recovery at both CRTC
-  states; VCOM held). **Auto-suspend is live on os2** (2026-08-03): 5 min
-  idle → `deep`, power-button wake with a resume banner, charging
-  inhibit. Consequence: **SSH to the reader is intermittent** — write
-  `enabled=0` to `/var/lib/pinenote/autosuspend.conf` before working on
-  it (`doc/device-access.md`). Not yet proven: the multi-day unplugged
-  soak; wake sources beyond RTC + power button; the TPS `ENABLE` 2f→20
-  delta is unexplained. Ultra-suspend (rail-kill) remains unadopted.
-  **Standby has never been measured**: every deployed daemon burned a
-  full idle period awake after each RTC-backstop wake (~25 % duty,
-  54.7 mA, ~3 days), fixed in tree 2026-08-07 with the default backstop
-  at 1 h — `doc/power-management.md`, "The idle duty cycle".
+- **Suspend**: **ultra suspend is the shipping suspend** (2026-08-08,
+  R12): hrdl's configuration adopted whole — standing
+  `rockchip,suspend-state-override = <5>` + three `*_pmu` rails
+  off-in-suspend + `sdmmc1 cap-power-off-card` + the cyttsp5 resume
+  workaround — a MATCHED PAIR pinned by `make ultra-coupling-check`;
+  either half alone is proven broken. Three consecutive rails-off
+  resumes on glass (RTC backstop + power button); **4.64 mA measured**
+  vs deep's ~20 mA (`doc/artifacts/pinenote-ultra-r12-20260808/`);
+  ~36 days of pure suspend on paper — arithmetic, labelled as such.
+  Promoted image `9a08803e…` is on os2 and the **≥3-day unplugged soak
+  is running** (exit criteria: `doc/alpha-checklist.md` §3c; a failed
+  wake gets the U-Boot INT_STS forensics before any forced power-off).
+  Documented tradeoff: GPIO0 is unpowered in suspend, so only
+  rk817-internal sources wake it (RTC, power button, charger) — cover
+  and pen cannot. Auto-suspend (5 min idle) is live, so **SSH to the
+  reader is intermittent** — write `enabled=0` to
+  `/var/lib/pinenote/autosuspend.conf` before working on it
+  (`doc/device-access.md`). Not yet proven: the soak; the TPS `ENABLE`
+  2f→20 delta after suspend is still unexplained.
 - **Power**: awake reader idle ~157 mA after the vdd_cpu auto-PFM fix
-  (was ~174); deep ~20 mA (rail-floor audit 2026-08-06). **DDR DVFS is built but SHIPS DISABLED**: 324 MHz
+  (was ~174); suspend 4.64 mA ultra (deep's ~20 mA is superseded as the
+  shipping figure). **DDR DVFS is built but SHIPS DISABLED**: 324 MHz
   starves the EBC's phase-data fetch and corrupts the display silently
   (no underrun interrupt), proven by one-variable A/B 2026-08-07, so
   `wilkbook_dmc` defaults to `mode=off` and the boost is off too.
-  Standby: the RTC-rewake duty-cycle fix (2026-08-07) took delivered
-  idle from ~55 mA to ~22.6 mA — arithmetic, never measured end to end.
-  Ledger and next levers:
+  End-to-end standby is what the running soak measures — the daemon
+  self-logs `charge_now` per resume. Ledger and next levers:
   `doc/power-management.md`.
 - **Display**: the portrait double-refresh is fixed on glass
   (publish-on-call + `defio_delay_ms=250`); the generation barrier is
   hardware-proven; the blank-panel and missing-border anomalies are
   closed (`doc/refresh-policy.md`).
-
-Exact image hashes, session records, and the full history:
-`doc/status.md`.
 
 ## Standing lessons (instrument corrections that cost real sessions)
 

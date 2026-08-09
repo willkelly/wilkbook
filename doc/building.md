@@ -4,18 +4,6 @@ All commands run from the repository root on the x86_64 build host. Everything
 here writes only to the Guix store and `/tmp/opencode`; deploying artifacts to
 the device is covered separately in `doc/hardware-deploy.md`.
 
-Two things to know about the artifact root before relying on it:
-
-- **It is volatile.** `/tmp` does not survive a host reboot; rebuild (or
-  copy out) any rootfs a later deploy session will reference.
-- **The name is historical** (a previous coding tool) but load-bearing:
-  the preflight/QEMU scripts hard-contain their writes under
-  `/tmp/opencode` and fail loudly on anything outside it. `ARTIFACTS=`
-  overrides where the Makefile puts artifacts, but for the `qemu-virt*`
-  targets the override must still resolve under `/tmp/opencode`.
-  Renaming the root is an open task that has to move those scripts in
-  the same change.
-
 The `Makefile` wraps the common invocations; the raw commands are recorded
 below for when a wrapper is not enough.
 
@@ -86,9 +74,8 @@ the first thing to check.
   `guix`.** `channels.scm` is a courtesy copy of the channel set; no
   build path consumes it (`guix time-machine` integration is an open
   task). What you build against is whatever your last `guix pull`
-  produced. The as-of-2026-08-06 known-good channel set (the author's
-  generation since 2026-06-05, so everything hardware-validated from
-  June onward built against it) is:
+  produced. The known-good channel set — every hardware-validated image since
+  2026-06-05 built against it — is:
 
   ```
   guix    2cd0118  https://git.guix.gnu.org/guix.git        (master)
@@ -153,6 +140,19 @@ Kernel packaging and the forward-port workflow are described in
 `doc/kernel-forward-port.md`.
 
 ## Rootfs extraction and boot bundles
+
+Two things to know about the artifact root before relying on it:
+
+- **It is volatile.** `/tmp` does not survive a host reboot; rebuild (or
+  copy out) any rootfs a later deploy session will reference.
+- **The name is historical** (a previous coding tool) but load-bearing:
+  the preflight/QEMU scripts hard-contain their writes under
+  `/tmp/opencode` and fail loudly on anything outside it. `ARTIFACTS=`
+  overrides where the Makefile puts artifacts, but for the `qemu-virt*`
+  targets the override must still resolve under `/tmp/opencode`.
+  Renaming the root is an open task that has to move those scripts in
+  the same change.
+
 
 The raw image is a build intermediate, never written to the device whole.
 Extract the single ext4 partition into a direct rootfs artifact labelled
@@ -283,14 +283,9 @@ reasoning behind this ordering — and the host tools in rung 0 — is in
    These compile the verbatim EBC driver/waveform sources and catch
    driver-logic and waveform regressions. The Rockchip PM gate separately
    compiles the verbatim typed model/executor, builds and parses donor/maximal
-    DTB fixtures (including standard OF `compatible`, `name`, and `status`
-    metadata), and proves the default production image links the executor but
-   omits its separate activation/PM-callback caller. Production parsing is
-    MEM-only and rejects virtual poweroff. The composite activation-positive
-    gate runs only the closed fake capability boundary, coordinator, and backend, then reruns the
-    production hard-off preflight so positive synthetic coverage cannot weaken
-    the shipped boundary. Run
-   the relevant gates whenever you touch either kernel patch.
+    Run `make check-host` (add `WBF=` for a reader candidate); each
+    gate's exact guarantees are catalogued in `doc/testing.md`. Run the
+    relevant gates whenever you touch either kernel patch.
 1. Static Guix build of the scaffold packages (commands above).
 2. QEMU `virt` smoke run for generic ARM64 userspace; `make qemu-virt` for
    an interactive boot of the real kernel/initrd/rootfs on a synthetic disk;

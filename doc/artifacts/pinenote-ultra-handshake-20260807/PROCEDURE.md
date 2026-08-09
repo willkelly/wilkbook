@@ -1,5 +1,11 @@
 # Ultra firmware-handshake test — supervised procedure
 
+*(Runs are labelled R<n>, continuing this device's numbered
+suspend-campaign runs; R9 is this session's rails-on mem control, R10
+the armed ultra attempt. Later sessions continue the numbering: R11 —
+`../pinenote-ultra-r11-20260808/` — and R12, rails-off, which resolved
+the question: `../pinenote-ultra-r12-20260808/`.)*
+
 The experiment: tell bl31 `LINUX_PM_STATE=5` (ultra) instead of 3 (mem)
 for **exactly one suspend**, change no rails, and see what the firmware
 does. Everything else about the suspend is the proven `deep` path.

@@ -279,7 +279,8 @@ work". It still should: idle suspends involve no Power event.
 
 **Predictions (all testable without a reboot):**
 
-1. Tonight's soak idle-suspends should show a CLEAN sleep screen (book +
+1. The 2026-08-06 night soak's idle-suspends should show a CLEAN sleep
+screen (book +
    banner). Checkable by looking at the sleeping device.
 2. With the boost disabled and DDR pinned at 324 (current soak state),
    an awake power tap should reproduce the corruption class with ZERO

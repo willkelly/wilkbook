@@ -48,16 +48,20 @@ capturing, not an unattended install. Sessions have ended with the device
 stuck before the U-Boot menu, needing a manual reset with the operator
 physically present (`doc/hardware-deploy.md`).
 
-## 2. Why the debug cable is not optional
+## 2. What the debug cable is for (and what it is not)
 
 Not for comfort — for control and recovery. From `doc/device-access.md`:
 
-- **Slot selection does NOT need the cable.** The U-Boot menu is
-  interactable on the device itself — you can pick "Boot OS2 (part 6)"
-  without a serial console. (Corrected 2026-08-07 from the operator's
-  direct observation; this page and `doc/device-access.md` both asserted
-  the opposite, that booting os2 without a UART was "not possible". It
-  is, and it is how os2 has been booted routinely.)
+- **The cable is your recovery console and your only window into a bad
+  boot** — a root shell when SSH is gone, and the only place U-Boot,
+  the kernel, and firmware narrate. It is *not* how you pick a boot
+  slot: the U-Boot menu is interactable on the device itself — a person
+  present can always pick "Boot OS2 (part 6)" by touch, no cable, ~15 s
+  countdown. An untouched reboot defaults to os1, the rescue slot. An
+  AI agent or unattended process has no fingers or eyes, so *it* needs
+  the cable to drive the menu over serial. (Corrected 2026-08-07 by
+  direct observation at the device; earlier versions of this page and
+  `doc/device-access.md` asserted the menu was serial-only.)
 
   What remains true is the **default**: the highlighted entry ("Search
   for extlinux.conf on all partitions") finds p5 first, because os1
@@ -219,9 +223,11 @@ them):
   and your way in is the console.
 - `wilkbook/autosuspend.conf` containing `enabled=0` — **strongly
   recommended for the first boot.** Auto-suspend sleeps the device to
-  `deep` after 5 minutes of no *input* (an SSH session does not count),
-  and serial is not an armed wake source, so each nap costs you a
-  physical button press. The daemon reads this file first and the
+  ultra suspend (rails-off, 4.64 mA measured 2026-08-08) after 5 minutes
+  of no *input* (an SSH session does not count). Waking takes the power
+  button, the RTC backstop, or plugging in a charger — nothing else can
+  wake it, the serial console and the cover included, so each nap costs
+  you a physical button press. The daemon reads this file first and the
   `/var/lib/pinenote/autosuspend.conf` runtime knob second (so a same-boot
   change there still wins), and unlike `/var/lib` it survives reflashes
   and is writable from os1 — which is exactly why it exists
@@ -229,12 +235,13 @@ them):
 - `books/` — your library. The seeded KOReader profile hardcodes
   `home_dir = "/data/books"` (`pinenote/systems/pinenote-reader.scm`).
 
-  **Open: nothing in the tree creates `/data/books`.** It exists on the
-  author's device because someone made it by hand; making it an
-  activation step is an open alpha blocker (`doc/alpha-checklist.md` §5).
-  Create it yourself and put a real book in it. What KOReader does when
-  `home_dir` points at a directory that does not exist is not
-  established anywhere in this repo.
+  `/data/books` is created automatically on first boot when absent
+  (`pinenote/services/library.scm` — with a relative pointer to an
+  existing stock-Debian home when one is present, and never touching an
+  existing library). Tested offline by `make qemu-data-check`
+  (`doc/testing.md` rung 4d) — proven in QEMU fixtures, not yet on a
+  second device. Put a real book in it before first boot if you want
+  more than an empty library.
 
 Note that p7 also comes to hold the device's **private** SSH host keys
 (`ssh/host/`, so the fingerprint survives reflashes). Any backup of p7
@@ -274,9 +281,9 @@ Stated plainly, because the alternative is implying a tested path.
   image.** "Fresh-clone first boot must survive" is an open alpha
   blocker (`doc/alpha-checklist.md` §5), and it is open for the
   *author's* device. On a second device it is open twice over.
-- **`/data/books` does not exist unless you make it** (section 7), and
-  the behaviour of the seeded profile against a missing `home_dir` is
-  unknown.
+- **`/data/books` is auto-created on first boot** (section 7); a missing
+  data partition falls back to a readable placeholder rather than a
+  broken browser — proven in QEMU, not on a second device.
 - **The SSH host-key fingerprint changes once**, at the first boot of an
   image carrying the host-key sync, and is stable across reflashes after
   that. Pin it in your ledger *then*, not before (`doc/networking.md`

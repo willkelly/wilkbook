@@ -389,9 +389,9 @@ should accompany any submission.
 
 **For:** linux-regulator (fan53555.c maintainers).
 **Shape:** two-line fix (NORMAL branch → `di->mode_reg`/`mode_mask`) plus
-optionally `of_map_mode` support; draft with full reasoning at
-`scratchpad`-stage, to be finalized from
-`pinenote/patches/`-adjacent material when sent.
+optionally `of_map_mode` support; a full-reasoning draft existed only in an uncommitted working
+scratchpad; reconstruct it from this section plus
+`pinenote/patches/`-adjacent material at send time.
 **What has to be true first:** the register-level claim re-verified
 against the then-current mainline at send time; the fix itself must NOT
 be "tested" by invoking the broken path on hardware (it provably drops

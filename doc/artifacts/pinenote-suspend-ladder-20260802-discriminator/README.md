@@ -56,7 +56,7 @@ the operator saw, so writing black there was a genuine no-op.
 reader survives suspend in place; rung-2 acceptance passes.
 
 **Not established**: whether the 2026-08-02 damage-baseline fix was
-*necessary*. Tonight's data cannot separate "the fix cured a real stale
+*necessary*. This session's data (2026-08-02) cannot separate "the fix cured a real stale
 baseline" from "black-on-black was always the artifact" — both predict
 this exact result, and a distinctive fill was never run on the old image.
 The fix stays regardless: `ctx->final_atomic_update` was genuinely

@@ -1,42 +1,129 @@
 # wilkbook
 
-A Guix channel that builds a reading-first operating system for the
-Pine64 PineNote e-ink tablet.
+A reading-first operating system for the Pine64 PineNote e-ink tablet,
+built as a Guix channel. It boots straight into KOReader on the
+framebuffer — pen, finger, four orientations, single-pass page turns —
+and runs nothing else. No desktop, no compositor, no display server, no
+apps waiting to be closed. The entire OS exists so that a book is on the
+screen and the battery is spent on nothing that is not the book. Under
+it: a forward-ported vanilla-7.0.x kernel (PREEMPT_RT) carrying the
+PineNote display stack as explicit patches, and a one-command path from
+checkout to a deployable rootfs.
 
-> ## THIS IS AI SLOP HARDLY TESTED NONSENSE. ONLY RUN THIS IF YOU ARE INSANE OR HATE YOUR PINE NOTE.
+The pitch is minimal and measured. Current numbers, from one device,
+honestly labelled:
 
-That is the short version and it is not a joke. Specifically, so you can
-judge for yourself:
+| What | Number | Provenance |
+|---|---|---|
+| RAM in use at boot | ~164 MB | the whole OS, KOReader included (operator-measured; committing a session record is [issue #1](../../issues)) |
+| Awake, reading | ~157 mA | measured floor 156.9 mA; stock Debian idles ~230 mA on the same glass (`doc/alpha-expectations.md`, `doc/power-management.md`) |
+| Suspended | **4.64 mA** | **measured on hardware 2026-08-08** (`doc/artifacts/pinenote-ultra-r12-20260808/`) |
+| Standby | ~36 days | *arithmetic* from that draw; ~28 effective days with backstop wakes; the multi-day soak is running right now |
 
-- **It writes to a partition on a device most people cannot easily
-  re-flash.** Deployment `dd`s a rootfs onto the `os2` slot. Stock Debian
-  on `os1` is deliberately never touched and every procedure here is
-  built around keeping that rescue path intact — but you are still
-  running `dd` against your eMMC on a tablet that is awkward to recover.
-- **It is largely AI-written.** Most of the code and nearly all of the
-  prose was produced by AI agents working under the rules in `CLAUDE.md`,
-  with a human reviewing and running the hardware sessions.
-- **Hardware validation is one device and one operator.** Every number
-  and every "proven on glass" claim in `doc/status.md` came off a single
-  PineNote v1.2. Nothing here has been reproduced on a second device, and
-  **no second person has ever installed it** — `doc/install.md` is
-  derived from this repo's own procedures, not from a successful replay.
-- **There is no update path and no support.** A new build is the whole
-  manual write protocol again. There is no package management on the
-  device, no migration, no issue triage promise, and no warranty of any
-  kind (`LICENSE`).
-- **You need a UART.** The U-Boot menu is serial-only, so booting `os2`
-  at all requires an SBU debug cable. Without one you cannot select the
-  slot and cannot recover from a bad boot.
+"Measured" means a battery gauge, a wall clock, and the ABBA discipline
+in `doc/power-management.md`. "Arithmetic" means division. This repo
+keeps the distinction everywhere, on purpose.
 
-The genuinely valuable part of this repo, for anyone who is not the
-author, is below: the host tools and the findings. Those you can read,
-run, and lift **without touching your device at all**.
+Three words you will meet immediately: **os1/os2** — the two OS slots
+(p5 = stock Debian, the untouched rescue slot; p6 = ours, the only
+partition ever written); **on glass** — on the physical e-ink panel;
+**rung** — a step on the offline validation ladder (`doc/testing.md`).
 
-## Reproducing a build
+Built by one human and a lot of AI, validated on exactly one device, and
+public so other PineNote people can take the useful parts. Which brings
+us to:
 
-We publish no binaries. `channels.scm` pins Guix and every extra channel
-by commit, so a tagged tree rebuilds byte-identically anywhere:
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+### *** W A R N I N G *** W A R N I N G *** W A R N I N G ***
+
+### !!! TURN BACK NOW !!! WE ARE NOT KIDDING !!! THIS MEANS *YOU* !!!
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+*~*~*~ a scrolling marquee is unavailable in markdown. please move your
+eyes from left to right at a steady pace for the full effect ~*~*~*
+
+**YOU ARE VISITOR NUMBER: `[0][0][0][0][0][2]`**
+*(visitor number 000001 owns the ONLY PineNote this has ever run on.
+there has never been a visitor number 000003.)*
+
+**THIS IS AI SLOP HARDLY TESTED NONSENSE. ONLY FLASH THIS IF YOU ARE
+INSANE OR HATE YOUR PINENOTE.** That sentence has survived every rewrite
+of this README because it is *true*. The specifics, so you can judge for
+yourself exactly which kind of insane you are:
+
+- **IT IS LARGELY WRITTEN BY AI.** Most of the code and nearly all of
+  the prose came from AI agents working under the rules in `CLAUDE.md`,
+  with one (1) human reviewing everything and running every hardware
+  session. If the phrase "AI-generated kernel patches on my eMMC" just
+  set off a small alarm in your head: GOOD. That alarm is CORRECT.
+  Consult it often.
+- **HARDLY TESTED means HARDLY TESTED.** Every measured number, every
+  "proven on glass" claim, comes from ONE PineNote v1.2. One. There is
+  no fleet. There is no QA lab. **NO SECOND PERSON HAS EVER INSTALLED
+  THIS.** `doc/install.md` admits it in its first paragraph, because
+  honesty is cheaper than support.
+- **YOU WILL BE RUNNING `dd` AGAINST YOUR TABLET'S eMMC.** Deployment
+  writes a rootfs onto a device that is *notoriously awkward* to
+  reflash. The protocol is paranoid — hash before, hash after,
+  refuse-rather-than-guess — but at the bottom of it all it is still
+  you, root, and a block device. **YOU FLASH AT YOUR OWN RISK.**
+- **SOMETIMES THE ONLY WAY OUT IS THE 10-SECOND POWER HOLD.** Real
+  sessions have ended with the device wedged before U-Boot, waiting on a
+  human thumb to perform the ancient rite of forced power-off.
+  Supervised procedures literally *budget one per sitting*. It is a
+  documented line item.
+- **GET THE SBU DEBUG CABLE ANYWAY.** You can pick the boot slot right
+  on the glass with your finger — no serial console needed for that —
+  but when a boot goes sideways the UART is your root shell and your
+  only window into WHAT IT IS DOING. (It is also a passwordless root
+  shell for anyone who physically holds it. That is the recovery
+  channel, on purpose. Know this before it surprises you.)
+- **THERE IS NO SUPPORT. NONE.** No update path — a new build means the
+  whole write protocol AGAIN. No package manager on the device. No
+  issue-triage promise. NO WARRANTY OF ANY KIND (`LICENSE`, and it
+  means it). If it breaks, you get to keep all the pieces, which is
+  generous, because e-ink breaks into SO MANY pieces.
+
+~~~ AND YET ~~~ the safety model is paranoid *in your favor* ~~~
+
+- **os1 IS SACRED.** Stock Debian on the rescue slot is never written,
+  never reconfigured, never even breathed on. Every procedure in this
+  repo is built around keeping that escape hatch open. Builds NEVER
+  touch the device at all; deployment is a separate, manual, os2-only
+  act of will. An untouched reboot lands you back in os1.
+- **NEVER SEND US YOUR WAVEFORM. WE WILL NEVER SEND YOU OURS.** The EPD
+  waveform and VCOM are per-device FACTORY CALIBRATION, extracted from
+  your own device's waveform partition at boot. The build FAILS LOUDLY
+  rather than bundle a generic one. Do not post yours. Do not ask for
+  the author's. This is not etiquette — it is how your panel stays a
+  panel.
+
+And if you only came for the *good stuff* — host tools that test the
+display driver on your desk, driver bugs with reproducers, waveform
+decoders — relax and keep scrolling: **none of it touches your device
+at all.**
+
+`<blink>` imagine, if you will, that this line is blinking `</blink>`
+
+~~~~~~ THIS PAGE IS UNDER CONSTRUCTION ~~ IT ALWAYS WILL BE ~~~~~~
+
+## Quick start
+
+The short version. `doc/install.md` is the long version — read it before
+step 3, because step 3 is where the `dd` lives.
+
+**0. What you need.** A PineNote v1.2 with a working stock Debian on
+os1; backups of your waveform partition, VCOM, and partition table
+(`doc/device-runbook.md`); a USB-C SBU debug cable run at 1500000 baud
+(`doc/device-access.md`); a GNU/Linux host with Guix and the nonguix
+channel (`doc/building.md` starts from zero). Charge to ~100% *before*
+the cable goes on — the cable and the charger share the PineNote's one
+port.
+
+**1. Build.** Everything is pinned by commit; a tagged tree rebuilds
+byte-identically anywhere:
 
 ```sh
 guix time-machine -C channels.scm -- \
@@ -44,8 +131,79 @@ guix time-machine -C channels.scm -- \
   pinenote/systems/pinenote-reader.scm
 ```
 
-`doc/release.md` has the full procedure. This is a claim about
-*reproducibility*, not about quality — see the banner above.
+Or `make rootfs-reader`, which builds the image *and* extracts the
+rootfs you will actually write (an ext4 labelled `PNGuixRoot`) into
+`$(ARTIFACTS)`. Fair warning: a cold kernel cross-build is hours, not
+minutes. The raw `time-machine` command above is the pinned,
+byte-identical path (`doc/release.md`); the `make` wrappers call your
+*ambient* guix — see the caveat in `doc/building.md`. Day-to-day:
+`make help`, `make kernel-drv` (seconds, before any real build),
+`make qemu-smoke`. The gitignored licensed fonts are optional — a fresh
+clone builds and runs with KOReader's bundled fallbacks
+(`doc/building.md`).
+
+**2. Stage your life on the data partition.** The image is generic on
+purpose — no credentials, keys, or books ever enter it. Everything yours
+lives on p7 (label `data`), which survives reflashes and which stock os1
+mounts at `/home`, so you can stage all of it from os1 before os2 ever
+boots. Paths relative to the partition root:
+
+- `wifi/wlan0.conf`, mode 0600 — plain wpa_supplicant(5) format, with a
+  `country=` line and the PSK *hash* from `wpa_passphrase`, never the
+  passphrase:
+
+  ```
+  country=US
+  ctrl_interface=/run/wpa_supplicant
+  update_config=1
+  network={
+      ssid="YourNetwork"
+      psk=<64-hex-from-wpa_passphrase>
+  }
+  ```
+
+  (the two extra lines are inert today; they feed the planned on-device
+  Wi-Fi picker — `doc/networking.md` §4.1.)
+
+  No file means no Wi-Fi and no drama: the reader boots fine without it
+  (`doc/networking.md`).
+- `ssh/authorized_keys` — your public key. A boot service installs it
+  for root on every boot, so it survives reflashes. SSH is key-only: no
+  staged key, no SSH, and your way in is the console. (p7 also comes to
+  hold the device's *private* SSH host identity under `ssh/host/`, so
+  back p7 up like it contains key material — it does.)
+- `books/` — your library. KOReader's home is `/data/books`; a
+  first-boot service creates the directory if it is missing
+  (`pinenote/services/library.scm` — proven in QEMU fixtures, not yet on
+  a second device), but only you can put books in it.
+- `wilkbook/autosuspend.conf` containing `enabled=0` — strongly
+  recommended for your first boot, unless you want the device napping
+  five minutes into your debugging session.
+
+**3. Write os2.** Copy the extracted rootfs, its SHA-256, and
+`pinenote/scripts/preflight/write-os2-verified.sh` to os1 over SSH.
+Then, from a root shell on os1, with backups verified and
+`doc/install.md` read:
+
+```sh
+./write-os2-verified.sh pinenote-reader-PNGuixRoot-YYYYMMDD.ext4 <sha256>
+```
+
+The script refuses to run from os2, refuses a mounted target, derives
+every block count instead of trusting you to type one, and SHA-verifies
+the readback. It writes p6 and nothing else. os1 — your rescue slot —
+is never touched.
+
+**4. Boot it.** Power on and pick **"Boot OS2 (part 6)"** at the U-Boot
+menu, on the device itself — the menu works on the glass, no serial
+console needed, with a ~15 s countdown. A boot where nobody touches the
+menu lands in os1, which is exactly the behaviour you want from a rescue
+default.
+
+**5. Read.** Page turns are single-pass, the device suspends itself when
+you drift off, and it sips 4.64 mA while you sleep (one measured 40-minute bracket;
+the multi-day soak is running). What it should feel like, and what is
+known-broken: `doc/alpha-expectations.md`. That is the whole product.
 
 ## What to steal
 
@@ -108,8 +266,9 @@ build time, never hand-copied — so they cannot drift from the driver.
 - `pinenote/patches/linux-pinenote-7.0-forward-port.patch` — the EBC
   display stack, `drm_epd_helper`, WS8100 pen, PineNote DTS and
   `pinenote_defconfig`, forward-ported onto vanilla 7.0.x and
-  hardware-validated. Five smaller patches ride alongside it (BSP SIP
-  suspend, cpuidle, vdd_cpu PFM, DDR static-low, st_accel PM).
+  hardware-validated. Six smaller patches ride alongside it (BSP SIP
+  suspend, cpuidle, vdd_cpu PFM, DDR static-low, st_accel PM, and the
+  ultra rails-off suspend — 4.64 mA measured 2026-08-08).
   `doc/kernel-forward-port.md` carries the inventory, the refresh
   procedure, the config lessons, and the community cherry-pick record.
 - `pinenote/tools/ddr-sip-probe/src` — a ~zero-risk out-of-tree module
@@ -151,84 +310,39 @@ build time, never hand-copied — so they cannot drift from the driver.
   re-pasted code, "absence of an error is not a passing test", and why a
   single-stack harness models ordering but not races.
 
-## What this is
+## Status (2026-08-08)
 
-The goals, in order — all three now have hardware-proven substance behind
-them:
-
-1. **Kernel currency** — track recent kernels by carrying the downstream
-   PineNote display/pen stack as explicit patches, with working (non-free)
-   firmware. The forward-ported 7.0.x kernel is the validated primary.
-2. **Easy image building** — one command from checkout to a deployable
-   rootfs artifact.
-3. **E-ink userland** — a reading-first device. KOReader runs natively on
-   the framebuffer with pen and finger input; this is the deployed product.
-
-See `doc/status.md` for what is currently proven on hardware (start with
-its current-state header), `ROADMAP.md` for direction, and the reading
-order below for onboarding.
-
-## Status (2026-08-06)
-
-- **The reader image is the product.** KOReader runs directly on fbdev
-  with pen + finger input, four orientations, and single-pass
-  publish-on-call page turns (fixed on glass 2026-08-01). Wi-Fi with
-  out-of-band credentials, key-only SSH, and the USB ACM gadget console
-  are hardware-proven.
-- **Deep suspend works** (2026-08-02) and **auto-suspend is live**: the
-  device sleeps to `deep` after 5 minutes idle and wakes on the power
-  button (~157 mA awake reader idle vs ~20 mA suspended). A multi-day
-  unplugged soak is still outstanding. Practical consequence: SSH to a
-  deployed reader is intermittent while auto-suspend is enabled — see
-  `doc/device-access.md`.
-- **Kernel**: the forward-ported vanilla-7.0.x kernel with `PREEMPT_RT`,
-  temperature-compensated e-ink waveforms, Wi-Fi/BT firmware, and the
-  power-management patch set is the validated primary. The 6.6.30
-  m-weigand flavor is kept for regression isolation only.
-- Details, exact image hashes, and every session record: `doc/status.md`.
-
-## Quick start
-
-```sh
-make help                              # list targets
-make rootfs-reader                     # the product: KOReader reader image
-make rootfs-reader-debug               # reader + diagnostics/EXTRACT_FBS kernel
-make rootfs-usb-console               # headless debug image (ACM console)
-make kernel-drv                       # cheap gate: compute kernel derivation
-make qemu-smoke                       # generic ARM64 userspace check
-```
-
-Never used Guix? `doc/building.md` opens with a **from-zero** section —
-install Guix, `guix pull -C channels.scm` (nonguix is required and the
-file carries its channel introduction), authorize substitutes, build.
-Guix is the only host dependency; it brings its own toolchain.
-
-Before your first build, read the **host prerequisites** in
-`doc/building.md` (Guix + nonguix channel setup, substitutes, and honest
-build-time expectations — a cold cross-build of the kernel is hours, not
-minutes). Note for collaborators: the validated images bundle
-personally-licensed fonts staged from a gitignored directory
-(`pinenote/fonts/README.md`); a fresh clone builds with fallback fonts.
-
-Deployment to the device is deliberately manual: the extracted `PNGuixRoot`
-rootfs is written to the inactive `os2` partition only, observed over UART,
-with stock Debian on `os1` as the rescue path. See `doc/hardware-deploy.md`
-for the write protocol and `doc/device-runbook.md` for the backup ledger.
-
-**Installing on a PineNote that isn't the author's** — the cable you
-need, the backups to take first, the per-device waveform and VCOM, what
-to stage on the data partition, and what the repo does *not* know about
-a first boot: `doc/install.md`. Nobody has done it yet; that page says
-so throughout.
+- **Product**: the reader image on os2 — KOReader natively on fbdev with
+  pen/finger input, four orientations, publish-on-call single-pass page
+  turns, the GL16 partial policy + idle washer, Wi-Fi with out-of-band
+  credentials, key-only SSH. `v0.1.0-prealpha` is tagged; the alpha
+  sign-off (`doc/alpha-signoff.md`) has not happened.
+- **Ultra suspend is in production** (2026-08-08): hrdl's rails-off
+  configuration on the primary kernel, **4.64 mA measured on glass**
+  (`doc/artifacts/pinenote-ultra-r12-20260808/`) against the superseded
+  deep's ~20 mA — ~36 days of pure suspend on paper, labelled
+  arithmetic. The device sleeps after 5 idle minutes; only the power
+  button, the RTC backstop, and the charger can wake it — the rails-off
+  tradeoff unpowers GPIO0 during suspend, so the cover and pen cannot.
+  A ≥3-day unplugged soak is RUNNING; until it concludes, multi-day
+  standby is arithmetic on one good measurement. SSH to a deployed
+  reader is intermittent while auto-suspend is enabled
+  (`doc/device-access.md`).
+- **Kernel**: the vanilla-7.0.x forward port is the hardware-proven
+  primary (display, PREEMPT_RT, Wi-Fi/BT, gadget). Seven patches total —
+  `doc/kernel-forward-port.md`.
+- Exact image hashes, session records, and the full history:
+  `doc/status.md`.
 
 ## Alpha
 
-Scope, blockers and what is explicitly deferred: `doc/alpha-checklist.md`.
-Alpha is the reader flavor for two people who can build from source and
-drive a UART. The repo is public so other PineNote people can read the
-findings and take what is useful (see "What to steal" above), not because
-this is installable by anyone else. If you are the second person,
-`doc/install.md` is your starting page.
+Alpha targets operators who build from source and are comfortable with a
+serial console for recovery. No one outside the author has installed it
+yet; if you are provisioning your own device, `doc/install.md` is your
+starting page, `doc/alpha-expectations.md` says what it should feel
+like, and `doc/alpha-signoff.md` is the bar an actual alpha release has
+to clear. `doc/alpha-checklist.md` tracks what stands between the
+prealpha tag and that bar.
 
 ## Reading order (humans)
 
@@ -311,12 +425,11 @@ boot-order changes. Reboots and other destructive steps are user-present.
 
 One knob, off by default: `WILKBOOK_VERY_INSECURE_FOR_CONVENIENCE`.
 
-Bring-up on this device is awkward — one USB-C port, so the debug cable
-and the charger are mutually exclusive, and serial is not an armed wake
-source. An unauthenticated shell is genuinely the difference between a
-five-minute fix and a teardown. That was never the problem. The problem
-was that it shipped **unconditionally and invisibly**: no build said
-whether it carried one, and nobody had to decide.
+Bring-up on a one-port device sometimes genuinely needs an
+unauthenticated shell — the debug cable and the charger are mutually
+exclusive, and serial cannot wake a suspended device. The design rule is
+that this must be a deliberate, visible choice: opt-in, gated together,
+and every reader build names which one it is in `/etc/wilkbook-build`.
 
 So it is opt-in:
 
@@ -365,6 +478,5 @@ over a USB data cable, not locked down.
 
 ## Hosting
 
-The canonical remote is currently a private Forgejo instance on the
-author's network; the repo will move to GitHub for sharing. Until then,
-work from a shared clone/bundle and send changes as patches or bundles.
+The canonical public home is <https://github.com/willkelly/wilkbook>
+(tagged `v0.1.0-prealpha`). Issues and contributions go through GitHub.

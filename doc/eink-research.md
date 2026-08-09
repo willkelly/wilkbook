@@ -214,8 +214,9 @@ kthread's scheduling class before chasing pen latency.
 ## 8. Community sweep, 2026-07-11 (fresh; feeds the optics program)
 
 A targeted re-sweep of the display-stack lineages, done when the optics
-harness reached "ready for first capture". Primary sources cached under the
-session scratchpad (`ebc/`); adoptability verdicts recorded in
+harness reached "ready for first capture". Primary sources were cached in an
+uncommitted session scratchpad (not in the repo); the durable outputs
+are the adoptability verdicts in
 `pinenote/tools/optics/PLAN.md`.
 
 - **m-weigand kernel is dormant** (tip `branch_pinenote_6-12-11`,

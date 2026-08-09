@@ -523,7 +523,8 @@ frame-window extraction with per-frame tables and PNGs around every
 claimed event; and a verbatim rerun of the campaign's patch-strip
 detector, which reproduced every claimed event time exactly. Scripts:
 `audit-validity.py`, `audit2-perframe.py`, `inspect-window.py` (session
-scratchpad).
+scratchpad — not preserved in the repo; the verdicts, per-frame tables,
+and the verbatim detector rerun described here are the durable record).
 
 **Instrument verdicts first.** The v4 blank-page mode did NOT drive the
 campaign numbers: every walk bundle holds 96-97% per-frame fiducial

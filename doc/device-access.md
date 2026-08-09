@@ -126,18 +126,19 @@ garbage, not zero bytes).
 **Consequence when the UART is down: the DEFAULT boot slot is os1 — but
 you can still choose.** The U-Boot menu is interactable on the device
 itself; picking "Boot OS2 (part 6)" does not require a serial console.
-(Corrected 2026-08-07 from the operator's direct observation. This
-paragraph previously said the menu was serial-only and that booting os2
-without a UART was impossible — it is not, and that error propagated
-into `doc/install.md`, where it told a first-time installer they needed a
-cable they do not need.)
+(Corrected 2026-08-07 by direct observation at the device. Earlier
+versions said the menu was serial-only; that error propagated into
+`doc/install.md`.)
 
 Its default entry ("Search for
 extlinux.conf on all partitions") finds p5 first because os1 carries
 `/boot/extlinux/extlinux.conf` — so every *unattended* reboot lands in
 **os1**. p3 (`uboot_env`) is an empty FAT12 filesystem, not a raw env, so
 there is no file-based slot selector to write either. Deploying to os2 is
-still safe and useful without UART; an *unattended* boot into it needs either a working
+still safe and useful without UART. os2 never comes up on its own — an
+unattended reboot always lands on os1. Booting os2 takes either a human
+at the menu (on-device, no cable) or an agent driving the menu over
+UART, since an agent has no fingers or eyes. The old text: needs either a working
 UART or a human at the menu.
 
 ## SSH to the deployed reader

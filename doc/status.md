@@ -1,72 +1,35 @@
 # Hardware status
 
-Last updated: 2026-08-06. Update protocol: add a dated entry at the top
+Last updated: 2026-08-08. Update protocol: add a dated entry at the top
 after every hardware session; entries are per-device/per-operator.
 
-## Current state (2026-08-06)
+## Current state (2026-08-08)
 
 **Proven on glass**: KOReader on fbdev with pen, finger, frontlight, and
 SC7A20 autorotation on all four edges; temperature-compensated waveforms;
-Wi-Fi association + key-only SSH; USB ACM gadget console; PREEMPT_RT.
-Portrait page turns cost exactly one pass (publish-on-call +
-`defio_delay_ms=250`, fixed 2026-08-01). Deep suspend works (2026-08-02,
-BSP-ATF activation live, `cfg: 0x5ec`) and **auto-suspend is live on os2**
-(2026-08-03): sleeps to `deep` after 5 min idle, wakes on the power
-button, short-press tap suspends, inhibited while charging.
+Wi-Fi association + key-only SSH; PREEMPT_RT; **ultra suspend** — hrdl's
+rails-off configuration on the primary kernel, three consecutive resumes
+(RTC backstop + power button), **4.64 mA measured**
+(`doc/artifacts/pinenote-ultra-r12-20260808/`); deep (~20 mA) is
+superseded as the shipping suspend.
 
-**Warning**: with auto-suspend live, **ssh is intermittent** — write
-`enabled=0` to `/var/lib/pinenote/autosuspend.conf` before working on the
-device. See `doc/device-access.md`.
+**On os2 now**: promoted image `9a08803e…` (deployed 2026-08-08,
+readback-verified), auto-suspend ON (5 min idle → ultra), and the
+**≥3-day unplugged ultra soak IN PROGRESS** — exit criteria in
+`doc/alpha-checklist.md` §3c. A failed wake gets the U-Boot `INT_STS`
+forensics *before* any forced power-off. Wake sources are rk817-internal
+only (RTC alarm, power button, charger): GPIO0 is unpowered in suspend,
+so the cover and pen cannot wake the device, by design.
 
-**Power**: awake reader idle **156.9 mA** (was 174; vdd_cpu auto-PFM,
-2026-08-06). Deep is **~20 mA**: 19.3 mA measured 2026-08-02
-(battery-drain window, pre-cpuidle image) vs 20.6 mA in the 2026-08-06
-rail-floor audit (900 s same-boot windows) — same floor, different
-measurement windows; quote ~20. **DDR static-low is OFF**: 324 MHz saves
-~24.8 mA quiesced but corrupts the display (2026-08-07), so
-`wilkbook_dmc` ships disabled and the rate stays at the 1056 boot value;
-the input boost is disabled too. 528/780 untested —
-`doc/power-management.md`.
+**Still true / still open**: DDR static-low ships `mode=off` (324 MHz
+corrupts the display silently); SSH to the deployed reader is
+intermittent while auto-suspend is enabled (`doc/device-access.md`); the
+TPS `ENABLE` 2f→20 delta is unexplained; standby has never been measured
+end-to-end — the running soak is that measurement.
 
-**On os2**: image `50e7fe1d…` (deployed 2026-08-07). DDR is at the
-**1056 boot rate** — `mode=noswitch` in `/data/wilkbook/dmc.conf`, and
-`pinenote/services/dmc.scm` now defaults to `off` — because **324 MHz
-corrupts the display** (see the 2026-08-07 entry). `console=tty0` is
-hand-stripped from p6's `extlinux.conf` (original at
-`extlinux.conf.tty0bak`); the same change is committed for the next image
-build. os1 currently has `sleep.target`/`suspend.target` **masked** — a
-deliberate temporary change that is owed back.
-
-Superseded, for the record: v3 image `f41cf91f…` — v2 plus the power-key/wash fix stack
-(commit `55c43b0`): KOReader no longer opens the pwrkey, autosuspend
-gates `mem` behind a sustained-quiet EBC-idle wait and washes GC16 on
-resume, both waveform save/restore sites self-heal, ddr-boost ships
-disabled, the boot wash fsyncs its fill. First image that reads root's
-SSH key from `/data/ssh/authorized_keys` — staged before the write.
-
-**Warning (fix deployed, unproven)**: the awake-power-tap corruption
-(KOReader's unconditional Power handler racing press-to-suspend into a
-mid-refresh park) is fixed in v3 but not yet validated on glass. The
-v3 boot acceptance is the tap test; see the 2026-08-06 night entry.
-
-**Next actions**: (1) the week-scale unplugged soak — a first short
-unplugged soak passed clean 2026-08-03 (2 full-duration sleeps, no
-spurious wakes, 64.4 mA duty cycle), and that 64.4 mA is now known to be
-the RTC-rewake bug fixed 2026-08-07, so **standby has never been
-measured**: the old 8.6-day figure was the deep floor, which an idle
-device never sat at, and the post-fix ~7.4 days is arithmetic
-(`doc/power-management.md`, "The idle duty cycle" — the fix's acceptance
-is a log read, defined there); (2) wake attribution — only RTC and power-button
-wake are proven; (3) the unexplained TPS `ENABLE 2f → 20` after deep
-resume; (4) the pre-suspend `nobody cared` trace seen once on the
-st_accel-PM image (soak artifact, open question); (5) SSH state on `/data`:
-the authorized key is already staged (done before the v3 write), and
-the host-identity persistence is in tree but **not in v3** — v3's first
-boot changes the fingerprint without persisting it; pin the fingerprint
-at the first boot of a post-v3 image (see the host-keys entry below).
-
-Entries below are newest-first; the ## sections after the parity table
-are a historical document.
+**Next actions**: (1) let the soak finish and compute the standby figure
+from the daemon's `charge_now` series; (2) the human QC cycle
+(`doc/alpha-signoff.md`) on a post-soak image; (3) the alpha tag.
 
 **2026-08-08 (night) THE ULTRA SOAK IS RUNNING.** [wilkbook / wkelly]
 Promoted image `9a08803e…` deployed to os2 (readback-verified), p7
@@ -117,7 +80,7 @@ image.** Every deployed image from 2026-08-03 onward re-armed a full
 essentially the whole backstop (a button wake still gets the full idle
 period), and the default backstop moved 900 s → 3600 s now that each
 backstop wake is pure cost. **No hardware evidence yet** — the numbers
-are arithmetic on the measured 156.9/20.6 mA, the 1 h dwell is 4x the
+are arithmetic on the measured 156.9/20.6 mA, the 1 h dwell is 4x [correction 2026-08-08: 1.5x — the 4x was against the retired 900 s default; R12 slept 2400 s] the
 longest this device has slept, and the acceptance procedure (a log read)
 is in `doc/power-management.md`, "The idle duty cycle". Offline evidence:
 `pinenote/tools/power/test-autosuspend-policy.lua` under `make
@@ -1309,7 +1272,7 @@ fire). All over SSH with the standard preconditions; device left healthy
   option lines (reaches the device on the next image; this boot has it
   applied live via sysfs and reverts to 50 on reboot until then). 1000
   also works but penalizes non-publishing writers for no reader benefit.
-- Temperature bins moved mid-session (38-frame cold, 46 warm) —
+- Temperature bins moved mid-session (38-frame cold, 46 warm) [correction 2026-08-08: backwards — 46 frames is the cooler bin, 38 the >=24 C bin; doc/refresh-policy.md] —
   per-turn pass counting used same-session baselines throughout.
 - Expected lifecycle note: `QUIT`ing the optics injector destroys an
   input device the reader holds, which correctly restarts reader-session

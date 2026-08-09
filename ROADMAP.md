@@ -258,14 +258,17 @@ the start of this track — no panel required. Policy background in
 - [x] **Awake power-policy program — concluded 2026-08-06.** The
       `conservative` governor is the validated awake default (2026-07-25);
       the vdd_cpu auto-PFM fix took awake reader idle ~174 → ~157 mA on
-      the deployed image; DDR DVFS landed in tree (~25 mA more available,
-      not yet deployed); the domain teardown measured the remaining
+      the deployed image; DDR DVFS was built and then withheld — 324 MHz
+      starves the EBC's phase-data fetch and corrupts the display
+      silently (one-variable A/B, 2026-08-07), so `wilkbook_dmc` ships
+      disabled and 528/780 MHz are untested; the domain teardown measured the remaining
       floor. On-demand Wi-Fi was deliberately deferred (2026-08-03).
       Ledger, numbers, and any future levers: `doc/power-management.md`.
 - [x] **E-reader suspend program — mechanism proven; validation continues.**
       Deep suspend works on hardware (2026-08-02: BSP SIP activation live
       and bound, RTC wake, display recovery, VCOM held), and auto-suspend
-      is deployed on os2 (2026-08-03: idle -> deep, power-button wake,
+      is deployed on os2 (2026-08-03: idle -> deep, power-button wake;
+      since 2026-08-08 idle suspends to ultra and deep is superseded,
       charging inhibit, runtime `enabled=0` off-switch). Note on the old
       gate: this file previously required "repeated deep cycles with
       unplugged energy measurements" before any idle autosuspend; the
@@ -284,8 +287,13 @@ the start of this track — no panel required. Policy background in
       and the cover wake source; the
       unexplained TPS `ENABLE` 2f->20 delta after deep; resume latency as
       a UX metric (~1.1 s kernel time today; measure one full
-      wake+render+refresh cycle); ultra-suspend (rail-kill) for the
-      week-idle target, gated on the `vcc_3v3_pmu`/GPIO0 wake collision.
+      wake+render+refresh cycle); ultra suspend — ADOPTED
+      2026-08-08: hrdl's rails-off pair on the primary kernel, 4.64 mA
+      measured (~36 d paper; `doc/artifacts/pinenote-ultra-r12-20260808/`),
+      wake via rk817-internal sources only (RTC/power/charger — GPIO0
+      unpowered, cover/pen cannot wake); the wake-collision gate was
+      answered by adoption, and the running ≥3-day ultra soak plus its
+      end-to-end standby figure are now the outstanding validation.
       Upstream TF-A stays a separate, later, recovery-qualified migration
       — never a hybrid.
 - [ ] Reader polish, next: refresh-policy tuning (KOReader's

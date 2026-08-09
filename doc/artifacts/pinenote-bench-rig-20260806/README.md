@@ -70,6 +70,13 @@ default entry searches all partitions and finds p5 first (os1 carries
 with no file-based selector to write. Deploying to os2 stays safe and
 useful; *booting* it needs the cable fixed or a human at the menu.
 
+[Correction 2026-08-07: "serial-only" above was a wrong inference — the
+U-Boot menu is interactable on the device itself, and a human present
+can always pick "Boot OS2 (part 6)" by touch with no cable. What this
+unattended session actually proved is narrower: with the UART dead and
+nobody at the device, no agent can drive the menu, so every unattended
+reboot lands in os1. See doc/device-access.md.]
+
 ## What the harvested v3 logs say
 
 `v3-boot-dmc-window.log` is the boot window from the v3 image, pulled off
@@ -308,7 +315,7 @@ their own failure:
   simpler failure sat closer to hand, and the confirmation only checked
   the story, not the ground.
 
-## Where the earlier session ended (historical)
+## Where the supervised (pre-AFK) part of 2026-08-06 ended (historical)
 
 The device auto-suspended in os1 while a transfer was in flight and
 became unreachable — no UART, no network, no way to wake it without a

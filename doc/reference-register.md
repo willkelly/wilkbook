@@ -60,8 +60,9 @@ rails flipped to `regulator-off-in-suspend` and `sdmmc1` moved from
 (0x5ec) and `wakeup-config` (0x10) are **identical to ours** — the rails
 are the entire difference. Their commit message states mode 5 "is needed
 for the system to resume", i.e. the two halves are a matched pair.
-See `doc/power-management.md` and
-`doc/artifacts/pinenote-ultra-handshake-20260807/`.
+Adopted into production 2026-08-08
+(`linux-pinenote-7.0-ultra-rails.patch`). See `doc/power-management.md`
+and `doc/artifacts/pinenote-ultra-r12-20260808/`.
 
 **Watch for:** whether ultra ever lands on a mainline-tracking branch;
 anything about wake sources under ultra; the tps65185 resume work.
@@ -141,6 +142,10 @@ measurement (`doc/power-management.md`).
 `v2.3-210-g4af361e4c` (2022-06-09). Because our ultra failure is a
 firmware-behaviour question, a newer bl31 is one of the named conditions
 for reopening ultra
+(2026-08-08: resolved without a firmware change — rails-off ultra
+resumes on this same bl31; `doc/artifacts/pinenote-ultra-r12-20260808/`.
+Watching rkbin remains worthwhile for general suspend/wake fixes, not as
+an ultra precondition.)
 (`doc/artifacts/pinenote-ultra-handshake-20260807/RESULT.md`).
 
 **Watch for:** bl31 releases newer than v2.3-210, and any changelog
@@ -156,7 +161,7 @@ pinenote-dist above).
 - **Kernel PM docs** — `https://docs.kernel.org/admin-guide/pm/sleep-states.html`
   and the `power/` tree (`basic-pm-debugging`, `suspend-and-interrupts`).
   Authoritative for the Linux side of suspend, and useful mainly for
-  knowing where its coverage *ends*: our ultra failure is past the SMC
+  knowing where its coverage *ends*: our 2026-08-07 rails-on ultra failure was past the SMC
   boundary, where none of these tools can see.
 - **Rockchip wiki, power management** — `http://rockchip.wikidot.com/power-manage`.
   Community-transcribed BSP notes. Treat as a hint generator, not

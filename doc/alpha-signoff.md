@@ -3,7 +3,8 @@
 Alpha is not cut by a green test run. It is cut by a person putting their
 name on this page after using the thing.
 
-**The bar, in the operator's words:** *we want to let people use this, but
+**The bar, as set by the project's maintainer when alpha was scoped
+(2026-08-07):** *we want to let people use this, but
 we want it to be of reasonable quality with appropriate steps taken to
 ensure we are not unleashing a horrible plague upon the world and at most
 are introducing minor annoyances — like the cold, but not covid.*
@@ -117,9 +118,12 @@ not on this list that costs them anything, it is a defect.
   rewrite, so os1 quietly keeps its own copy.
 - **Unattended reboots land on os1.** The menu is interactable on the
   device, so this costs one deliberate selection, not a cable.
-- **Suspend is `deep`, not ultra.** Ultra is answered and closed: the
-  firmware honours it and nothing wakes the device from it
-  (2026-08-07). Standby is what `deep` gives.
+- **Suspend is ultra (rails-off), and only the power button, the RTC,
+  and the charger can wake it.** GPIO0 is unpowered in suspend, so the
+  cover and the pen can never wake the device — deliberate (4.64 mA vs
+  deep's ~20, `doc/artifacts/pinenote-ultra-r12-20260808/`). One cold
+  touch-controller timeout on resume is absorbed by a carried
+  workaround; the panel must come back clean.
 - **No on-device Wi-Fi picker.** Credentials are staged out of band.
 - **No update path.** A new version is a reflash.
 - **`herd restart reader-session` wrecks the panel.** A maintenance path

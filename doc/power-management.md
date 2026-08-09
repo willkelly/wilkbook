@@ -1,6 +1,15 @@
 # PineNote power management: evidence first
 
-**Current state (2026-08-07).** What is hardware-proven, in one place:
+**Current state (2026-08-08).** What is hardware-proven, in one place:
+
+- **Ultra suspend is in production** (2026-08-08, R12): hrdl's rails-off
+  configuration adopted whole on the primary kernel
+  (`linux-pinenote-7.0-ultra-rails.patch`, matched pair enforced by
+  `make ultra-coupling-check`); three consecutive rails-off resumes
+  (RTC + power button); **4.64 mA measured** over a 40-min gauge bracket
+  vs deep's ~20 mA — ~36 days of pure suspend on paper. Wake sources
+  reduce to rk817-internal (RTC, power button, charger). The ≥3-day soak
+  is running. `doc/artifacts/pinenote-ultra-r12-20260808/`.
 
 - **Deep suspend works** (2026-08-02): BSP SIP activation is live and
   bound (`cfg: 0x5ec`, wakeup-config `0x10`); the device enters `deep`,
@@ -31,6 +40,9 @@
   beyond RTC + power button (cover wake in particular); the TPS
   `ENABLE` 2f → 20 drift across deep is unexplained; ultra-suspend
   remains unadopted (rail-kill wake collision unresolved).
+  [Superseded 2026-08-08: ADOPTED — rails-off ultra resumes on both wake
+  legs and ships on the primary kernel; the running multi-day soak is the
+  outstanding suspend proof. See the lead bullet above.]
 
 The rest of this document accumulated with the program. Dated sections
 are session records and stand as written at their dates; where later
@@ -44,6 +56,10 @@ waveform or VCOM calibration data and never writes sysfs, procfs,
 debugfs, or tracefs.
 
 ## Hibernation (suspend-to-disk) — scoped 2026-08-07, not built
+
+(2026-08-08: ultra landed at 4.64 mA, clearing the 18-day target on paper
+with ~2× slack — hibernation is re-priced from "the only step change" to
+a pre-1.0 option, still gated on the os2-default-boot question.)
 
 Raised as an interim step the same night the ultra handshake came back
 unwakeable. It deserves the serious treatment because it is the only
@@ -344,7 +360,9 @@ awk '/resumed after/ {
    240s` lines ~260 s apart.** `awake 300s` / ~540 s apart means the fix
    is not in the running image. Remove the override afterwards.
 2. **Then the default period, which has never been tested**: the 1 h
-   backstop is 4x the longest dwell this device has ever slept. Expect
+   backstop is 1.5x the longest dwell this device has ever slept
+   (2400 s, R12 2026-08-08; this line previously said 4x against the
+   retired 900 s default). Expect
    `resumed after 3600s` (±3) roughly hourly, each followed by `awake
    20s`. **If the resume lines stop, the alarm is not re-arming** — that
    is a fail, and the device is then relying on button wake alone.
@@ -384,6 +402,7 @@ experience* metric as much as a power one.
 
 ### Target 2 needs less suspend draw, not better scheduling
 
+[Answered 2026-08-08: the payload is adopted and measures 4.64 mA — R12.]
 No amount of scheduling fixes 20.6 mA → 6 mA. That is the **ultra-suspend
 / rail-kill** payload we deliberately left unadopted (`ultra: 0` in every
 bl31 `PM-STATE` line so far), and it is gated on the rail-kill wake
@@ -416,7 +435,8 @@ that bl31 preserves a non-boot DDR rate across suspend/resume.
    suspend-between-page-turns is viable and what resume latency budget we
    have.
 3. **Resume latency** — UX first, power second.
-4. **Suspend draw 20.6 → <10 mA** — ultra-suspend, gated on the rail-kill
+4. **Suspend draw 20.6 → <10 mA** — DONE 2026-08-08 at 4.64 mA (R12);
+   originally gated on the rail-kill
    wake question. This is what target 2 actually needs.
 
 ### Deferred: on-demand Wi-Fi (after everything else)

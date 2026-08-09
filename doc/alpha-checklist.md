@@ -64,7 +64,7 @@ once you separate *attended* from *unattended*: the U-Boot menu is
 interactable **on the device**, so a human present can always pick os2
 without a serial console; with nobody present the countdown elapses and
 the default ("search all partitions") finds p5 first, because os1 carries
-`/boot/extlinux/extlinux.conf`. Tonight's ultra recovery boot captured
+`/boot/extlinux/extlinux.conf`. The 2026-08-07 ultra recovery boot captured
 the countdown running 15→0 untouched, then landing on os1.
 
 So: **not an alpha blocker** — an installer is a human at their device.
@@ -119,7 +119,10 @@ endurance.  The soak is the endurance proof:
 
 ### 3b. ~~Original session B~~ — DONE 2026-08-07
 
-Run, and answered. The firmware **does** honour `LINUX_PM_STATE=5`
+Run, and answered. [Superseded 2026-08-08, §3 above: this no-wake result
+was specific to rails-ON ultra — rails-off ultra resumes on this same
+bl31 and now ships. Kept as the record of why rails-on ultra is
+proven-broken.] The firmware **does** honour `LINUX_PM_STATE=5`
 (`ultra:` incremented 0→1, the first time ever) — and nothing wakes the
 device from it: not the RTC at +60 s, not a short power-button press.
 Only a forced power-off exits. Both pmic words were identical to the
@@ -270,14 +273,14 @@ tag, one channel pin and one hash clears it.
 
 Cheap, offline, and they are the numbers a public repo gets judged on.
 
-- [ ] **The "9 mA pessimistic end"** in the targets table has no
+- [x] **The "9 mA pessimistic end"** — resolved 2026-08-08: moot, ultra
+      is measured at 4.64 mA. Originally: it had no
       derivation anywhere in the tree, and `68dfbba` attributes it to
       hrdl, who never wrote it. Derive it or drop it.
-- [ ] **"4x the longest dwell"** for the 3600 s backstop, in
-      `doc/status.md` and `doc/power-management.md`: it is **1.33x**. The
-      4x is against the retired 900 s default.
-- [ ] **`doc/status.md`'s "38-frame cold, 46 warm"** is backwards per
-      `doc/refresh-policy.md`.
+- [x] **"4x the longest dwell"** — corrected in both docs by the
+      2026-08-08 sweep (now 1.5x, after R12's 2400 s sleep).
+- [x] **`doc/status.md`'s "38-frame cold, 46 warm"** — bracketed
+      correction added by the 2026-08-08 sweep.
 - [ ] The felt-latency model **double-counts `delay_b`**, which is
       already inside the measured 132-140 ms pipeline floor.
 
@@ -315,10 +318,10 @@ seen on glass**, so both belong in the QC cycle.
 
 On the record as decisions, not oversights.
 
-- **The ultra rail payload** — now **moot, not deferred**. The 2026-08-07
-  handshake showed the device cannot wake from ultra even with the proven
-  `mem` rails untouched, so the payload could only make the unwakeable
-  state cheaper. Reopening it needs a firmware/wake fix first.
+- **The ultra rail payload** — ~~moot~~ **ADOPTED 2026-08-08** (§3): the
+  rails-off pair ships on the primary kernel; the 2026-08-07 "cannot
+  wake" result was specific to rails-ON ultra, the one configuration
+  with no wake path.
 - **DDR at 528/780 MHz.** Never measured. Worth 4–10% of awake runtime,
   zero standby benefit.
 - **Wi-Fi off by default** (10.3 mA, and that was `wlan0 down`, not radio
@@ -347,8 +350,10 @@ On the record as decisions, not oversights.
 Measured, and labelled as such:
 
 - awake reader idle **156.9 mA**, at frontlight zero
-- deep suspend **~20 mA**
+- deep suspend **~20 mA** (superseded as shipping suspend)
+- ultra suspend **4.64 mA** (one 40-minute bracket, 2026-08-08; the
+  soak's end-to-end figure supersedes it)
 - whatever the one standby observation says
 
-Everything else — 25.5 h, 7.4 days, 18 days, the ultra bracket — is
-arithmetic or a third party's unreplicated figure. Goals, not claims.
+The multi-day extrapolations — 25.5 h, 7.4/18/36 days — are arithmetic.
+Goals, not claims, until the running soak lands its measured figure.

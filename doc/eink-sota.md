@@ -644,7 +644,8 @@ fact — but it strengthens §3's novelty assessment.
 Ranked by evidence-per-effort. "Rung" = cheapest validation:
 **docs** < **offline tools** (wbf/ebc-logic/rastersim/koreader-input,
 rung 0–3) < **workbench** (`ebc-replay`, rung 7a) < **instrumented
-kernel** (dbg v2 session) < **camera** (optics rig).
+kernel** (the instrumented debug-kernel sessions — "dbg v2",
+`doc/pageturn-program.md` §5.1) < **camera** (optics rig).
 
 | # | Steal | Layer | Cheapest rung |
 |---|---|---|---|

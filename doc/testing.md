@@ -138,8 +138,8 @@ latency — those stay on the hardware-only list. The tools validate
 
 Getting the pulled waveform for local runs: on a booted device,
 `base64 /lib/firmware/rockchip/ebc.wbf` over the console (or the backups
-in `doc/device-runbook.md`). A verified copy from the 2026-07-04 session
-lives at `~/pinenote-backup/2026-07-04-wbf-pull/ebc.wbf`.
+in `doc/device-runbook.md`). Use your own device's waveform backup — the
+per-operator ledger (`doc/device-runbook.md`) records where yours lives.
 
 ## The validation ladder (toward hardware)
 
@@ -169,8 +169,11 @@ device model, 7b, remains future work.)
     returned device class follows it. Its fixtures explicitly accept the three
     standard metadata properties and reject any lookalike or policy property;
     source/compiled DT coverage is distinct from Linux's live-OF `name`
-    normalization. It deliberately proves that suspend is
-   still disabled, while firmware and physical sleep remain hardware-only.
+    normalization. It deliberately proves the KOReader-side suspend
+   policy module is still the exact disabled fixture (`return false` —
+   suspend is owned by the standalone autosuspend daemon, not KOReader)
+   and that the DT carries exactly the reviewed PM policy; firmware and
+   physical sleep remain hardware-only.
 4. **QEMU smoke** (`make qemu-smoke`) for generic ARM64 userspace, and
    **QEMU virt** — interactive (`make qemu-virt ROOTFS=…`) or the
    mechanized rung-4 gate (`make qemu-virt-check ROOTFS=…`) — which boots
