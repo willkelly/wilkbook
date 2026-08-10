@@ -59,31 +59,43 @@ Liveness was checked three ways after entry and after the presses: SSH
 (`No route to host`), ICMP (100 % loss — note it *answers* under ordinary
 deep via brcmfmac offload), and UART (zero bytes).
 
-## The cover switch: wired, armed, and unactuatable on this device
+## The cover switch: wired and armed; the magnet alignment is fussy
 
-This was R11's second new instrument and it produced a clean negative.
+This was R11's second new instrument. It produced a negative that was
+**over-generalised at the time — see the correction at the end of this
+section.**
 
 The DT node is real and correctly configured — `gpio-23` on gpio0,
 `ACTIVE LOW`, IRQ present, `linux,code = 0` (SW_LID), `linux,input-type =
 5` (EV_SW), `wakeup-event-action = 2` (wake on cover *open*), identical to
 hrdl's node. `/sys/bus/platform/devices/gpio-keys` is wakeup-enabled.
 
-But with the operator's cover physically shut, `gpio-23` still reads `hi`
-(unasserted) and `wakeup_sources` shows `gpio-keys event_count = 0`. No
-state change was ever observed. **The cover on this device does not
-actuate the sensor** — no magnet, or misaligned. It is not a broken wake
-path; it is an unreachable one.
+But with the operator's cover physically shut, `gpio-23` still read `hi`
+(unasserted) and `wakeup_sources` showed `gpio-keys event_count = 0`. No
+state change was observed during this session.
+
+**[Correction 2026-08-09.** The conclusion drawn here — "the cover on
+this device does not actuate the sensor, no magnet or misaligned" — was
+wrong, and wrong in an avoidable way: it generalised from a *single*
+cover close in one position. The operator subsequently actuated the
+switch on this same device. The magnets do line up, but only in a narrow
+position, so a casual close often misses. The accurate statement is
+**the cover actuates unreliably here because of magnet alignment, not
+because the path is unreachable**. What this session actually showed is
+that one particular close did not trigger it.**]**
 
 Consequences worth stating plainly:
 
-- The cover rung was removed from the Phase 2 ladder. Every stimulus we
-  *could* apply reaches the SoC through the single rk817 PMIC-INT → GPIO0
-  line, which is exactly the line R10 already showed dead. **The one
-  physically independent wake leg remains untested, for want of a magnet.**
+- The cover rung was removed from the Phase 2 ladder, so every stimulus
+  actually applied reached the SoC through the single rk817 PMIC-INT →
+  GPIO0 line — exactly the line R10 had already shown dead. **The one
+  physically independent wake leg went untested in this session.** With
+  the 2026-08-09 correction above, it was testable and we did not know
+  it; that is a missed rung, not an impossible one.
 - The 2026-08-08 auto-suspend change that makes cover-close a suspend
-  request can never fire on this device. The code is still correct, and
-  correct for anyone with a magnetic cover, but it is **unexercisable
-  here** and must not be recorded as validated on glass.
+  request was recorded here as unexercisable. It is not:
+  cover-close-to-suspend was confirmed on a second device on 2026-08-09,
+  and then on this device too, with the alignment caveat.
 
 ## Incidental results
 

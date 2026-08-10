@@ -95,8 +95,9 @@ configuration.  The bench kernel and flavor are retired.
 
 **Consequence, documented not hidden:** during suspend the GPIO0 pad bank
 is unpowered, so the only wake sources are rk817-internal (RTC alarm,
-power button, charger).  The cover — already unactuatable on this device
-— and the pen cannot wake it.  A cold touch controller times out once on
+power button, charger).  The cover and the pen cannot wake it
+(the cover switch works — fussily, magnet alignment — but it sits on the
+unpowered GPIO0 bank during suspend).  A cold touch controller times out once on
 resume and is reset by the carried workaround.
 
 ### 3c. NEW BLOCKER — the multi-day ultra soak
@@ -339,15 +340,18 @@ seen on glass**, so both belong in the QC cycle.
 - [ ] **Verify both on glass** — QC §2.2 (cycle with the light ON and
       check `actual_brightness` after) and §2.3 (close the cover, confirm
       it sleeps promptly; open it, confirm it wakes).
-- [x] **The cover as a WAKE source** — tried 2026-08-08, and it cannot be
-      tested on this device. The switch is correctly wired and armed
-      (`gpio-23`, ACTIVE LOW, IRQ, SW_LID, wakeup-enabled) but the
-      operator's cover does not actuate it: shut, the pin still reads
-      `hi` and `event_count` stays 0. No magnet, or misaligned.
-      **Consequence for the cover fix above: it can never fire on this
-      device, so it cannot be validated on glass here.** The code stays
-      (it is correct for anyone with a magnetic cover) but is recorded as
-      unexercisable, not as tested.
+- [x] **Cover-close-to-suspend: CONFIRMED on glass 2026-08-09**, first
+      on the second tester's device and then on the author's. The switch
+      is wired and armed (`gpio-23`, ACTIVE LOW, IRQ, SW_LID,
+      wakeup-enabled); the author's magnets align only in a narrow
+      position, so a casual close often misses — fussy hardware, not a
+      code problem. **Corrects the 2026-08-08 entry here**, which
+      declared the cover "unactuatable on this device" after a single
+      close in one position and wrote the fix off as unexercisable.
+- [ ] **The cover as a WAKE source** — still untested, and now known to
+      be testable. Under ultra it should NOT wake the device
+      (`vcc_3v3_pmu` is off, unpowering the GPIO0 bank); a plain `mem`
+      suspend would be the honest test of the wake path itself.
 
 ## Explicitly deferred to the pre-1.0 optimization pass
 
