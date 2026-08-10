@@ -40,7 +40,20 @@ worse than this, that's a bug report; if it does better, brag.
   with one good measurement behind it, not a promise.
 - The device suspends itself after ~5 idle minutes (page + SUSPENDED
   banner, frontlight off), and a short power press suspends or wakes it
-  on demand. Waking is a single short press. **If a press ever fails to
+  on demand.
+- **If it never sleeps at all** — no banner, Wi-Fi stays up, the power
+  button does nothing — auto-suspend is *paused*, not broken. Check
+  `/data/wilkbook/autosuspend.conf` and
+  `/var/lib/pinenote/autosuspend.conf`; either holding `enabled=0`
+  pauses everything, and the second one wins. Set `enabled=1` or delete
+  it (no restart needed). An earlier version of the install page told
+  people to create that file and never told them to undo it, so this is
+  the most likely first-boot symptom rather than an exotic one.
+- **Closing the cover suspends it — if your cover's magnet reaches the
+  sensor.** The switch is wired, armed, and the software treats a close
+  as a suspend request; but the author's own cover does not actuate it
+  (`gpio-23` never changes state), so this path is **untested on real
+  hardware**. If yours works, that is genuinely new information. Waking is a single short press. **If a press ever fails to
   wake it, note the time and tell the operator before force-restarting
   it** — a stuck device carries forensic evidence that a 10-second
   power-hold destroys.

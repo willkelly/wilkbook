@@ -284,6 +284,41 @@ Cheap, offline, and they are the numbers a public repo gets judged on.
 - [ ] The felt-latency model **double-counts `delay_b`**, which is
       already inside the measured 132-140 ms pipeline floor.
 
+### 10. First-second-person install: the pause trap (found 2026-08-09)
+
+The first install by someone other than the author produced a device
+that could not suspend at all — and the cause was this repo's own
+documentation, not its code.
+
+`doc/install.md` recommended creating `/data/wilkbook/autosuspend.conf`
+with `enabled=0` for first-boot debugging, and **no document anywhere
+said to undo it** (`grep enabled=1` across all docs returned nothing
+relevant). The tester followed the instructions exactly and got a reader
+that never napped, showed no banner, kept Wi-Fi up, and ignored the
+power button and the cover.
+
+- [x] **Docs fixed 2026-08-09.** The file is now documented as optional
+      and as a foot-gun, with undoing it stated in the same breath;
+      skipping it is the recommended path, so the default install
+      suspends out of the box. README quickstart gained a "check it
+      sleeps" step; `doc/install.md` gained a troubleshooting entry
+      naming both config paths and their precedence;
+      `doc/alpha-expectations.md` warns the tester directly.
+- [ ] **Code (needs an image): the daemon must say it is paused** —
+      GitHub issue #7. The startup banner logs idle/backstop/overlay/
+      config path but not `enabled`, and the only paused message fires
+      on a power tap, so an idle-only user gets silence. `herd status`
+      showing `running` reads as healthy.
+- [ ] **Timezone at build time** — GitHub issue #6, raised in the same
+      session: the image runs UTC, so clocks and log timestamps are off
+      for every user.
+
+**The lesson worth keeping:** every offline gate in this repo passed on
+this image, and the QEMU rungs boot it three ways. None of them could
+catch an instruction that tells a human to disable a feature and then
+forgets to mention turning it on. That class needs a second person, and
+it took about a day of one to surface.
+
 ### 9. Reader-quality fixes found 2026-08-07 (mining hrdl's dist)
 
 Both were verified in our own tree before being believed, and both are

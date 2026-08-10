@@ -221,8 +221,12 @@ them):
   to `/root/.ssh/authorized_keys` every boot, so it survives reflashes
   (`/root` does not). With no key staged, root SSH is simply unreachable
   and your way in is the console.
-- `wilkbook/autosuspend.conf` containing `enabled=0` — **strongly
-  recommended for the first boot.** Auto-suspend sleeps the device to
+- `wilkbook/autosuspend.conf` — **optional, and the single easiest way
+  to end up with a device that never sleeps.** Writing `enabled=0` here
+  pauses auto-suspend for first-boot debugging; **whoever writes it owns
+  undoing it** (`enabled=1`, or delete the file — re-read before every
+  idle wait, no reboot). Skip it and suspend works out of the box.
+  What it controls: auto-suspend sleeps the device to
   ultra suspend (rails-off, 4.64 mA measured 2026-08-08) after 5 minutes
   of no *input* (an SSH session does not count). Waking takes the power
   button, the RTC backstop, or plugging in a charger — nothing else can
@@ -284,6 +288,21 @@ Stated plainly, because the alternative is implying a tested path.
 - **`/data/books` is auto-created on first boot** (section 7); a missing
   data partition falls back to a readable placeholder rather than a
   broken browser — proven in QEMU, not on a second device.
+- **If the device never sleeps, you paused it.** No suspend banner,
+  Wi-Fi stays up, the power button and the cover do nothing, and the
+  battery drains at reading speed — that is auto-suspend paused, not
+  broken. Check, in this order:
+  `cat /data/wilkbook/autosuspend.conf` (the persistent one, on p7, that
+  survives reflashes) and `cat /var/lib/pinenote/autosuspend.conf` (the
+  runtime one, read *second*, so it wins for the current boot). Either
+  containing `enabled=0` pauses everything. Set `enabled=1` or delete
+  the file; it is re-read before every idle wait, so no restart is
+  needed. **This is the most likely first-boot symptom**, because an
+  earlier version of this page recommended creating that file with
+  `enabled=0` and never said to undo it. `herd status
+  pinenote-autosuspend` showing the daemon *running* is not evidence it
+  is enabled — a paused daemon runs normally and, as of 2026-08-09, does
+  not say so in its startup log (GitHub issue #7).
 - **The SSH host-key fingerprint changes once**, at the first boot of an
   image carrying the host-key sync, and is stable across reflashes after
   that. Pin it in your ledger *then*, not before (`doc/networking.md`

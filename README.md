@@ -176,9 +176,15 @@ boots. Paths relative to the partition root:
   first-boot service creates the directory if it is missing
   (`pinenote/services/library.scm` — proven in QEMU fixtures, not yet on
   a second device), but only you can put books in it.
-- `wilkbook/autosuspend.conf` containing `enabled=0` — strongly
-  recommended for your first boot, unless you want the device napping
-  five minutes into your debugging session.
+- `wilkbook/autosuspend.conf` — **optional, and a foot-gun.** Writing
+  `enabled=0` here pauses auto-suspend, which is genuinely handy while
+  you are poking at a new device over SSH (otherwise it naps five
+  minutes in and each nap costs a physical button press). **If you write
+  it, you must undo it** — a device with this file at `enabled=0` never
+  sleeps, shows no suspend banner, and burns ~157 mA forever. Undo with
+  `enabled=1`, or just delete the file; the daemon re-reads it before
+  every idle wait, so no reboot is needed. Skip this bullet entirely and
+  suspend works out of the box — the recommended path.
 
 **3. Write os2.** Copy the extracted rootfs, its SHA-256, and
 `pinenote/scripts/preflight/write-os2-verified.sh` to os1 over SSH.
@@ -200,7 +206,12 @@ console needed, with a ~15 s countdown. A boot where nobody touches the
 menu lands in os1, which is exactly the behaviour you want from a rescue
 default.
 
-**5. Read.** Page turns are single-pass, the device suspends itself when
+**5. Check it sleeps.** Leave it untouched for six minutes. You should
+see your page with a `SUSPENDED` banner and the frontlight off; SSH and
+ping go dead. If it never sleeps, check
+`cat /data/wilkbook/autosuspend.conf` first — see the previous step.
+
+**6. Read.** Page turns are single-pass, the device suspends itself when
 you drift off, and it sips 4.64 mA while you sleep (one measured 40-minute bracket;
 the multi-day soak is running). What it should feel like, and what is
 known-broken: `doc/alpha-expectations.md`. That is the whole product.
