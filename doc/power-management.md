@@ -93,16 +93,35 @@ also underwrites "the pen cannot wake" and parts of how R10/R11 were
 interpreted — if the premise is wrong, those conclusions deserve
 re-examination rather than inheritance.
 
-**Cheapest discriminators, none requiring a new image:**
+**A discriminator that was proposed and is VOID (2026-08-09).** "Does
+the pen wake it?" was offered here as the cheap test — same pad supply,
+different pin, so pen-wakes would mean the rail is up. It was run: the
+pen does not wake it. **That result carries no information**, because
+the pen is not an armed wake source in the first place: only two nodes
+in `rk3566-pinenote.dtsi` carry `wakeup-source` — the cover switch and
+the rk817 PMIC — and this repo's own suspend gate pins exactly that
+(`expected_wake_paths`). The pen could never have woken the device
+regardless of any rail. The premise was not checked before the test was
+proposed.
 
-- Does the **pen** wake it? Same pad supply, different pin. Pen-wakes
-  points at explanation 1 (rail up); pen-dead-but-cover-works points at
-  2 (switch-specific level detection).
-- Read `vcc_3v3_pmu`'s regulator state from `/sys/class/regulator` right
-  after a cover-initiated resume, and compare with a power-button
-  resume.
-- On the next supervised UART session, watch whether the resume path
-  differs between a cover wake and a button wake.
+**Current is not a discriminator either.** R11's rails-ON ultra
+estimated ~3 mA (wide error bars, boot cost subtracted) and R12's
+rails-OFF ultra measured 4.64 mA. Those overlap, and the rails-off
+figure is nominally the *higher* of the two, so suspend draw cannot
+separate "rail dropped" from "rail stayed up".
+
+**What would actually discriminate** (all need a test image, hence
+issue #8):
+
+- Add `wakeup-source` to the pen node in a bench image. If the pen then
+  wakes the device from ultra, `vcc_3v3_pmu` is up and explanation 1 is
+  confirmed; if it still does not while the cover does, explanation 2
+  (alive-domain level detection specific to the hall switch) survives.
+- Instrument bl31's own PMIC readback further: the banner reports
+  `POWER_SLP_EN` (intent). What is missing is the rail's *actual* state
+  during suspend, which nothing in the current stack reports.
+- A hardware measurement across `vcc_3v3_pmu` during suspend would
+  settle it outright, and needs no software at all — just probe access.
 
 ## Hibernation (suspend-to-disk) — scoped 2026-08-07, not built
 
