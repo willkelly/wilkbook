@@ -201,9 +201,10 @@ gitignored `build/`, or the reader's static address.
   Promoted image `9a08803e…` is on os2 and the **≥3-day unplugged soak
   is running** (exit criteria: `doc/alpha-checklist.md` §3c; a failed
   wake gets the U-Boot INT_STS forensics before any forced power-off).
-  Documented tradeoff: GPIO0 is unpowered in suspend, so only
-  rk817-internal sources wake it (RTC, power button, charger) — cover
-  and pen cannot. Auto-suspend (5 min idle) is live, so **SSH to the
+  Documented tradeoff: GPIO0 is unpowered in suspend, so the pen cannot
+  wake it. Wake sources are the RTC, power button, charger — **and the
+  cover, confirmed 2026-08-09, which the rails model does not explain**
+  (open question, `doc/power-management.md`). Auto-suspend (5 min idle) is live, so **SSH to the
   reader is intermittent** — write `enabled=0` to
   `/var/lib/pinenote/autosuspend.conf` before working on it
   (`doc/device-access.md`). Not yet proven: the soak; the TPS `ENABLE`

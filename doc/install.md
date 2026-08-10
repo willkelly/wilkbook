@@ -229,9 +229,8 @@ them):
   What it controls: auto-suspend sleeps the device to
   ultra suspend (rails-off, 4.64 mA measured 2026-08-08) after 5 minutes
   of no *input* (an SSH session does not count). Waking takes the power
-  button, the RTC backstop, or plugging in a charger — nothing else can
-  wake it, the serial console and the cover included, so each nap costs
-  you a physical button press. The daemon reads this file first and the
+  button, the RTC backstop, plugging in a charger, or opening the cover
+  (confirmed 2026-08-09); the serial console cannot wake it. The daemon reads this file first and the
   `/var/lib/pinenote/autosuspend.conf` runtime knob second (so a same-boot
   change there still wins), and unlike `/var/lib` it survives reflashes
   and is writable from os1 — which is exactly why it exists

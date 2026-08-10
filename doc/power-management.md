@@ -55,6 +55,55 @@ offline tests, and only reads an explicit allowlist.  It never reads
 waveform or VCOM calibration data and never writes sysfs, procfs,
 debugfs, or tracefs.
 
+## Open question: the cover wakes it, and it should not (2026-08-09)
+
+**Observation, on glass:** opening the cover wakes the device from ultra
+suspend. Confirmed by the operator; cover-close-to-suspend is confirmed
+on two devices the same day.
+
+**Why that is a problem for our model.** The cover switch is
+`gpio0 RK_PC7` (`rk3566-pinenote.dtsi`, `switch-cover`). GPIO0's pad
+supply comes from `pmuio1`/`pmuio2`, and this board wires **both to
+`vcc_3v3_pmu`** (`&pmu_io_domains`). The production configuration marks
+`vcc_3v3_pmu` `regulator-off-in-suspend`, and bl31's banner confirms the
+rails reach the PMIC (`pmic: 0x14, 0x00`). So the pad should be
+unpowered during suspend and a transition on it undetectable — the exact
+reasoning this repo used to explain R10/R11, and to tell testers the
+cover could not wake the device. That explanation is now incomplete at
+best.
+
+**Candidate explanations, none verified:**
+
+1. **The rail does not actually drop.** The DT says off-in-suspend; the
+   rk817 may decline for a rail with other constraints, or bl31's
+   `PMIC_LP` handling may override the regulator framework's intent. If
+   so, our 4.64 mA is achieved by something other than we think — and
+   the number stands regardless, since it was measured, not derived.
+2. **The PMU wake detector is not on the pad supply.** GPIO0 is the PMU
+   bank; `RKPM_SLP_PMUALIVE_32K` is set in `cfg 0x5ec`, so the PMU alive
+   domain is running. A hall switch that shorts the line to ground may
+   present a detectable level to alive-domain logic without the IO
+   supply being up.
+3. **Something else in hrdl's configuration keeps this path alive** that
+   we adopted without isolating.
+
+**Why it matters even though the news is good.** A third wake source is
+a product win. But the same reasoning that said "cover cannot wake"
+also underwrites "the pen cannot wake" and parts of how R10/R11 were
+interpreted — if the premise is wrong, those conclusions deserve
+re-examination rather than inheritance.
+
+**Cheapest discriminators, none requiring a new image:**
+
+- Does the **pen** wake it? Same pad supply, different pin. Pen-wakes
+  points at explanation 1 (rail up); pen-dead-but-cover-works points at
+  2 (switch-specific level detection).
+- Read `vcc_3v3_pmu`'s regulator state from `/sys/class/regulator` right
+  after a cover-initiated resume, and compare with a power-button
+  resume.
+- On the next supervised UART session, watch whether the resume path
+  differs between a cover wake and a button wake.
+
 ## Hibernation (suspend-to-disk) — scoped 2026-08-07, not built
 
 (2026-08-08: ultra landed at 4.64 mA, clearing the 18-day target on paper

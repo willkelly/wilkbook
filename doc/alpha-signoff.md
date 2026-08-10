@@ -119,8 +119,9 @@ not on this list that costs them anything, it is a defect.
 - **Unattended reboots land on os1.** The menu is interactable on the
   device, so this costs one deliberate selection, not a cable.
 - **Suspend is ultra (rails-off), and only the power button, the RTC,
-  and the charger can wake it.** GPIO0 is unpowered in suspend, so the
-  cover and the pen can never wake the device — deliberate (4.64 mA vs
+  the charger, and the cover can wake it.** The pen cannot. (Cover wake
+  was confirmed 2026-08-09 and contradicts the rails model — see
+  `doc/power-management.md`; the tradeoff below is otherwise (4.64 mA vs
   deep's ~20, `doc/artifacts/pinenote-ultra-r12-20260808/`). One cold
   touch-controller timeout on resume is absorbed by a carried
   workaround; the panel must come back clean.

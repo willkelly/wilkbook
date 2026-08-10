@@ -18,8 +18,10 @@ readback-verified), auto-suspend ON (5 min idle → ultra), and the
 **≥3-day unplugged ultra soak IN PROGRESS** — exit criteria in
 `doc/alpha-checklist.md` §3c. A failed wake gets the U-Boot `INT_STS`
 forensics *before* any forced power-off. Wake sources are rk817-internal
-only (RTC alarm, power button, charger): GPIO0 is unpowered in suspend,
-so the cover and pen cannot wake the device, by design.
+(RTC alarm, power button, charger) **plus the cover, confirmed working
+2026-08-09** — which our rails model says should be impossible, since
+`gpio0 RK_PC7`'s pad supply is off-in-suspend. The pen cannot wake it.
+The cover mechanism is an open question, not a settled tradeoff.
 
 **Still true / still open**: DDR static-low ships `mode=off` (324 MHz
 corrupts the display silently); SSH to the deployed reader is

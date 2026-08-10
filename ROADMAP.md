@@ -290,8 +290,9 @@ the start of this track — no panel required. Policy background in
       wake+render+refresh cycle); ultra suspend — ADOPTED
       2026-08-08: hrdl's rails-off pair on the primary kernel, 4.64 mA
       measured (~36 d paper; `doc/artifacts/pinenote-ultra-r12-20260808/`),
-      wake via rk817-internal sources only (RTC/power/charger — GPIO0
-      unpowered, cover/pen cannot wake); the wake-collision gate was
+      wake via RTC/power/charger and, unexpectedly, the cover
+      (confirmed 2026-08-09 — the pad supply is off-in-suspend, so the
+      mechanism is unexplained); the pen cannot wake; the wake-collision gate was
       answered by adoption, and the running ≥3-day ultra soak plus its
       end-to-end standby figure are now the outstanding validation.
       Upstream TF-A stays a separate, later, recovery-qualified migration

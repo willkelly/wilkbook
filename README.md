@@ -334,7 +334,9 @@ build time, never hand-copied — so they cannot drift from the driver.
   deep's ~20 mA — ~36 days of pure suspend on paper, labelled
   arithmetic. The device sleeps after 5 idle minutes; only the power
   button, the RTC backstop, and the charger can wake it — the rails-off
-  tradeoff unpowers GPIO0 during suspend, so the cover and pen cannot.
+  tradeoff unpowers GPIO0 during suspend, so the pen cannot — though
+  the cover demonstrably does wake it (2026-08-09), which the model does
+  not yet explain.
   A ≥3-day unplugged soak is RUNNING; until it concludes, multi-day
   standby is arithmetic on one good measurement. SSH to a deployed
   reader is intermittent while auto-suspend is enabled

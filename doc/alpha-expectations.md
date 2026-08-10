@@ -53,10 +53,10 @@ worse than this, that's a bug report; if it does better, brag.
   two devices. Expect it to be *fussy*: the switch is a magnetic sensor
   and the cover has to sit in roughly the right position, so a casual
   close sometimes does nothing. That is magnet alignment, not software —
-  if it misses, close it more deliberately. Note the asymmetry: closing
-  suspends, but the cover cannot *wake* it — `vcc_3v3_pmu` is off during
-  ultra suspend, which unpowers the GPIO0 bank the switch sits on. Wake
-  is the power button, the RTC backstop, or the charger. Waking is a single short press. **If a press ever fails to
+  if it misses, close it more deliberately. **Opening the cover also wakes it** —
+  confirmed on glass 2026-08-09. So the cover is a full sleep/wake
+  gesture, alongside the power button, the RTC backstop, and the
+  charger. Waking is a single short press. **If a press ever fails to
   wake it, note the time and tell the operator before force-restarting
   it** — a stuck device carries forensic evidence that a 10-second
   power-hold destroys.

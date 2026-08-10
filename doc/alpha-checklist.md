@@ -95,9 +95,9 @@ configuration.  The bench kernel and flavor are retired.
 
 **Consequence, documented not hidden:** during suspend the GPIO0 pad bank
 is unpowered, so the only wake sources are rk817-internal (RTC alarm,
-power button, charger).  The cover and the pen cannot wake it
-(the cover switch works — fussily, magnet alignment — but it sits on the
-unpowered GPIO0 bank during suspend).  A cold touch controller times out once on
+power button, charger).  The pen cannot wake it. The **cover
+can**, confirmed 2026-08-09 — which contradicts the model above and is
+an open question rather than a settled tradeoff (`doc/power-management.md`).  A cold touch controller times out once on
 resume and is reset by the carried workaround.
 
 ### 3c. NEW BLOCKER — the multi-day ultra soak
@@ -348,10 +348,13 @@ seen on glass**, so both belong in the QC cycle.
       code problem. **Corrects the 2026-08-08 entry here**, which
       declared the cover "unactuatable on this device" after a single
       close in one position and wrote the fix off as unexercisable.
-- [ ] **The cover as a WAKE source** — still untested, and now known to
-      be testable. Under ultra it should NOT wake the device
-      (`vcc_3v3_pmu` is off, unpowering the GPIO0 bank); a plain `mem`
-      suspend would be the honest test of the wake path itself.
+- [x] **The cover as a WAKE source: CONFIRMED WORKING 2026-08-09.**
+      Opening the cover wakes the device. This contradicts the stated
+      rails model — the switch is on `gpio0 RK_PC7`, whose pad supply
+      (`pmuio1`/`pmuio2` ← `vcc_3v3_pmu`) is off-in-suspend — so the
+      *mechanism* is now an open question, tracked in
+      `doc/power-management.md`. The product fact is good news: a third
+      wake source, and a complete cover gesture.
 
 ## Explicitly deferred to the pre-1.0 optimization pass
 
