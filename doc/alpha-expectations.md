@@ -49,11 +49,14 @@ worse than this, that's a bug report; if it does better, brag.
   it (no restart needed). An earlier version of the install page told
   people to create that file and never told them to undo it, so this is
   the most likely first-boot symptom rather than an exotic one.
-- **Closing the cover suspends it — if your cover's magnet reaches the
-  sensor.** The switch is wired, armed, and the software treats a close
-  as a suspend request; but the author's own cover does not actuate it
-  (`gpio-23` never changes state), so this path is **untested on real
-  hardware**. If yours works, that is genuinely new information. Waking is a single short press. **If a press ever fails to
+- **Closing the cover suspends it — confirmed 2026-08-09 on the second
+  device.** The author's own cover does not actuate the sensor at all
+  (`gpio-23` never changes state), so this path could only ever be
+  validated by someone else's cover; it now has been. Note the
+  asymmetry: closing suspends, but the cover almost certainly cannot
+  *wake* it — `vcc_3v3_pmu` is off during ultra suspend, which unpowers
+  the GPIO0 bank the switch sits on. Wake is the power button, the RTC
+  backstop, or the charger. Waking is a single short press. **If a press ever fails to
   wake it, note the time and tell the operator before force-restarting
   it** — a stuck device carries forensic evidence that a 10-second
   power-hold destroys.
