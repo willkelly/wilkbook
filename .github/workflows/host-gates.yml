@@ -50,7 +50,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       # The single rule this repo will not bend: per-device calibration never
       # enters the tree.  Cheap to assert, catastrophic to get wrong.
@@ -114,7 +114,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install the minimal toolchain
         run: |
@@ -151,7 +151,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install the host toolchain
         run: |
@@ -169,12 +169,52 @@ jobs:
           command -v guile >/dev/null 2>&1 || \
             sudo ln -s "$(command -v guile-3.0)" /usr/local/bin/guile
 
+      # koreader-input-check is the one suite that resolves a Guix package:
+      # without a bundle it shells out to `guix build koreader-bin'. Rather
+      # than drop the suite -- it covers input, touch normalization and the
+      # refresh seam, which is exactly the area under active work -- stage the
+      # SAME upstream release tarball pinenote/packages/koreader.scm pins.
+      #
+      # The stock bundle is sufficient: run-tests.sh takes the wilkbook device
+      # files (mixedrouter.lua, device.lua, idlewasher) from the REPO and needs
+      # only luajit and the koreader lua tree from the bundle. x86_64 here
+      # because it executes natively on the runner; the package selects arm64
+      # under --target.
+      #
+      # The hash is koreader.scm's own x86_64 nix-base32 pin, converted to hex.
+      # Verified, not trusted: this downloads a 27 MB binary into CI.
+      - name: Stage the pinned KOReader bundle
+        run: |
+          set -eux
+          ver=2026.03
+          want=2fe4e5bb7973e30e3a3932f9370b549d6cc26272acaba471c35ebcaf81c741af
+          url="https://github.com/koreader/koreader/releases/download/v${ver}/koreader-linux-x86_64-v${ver}.tar.xz"
+          curl -fsSL --retry 3 --retry-delay 5 -o /tmp/koreader.tar.xz "$url"
+          echo "${want}  /tmp/koreader.tar.xz" | sha256sum -c -
+          mkdir -p /tmp/koreader-bundle
+          tar -xJf /tmp/koreader.tar.xz -C /tmp/koreader-bundle
+          # Locate the bundle root by the file run-tests.sh actually requires,
+          # rather than assuming the tarball's top-level layout.
+          luajit=$(find /tmp/koreader-bundle -type f -path '*/lib/koreader/luajit' | head -1)
+          test -n "$luajit" || { echo "FATAL: no lib/koreader/luajit in the tarball"; exit 1; }
+          root=${luajit%/lib/koreader/luajit}
+          test -x "$luajit" || chmod +x "$luajit"
+          # Apply the same graft koreader.scm's `add-pinenote-device' phase
+          # does: copy-recursively the pinenote-device tree into lib/koreader.
+          # Without it device.lua:14 cannot resolve
+          # device/pinenote/suspend_policy and the touch-normalization and
+          # optics-inject suites fail -- verified, not assumed.
+          cp -a pinenote/packages/koreader-device/. "$root/lib/koreader/"
+          test -f "$root/lib/koreader/frontend/device/pinenote/suspend_policy.lua" \
+            || { echo "FATAL: device graft did not land"; exit 1; }
+          echo "KOREADER_BUNDLE=$root" >> "$GITHUB_ENV"
+
       # The aggregate. Its first action is to print the waveform skip banner, so
       # the coverage gap is stated in the log of every run rather than inferred
       # from a green badge -- doc/testing.md, "absence of an error is not a
       # passing test".
       - name: rung 1 aggregate
-        run: make check-host HOST_TOOLCHAIN=1
+        run: make check-host HOST_TOOLCHAIN=1 KOREADER_BUNDLE="$KOREADER_BUNDLE"
 
       - name: Restate what this run did NOT cover
         if: always()
