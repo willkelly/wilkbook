@@ -7,6 +7,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
 import types
 
 sys.path.insert(0, os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "optics")))
@@ -142,17 +143,26 @@ def fails(fn):
 
 class LocalShellTransport:
     """Executes only temporary local shell fixtures; never contacts a device."""
+
+    # bash, not sh.  reader-energy.py's disarm path issues `kill -TERM -- -$1`
+    # (reader-energy.py:304) to signal the guard's whole process group.  dash's
+    # builtin kill rejects that -- `kill: Illegal number: -`, rc=2 -- so under a
+    # distro /bin/sh these fixtures exercise a shell the reader never has: on the
+    # device /bin/sh IS bash, via Guix.  Testing under dash therefore reported a
+    # failure the product cannot have, and only on hosts where PATH lacks the
+    # Guix profile (i.e. every CI runner; not this project's workstations, which
+    # is why it stayed hidden).
     def __init__(self): self.processes = []
     def push(self, data, path):
         with open(path, "wb") as f: f.write(data)
     def run(self, command, timeout=None, detach=False):
         if detach:
-            proc = subprocess.Popen(["sh", "-c", command], stdin=subprocess.DEVNULL,
+            proc = subprocess.Popen(["bash", "-c", command], stdin=subprocess.DEVNULL,
                                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                                     start_new_session=True)
             self.processes.append(proc)
             return 0, ""
-        proc = subprocess.run(["sh", "-c", command], capture_output=True, text=True, timeout=timeout)
+        proc = subprocess.run(["bash", "-c", command], capture_output=True, text=True, timeout=timeout)
         return proc.returncode, proc.stdout.strip()
 
 
@@ -285,7 +295,10 @@ def main():
         try:
             h = energy.ReaderEnergyHarness(LocalShellTransport(), FakeDriver(FakeTransport()), card(), source,
                 output, ("conservative", "powersave"), 1, 0, 1800,
-                {"manifest_sha256": "m"}, clock_factory=recorder.FakeClock, sleep=lambda _: None)
+                # Real sleep: _arm_guard budgets 20 x 0.1s for the detached guard
+                # to write its identity file.  A no-op sleep collapses that budget
+                # to zero wall time and turns the handshake into a race.
+                {"manifest_sha256": "m"}, clock_factory=recorder.FakeClock, sleep=time.sleep)
             h.restore_timeout_s = 1
             h.remote_dir = os.path.join(d, "remote-expiry"); os.mkdir(h.remote_dir, 0o700)
             h.remote_source = os.path.join(h.remote_dir, "source.scm")
@@ -299,7 +312,7 @@ def main():
             open(policy, "w").write("candidate")
             h2 = energy.ReaderEnergyHarness(LocalShellTransport(), FakeDriver(FakeTransport()), card(), source,
                 output, ("conservative", "powersave"), 1, 0, 1800,
-                {"manifest_sha256": "m"}, clock_factory=recorder.FakeClock, sleep=lambda _: None)
+                {"manifest_sha256": "m"}, clock_factory=recorder.FakeClock, sleep=time.sleep)
             h2.restore_timeout_s = 5
             h2.remote_dir = os.path.join(d, "remote-disarm"); os.mkdir(h2.remote_dir, 0o700)
             h2.remote_source = os.path.join(h2.remote_dir, "source.scm")
