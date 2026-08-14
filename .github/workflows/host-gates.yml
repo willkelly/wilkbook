@@ -1,0 +1,194 @@
+# wilkbook host gates -- the offline validation ladder, rung 1 (doc/testing.md).
+#
+# PRIMARY PURPOSE: protect pinenote/patches/linux-pinenote-7.0-forward-port.patch
+# and the six patches riding alongside it.  CLAUDE.md calls that patch "the most
+# rebase-fragile, highest-value artifact in the repo"; the display trio compiles
+# its VERBATIM driver source, and suspend-check gates the hunks sitting behind
+# config guards that the other suites compile as #else stubs.
+#
+# No Guix, no device, no waveform.  Every check-host member runs under an
+# ordinary distro toolchain: these suites compile sources extracted from the
+# patches and read committed fixtures, and none evaluates a Guix module,
+# computes a derivation, or inspects the store.  The `guix shell' prefixes in
+# the Makefile are toolchain convenience, which HOST_TOOLCHAIN=1 bypasses.
+#
+# ubuntu-24.04 is PINNED, not ubuntu-latest.  These suites use -Werror, compare
+# sha256 goldens, and assert numeric classifier output.  A floating image that
+# silently bumps gcc or numpy turns them red for reasons unrelated to any change.
+#
+# LOG-READING TRAP, do not remove this warning: suspend-check,
+# activation-positive-check and battery-dtb-check deliberately print lines
+# beginning "FAIL:".  They drive inspectors over dozens of negative fixtures
+# that MUST be rejected, and the "FAIL:" line is the gate correctly catching a
+# deliberately broken input.  A passing run prints them.  JUDGE BY EXIT CODE.
+# Never add a `grep -q FAIL' to this workflow.
+
+name: host gates (no hardware, no waveform)
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: host-gates-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # The waveform is per-device calibration and is NEVER committed, so CI can
+  # never run the parser or the waveform-gated tests.  Set explicitly so the
+  # skip is a decision rather than an accident; the safety job asserts it.
+  WBF: ''
+
+jobs:
+  safety:
+    name: safety (no waveform, no secrets)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      # The single rule this repo will not bend: per-device calibration never
+      # enters the tree.  Cheap to assert, catastrophic to get wrong.
+      - name: No waveform or VCOM blob is tracked
+        run: |
+          set -eu
+          if git ls-files | grep -iE '\.wbf$|vcom' ; then
+            echo "FATAL: a waveform/VCOM artifact is tracked. See CLAUDE.md."
+            exit 1
+          fi
+          echo "ok: no .wbf or vcom file is tracked"
+
+      - name: WBF is unset, so waveform-gated tests cannot silently run
+        run: |
+          set -eu
+          test -z "${WBF:-}" || { echo "FATAL: WBF is set in CI"; exit 1; }
+          echo "ok: WBF is empty"
+
+      # A public repo: no workflow should need a secret, and the fork-privileged
+      # pull-request trigger would run untrusted code with repo write scope.
+      #
+      # STRUCTURAL, not textual.  A grep for the trigger name matches its own
+      # pattern and its own explanatory comment, so a text gate here fails on a
+      # clean tree and then gets deleted for crying wolf.  Parsing the YAML asks
+      # the real question: which triggers are declared, and does any step body
+      # interpolate a secret.
+      - name: No workflow uses secrets or the fork-privileged PR trigger
+        run: |
+          set -eu
+          python3 - <<'PY'
+          import glob, re, sys, yaml
+          bad = []
+          for path in sorted(glob.glob(".github/workflows/*.yml")):
+              doc = yaml.safe_load(open(path)) or {}
+              # `on' is a YAML 1.1 boolean, so PyYAML may key it as True.
+              triggers = doc.get("on", doc.get(True, {})) or {}
+              names = set(triggers) if isinstance(triggers, dict) else set(
+                  triggers if isinstance(triggers, list) else [triggers])
+              if "pull_request" + "_target" in names:
+                  bad.append(f"{path}: declares the fork-privileged PR trigger")
+              for job in (doc.get("jobs") or {}).values():
+                  for step in (job.get("steps") or []):
+                      body = "\n".join(str(v) for v in step.values())
+                      if re.search(r"secrets\s*\.", body):
+                          bad.append(f"{path}: step {step.get('name','?')!r} uses a secret")
+          print("\n".join(bad) if bad else
+                f"ok: {len(glob.glob('.github/workflows/*.yml'))} workflow(s), "
+                "no secrets, no privileged PR trigger")
+          sys.exit(1 if bad else 0)
+          PY
+
+      - name: Every tracked shell script parses
+        run: |
+          set -eu
+          n=0
+          for f in $(git ls-files '*.sh'); do sh -n "$f"; n=$((n+1)); done
+          echo "ok: sh -n over $n tracked shell scripts"
+
+  patch-guard:
+    name: patch guard (forward-port + the six others)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install the minimal toolchain
+        run: |
+          set -eux
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            build-essential device-tree-compiler luajit patch python3
+
+      # Either half of the ultra payload alone is a proven-broken, unwakeable
+      # configuration (R10/R11, doc/artifacts/pinenote-ultra-r1*).  Pure grep.
+      - name: ultra suspend matched pair ships whole
+        run: make ultra-coupling-check
+
+      # Spoof DTBs and Lua fixtures plus the structural hunk gates: tps65185 PM,
+      # the EBC fbdev resume barrier and its mutation suite, the timeout
+      # asymmetry, the DMC default-off selector.  Highest value per second on a
+      # patch rebase, which is when this repo historically breaks.
+      - name: offline suspend qualification gates
+        run: make suspend-check HOST_TOOLCHAIN=1
+
+      - name: dormant Rockchip BSP SIP/PM model and zero-call proof
+        run: make rockchip-pm-check HOST_TOOLCHAIN=1
+
+      - name: library first-boot structure
+        run: make library-check
+
+      # Was orphaned: the self-test existed in the tree and was executed by no
+      # make target, which is how coverage rots silently.
+      - name: generated battery DTB inspector self-test
+        run: make battery-dtb-check HOST_TOOLCHAIN=1
+
+  check-host:
+    name: check-host (rung 1, full)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install the host toolchain
+        run: |
+          set -eux
+          sudo apt-get update -qq
+          # Verified against a bare distro PATH: gcc, python3, numpy, scipy,
+          # pillow, ffmpeg, git, patch and xz are already present on the runner
+          # image; luajit, dtc and guile are the only genuine additions.
+          sudo apt-get install -y --no-install-recommends \
+            build-essential device-tree-compiler ffmpeg git guile-3.0 luajit \
+            patch python3 python3-numpy python3-pil python3-scipy xz-utils
+          # pinenote/tools/power invokes `guile'; Debian ships it as guile-3.0.
+          # The tool imports no (guix ...) or (gnu ...) module and never
+          # inspects the store, so base Guile 3 is sufficient.
+          command -v guile >/dev/null 2>&1 || \
+            sudo ln -s "$(command -v guile-3.0)" /usr/local/bin/guile
+
+      # The aggregate. Its first action is to print the waveform skip banner, so
+      # the coverage gap is stated in the log of every run rather than inferred
+      # from a green badge -- doc/testing.md, "absence of an error is not a
+      # passing test".
+      - name: rung 1 aggregate
+        run: make check-host HOST_TOOLCHAIN=1
+
+      - name: Restate what this run did NOT cover
+        if: always()
+        run: |
+          {
+            echo '### What this green does not mean'
+            echo
+            echo '- **No waveform coverage.** `wbf-check` and the waveform-gated'
+            echo '  halves of `ebc-logic-check` / `rastersim-check` were skipped:'
+            echo '  the waveform is per-device calibration and is never committed,'
+            echo '  so CI structurally cannot run them. Run `make check-host'
+            echo '  WBF=/path/to/ebc.wbf` locally before trusting display work.'
+            echo '- **Nothing was built.** No kernel, no rootfs, no derivation.'
+            echo '  This job never proves the patch *applies* or *compiles*.'
+            echo '- **Nothing was booted.** Rungs 4-4v (QEMU) and 6 (hardware)'
+            echo '  are out of scope here.'
+          } >> "$GITHUB_STEP_SUMMARY"

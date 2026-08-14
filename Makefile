@@ -2,7 +2,21 @@
 # Everything cross-builds for aarch64 and writes only to the Guix store
 # and $(ARTIFACTS).
 
-GUIX = guix
+GUIX_BASE = guix
+# channels.scm IS the reproducibility claim (doc/release.md).  TIME_MACHINE=1
+# routes every guix invocation through the pinned channels.
+#
+# This is not a nicety.  pinenote/packages/kernel.scm binds
+# %linux-pinenote-base to nongnu:linux -- a FLOATING alias.  It has already
+# moved 7.0 -> 7.1 on current channels, after which the forward-port patch
+# collides with mainline's own PineNote DTSI:
+#
+#   rk3566-pinenote.dtsi:433: ERROR (duplicate_node_names):
+#     /i2c@fdd40000/pmic@20/charger
+#
+# so a plain `make kernel' on a freshly-pulled workstation builds a DIFFERENT
+# kernel than the one doc/status.md calls hardware-proven, or fails outright.
+GUIX = $(if $(TIME_MACHINE),$(GUIX_BASE) time-machine -C channels.scm --,$(GUIX_BASE))
 TARGET = aarch64-linux-gnu
 GUIX_FLAGS = -L . --target=$(TARGET)
 
@@ -11,6 +25,23 @@ GUIX_FLAGS = -L . --target=$(TARGET)
 # OFF unless this file turns it on -- so a plain checkout cannot build the
 # development conveniences by accident.
 -include local.mk
+
+# CI / preprovisioned toolchains.  Every host suite below runs fine under an
+# ordinary distro toolchain: they compile verbatim sources extracted from the
+# patches and read committed fixtures, and none evaluates a Guix module,
+# computes a derivation, or inspects the store.  The `guix shell' prefixes are
+# toolchain convenience, not a correctness requirement.  Set HOST_TOOLCHAIN=1
+# to use whatever is already on PATH:
+#
+#   make check-host HOST_TOOLCHAIN=1
+#
+# Opt-in: a plain `make check-host' behaves exactly as it always has, so a
+# developer's reproducible toolchain is never silently bypassed.
+ifeq ($(HOST_TOOLCHAIN),1)
+guix-shell =
+else
+guix-shell = guix shell $(1) --
+endif
 # Volatile by design: /tmp does not survive a host reboot, so rebuild
 # (or copy out) anything a later deploy will reference.  The
 # /tmp/opencode root is a historical name (a previous coding tool) that
@@ -30,8 +61,9 @@ FIXTURE ?= os1-used
 # (linux-pinenote-debug); remove with the debug patch when done.
 FLAVORS = minimal slim networked dev usb-console usb-console-linux-6-6 reader reader-debug
 
-.PHONY: help packages kernel kernel-drv qemu-smoke qemu-virt qemu-virt-check \
-         check-host wbf-check ebc-logic-check ebc-barrier-check rastersim-check koreader-input-check orientation-check optics-check power-check rockchip-pm-check activation-positive-check suspend-check \
+.PHONY: help packages kernel kernel-drv reader-system-drv qemu-smoke qemu-virt qemu-virt-check \
+         check-host wbf-check wbf-notice ebc-logic-check ebc-barrier-check rastersim-check koreader-input-check orientation-check optics-check power-check rockchip-pm-check activation-positive-check suspend-check \
+         battery-dtb-check library-check ultra-coupling-check \
         $(FLAVORS) $(addprefix image-,$(FLAVORS)) $(addprefix rootfs-,$(FLAVORS))
 
 help:
@@ -75,8 +107,22 @@ $(addprefix rootfs-,$(FLAVORS)): rootfs-%:
 	echo "rootfs ready: $$rootfs"
 
 kernel-drv:
-	$(GUIX) build -d -L . --target=$(TARGET) \
+	@# --no-grafts is what makes this the cheap gate doc/testing.md advertises.
+	@# `guix build -d' WITH grafting has to realize the ungrafted output in
+	@# order to compute references, i.e. it performs a REAL cross kernel build
+	@# -- the exact opposite of a derivation-only check.  Measured on this
+	@# tree: 0.64s with --no-grafts, versus a full (currently failing) compile
+	@# without it.  Grafts are irrelevant when all you want is the drv hash.
+	$(GUIX) build -d --no-grafts $(GUIX_FLAGS) \
 	  -e '(@ (pinenote packages kernel) linux-pinenote)'
+
+# Rung 2, and the only gate that reads services/*.scm and systems/*.scm AS
+# SCHEME.  Nothing in rung 1 evaluates them, so a broken gexp -- a typo'd
+# field, an unbound variable inside a service definition -- is invisible until
+# something lowers the system.  Cheap for the same --no-grafts reason.
+reader-system-drv:
+	$(GUIX) system build -d --no-grafts $(GUIX_FLAGS) \
+	  pinenote/systems/pinenote-reader.scm
 
 kernel:
 	$(GUIX) build -L . --target=$(TARGET) \
@@ -103,7 +149,7 @@ qemu-virt:
 	mkdir -p $(ARTIFACTS); \
 	bundle=$(ARTIFACTS)/pinenote-virt-bundle-$$stamp; \
 	disk=$(ARTIFACTS)/pinenote-virt-disk-$$stamp.img; \
-	guix shell e2fsprogs gptfdisk qemu -- sh -c "\
+	$(call guix-shell,e2fsprogs gptfdisk qemu) sh -c "\
 	  pinenote/scripts/preflight/stage-boot-bundle-from-rootfs.sh '$(ROOTFS)' \"$$bundle\" && \
 	  pinenote/scripts/qemu/make-virt-disk.sh '$(ROOTFS)' \"$$disk\" $(WAVEFORM) && \
 	  pinenote/scripts/qemu/run-pinenote-virt.sh \"$$bundle\" \"$$disk\""
@@ -121,7 +167,7 @@ qemu-virt-check:
 	mkdir -p $(ARTIFACTS); \
 	bundle=$(ARTIFACTS)/pinenote-virtchk-bundle-$$stamp; \
 	disk=$(ARTIFACTS)/pinenote-virtchk-disk-$$stamp.img; \
-	guix shell e2fsprogs gptfdisk qemu -- sh -c "\
+	$(call guix-shell,e2fsprogs gptfdisk qemu) sh -c "\
 	  pinenote/scripts/preflight/stage-boot-bundle-from-rootfs.sh '$(ROOTFS)' \"$$bundle\" && \
 	  pinenote/scripts/qemu/make-virt-disk.sh '$(ROOTFS)' \"$$disk\" $(WAVEFORM) && \
 	  pinenote/scripts/qemu/run-virt-assertions.sh \"$$bundle\" \"$$disk\""
@@ -141,7 +187,7 @@ qemu-data-check:
 	bundle=$(ARTIFACTS)/pinenote-datachk-bundle-$$stamp; \
 	disk=$(ARTIFACTS)/pinenote-datachk-disk-$$stamp.img; \
 	data=$(ARTIFACTS)/pinenote-datachk-data-$$stamp.img; \
-	guix shell e2fsprogs gptfdisk qemu -- sh -c "\
+	$(call guix-shell,e2fsprogs gptfdisk qemu) sh -c "\
 	  pinenote/scripts/qemu/make-data-fixture.sh $(FIXTURE) \"$$data\" && \
 	  pinenote/scripts/preflight/stage-boot-bundle-from-rootfs.sh '$(ROOTFS)' \"$$bundle\" && \
 	  pinenote/scripts/qemu/make-virt-disk.sh '$(ROOTFS)' \"$$disk\" '$(WAVEFORM)' \"$$data\" && \
@@ -158,7 +204,7 @@ qemu-virt-visual:
 	mkdir -p $(ARTIFACTS); \
 	bundle=$(ARTIFACTS)/pinenote-virtvis-bundle-$$stamp; \
 	disk=$(ARTIFACTS)/pinenote-virtvis-disk-$$stamp.img; \
-	guix shell e2fsprogs gptfdisk qemu -- sh -c "\
+	$(call guix-shell,e2fsprogs gptfdisk qemu) sh -c "\
 	  pinenote/scripts/preflight/stage-boot-bundle-from-rootfs.sh '$(ROOTFS)' \"$$bundle\" && \
 	  pinenote/scripts/qemu/make-virt-disk.sh '$(ROOTFS)' \"$$disk\" $(WAVEFORM) && \
 	  pinenote/scripts/qemu/run-virt-visual.sh \"$$bundle\" \"$$disk\""
@@ -168,22 +214,52 @@ qemu-virt-visual:
 # command.  wbf-check hard-requires WBF=, so it joins only when WBF is
 # set; ebc-logic-check and rastersim-check accept the same optional WBF
 # and skip their waveform-gated tests without it.
-check-host: $(if $(WBF),wbf-check) ebc-logic-check ebc-barrier-check \
-        rastersim-check koreader-input-check orientation-check optics-check \
-        power-check rockchip-pm-check activation-positive-check suspend-check \
-        library-check ultra-coupling-check
+# The rung-1 roster.  Single source of truth: CI shards it with SKIP_CHECKS=
+# rather than restating it, so a suite added here is picked up automatically
+# instead of quietly missing from CI.
+CHECK_HOST_TARGETS = ebc-logic-check ebc-barrier-check rastersim-check \
+        koreader-input-check orientation-check optics-check power-check \
+        rockchip-pm-check activation-positive-check suspend-check \
+        library-check ultra-coupling-check battery-dtb-check
+
+# Parse time, not recipe time: a recipe-level guard would run only AFTER every
+# prerequisite had already completed, so it could not prevent the mistake it
+# exists to catch.
+ifneq ($(filter-out $(CHECK_HOST_TARGETS),$(SKIP_CHECKS)),)
+$(error SKIP_CHECKS names a target not in CHECK_HOST_TARGETS: $(filter-out $(CHECK_HOST_TARGETS),$(SKIP_CHECKS)))
+endif
+
+check-host: wbf-notice $(if $(WBF),wbf-check) \
+        $(filter-out $(SKIP_CHECKS),$(CHECK_HOST_TARGETS))
+
+# Announce the waveform coverage gap on EVERY run, so a local green is as
+# honest as a CI green.  doc/testing.md: "absence of an error is not a passing
+# test."  The waveform is per-device calibration and is never committed, so CI
+# can NEVER cover the parser -- that has to be said out loud rather than
+# inferred from a badge.
+wbf-notice:
+	@if [ -n "$(WBF)" ]; then echo "wbf-check: enabled (WBF=$(WBF))"; else \
+	  echo 'SKIP: wbf-check and every waveform-gated test -- WBF= is unset.'; \
+	  echo '      The waveform is per-device calibration and is NEVER committed,'; \
+	  echo '      so CI cannot cover it. Run locally: make check-host WBF=/path/to/ebc.wbf'; fi
+	@test -z "$(SKIP_CHECKS)" || printf 'SKIP: %s -- excluded by SKIP_CHECKS\n' '$(SKIP_CHECKS)'
+
+# The generated-battery-DTB inspector's own self-test.  It has been in the tree
+# and executed by no make target, which is the coverage-rot failure mode.
+battery-dtb-check:
+	$(call guix-shell,dtc) sh pinenote/scripts/preflight/test-inspect-pinenote-battery-dtb.sh
 
 # Host-side waveform parser tests (offline ladder rung 1); needs the
 # per-device .wbf (never committed): make wbf-check WBF=/path/to/ebc.wbf
 wbf-check:
-	guix shell gcc-toolchain python -- $(MAKE) -C pinenote/tools/wbf check WBF=$(WBF)
+	$(call guix-shell,gcc-toolchain python) $(MAKE) -C pinenote/tools/wbf check WBF=$(WBF)
 
 # EBC driver logic unit tests against the verbatim rockchip_ebc.c from
 # the forward-port patch (offline ladder rung 2). WBF optional; without
 # it the waveform-dependent tests are skipped:
 #   make ebc-logic-check [WBF=/path/to/ebc.wbf]
 ebc-logic-check:
-	guix shell gcc-toolchain python -- $(MAKE) -C pinenote/tools/ebc-logic check WBF=$(WBF)
+	$(call guix-shell,gcc-toolchain python) $(MAKE) -C pinenote/tools/ebc-logic check WBF=$(WBF)
 	@# The harness does not define CONFIG_DRM_FBDEV_EMULATION, so the suite
 	@# above is blind to the deferred-io drain and to its ordering against
 	@# the wash. That ordering is worth one whole visible refresh pass.
@@ -193,13 +269,13 @@ ebc-logic-check:
 # diagnostic.  It extracts the barrier UAPI from the permanent kernel patch;
 # this target never invokes --run or opens device nodes.
 ebc-barrier-check:
-	guix shell gcc-toolchain python -- $(MAKE) -C pinenote/tools/ebc-barrier check
+	$(call guix-shell,gcc-toolchain python) $(MAKE) -C pinenote/tools/ebc-barrier check
 
 # Gray8->Y4 raster library + waveform simulator tests (offline ladder
 # rung 3). WBF optional; without it the waveform-dependent tests are
 # skipped: make rastersim-check [WBF=/path/to/ebc.wbf]
 rastersim-check:
-	guix shell gcc-toolchain python -- $(MAKE) -C pinenote/tools/rastersim check WBF=$(WBF)
+	$(call guix-shell,gcc-toolchain python) $(MAKE) -C pinenote/tools/rastersim check WBF=$(WBF)
 
 # KOReader input-routing tests against the verbatim bundle sources
 # (native koreader-bin, resolved via `guix build` -- cached; override
@@ -209,29 +285,29 @@ koreader-input-check:
 	$(MAKE) -C pinenote/tools/koreader-input check KOREADER_BUNDLE=$(KOREADER_BUNDLE)
 
 orientation-check:
-	guix shell luajit -- $(MAKE) -C pinenote/tools/orientation check
+	$(call guix-shell,luajit) $(MAKE) -C pinenote/tools/orientation check
 
 # E-ink optical-defect detectors (optics harness analysis core). Deterministic
 # validation of the flash/ghost/settle/double-flash classifiers against
 # synthetic clips with known injected defects; no camera, no device.
 #   make optics-check
 optics-check:
-	guix shell python python-numpy python-scipy python-pillow ffmpeg -- $(MAKE) -C pinenote/tools/optics check
+	$(call guix-shell,python python-numpy python-scipy python-pillow ffmpeg) $(MAKE) -C pinenote/tools/optics check
 
 # Read-only power snapshot/delta recorder tests.  Guile is present in the
 # final4 system profile and the tool uses only base Guile modules.  luajit
 # joins for the auto-suspend post-wake policy gate, which executes the
 # daemon's own extracted source.
 power-check:
-	guix shell guile python luajit -- $(MAKE) -C pinenote/tools/power check
+	$(call guix-shell,guile python luajit) $(MAKE) -C pinenote/tools/power check
 
 rockchip-pm-check:
-	guix shell dtc gcc-toolchain git python -- $(MAKE) -C pinenote/tools/rockchip-pm check
+	$(call guix-shell,dtc gcc-toolchain git python) $(MAKE) -C pinenote/tools/rockchip-pm check
 
 # Deliberately composite: the positive fake scenarios may pass only alongside
 # the unchanged production hard-off gate. Nothing here can write power state.
 activation-positive-check:
-	guix shell dtc gcc-toolchain git python luajit -- sh -c 'set -e; \
+	$(call guix-shell,dtc gcc-toolchain git python luajit) sh -c 'set -e; \
 	  $(MAKE) -C pinenote/tools/power power-capabilities-check; \
 	  $(MAKE) -C pinenote/tools/power ebc-sleep-frame-check; \
 	  luajit pinenote/tools/power/test-power-coordinator.lua; \
@@ -281,10 +357,10 @@ ultra-coupling-check:
 	sh pinenote/scripts/preflight/validate-ultra-coupling.sh
 
 suspend-check:
-	guix shell dtc python luajit -- sh pinenote/scripts/preflight/test-inspect-pinenote-suspend-gates.sh
+	$(call guix-shell,dtc python luajit) sh pinenote/scripts/preflight/test-inspect-pinenote-suspend-gates.sh
 	sh pinenote/scripts/preflight/validate-tps65185-pm-hunk.sh
 	sh pinenote/scripts/preflight/validate-ebc-fbdev-resume-hunk.sh
 	sh pinenote/scripts/preflight/validate-ebc-resume-baseline-hunk.sh
 	sh pinenote/scripts/preflight/validate-ebc-timeout-asymmetry.sh
 	sh pinenote/scripts/preflight/validate-dmc-default-off.sh
-	guix shell python -- sh pinenote/scripts/preflight/test-validate-ebc-fbdev-resume-hunk.sh
+	$(call guix-shell,python) sh pinenote/scripts/preflight/test-validate-ebc-fbdev-resume-hunk.sh
