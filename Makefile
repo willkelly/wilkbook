@@ -146,7 +146,7 @@ reader-system-drv:
 #   make kernel-version-check TIME_MACHINE=1  PASSES (7.0.11 via channels.scm).
 #
 # Deliberately NOT in CHECK_HOST_TARGETS: the CI runner installs no Guix.
-KERNEL_EXPECT ?= linux-pinenote-7.0.
+KERNEL_EXPECT ?= linux-pinenote-7.1.
 kernel-version-check:
 	@set -e; \
 	drv=$$($(GUIX) build -d --no-grafts $(GUIX_FLAGS) \

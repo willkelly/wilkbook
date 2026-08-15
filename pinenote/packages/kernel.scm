@@ -34,7 +34,7 @@
 ;; the series, and the upgrade procedure in doc/kernel-forward-port.md says what
 ;; re-proving costs.  Moving OFF 7.0.x is a deliberate forward-port project,
 ;; not a `guix pull' side effect -- which is the entire point of this line.
-(define %linux-pinenote-base nongnu:linux-7.0)
+(define %linux-pinenote-base nongnu:linux-7.1)
 
 (define %linux-pinenote-6.6-version "6.6.30-pinenote")
 
