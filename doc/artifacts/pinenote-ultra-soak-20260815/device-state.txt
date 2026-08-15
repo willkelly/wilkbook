@@ -1,0 +1,82 @@
+== identity
+/dev/mmcblk0p6
+pinenote-reader
+Sat Aug 15 04:05:21 AM UTC 2026
+7.0.11
+== uptime
+534266.44 76416.78
+== battery
+charge_now=2345048
+charge_full=4000000
+capacity=59
+status=Discharging
+== suspend_stats
+success=170
+fail=0
+last_failed_step=resume
+== autosuspend config
+/var/lib/pinenote/autosuspend.conf: 
+/data/wilkbook/autosuspend.conf: enabled=1 idle=300 backstop=3600 
+== autosuspend log size
+208 /var/log/pinenote-autosuspend.log
+== resume series (last 60)
+2026-08-12 18:29:14 [autosuspend] resumed after 3596s (charge_now=2698164)
+2026-08-12 19:29:38 [autosuspend] resumed after 3596s (charge_now=2692660)
+2026-08-12 20:30:03 [autosuspend] resumed after 3597s (charge_now=2687328)
+2026-08-12 21:30:28 [autosuspend] resumed after 3596s (charge_now=2681996)
+2026-08-12 22:30:53 [autosuspend] resumed after 3597s (charge_now=2676836)
+2026-08-12 23:31:18 [autosuspend] resumed after 3597s (charge_now=2671676)
+2026-08-13 00:31:43 [autosuspend] resumed after 3597s (charge_now=2666344)
+2026-08-13 01:32:07 [autosuspend] resumed after 3596s (charge_now=2660840)
+2026-08-13 02:32:32 [autosuspend] resumed after 3597s (charge_now=2655508)
+2026-08-13 03:32:57 [autosuspend] resumed after 3597s (charge_now=2650176)
+2026-08-13 04:33:22 [autosuspend] resumed after 3596s (charge_now=2644672)
+2026-08-13 05:33:46 [autosuspend] resumed after 3596s (charge_now=2639340)
+2026-08-13 06:34:11 [autosuspend] resumed after 3597s (charge_now=2633836)
+2026-08-13 07:34:36 [autosuspend] resumed after 3597s (charge_now=2628504)
+2026-08-13 08:35:01 [autosuspend] resumed after 3597s (charge_now=2622828)
+2026-08-13 09:35:26 [autosuspend] resumed after 3597s (charge_now=2616980)
+2026-08-13 10:35:51 [autosuspend] resumed after 3597s (charge_now=2611476)
+2026-08-13 11:36:16 [autosuspend] resumed after 3597s (charge_now=2605800)
+2026-08-13 12:36:41 [autosuspend] resumed after 3597s (charge_now=2600296)
+2026-08-13 13:37:05 [autosuspend] resumed after 3596s (charge_now=2594792)
+2026-08-13 14:37:30 [autosuspend] resumed after 3597s (charge_now=2589116)
+2026-08-13 15:37:55 [autosuspend] resumed after 3597s (charge_now=2583612)
+2026-08-13 15:42:13 [autosuspend] resumed after 229s (charge_now=2581548)
+2026-08-13 16:42:20 [autosuspend] resumed after 3597s (charge_now=2577076)
+2026-08-13 17:47:25 [autosuspend] resumed after 3597s (charge_now=2560220)
+2026-08-13 18:47:50 [autosuspend] resumed after 3597s (charge_now=2554888)
+2026-08-13 19:48:14 [autosuspend] resumed after 3596s (charge_now=2549556)
+2026-08-13 20:48:39 [autosuspend] resumed after 3597s (charge_now=2544052)
+2026-08-13 21:49:04 [autosuspend] resumed after 3596s (charge_now=2538376)
+2026-08-13 22:49:29 [autosuspend] resumed after 3597s (charge_now=2532700)
+2026-08-13 23:49:55 [autosuspend] resumed after 3597s (charge_now=2527024)
+2026-08-14 00:50:19 [autosuspend] resumed after 3596s (charge_now=2521692)
+2026-08-14 01:50:44 [autosuspend] resumed after 3597s (charge_now=2516016)
+2026-08-14 02:51:08 [autosuspend] resumed after 3596s (charge_now=2510684)
+2026-08-14 03:51:32 [autosuspend] resumed after 3596s (charge_now=2504836)
+2026-08-14 04:51:57 [autosuspend] resumed after 3597s (charge_now=2499332)
+2026-08-14 05:32:56 [autosuspend] resumed after 2426s (charge_now=2494000)
+2026-08-14 06:33:03 [autosuspend] resumed after 3596s (charge_now=2489528)
+2026-08-14 07:38:09 [autosuspend] resumed after 3597s (charge_now=2470780)
+2026-08-14 08:38:33 [autosuspend] resumed after 3597s (charge_now=2465276)
+2026-08-14 09:38:58 [autosuspend] resumed after 3597s (charge_now=2459772)
+2026-08-14 10:39:22 [autosuspend] resumed after 3596s (charge_now=2454440)
+2026-08-14 11:39:46 [autosuspend] resumed after 3596s (charge_now=2449108)
+2026-08-14 12:40:11 [autosuspend] resumed after 3597s (charge_now=2443432)
+2026-08-14 13:40:35 [autosuspend] resumed after 3596s (charge_now=2438100)
+2026-08-14 14:41:00 [autosuspend] resumed after 3597s (charge_now=2432424)
+2026-08-14 15:41:25 [autosuspend] resumed after 3597s (charge_now=2426920)
+2026-08-14 16:41:50 [autosuspend] resumed after 3597s (charge_now=2421416)
+2026-08-14 17:42:14 [autosuspend] resumed after 3597s (charge_now=2415912)
+2026-08-14 18:42:39 [autosuspend] resumed after 3597s (charge_now=2410580)
+2026-08-14 19:43:05 [autosuspend] resumed after 3597s (charge_now=2405248)
+2026-08-14 20:43:29 [autosuspend] resumed after 3596s (charge_now=2399744)
+2026-08-14 21:43:54 [autosuspend] resumed after 3596s (charge_now=2394584)
+2026-08-14 22:44:20 [autosuspend] resumed after 3596s (charge_now=2389252)
+2026-08-14 23:44:44 [autosuspend] resumed after 3596s (charge_now=2383576)
+2026-08-15 00:45:09 [autosuspend] resumed after 3597s (charge_now=2377900)
+2026-08-15 01:45:34 [autosuspend] resumed after 3596s (charge_now=2372224)
+2026-08-15 02:46:00 [autosuspend] resumed after 3597s (charge_now=2366720)
+2026-08-15 03:46:25 [autosuspend] resumed after 3596s (charge_now=2361044)
+2026-08-15 04:01:04 [autosuspend] resumed after 850s (charge_now=2358464)
