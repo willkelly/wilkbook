@@ -12,7 +12,29 @@
 ;; (request paths become /*(DEBLOBBED)*/), which blocks the PineNote's
 ;; Broadcom Wi-Fi even when the firmware files are present.  See
 ;; doc/kernel-forward-port.md.
-(define %linux-pinenote-base nongnu:linux)
+;;
+;; PINNED TO A SERIES, deliberately.  This was `nongnu:linux' -- a FLOATING
+;; alias for whatever kernel.org release nonguix currently packages -- so the
+;; kernel this repo built was decided by when the developer last ran `guix
+;; pull', not by anything in the repo.  It moved to 7.1 and `make kernel'
+;; stopped working entirely: mainline picked up commit 1d608a269e24, which is
+;; the battery/charger DTS backport the forward-port patch also carries, and
+;; dtc rejects the duplicate nodes (issue #13, doc/kernel-forward-port.md).
+;;
+;; A SERIES pin, not an exact-version pin, and that is a judgement call:
+;;   * it eliminates the whole 7.0 -> 7.1 class of breakage, which is the one
+;;     that actually bit and the one that silently changes what ships;
+;;   * it still accepts 7.0.x POINT releases, so security fixes arrive without
+;;     a commit here.  Those do not touch arch DTS in practice -- verified for
+;;     the 7.0.11 -> 7.0.14 step (see doc/kernel-forward-port.md, "Upgrading
+;;     the kernel"), not assumed.
+;;
+;; The exact hardware-proven version is 7.0.11 (doc/status.md).  Anything else
+;; in 7.0.x is *accepted* but not *proven*; `make kernel-version-check' asserts
+;; the series, and the upgrade procedure in doc/kernel-forward-port.md says what
+;; re-proving costs.  Moving OFF 7.0.x is a deliberate forward-port project,
+;; not a `guix pull' side effect -- which is the entire point of this line.
+(define %linux-pinenote-base nongnu:linux-7.0)
 
 (define %linux-pinenote-6.6-version "6.6.30-pinenote")
 
