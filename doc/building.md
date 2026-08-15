@@ -70,16 +70,41 @@ the first thing to check.
   image pulls tens of GB into `/gnu/store`. With substitutes, most of
   the toolchain arrives prebuilt and only the PineNote-specific
   packages compile locally.
-- **Reproducibility caveat — the make targets call the *ambient*
-  `guix`.** `channels.scm` is a courtesy copy of the channel set; no
-  build path consumes it (`guix time-machine` integration is an open
-  task). What you build against is whatever your last `guix pull`
-  produced. The known-good channel set — every hardware-validated image since
+- **`TIME_MACHINE=1` builds against the pin; without it you build
+  against your last `guix pull`.** Every build target routes through
+  `guix time-machine -C channels.scm --` when the flag is set:
+
+  ```sh
+  make rootfs-reader TIME_MACHINE=1     # pinned, reproducible
+  make rootfs-reader                    # ambient guix, whatever you pulled
+  ```
+
+  It is opt-in rather than the default because a cold cache has to
+  materialize the pinned Guix first, which would turn the cheap rung-2
+  gates (`make kernel-drv`, ~0.6 s) into a long build.
+
+  **This is not a theoretical difference.** `%linux-pinenote-base`
+  (`pinenote/packages/kernel.scm`) is bound to `nongnu:linux`, a
+  *floating* alias. Measured 2026-08-14: the pin resolves to
+  `linux-pinenote-7.0.11`, while a workstation pulled on 2026-08-11
+  resolves to `7.1.5` — where the forward-port patch collides with
+  mainline's own PineNote DTSI and `make kernel` fails outright in
+  `dtbs`. See issue #13.
+
+  Three `guix` call sites stay ambient **by design**, and are not
+  oversights: the `guix-shell` toolchain helper in the `Makefile`
+  (bypassed wholesale by `HOST_TOOLCHAIN=1`), `make channels-pin` (which
+  must describe the *ambient* guix or it could not regenerate the pin),
+  and `pinenote/tools/koreader-input/run-tests.sh`'s `guix build
+  koreader-bin` fallback (override with `KOREADER_BUNDLE=`).
+
+  The known-good channel set — every hardware-validated image since
   2026-06-05 built against it — is:
 
   ```
   guix    2cd0118  https://git.guix.gnu.org/guix.git        (master)
   nonguix 3ed7c20  https://gitlab.com/nonguix/nonguix       (master)
+  saayix  f0e272e  https://codeberg.org/look/saayix         (main)
   ```
 
   Record your own `guix describe` output alongside any image you

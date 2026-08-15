@@ -134,9 +134,10 @@ guix time-machine -C channels.scm -- \
 Or `make rootfs-reader`, which builds the image *and* extracts the
 rootfs you will actually write (an ext4 labelled `PNGuixRoot`) into
 `$(ARTIFACTS)`. Fair warning: a cold kernel cross-build is hours, not
-minutes. The raw `time-machine` command above is the pinned,
-byte-identical path (`doc/release.md`); the `make` wrappers call your
-*ambient* guix — see the caveat in `doc/building.md`. Day-to-day:
+minutes. Add `TIME_MACHINE=1` and the wrapper *is* the pinned,
+byte-identical path shown above — without it you build against whatever
+your last `guix pull` produced, which is currently a kernel that does not
+compile (`doc/building.md`, issue #13). Day-to-day:
 `make help`, `make kernel-drv` (seconds, before any real build),
 `make qemu-smoke`. The gitignored licensed fonts are optional — a fresh
 clone builds and runs with KOReader's bundled fallbacks

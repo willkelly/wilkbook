@@ -63,7 +63,7 @@ FLAVORS = minimal slim networked dev usb-console usb-console-linux-6-6 reader re
 
 .PHONY: help packages kernel kernel-drv reader-system-drv qemu-smoke qemu-virt qemu-virt-check \
          check-host wbf-check wbf-notice ebc-logic-check ebc-barrier-check rastersim-check koreader-input-check orientation-check optics-check power-check rockchip-pm-check activation-positive-check suspend-check \
-         battery-dtb-check library-check ultra-coupling-check \
+         battery-dtb-check time-machine-check kernel-version-check library-check ultra-coupling-check \
         $(FLAVORS) $(addprefix image-,$(FLAVORS)) $(addprefix rootfs-,$(FLAVORS))
 
 help:
@@ -72,6 +72,7 @@ help:
 	@echo "  image-<flavor>    build the raw-with-offset disk image"
 	@echo "  rootfs-<flavor>   image + extract + inspect PNGuixRoot rootfs into $(ARTIFACTS)"
 	@echo "  kernel-drv        compute the linux-pinenote derivation (cheap gate)"
+	@echo "  kernel-version-check  assert the resolved kernel is still 7.0.x (rung 2; needs guix)"
 	@echo "  kernel            build the forward-ported linux-pinenote"
 	@echo "  packages          build the helper/firmware packages"
 	@echo "  qemu-smoke        build the generic ARM64 QEMU smoke VM launcher"
@@ -88,6 +89,11 @@ help:
 	@echo "  rockchip-pm-check dormant BSP SIP/PM model, DTB, and zero-call checks"
 	@echo "  activation-positive-check  fake capabilities/coordinator + active PM scenario; production hard-off"
 	@echo "  suspend-check     offline fail-closed e-reader suspend qualification gates"
+	@echo
+	@echo "Flags:"
+	@echo "  TIME_MACHINE=1    build through channels.scm (pinned/reproducible; required for releases)"
+	@echo "  HOST_TOOLCHAIN=1  use the toolchain already on PATH instead of 'guix shell' (what CI does)"
+	@echo "  SKIP_CHECKS=..    omit named check-host members (must be in CHECK_HOST_TARGETS)"
 	@echo
 	@echo "Deployment is manual by design: see doc/hardware-deploy.md."
 
@@ -123,6 +129,33 @@ kernel-drv:
 reader-system-drv:
 	$(GUIX) system build -d --no-grafts $(GUIX_FLAGS) \
 	  pinenote/systems/pinenote-reader.scm
+
+# Is the kernel we would build still the one we have hardware-proven?
+#
+# %linux-pinenote-base is bound to nongnu:linux, a FLOATING alias, so the
+# answer depends on when you last ran `guix pull' rather than on anything in
+# this repo.  The resolved derivation NAME carries the version, so asking is
+# ~0.6s and needs no build.
+#
+# EXPECTED ASYMMETRY -- do not "fix" the red:
+#   make kernel-version-check                 FAILS on drifted channels (7.1.x),
+#                                             which is the entire point;
+#   make kernel-version-check TIME_MACHINE=1  PASSES (7.0.11 via channels.scm).
+#
+# Deliberately NOT in CHECK_HOST_TARGETS: the CI runner installs no Guix.
+KERNEL_EXPECT ?= linux-pinenote-7.0.
+kernel-version-check:
+	@set -e; \
+	drv=$$($(GUIX) build -d --no-grafts $(GUIX_FLAGS) \
+	         -e '(@ (pinenote packages kernel) linux-pinenote)' | tail -n 1); \
+	echo "resolved: $$drv"; \
+	case "$$drv" in \
+	  *$(KERNEL_EXPECT)*) echo "PASS: kernel base is $(KERNEL_EXPECT)x as expected"; ;; \
+	  *) echo "FAIL: expected $(KERNEL_EXPECT)x, resolved $$drv"; \
+	     echo "      The nonguix 'linux' alias has moved. Build with TIME_MACHINE=1,"; \
+	     echo "      or see issue #13 for pinning %linux-pinenote-base."; \
+	     exit 1 ;; \
+	esac
 
 kernel:
 	$(GUIX) build -L . --target=$(TARGET) \
@@ -220,7 +253,7 @@ qemu-virt-visual:
 CHECK_HOST_TARGETS = ebc-logic-check ebc-barrier-check rastersim-check \
         koreader-input-check orientation-check optics-check power-check \
         rockchip-pm-check activation-positive-check suspend-check \
-        library-check ultra-coupling-check battery-dtb-check
+        library-check ultra-coupling-check battery-dtb-check time-machine-check
 
 # Parse time, not recipe time: a recipe-level guard would run only AFTER every
 # prerequisite had already completed, so it could not prevent the mistake it
@@ -248,6 +281,11 @@ wbf-notice:
 # and executed by no make target, which is the coverage-rot failure mode.
 battery-dtb-check:
 	$(call guix-shell,dtc) sh pinenote/scripts/preflight/test-inspect-pinenote-battery-dtb.sh
+
+# Every recipe that invokes guix must go through $(GUIX), so TIME_MACHINE=1 can
+# pin it to channels.scm.  Pure text analysis of this file; needs no guix.
+time-machine-check:
+	sh pinenote/scripts/preflight/validate-time-machine-wiring.sh
 
 # Host-side waveform parser tests (offline ladder rung 1); needs the
 # per-device .wbf (never committed): make wbf-check WBF=/path/to/ebc.wbf

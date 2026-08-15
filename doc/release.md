@@ -35,7 +35,11 @@ tested. `README.md` says so at the top and means it.
 2. **Pin the channels**: `make channels-pin`, and commit `channels.scm`.
    Do this *before* building the artifact you intend to ship, or the pin
    describes a different tree than the one you built.
-3. **Build the artifact** (`make rootfs-reader`).
+3. **Build the artifact**: `make rootfs-reader TIME_MACHINE=1`. The flag
+   is not optional here — it is what routes the build through
+   `channels.scm`, and without it this step builds against your ambient
+   `guix` and quietly forfeits the byte-identical-rebuild claim made
+   three paragraphs above.
 4. **Write the manifest**: `make release-manifest ROOTFS=<the .ext4>`,
    which writes `SHA256SUMS` carrying the hash, the git description, and a
    pointer to `channels.scm`. Commit it.

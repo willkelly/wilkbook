@@ -280,6 +280,24 @@ It does not change Linux 7.0's `ROCKCHIP_SLEEP_PD_CONFIG=0xff` pmdomain ABI.
   the source values; `inspect-pinenote-battery-dtb.sh` also checks the compiled
   DTB and resolves its compiler-assigned phandle relationship.
 
+  **Mainline caught up: drop BOTH nodes on any 7.1+ rebase.** Commit
+  `1d608a269e24` is in mainline as of 7.1, so `rk3566-pinenote.dtsi`
+  now carries the battery profile and the charger child itself.
+  Building against a channel set whose `nongnu:linux` has moved to
+  7.1.x therefore fails in `dtbs`:
+
+  ```
+  rk3566-pinenote.dtsi:433.11-438.5: ERROR (duplicate_node_names):
+    /i2c@fdd40000/pmic@20/charger
+  ```
+
+  Both hunks collide — the root `battery: battery { … }` node near the
+  top of the forward-port patch **and** the `charger { … }` child
+  further down. **dtc stops at the first error**, so dropping only the
+  `charger` hunk moves the failure to `battery` rather than fixing it.
+  Measured 2026-08-14 (issue #13); `make kernel-version-check` now
+  detects the drift in ~0.6 s instead of at `dtbs` failure time.
+
 ### RK817 battery first boot is supervised
 
 The backport can cause the existing RK817 driver to probe for the first time;

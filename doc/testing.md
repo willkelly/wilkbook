@@ -156,8 +156,18 @@ device model, 7b, remains future work.)
     probe path while compiling the dormant typed model and parsing real DTBs
     carrying the donor property schema. Fast; catches
     driver-logic and waveform regressions.
-2. **Static Guix builds** — `make kernel-drv` (cheap derivation gate),
-   then `make kernel` / `make <flavor>` / `make rootfs-<flavor>`.
+2. **Static Guix builds** — `make kernel-drv` (cheap derivation gate:
+   ~0.6 s, and cheap *only* because of `--no-grafts`; with grafting,
+   `guix build -d` has to realize the ungrafted output and performs a
+   real cross kernel build), `make reader-system-drv` (the only gate
+   that reads `services/*.scm` and `systems/*.scm` **as Scheme** — rung
+   1 never evaluates them, so a broken gexp is invisible until here),
+   and `make kernel-version-check` (asserts the resolved kernel is
+   still 7.0.x; it *fails by design* on drifted channels and passes
+   with `TIME_MACHINE=1` — see `doc/kernel-forward-port.md` and issue
+   #13). Then `make kernel` / `make <flavor>` / `make rootfs-<flavor>`.
+   Add `TIME_MACHINE=1` to build against `channels.scm` rather than
+   your last `guix pull`.
 3. **Source + config inspection** —
    `guix shell git python -- pinenote/scripts/preflight/inspect-kernel-source.sh
    SOURCE RESOLVED_CONFIG` from the full checkout,
