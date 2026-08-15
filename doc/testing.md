@@ -71,6 +71,7 @@ with a clear message rather than fail.
 | `pinenote/tools/rockchip-pm` | 1 | Verbatim extracted BSP SIP/PM model and generic executor plus compiled-DTB donor/maximal fixtures: exact RK3568 bindings; standard OF metadata `compatible`, `name`, `status`; donor event ordering, GPIO/regulator limits, descriptive-only virtual-poweroff, fake-only unwind injection, strict source-tree validation, MEM-only production parsing, consumer-handle lifetime/locking, and proof that the real backend is linked while its active-driver `.prepare` edge is omitted | `make rockchip-pm-check` |
 | suspend preflight | 1 | Fail-closed config/DT/KOReader qualification fixtures: exact PM config lines, effectively enabled cover+RK817 wake identities, exact disabled policy bytes, and restricted two-value KOReader policy evaluation; plus structural gates over the TPS65185 PM hunk and the fbdev resume barrier, the latter with its own mutation suite | `make suspend-check` |
 | activation-positive composite | 1 | Runs the closed capability constructor, pure Lua coordinator, a separate compiled-DTB synthetic active Rockchip PM scenario through fake ops, and the unchanged production hard-off preflight in one gate. It cannot select the real backend or write `/sys/power/state` | `make activation-positive-check` |
+| `pinenote/tools/refresh-episodes` | 1 (analysis) / 4vc (capture) | Episode analysis for `[pn-refresh]` traces, from a qemu-virt campaign or a copy of a device's `reader-session.log`: discovers the panel extent from the traces (KOReader emits over-panel rects like `-28,0,1460,1872`, so anchoring on max area alone scores every real page turn as not-full-panel), then reports a gap-threshold **sweep** rather than a single sub-second count, runs of >2 rapid refreshes, and the issue-#14 menu antecedent — a flash\*/global wash **and** a full-panel `ui/partial` within 15 s — against its own base rate, with both halves also reported separately. `test-refresh-episodes.py` replays a fixture reconstructed from the issue's published structure and requires the published answers back (5 episodes, largest 8 in 2.26 s, 13 sub-second gaps, 4/5 antecedent, 131 ms floor) | `make refresh-episodes-check`; capture via `make qemu-pageturn-campaign` |
 | `pinenote/tools/ebc-damage-probe` | 6 (device-side) | Supervised LuaJIT probes that write chosen patterns into the mmapped framebuffer and count EBC IRQs — isolates deferred-io/damage-scheduling behavior from KOReader entirely (the instrument behind the fbcon-starvation and publish-on-call findings, and the `defio_delay_ms` sweep) | no `make` target; copy to the device, see its README and `doc/hardware-deploy.md` |
 | `pinenote/tools/ddr-sip-probe` | 6 (device-side) | Read-only go/no-go for the bl31 DRAM-frequency SIP: an out-of-tree module that issues version *queries* only and returns `-ENODEV` so it never stays loaded. Answered GO on 2026-08-06 (SIP v2, DRAM version 0x101) | no `make` target; cross-built and insmodded supervised, see its README and `doc/power-management.md` |
 | `pinenote/tools/ddr-dvfs-test` | 6 (device-side) | Supervised DDR `SET_RATE` campaign tool against the same SIP; performed this board's first DDR rate change (324 MHz, 2026-08-06, EBC quiesced for every switch). No `README.md` yet — its `procedure.md`/`protocol.md` are the coverage record | no `make` target; supervised sessions only, see `procedure.md` and `doc/power-management.md` |
@@ -215,6 +216,28 @@ device model, 7b, remains future work.)
    `[pn-refresh]` intent traces iterate without hardware — what the
    e-ink *optics* do with those updates stays on hardware and rung 7's
    simulators.
+   **4vc. Page-turn / menu campaign** (`make qemu-pageturn-campaign
+   ROOTFS=…`) — the same boot driven for minutes instead of one tap.
+   A persistent QMP driver walks a generated plan of page turns at
+   three cadences with menu open/dismiss cycles interleaved (the
+   antecedent 4 of the 5 issue-#14 field episodes share), logging a
+   host-clock ledger of every action; a console harvester then cats the
+   guest's own `[pn-refresh]` lines out of
+   `/var/log/reader-session.log`, and
+   `pinenote/tools/refresh-episodes/refresh-episodes.py` scores them
+   with the field analysis's own signature logic — threshold sweep,
+   episode runs, menu-antecedent rate against base. Coordinates are
+   MEASURED, not assumed: `CAMPAIGN_PROBE=1` writes a 3x3 grid plan and
+   dumps a screendump per tap. KOReader renders portrait into the
+   landscape framebuffer, so `logical_x = 1403 - fb_y`,
+   `logical_y = fb_x`, and the top-right dogear zone overrides the menu
+   zone (fb(160,120) toggles a bookmark, it does not open a menu).
+   **What this rung cannot show:** virtio-gpu absorbs a full-panel blit
+   in microseconds where the panel takes ~300 ms, and issue #14's 131 ms
+   floor argues the repeated refresh is waiting on the previous e-ink
+   pass — so any mechanism gated on real panel service time is absent
+   here. Reproducing an episode is strong evidence; not reproducing one
+   is weak.
 
 The orientation bridge is both offline- and hardware-validated (2026-07-19):
 the PineNote production self-test delivered MSC_RAW through its real evdev node,

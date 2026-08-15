@@ -61,7 +61,7 @@ FIXTURE ?= os1-used
 # (linux-pinenote-debug); remove with the debug patch when done.
 FLAVORS = minimal slim networked dev usb-console usb-console-linux-6-6 reader reader-debug
 
-.PHONY: help packages kernel kernel-drv reader-system-drv qemu-smoke qemu-virt qemu-virt-check \
+.PHONY: help packages kernel kernel-drv reader-system-drv qemu-smoke qemu-virt qemu-virt-check qemu-pageturn-campaign refresh-episodes-check \
          check-host wbf-check wbf-notice ebc-logic-check ebc-barrier-check rastersim-check koreader-input-check orientation-check optics-check power-check rockchip-pm-check activation-positive-check suspend-check \
          battery-dtb-check time-machine-check gexp-modules-check kernel-version-check library-check ultra-coupling-check \
         $(FLAVORS) $(addprefix image-,$(FLAVORS)) $(addprefix rootfs-,$(FLAVORS))
@@ -77,6 +77,8 @@ help:
 	@echo "  packages          build the helper/firmware packages"
 	@echo "  qemu-smoke        build the generic ARM64 QEMU smoke VM launcher"
 	@echo "  qemu-virt-check   mechanized virt boot assertions (ROOTFS=.. [WAVEFORM=..])"
+	@echo "  qemu-pageturn-campaign  scripted page-turn/menu campaign + [pn-refresh] episode analysis (ROOTFS=..)"
+	@echo "  refresh-episodes-check  self-test of the episode analyser against the issue-#14 fixture"
 	@echo "  check-host        every host suite needing no hardware ([WBF=..] adds wbf-check + waveform-gated tests)"
 	@echo "  wbf-check         waveform parser checks (WBF=..; never committed)"
 	@echo "  ebc-logic-check   extracted EBC driver logic checks ([WBF=..])"
@@ -242,6 +244,36 @@ qemu-virt-visual:
 	  pinenote/scripts/preflight/stage-boot-bundle-from-rootfs.sh '$(ROOTFS)' \"$$bundle\" && \
 	  pinenote/scripts/qemu/make-virt-disk.sh '$(ROOTFS)' \"$$disk\" $(WAVEFORM) && \
 	  pinenote/scripts/qemu/run-virt-visual.sh \"$$bundle\" \"$$disk\""
+
+# Scripted page-turn / menu campaign on the rung-4v boot (offline
+# reproduction attempt for issue #14, "occasional two-step page turns").
+# Drives many page turns with interleaved menu open/dismiss cycles --
+# the antecedent 4 of the 5 field episodes share -- harvests the guest's
+# own [pn-refresh] traces over the console, and scores them with the
+# same signature logic the issue analysis used (threshold sweep, episode
+# runs, menu-antecedent rate vs base).  Usage:
+#   make qemu-pageturn-campaign ROOTFS=<rootfs.ext4> [WAVEFORM=<file>] \
+#        [CAMPAIGN_TURNS=160] [CAMPAIGN_MENU_EVERY=8] [CAMPAIGN_PROBE=1]
+qemu-pageturn-campaign:
+	@test -n "$(ROOTFS)" || { echo "usage: make qemu-pageturn-campaign ROOTFS=<rootfs.ext4> [WAVEFORM=<file>]"; exit 2; }
+	@set -e; \
+	stamp=$$(date +%Y%m%d-%H%M%S); \
+	mkdir -p $(ARTIFACTS); \
+	bundle=$(ARTIFACTS)/pinenote-pageturn-bundle-$$stamp; \
+	disk=$(ARTIFACTS)/pinenote-pageturn-disk-$$stamp.img; \
+	$(call guix-shell,e2fsprogs gptfdisk qemu) sh -c "\
+	  pinenote/scripts/preflight/stage-boot-bundle-from-rootfs.sh '$(ROOTFS)' \"$$bundle\" && \
+	  pinenote/scripts/qemu/make-virt-disk.sh '$(ROOTFS)' \"$$disk\" $(WAVEFORM) && \
+	  CAMPAIGN_TURNS='$(CAMPAIGN_TURNS)' CAMPAIGN_MENU_EVERY='$(CAMPAIGN_MENU_EVERY)' \
+	  CAMPAIGN_PROBE='$(CAMPAIGN_PROBE)' CAMPAIGN_PLAN='$(CAMPAIGN_PLAN)' \
+	  pinenote/scripts/qemu/run-virt-pageturn-campaign.sh \"$$bundle\" \"$$disk\""
+
+# Self-test of the episode analyser (rung 1: no device, no VM, no guix).
+# It replays the issue-#14 field fixture and requires the published
+# numbers back out, so an offline campaign result and the field result
+# are known to be the same measurement.
+refresh-episodes-check:
+	python3 pinenote/tools/refresh-episodes/test-refresh-episodes.py
 
 # Aggregate host gate (doc/testing.md, validation-ladder rung 1): every
 # suite that needs no hardware and no per-device waveform, in one

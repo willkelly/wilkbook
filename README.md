@@ -15,7 +15,7 @@ honestly labelled:
 
 | What | Number | Provenance |
 |---|---|---|
-| RAM in use at boot | ~164 MB | the whole OS, KOReader included (operator-measured; committing a session record is [issue #1](../../issues)) |
+| RAM in use at boot | **~162 MiB** | the whole OS, KOReader painted, Wi-Fi up. **Measured** 2 min post-boot (`doc/artifacts/pinenote-boot-ram-20260815/`); ~148 MiB without the SSH session used to read it |
 | Awake, reading | ~157 mA | measured floor 156.9 mA; stock Debian idles ~230 mA on the same glass (`doc/alpha-expectations.md`, `doc/power-management.md`) |
 | Suspended | **4.64 mA** | **measured on hardware 2026-08-08** (`doc/artifacts/pinenote-ultra-r12-20260808/`) |
 | Standby, idle | **~30 days** | **measured** over 6.17 days unplugged, 5.47 mA (`doc/artifacts/pinenote-ultra-soak-20260815/`) |

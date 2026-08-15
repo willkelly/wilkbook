@@ -1,0 +1,51 @@
+=== t+20.0s (reader-session 5s old) ===
+== identity
+/dev/mmcblk0p6
+7.0.11
+Sat Aug 15 05:23:05 AM UTC 2026
+== HOW FAR INTO BOOT (seconds since boot)
+19.99
+== meminfo
+MemTotal:        3814716 kB
+MemFree:         3499408 kB
+MemAvailable:    3629324 kB
+Buffers:           19808 kB
+Cached:           137856 kB
+Shmem:             10268 kB
+Slab:              59792 kB
+SReclaimable:      19252 kB
+== free -m
+               total        used        free      shared  buff/cache   available
+Mem:            3725         181        3417          10         172        3544
+Swap:              0           0           0
+== top RSS
+  RSS COMMAND
+47660 shepherd
+38500 luajit
+ 8540 sshd-session
+ 7480 wpa_supplicant
+ 6132 sshd-session
+ 3828 udevd
+ 3716 ps
+ 3560 bash
+ 2380 dhcpcd
+ 2220 luajit
+ 2196 luajit
+== is the reader up?
+● Status of reader-session:
+  It is running since 05:23:00 AM (5 seconds ago).
+  Main PID: 577
+
+=== t+118.5s (settled) ===
+== uptime
+118.47
+== free -m
+               total        used        free      shared  buff/cache   available
+Mem:            3725         162        3434          10         174        3562
+Swap:              0           0           0
+== meminfo key
+MemTotal:        3814716 kB
+MemFree:         3516812 kB
+MemAvailable:    3648068 kB
+== my own ssh overhead
+14672 kB in sshd
