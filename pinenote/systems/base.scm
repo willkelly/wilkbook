@@ -2,7 +2,9 @@
   #:use-module (gnu bootloader)
   #:use-module ((gnu packages linux) #:select (wireless-regdb))
   #:use-module (pinenote images pinenote-bootloader)
-  #:use-module ((gnu services) #:select (service service-kind))
+  #:use-module ((gnu services) #:select (service service-kind modify-services))
+  #:use-module ((guix packages) #:select (package? package-name))
+  #:use-module ((srfi srfi-1) #:select (remove))
   #:use-module (gnu services base)
   #:use-module (gnu system)
   #:use-module (gnu system accounts)
@@ -47,12 +49,39 @@
         (service pinenote-ebc-test-service-type)
         (service pinenote-state-service-type)))
 
+;; %base-services registers udev RULE PROVIDERS -- lvm2, fuse, alsa-utils,
+;; crda -- and a provider is a whole package, pulled into the closure just to
+;; harvest its lib/udev/rules.d.  alsa-utils drags the entire ALSA userland
+;; (and, cross-compiling, its autotools bootstrap) into a device that has no
+;; audio stack, no mixer, and no way for a user to play anything: the reader
+;; runs KOReader on fbdev and nothing else.
+;;
+;; It is also, as of 2026-08-15, the thing that makes the image unbuildable
+;; here at all: cross-building alsa-lib bootstraps with libtoolize, and its
+;; automake dependency fails its own test suite locally while no substitute
+;; lands cleanly.  Dropping the rules is the correct change on its own terms
+;; and happens to remove that entire subtree.
+;;
+;; Only alsa-utils is dropped.  crda stays -- Wi-Fi regulatory domain is real
+;; on this device -- and lvm2/fuse are left alone as a deliberately minimal
+;; edit rather than a sweep.
+(define (%without-alsa-udev-rules services)
+  (modify-services services
+    (udev-service-type
+     config => (udev-configuration
+                (inherit config)
+                (rules (remove (lambda (r)
+                                 (and (package? r)
+                                      (string=? (package-name r) "alsa-utils")))
+                               (udev-configuration-rules config)))))))
+
 (define %base-services-without-guix
   ;; Release-slot flavors should not carry on-device package management unless
   ;; they explicitly opt in, as pinenote-dev does below.
-  (filter (lambda (base-service)
-            (not (eq? (service-kind base-service) guix-service-type)))
-          %base-services))
+  (%without-alsa-udev-rules
+   (filter (lambda (base-service)
+             (not (eq? (service-kind base-service) guix-service-type)))
+           %base-services)))
 
 (define %pinenote-base-services
   (append %pinenote-bringup-services %base-services-without-guix))
