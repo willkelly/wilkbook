@@ -163,12 +163,28 @@ console discipline, UART settings, post-mortem harvest — are in
 
 ## Committing
 
-Two-person repo (as of 2026-08). Convention: direct commits and pushes to
-`main` are fine for docs, host tools, and your own device's ledger;
-anything touching the forward-port patch, the other kernel patches, the
-safety model, or another operator's workflow goes through a short-lived
-branch and a review by the other person. Keep commits in logical
-increments with descriptive messages. `doc/status.md` entries are labeled
+Two-person repo (as of 2026-08). **Two remotes, two different rules
+(2026-08-15):**
+
+- **`github` is upstream and is PR-only.** Never push to
+  `github main`. Everything reaches it through a pull request, whatever
+  it touches — docs and host tools included.
+- **`origin` (Forgejo) is the working remote.** Merge and push to its
+  `main` freely.
+
+So the normal flow is: commit → push `origin main` → open a PR against
+`github` from a branch at the same commit. The forward-port stack, the
+other kernel patches, the safety model, and another operator's workflow
+additionally want a review before merge; everything else is a PR for the
+record, not for permission.
+
+**Never `git add -A` or `git add .` while an agent may be writing to the
+tree.** Stage explicit paths. On 2026-08-15 an `add -A` swept 1,390
+lines of a subagent's in-progress test harness into a commit whose
+message described a memory measurement; it was already pushed by the
+time anyone noticed, so the history stands uncorrected.
+
+Keep commits in logical increments with descriptive messages. `doc/status.md` entries are labeled
 by device/operator and updated after every hardware session — hardware
 truth is per-device, so never overwrite another operator's entries; add
 your own. Don't commit the per-device waveform, anything under a tool's
