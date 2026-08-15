@@ -336,6 +336,75 @@ then panics rather than returning into driver-core devres teardown. That panic
 is the last-resort fail-stop boundary for an impossible supported topology, not
 a claim that dynamic EBC removal is safe or supported.
 
+## Upgrading the kernel: the base is pinned to a SERIES
+
+`%linux-pinenote-base` (`pinenote/packages/kernel.scm`) is bound to
+**`nongnu:linux-7.0`**, not to `nongnu:linux`.
+
+It used to be the floating alias, and that meant the kernel this repo
+built was chosen by *when the developer last ran `guix pull`* rather
+than by anything in the repo. On 2026-08-14 the alias reached 7.1 and
+`make kernel` stopped working outright — mainline had picked up
+`1d608a269e24`, the battery/charger DTS backport this patch set also
+carries, and dtc rejected the duplicate nodes (issue #13).
+
+Two consequences, and the distinction between them is the whole policy:
+
+- **A point release inside 7.0.x arrives on its own.** Security fixes
+  should not need a commit here, and mainline does not touch arch DTS in
+  a point release.
+- **Leaving 7.0.x is a project, not a bump**, and cannot happen by
+  accident. `make kernel-version-check` asserts the series in ~0.6 s
+  without building anything.
+
+**The hardware-proven version is 7.0.11** (`doc/status.md`). Anything
+else in 7.0.x is *accepted* but not *proven*.
+
+### Accepting a point release (cheap, offline)
+
+Do this when `kernel-version-check` passes but the resolved version has
+moved — e.g. 7.0.11 → 7.0.14:
+
+1. Fetch the source:
+   `guix build -S --no-grafts -e '(@ (nongnu packages linux) linux-7.0)'`
+2. Unpack to a disposable tree and dry-run **every** patch, in the order
+   `%linux-pinenote-patches` lists them, applying each for real between
+   dry-runs so the next one sees the right tree.
+3. All seven must apply. If any rejects, stop — that is a series-bump
+   problem wearing a point-release costume.
+4. `make check-host` (the display trio compiles the *verbatim* driver
+   source out of the patch, so it is the gate that notices a silent
+   semantic change).
+
+**Record, 7.0.11 → 7.0.14 (2026-08-15):** all seven patches apply
+cleanly, and 7.0.14's `rk3566-pinenote.dtsi` carries neither the
+`simple-battery` node nor the `charger` child, so the 7.1 collision does
+not exist there. Verified by dry-run and by inspecting the mainline
+DTSI. **Not** verified: a full build, a DTB compile, or anything on
+glass. 7.0.11 remains the proven version.
+
+### Bumping the series (7.0 → 7.1+): expect to delete patch, not write it
+
+1. Change `%linux-pinenote-base` and update `KERNEL_EXPECT` in the
+   `Makefile`. Expect `kernel-version-check` to be the first thing that
+   moves.
+2. Dry-run all seven patches. **Failures here are the deliverable**, not
+   an obstacle — each one is either a hunk mainline absorbed (delete it)
+   or a hunk that needs rebasing (do that).
+3. **Known for 7.1:** mainline carries `1d608a269e24`, so **both** the
+   root `battery: battery { … }` hunk and the `charger { … }` child hunk
+   must be dropped. dtc stops at the first error, so dropping only
+   `charger` moves the failure rather than removing it. Confirmed
+   against the 7.1.5 source — see the patch-inventory entry above.
+4. Build. dtc and the compiler will name the *next* collision; the list
+   is not knowable in advance because each error hides the ones after it.
+5. `make check-host` green, then `make qemu-virt-check`.
+6. A hardware session. A kernel that boots in QEMU virt has not proven
+   the display, suspend, or wake paths — see "What only hardware can
+   prove" in `doc/testing.md`.
+7. Update `doc/status.md` with the new proven version, and this section's
+   "hardware-proven version" line.
+
 ## Refreshing the patch for a new kernel
 
 1. Check the current vanilla kernel version the package inherits:
