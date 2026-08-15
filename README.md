@@ -18,7 +18,9 @@ honestly labelled:
 | RAM in use at boot | ~164 MB | the whole OS, KOReader included (operator-measured; committing a session record is [issue #1](../../issues)) |
 | Awake, reading | ~157 mA | measured floor 156.9 mA; stock Debian idles ~230 mA on the same glass (`doc/alpha-expectations.md`, `doc/power-management.md`) |
 | Suspended | **4.64 mA** | **measured on hardware 2026-08-08** (`doc/artifacts/pinenote-ultra-r12-20260808/`) |
-| Standby | ~36 days | *arithmetic* from that draw; ~28 effective days with backstop wakes; the multi-day soak is running right now |
+| Standby, idle | **~30 days** | **measured** over 6.17 days unplugged, 5.47 mA (`doc/artifacts/pinenote-ultra-soak-20260815/`) |
+| Standby, as actually read | **~16 days** | same run, 10.07 mA — the difference is ~40 min/day of reading |
+| Suspend reliability | **170/170** | suspend cycles with zero failures over that run |
 
 "Measured" means a battery gauge, a wall clock, and the ABBA discipline
 in `doc/power-management.md`. "Arithmetic" means division. This repo
@@ -213,8 +215,9 @@ ping go dead. If it never sleeps, check
 `cat /data/wilkbook/autosuspend.conf` first — see the previous step.
 
 **6. Read.** Page turns are single-pass, the device suspends itself when
-you drift off, and it sips 4.64 mA while you sleep (one measured 40-minute bracket;
-the multi-day soak is running). What it should feel like, and what is
+you drift off, and it sips 4.64 mA while you sleep. Left idle it lasts
+**~30 days**; read ~40 min a day it lasts **~16** — both measured over a
+six-day unplugged run. What it should feel like, and what is
 known-broken: `doc/alpha-expectations.md`. That is the whole product.
 
 ## What to steal
@@ -332,14 +335,19 @@ build time, never hand-copied — so they cannot drift from the driver.
 - **Ultra suspend is in production** (2026-08-08): hrdl's rails-off
   configuration on the primary kernel, **4.64 mA measured on glass**
   (`doc/artifacts/pinenote-ultra-r12-20260808/`) against the superseded
-  deep's ~20 mA — ~36 days of pure suspend on paper, labelled
+  deep's ~20 mA. The six-day unplugged soak has since concluded:
+  **5.47 mA idle standby (~30 days) and 10.07 mA as actually read
+  (~16 days), 170 suspend cycles with zero failures**
+  (`doc/artifacts/pinenote-ultra-soak-20260815/`) — measured, not
   arithmetic. The device sleeps after 5 idle minutes; only the power
   button, the RTC backstop, and the charger can wake it — the rails-off
   tradeoff unpowers GPIO0 during suspend, so the pen cannot — though
   the cover demonstrably does wake it (2026-08-09), which the model does
   not yet explain.
-  A ≥3-day unplugged soak is RUNNING; until it concludes, multi-day
-  standby is arithmetic on one good measurement. SSH to a deployed
+  The soak has CONCLUDED (2026-08-15): 6.17 days unplugged, **170
+  suspend cycles with zero failures**, 5.47 mA idle (~30 days) and
+  10.07 mA as actually read (~16 days) —
+  `doc/artifacts/pinenote-ultra-soak-20260815/`. SSH to a deployed
   reader is intermittent while auto-suspend is enabled
   (`doc/device-access.md`).
 - **Kernel**: the vanilla-7.0.x forward port is the hardware-proven

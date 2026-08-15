@@ -7,9 +7,13 @@
   (`linux-pinenote-7.0-ultra-rails.patch`, matched pair enforced by
   `make ultra-coupling-check`); three consecutive rails-off resumes
   (RTC + power button); **4.64 mA measured** over a 40-min gauge bracket
-  vs deep's ~20 mA — ~36 days of pure suspend on paper. Wake sources
-  reduce to rk817-internal (RTC, power button, charger). The ≥3-day soak
-  is running. `doc/artifacts/pinenote-ultra-r12-20260808/`.
+  vs deep's ~20 mA. Wake sources reduce to rk817-internal (RTC, power
+  button, charger). **The soak has concluded (2026-08-15): 5.47 mA idle
+  standby → ~30 days, 10.07 mA as actually lived in → ~16 days, over
+  148 h unplugged with 170 suspend cycles and zero failures.** The
+  hourly backstop therefore costs ~0.83 mA, not the ~1.3 mA the 36→28
+  estimate assumed. `doc/artifacts/pinenote-ultra-r12-20260808/`,
+  `doc/artifacts/pinenote-ultra-soak-20260815/`.
 
 - **Deep suspend works** (2026-08-02): BSP SIP activation is live and
   bound (`cfg: 0x5ec`, wakeup-config `0x10`); the device enters `deep`,
@@ -43,6 +47,10 @@
   [Superseded 2026-08-08: ADOPTED — rails-off ultra resumes on both wake
   legs and ships on the primary kernel; the running multi-day soak is the
   outstanding suspend proof. See the lead bullet above.]
+  [Closed 2026-08-15: the soak concluded — 148 h unplugged, 170 suspend
+  cycles, zero failures, 5.47 mA idle standby and 10.07 mA as actually
+  read. `doc/artifacts/pinenote-ultra-soak-20260815/`. Cover wake and the
+  TPS `ENABLE` drift remain open.]
 
 The rest of this document accumulated with the program. Dated sections
 are session records and stand as written at their dates; where later

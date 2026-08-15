@@ -1,9 +1,9 @@
 # Hardware status
 
-Last updated: 2026-08-08. Update protocol: add a dated entry at the top
+Last updated: 2026-08-15. Update protocol: add a dated entry at the top
 after every hardware session; entries are per-device/per-operator.
 
-## Current state (2026-08-08)
+## Current state (2026-08-15)
 
 **Proven on glass**: KOReader on fbdev with pen, finger, frontlight, and
 SC7A20 autorotation on all four edges; temperature-compensated waveforms;
@@ -14,8 +14,12 @@ rails-off configuration on the primary kernel, three consecutive resumes
 superseded as the shipping suspend.
 
 **On os2 now**: promoted image `9a08803e…` (deployed 2026-08-08,
-readback-verified), auto-suspend ON (5 min idle → ultra), and the
-**≥3-day unplugged ultra soak IN PROGRESS** — exit criteria in
+readback-verified), auto-suspend ON (5 min idle → ultra). The **≥3-day
+unplugged ultra soak has CONCLUDED** — it ran 6.17 days and met its exit
+criteria: **170 suspend cycles, zero failures**, no forced power-off,
+and a measured standby figure at last — **5.47 mA idle (~30 days) and
+10.07 mA as actually read (~16 days)**
+(`doc/artifacts/pinenote-ultra-soak-20260815/`). Exit criteria in
 `doc/alpha-checklist.md` §3c. A failed wake gets the U-Boot `INT_STS`
 forensics *before* any forced power-off. Wake sources are rk817-internal
 (RTC alarm, power button, charger) **plus the cover, confirmed working
@@ -26,12 +30,48 @@ The cover mechanism is an open question, not a settled tradeoff.
 **Still true / still open**: DDR static-low ships `mode=off` (324 MHz
 corrupts the display silently); SSH to the deployed reader is
 intermittent while auto-suspend is enabled (`doc/device-access.md`); the
-TPS `ENABLE` 2f→20 delta is unexplained; standby has never been measured
-end-to-end — the running soak is that measurement.
+TPS `ENABLE` 2f→20 delta is unexplained. **Standby is now measured**, so
+the long-standing "arithmetic only" caveat is retired.
 
-**Next actions**: (1) let the soak finish and compute the standby figure
-from the daemon's `charge_now` series; (2) the human QC cycle
-(`doc/alpha-signoff.md`) on a post-soak image; (3) the alpha tag.
+**Next actions**: (1) the human QC cycle (`doc/alpha-signoff.md`) on a
+post-soak image; (2) the alpha tag.
+
+**2026-08-15 THE SOAK CONCLUDED — standby measured.** [wilkbook / wkelly]
+Harvested read-only over SSH from os2 while the device was still running;
+nothing written, nothing restarted. Window 2026-08-08 23:57:41 →
+2026-08-15 04:01:04 UTC (148.1 h, 6.17 d) on `/dev/mmcblk0p6`, Linux
+7.0.11 PREEMPT_RT, image `9a08803e…`. `charge_now` 3,848,844 →
+2,358,464 µAh = 1490.4 mAh consumed with **zero** gauge increases across
+170 samples, so the device was never on a charger and the series is
+monotonic. `/sys/power/suspend_stats`: **success=170, fail=0.**
+
+Idle standby, taken from the 119 hour-long backstop-to-backstop
+segments: **5.47 mA median** (mean 5.50, range 4.46–13.09) → **~30.5
+days** from 4000 mAh. Overall across the whole window, i.e. the device as
+actually lived in: **10.07 mA** → **~16.6 days**. The ~4.6 mA difference
+is awake time; against the 156.9 mA awake floor that implies roughly a
+3 % duty cycle, order of 40 min of reading per day.
+
+This corrects the standing projection in both directions. R12's 4.64 mA
+(a 40-min bracket containing no backstop wake) had been extrapolated to
+"~36 days pure, ~28 effective". Measured idle standby is 5.47 mA, so the
+hourly RTC backstop costs **~0.83 mA**, not the ~1.3 mA that estimate
+implied — the post-`626cb02` re-suspend-after-20s-settle is working, and
+the >30-day desired outcome is met on measurement rather than on paper.
+The reading term, which no prior figure carried, roughly halves it.
+
+Also from the log: 4 power taps correctly ignored inside the 2 s
+post-resume grace (that guard fires in the field); **2 cover-close
+suspends against 27 power-button presses**, quantifying the "fussy
+magnets" note in `doc/alpha-expectations.md`; and 3 ×
+`EBC still active after ~10s wait -- proceeding anyway` — cost nothing
+here since no suspend failed, but it is the one line in six days of logs
+that wants follow-up.
+
+Not proven: charging behaviour, gauge absolute accuracy, cold storage,
+or the single 13.09 mA idle-segment outlier. The window opened at ~96 %,
+not 100 %, so the day figures are projections from the measured rate
+rather than an observed run to empty.
 
 **2026-08-08 (night) THE ULTRA SOAK IS RUNNING.** [wilkbook / wkelly]
 Promoted image `9a08803e…` deployed to os2 (readback-verified), p7

@@ -115,8 +115,13 @@ endurance.  The soak is the endurance proof:
       fails the soak), no touch/Wi-Fi/display degradation across
       hundreds of cycles, and a measured multi-day standby figure to
       publish in place of the 4.64 mA × arithmetic.
-- [ ] The R12 measurement predicts ~28–36 days standby; the soak says
-      what a *lived-in* device actually gets.
+- [x] The R12 measurement predicted ~28–36 days standby. **The soak
+      answered it (2026-08-15): 5.47 mA idle → ~30 days, and 10.07 mA
+      as actually lived in → ~16 days, over 148 h unplugged with 170
+      suspend cycles and zero failures**
+      (`doc/artifacts/pinenote-ultra-soak-20260815/`). The estimate was
+      slightly pessimistic on standby and silent on the reading term,
+      which is the half a tester actually feels.
 
 ### 3b. ~~Original session B~~ — DONE 2026-08-07
 

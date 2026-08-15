@@ -2,7 +2,8 @@
 
 You have a PineNote running wilkbook's reader image. This page says what
 it should *feel* like, what is known-broken, and what to report. It is
-the operator's calibration, written 2026-08-08 — if your device does
+the operator's calibration, written 2026-08-08 and revised 2026-08-15
+with the measured soak figures — if your device does
 worse than this, that's a bug report; if it does better, brag.
 
 ## The feel
@@ -33,11 +34,31 @@ worse than this, that's a bug report; if it does better, brag.
   awake floor is 156.9 mA (frontlight off) against ~230 mA stock idle on
   the same hardware; the 1.3× is the operator's conservative real-use
   estimate, not the raw ratio.
-- **Suspend: the target is more than 30 days.** Measured suspend draw is
-  4.64 mA (2026-08-08, doc/artifacts/pinenote-ultra-r12-20260808/),
-  which is ~36 days of pure suspend on paper. A multi-day real-use soak
-  is in progress; until it concludes, treat ">30 days" as arithmetic
-  with one good measurement behind it, not a promise.
+- **Standby: about 30 days. In real use: about 16.** Both are measured,
+  from the same six-day unplugged run, and the difference between them
+  is *you reading the thing*:
+
+  | | draw | from a full charge |
+  |---|---|---|
+  | Sitting idle, suspending itself | 5.47 mA | **~30 days** |
+  | Actually being read (~40 min/day) | 10.07 mA | **~16 days** |
+
+  If you read more than that, expect less than 16. The honest way to
+  hold it: **a month in a bag, a couple of weeks in your hands.** Anyone
+  quoting only the 30 is quoting the number for a device nobody is
+  using.
+
+  Measured 2026-08-08 → 2026-08-15, 148 hours unplugged, never on a
+  charger (`doc/artifacts/pinenote-ultra-soak-20260815/`, raw log
+  committed). Earlier drafts of this page said ">30 days" from
+  arithmetic on a 40-minute sample; that estimate turned out slightly
+  *pessimistic* about standby and silent about reading, which is the
+  more useful half.
+
+- **It woke up every single time: 170 suspend cycles, zero failures**
+  over those six days, unattended. That is the number to weigh against
+  the warnings below about a device that will not wake — the failure is
+  taken seriously because it would be bad, not because it is common.
 - The device suspends itself after ~5 idle minutes (page + SUSPENDED
   banner, frontlight off), and a short power press suspends or wakes it
   on demand.
@@ -53,7 +74,10 @@ worse than this, that's a bug report; if it does better, brag.
   two devices. Expect it to be *fussy*: the switch is a magnetic sensor
   and the cover has to sit in roughly the right position, so a casual
   close sometimes does nothing. That is magnet alignment, not software —
-  if it misses, close it more deliberately. **Opening the cover also wakes it** —
+  if it misses, close it more deliberately. How fussy, measured: across
+  six days of ordinary use the operator's device logged **2 cover-close
+  suspends against 27 power-button presses**. It works; it is not what
+  anyone ends up using. **Opening the cover also wakes it** —
   confirmed on glass 2026-08-09. So the cover is a full sleep/wake
   gesture, alongside the power button, the RTC backstop, and the
   charger. Waking is a single short press. **If a press ever fails to
