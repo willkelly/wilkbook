@@ -1,0 +1,723 @@
+2026-08-08 23:41:11 ---------------------------------------------
+2026-08-08 23:41:11                 launching...
+2026-08-08 23:41:11   _  _____  ____                _
+2026-08-08 23:41:11  | |/ / _ \|  _ \ ___  __ _  __| | ___ _ __
+2026-08-08 23:41:11  | ' / | | | |_) / _ \/ _` |/ _` |/ _ \ '__|
+2026-08-08 23:41:11  | . \ |_| |  _ <  __/ (_| | (_| |  __/ |
+2026-08-08 23:41:11  |_|\_\___/|_| \_\___|\__,_|\__,_|\___|_|
+2026-08-08 23:41:11 
+2026-08-08 23:41:11  It's a scroll... It's a codex... It's KOReader!
+2026-08-08 23:41:11 
+2026-08-08 23:41:11  [*] Current time: 08/08/26-23:41:11
+2026-08-08 23:41:11 has monolibtic? no (libs/libkoreader-monolibtic.so: cannot open shared object file: No such file or directory)
+2026-08-08 23:41:11 lib_search_path: libs/?
+2026-08-08 23:41:11 lib_basic_format: lib%s.so
+2026-08-08 23:41:11 lib_version_format: lib%s.so.%s
+2026-08-08 23:41:11  [*] Version: v2026.03
+2026-08-08 23:41:11 
+2026-08-08 23:41:11 ffi.load: rt.so.1 (RTLD_GLOBAL)
+2026-08-08 23:41:11 ffi.findlib: utf8proc [3]
+2026-08-08 23:41:11 ffi.load: libs/libutf8proc.so.3
+2026-08-08 23:41:11 ffi.findlib: blitbuffer
+2026-08-08 23:41:11 ffi.load: libs/libblitbuffer.so
+2026-08-08 23:41:11 ffi.findlib: archive [13]
+2026-08-08 23:41:11 ffi.load: libs/libarchive.so.13
+2026-08-08 23:41:11 08/08/26-23:41:11 INFO  PineNote: flash_area_fraction=0.60 
+2026-08-08 23:41:11 08/08/26-23:41:11 INFO  PineNote: touch MT axes X=0..1871 Y=0..1403 (mirrored) 
+2026-08-08 23:41:11 08/08/26-23:41:11 INFO  PineNote: pen axes 20966x15725 -> screen 1872x1404 (scale 0.0893/0.0893) 
+2026-08-08 23:41:11 08/08/26-23:41:11 INFO  initializing for device PineNote 
+2026-08-08 23:41:11 08/08/26-23:41:11 INFO  framebuffer resolution: {
+2026-08-08 23:41:11   h = 1404,
+2026-08-08 23:41:11   w = 1872
+2026-08-08 23:41:11 } --[[table: 0x3fc83ef73c28]] 
+2026-08-08 23:41:11 ffi.findlib: wrap-mupdf
+2026-08-08 23:41:11 ffi.load: libs/libwrap-mupdf.so
+2026-08-08 23:41:11 ffi.findlib: sqlite3 [0]
+2026-08-08 23:41:11 ffi.load: libs/libsqlite3.so.0
+2026-08-08 23:41:11 08/08/26-23:41:11 INFO  Performing one-time migration for 20200421 
+2026-08-08 23:41:11 08/08/26-23:41:11 WARN  os.remove: /root/.config/koreader/cache/fontlist/fontinfo.dat: No such file or directory 
+2026-08-08 23:41:11 ffi.findlib: freetype [6]
+2026-08-08 23:41:11 ffi.load: libs/libfreetype.so.6
+2026-08-08 23:41:11 ffi.findlib: harfbuzz [0]
+2026-08-08 23:41:11 ffi.load: libs/libharfbuzz.so.0
+2026-08-08 23:41:11 ffi.findlib: zstd [1]
+2026-08-08 23:41:11 ffi.load: libs/libzstd.so.1
+2026-08-08 23:41:11 08/08/26-23:41:11 INFO  /root/.config/koreader/cache/fontlist/fontinfo.dat fopen: No such file or directory -> initializing it 
+2026-08-08 23:41:12 08/08/26-23:41:12 INFO  Performing one-time migration for 20210306 (1/2) 
+2026-08-08 23:41:12 08/08/26-23:41:12 INFO  Performing one-time migration for 20210306 (2/2) 
+2026-08-08 23:41:12 08/08/26-23:41:12 INFO  Performing one-time migration for 20210330 
+2026-08-08 23:41:12 ffi.findlib: leptonica [6]
+2026-08-08 23:41:12 ffi.load: libs/libleptonica.so.6
+2026-08-08 23:41:12 ffi.findlib: k2pdfopt [2]
+2026-08-08 23:41:12 ffi.load: libs/libk2pdfopt.so.2
+2026-08-08 23:41:12 08/08/26-23:41:12 INFO  Performing one-time migration for 20210404 
+2026-08-08 23:41:12 08/08/26-23:41:12 INFO  Performing one-time migration for 20210409 
+2026-08-08 23:41:12 08/08/26-23:41:12 WARN  os.rename: /root/.config/koreader/cache/fontinfo.dat: No such file or directory 
+2026-08-08 23:41:12 08/08/26-23:41:12 INFO  Performing one-time migration for 20210412 
+2026-08-08 23:41:12 08/08/26-23:41:12 WARN  os.rename: /root/.config/koreader/cache/calibre-libraries.lua: No such file or directory 
+2026-08-08 23:41:12 08/08/26-23:41:12 WARN  os.rename: /root/.config/koreader/cache/calibre-books.dat: No such file or directory 
+2026-08-08 23:41:12 08/08/26-23:41:12 INFO  Performing one-time migration for 20210414 
+2026-08-08 23:41:12 08/08/26-23:41:12 WARN  os.remove: /root/.config/koreader/cache/calibre/books.dat: No such file or directory 
+2026-08-08 23:41:12 08/08/26-23:41:12 INFO  Performing one-time migration for 20210503 & 20210508 
+2026-08-08 23:41:12 08/08/26-23:41:12 INFO  Performing one-time migration for 20210518 
+2026-08-08 23:41:12 08/08/26-23:41:12 INFO  Performing one-time migration for 20210521 
+2026-08-08 23:41:12 08/08/26-23:41:12 INFO  Performing one-time migration for 20210531 
+2026-08-08 23:41:12 08/08/26-23:41:12 INFO  Performing one-time migration for 20210622 
+2026-08-08 23:41:12 08/08/26-23:41:12 WARN  os.remove: /root/.config/koreader/cache/fontlist/fontinfo.dat: No such file or directory 
+2026-08-08 23:41:12 08/08/26-23:41:12 INFO  Performing one-time migration for 20210629 
+2026-08-08 23:41:12 08/08/26-23:41:12 INFO  Performing one-time migration for 20210715 
+2026-08-08 23:41:12 08/08/26-23:41:12 INFO  Performing one-time migration for 20210720 
+2026-08-08 23:41:12 08/08/26-23:41:12 INFO  Performing one-time migration for 20210831 
+2026-08-08 23:41:12 08/08/26-23:41:12 INFO  Performing one-time migration for 20210925 
+2026-08-08 23:41:12 08/08/26-23:41:12 INFO  Performing one-time migration for 20220116 
+2026-08-08 23:41:12 08/08/26-23:41:12 INFO  Performing one-time migration for 20220205 
+2026-08-08 23:41:12 08/08/26-23:41:12 INFO  Performing one-time migration for 20220819 
+2026-08-08 23:41:12 08/08/26-23:41:12 INFO  Performing one-time migration for 20220914 
+2026-08-08 23:41:12 08/08/26-23:41:12 WARN  os.remove: /root/.config/koreader/cache/fontlist/fontinfo.dat: No such file or directory 
+2026-08-08 23:41:12 08/08/26-23:41:12 INFO  Performing one-time migration for 20220930 
+2026-08-08 23:41:12 08/08/26-23:41:12 WARN  loadfile: cannot open /root/.config/koreader/defaults.persistent.lua: No such file or directory 
+2026-08-08 23:41:12 08/08/26-23:41:12 WARN  os.rename: /root/.config/koreader/defaults.persistent.lua: No such file or directory 
+2026-08-08 23:41:12 08/08/26-23:41:12 INFO  Performing one-time migration for 20221027 
+2026-08-08 23:41:12 08/08/26-23:41:12 INFO  Performing one-time migration for 20230531 
+2026-08-08 23:41:12 08/08/26-23:41:12 INFO  Performing one-time migration for 20230703 
+2026-08-08 23:41:12 08/08/26-23:41:12 INFO  Performing one-time migration for 20230707 
+2026-08-08 23:41:12 08/08/26-23:41:12 INFO  Performing one-time migration for 20230710 
+2026-08-08 23:41:12 08/08/26-23:41:12 INFO  Performing one-time migration for 20230731 
+2026-08-08 23:41:12 08/08/26-23:41:12 INFO  Performing one-time migration for 20230802 
+2026-08-08 23:41:12 08/08/26-23:41:12 INFO  statistics.sqlite3 not found. 
+2026-08-08 23:41:12 08/08/26-23:41:12 INFO  Performing one-time migration for 20230901 
+2026-08-08 23:41:12 08/08/26-23:41:12 INFO  Performing one-time migration for 20231217 
+2026-08-08 23:41:12 08/08/26-23:41:12 INFO  Performing one-time migration for 20240408 
+2026-08-08 23:41:12 08/08/26-23:41:12 INFO  Performing one-time migration for 20240616 
+2026-08-08 23:41:12 08/08/26-23:41:12 WARN  os.remove: /root/.config/koreader/cache/fontlist/fontinfo.dat: No such file or directory 
+2026-08-08 23:41:12 08/08/26-23:41:12 INFO  Performing one-time migration for 20240731 
+2026-08-08 23:41:12 08/08/26-23:41:12 INFO  Performing one-time migration for 20240911 
+2026-08-08 23:41:12 08/08/26-23:41:12 INFO  Performing one-time migration for 20240914 
+2026-08-08 23:41:12 08/08/26-23:41:12 INFO  Performing one-time migration for 20240915 
+2026-08-08 23:41:12 08/08/26-23:41:12 INFO  Performing one-time migration for 20240928 
+2026-08-08 23:41:12 08/08/26-23:41:12 INFO  Performing one-time migration for 20241123 
+2026-08-08 23:41:12 08/08/26-23:41:12 INFO  Performing one-time migration for 20241207 
+2026-08-08 23:41:12 08/08/26-23:41:12 INFO  Performing one-time migration for 20241208 
+2026-08-08 23:41:12 08/08/26-23:41:12 INFO  Performing one-time migration for 20241228 
+2026-08-08 23:41:12 08/08/26-23:41:12 INFO  Performing one-time migration for 20250207 
+2026-08-08 23:41:12 08/08/26-23:41:12 INFO  Performing one-time migration for 20250302 
+2026-08-08 23:41:12 08/08/26-23:41:12 INFO  Performing one-time migration for 20250318 
+2026-08-08 23:41:12 08/08/26-23:41:12 INFO  Performing one-time migration for 20250405 
+2026-08-08 23:41:12 08/08/26-23:41:12 INFO  Performing one-time migration for 20250601 
+2026-08-08 23:41:12 08/08/26-23:41:12 INFO  Performing one-time migration for 20250914 
+2026-08-08 23:41:12 08/08/26-23:41:12 INFO  Performing one-time migration for 20250929 
+2026-08-08 23:41:12 08/08/26-23:41:12 INFO  Performing one-time migration for 20260306 
+2026-08-08 23:41:12 08/08/26-23:41:12 INFO  Looking for plugins in directory: plugins 
+2026-08-08 23:41:12 08/08/26-23:41:12 INFO  Looking for plugins in directory: /root/.config/koreader/plugins/ 
+2026-08-08 23:41:12 08/08/26-23:41:12 WARN  No gestures file or invalid gestures file found, copying defaults 
+2026-08-08 23:41:12 08/08/26-23:41:12 INFO  [idlewasher] enabled debt_min=15 debt_max=60 idle_s=45 deepclean_idle_s=600 
+2026-08-08 23:41:12 08/08/26-23:41:12 INFO  [pn-refresh] ui partial rect=0,0,1404,1872 dither=nil t=1786232472.918253 
+2026-08-09 00:02:29 08/09/26-00:02:29 INFO  [idlewasher] deep clean (GC16) 
+2026-08-09 00:02:29 08/09/26-00:02:29 INFO  [pn-refresh] full global rect=0,0,1404,1872 dither=nil t=1786233749.231459 
+2026-08-09 00:02:32 08/09/26-00:02:32 INFO  [idlewasher] deep clean restore (refresh_waveform=6) 
+2026-08-09 00:40:41 08/09/26-00:40:41 INFO  [pn-refresh] ui partial rect=159,844,1086,184 dither=nil t=1786236041.700769 
+2026-08-09 00:40:41 08/09/26-00:40:41 INFO  opening file /data/books/The Chronicles of Prydain - Lloyd Alexander.epub 
+2026-08-09 00:40:41 08/09/26-00:40:41 INFO  Inhibiting user input 
+2026-08-09 00:40:41 08/09/26-00:40:41 INFO  [idlewasher] enabled debt_min=15 debt_max=60 idle_s=45 deepclean_idle_s=600 
+2026-08-09 00:40:45 08/09/26-00:40:45 INFO  TOC had 1 bogus page numbers: fixed 1 items to keep them ordered. 
+2026-08-09 00:40:46 08/09/26-00:40:46 INFO  [pn-refresh] full global rect=0,0,1404,1872 dither=nil t=1786236046.164758 
+2026-08-09 00:40:46 08/09/26-00:40:46 INFO  Restoring user input handling 
+2026-08-09 00:40:52 08/09/26-00:40:52 INFO  [pn-refresh] flashui global rect=-28,0,1460,1872 dither=nil t=1786236052.912811 
+2026-08-09 00:40:54 08/09/26-00:40:54 INFO  [pn-refresh] partial partial rect=-28,0,1460,1872 dither=nil t=1786236054.848237 
+2026-08-09 00:40:57 08/09/26-00:40:57 INFO  [pn-refresh] flashui global rect=0,0,1404,1872 dither=nil t=1786236057.470765 
+2026-08-09 00:41:01 08/09/26-00:41:01 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786236061.975249 
+2026-08-09 00:41:01 08/09/26-00:41:01 INFO  [pn-refresh] ui partial rect=31,389,1341,1094 dither=nil t=1786236061.979344 
+2026-08-09 00:41:02 08/09/26-00:41:02 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786236062.118042 
+2026-08-09 00:41:02 08/09/26-00:41:02 INFO  [pn-refresh] ui partial rect=31,389,1341,1094 dither=nil t=1786236062.123215 
+2026-08-09 00:41:02 08/09/26-00:41:02 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786236062.471520 
+2026-08-09 00:41:02 08/09/26-00:41:02 INFO  [pn-refresh] ui partial rect=31,389,1341,1094 dither=nil t=1786236062.475452 
+2026-08-09 00:41:02 08/09/26-00:41:02 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786236062.608556 
+2026-08-09 00:41:02 08/09/26-00:41:02 INFO  [pn-refresh] ui partial rect=31,389,1341,1094 dither=nil t=1786236062.610951 
+2026-08-09 00:41:02 08/09/26-00:41:02 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786236062.770238 
+2026-08-09 00:41:02 08/09/26-00:41:02 INFO  [pn-refresh] ui partial rect=31,389,1341,1094 dither=nil t=1786236062.774633 
+2026-08-09 00:41:02 08/09/26-00:41:02 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786236062.928564 
+2026-08-09 00:41:02 08/09/26-00:41:02 INFO  [pn-refresh] ui partial rect=31,389,1341,1094 dither=nil t=1786236062.935250 
+2026-08-09 00:41:03 08/09/26-00:41:03 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786236063.494742 
+2026-08-09 00:41:03 08/09/26-00:41:03 INFO  [pn-refresh] ui partial rect=31,389,1341,1094 dither=nil t=1786236063.497330 
+2026-08-09 00:41:03 08/09/26-00:41:03 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786236063.739886 
+2026-08-09 00:41:03 08/09/26-00:41:03 INFO  [pn-refresh] ui partial rect=31,389,1341,1094 dither=nil t=1786236063.970358 
+2026-08-09 00:41:03 08/09/26-00:41:03 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786236063.979348 
+2026-08-09 00:41:04 08/09/26-00:41:04 INFO  [pn-refresh] ui partial rect=31,389,1341,1094 dither=nil t=1786236064.010629 
+2026-08-09 00:41:05 08/09/26-00:41:05 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786236065.887051 
+2026-08-09 00:41:05 08/09/26-00:41:05 INFO  [pn-refresh] ui partial rect=31,389,1341,1094 dither=nil t=1786236065.891385 
+2026-08-09 00:41:06 08/09/26-00:41:06 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786236066.150409 
+2026-08-09 00:41:06 08/09/26-00:41:06 INFO  [pn-refresh] ui partial rect=31,389,1341,1094 dither=nil t=1786236066.370835 
+2026-08-09 00:41:06 08/09/26-00:41:06 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786236066.376645 
+2026-08-09 00:41:06 08/09/26-00:41:06 INFO  [pn-refresh] ui partial rect=31,389,1341,1094 dither=nil t=1786236066.557629 
+2026-08-09 00:41:10 08/09/26-00:41:10 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786236070.645611 
+2026-08-09 00:41:10 08/09/26-00:41:10 INFO  [pn-refresh] ui partial rect=31,389,1341,1094 dither=nil t=1786236070.657361 
+2026-08-09 00:41:11 08/09/26-00:41:11 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786236071.402896 
+2026-08-09 00:41:11 08/09/26-00:41:11 INFO  [pn-refresh] ui partial rect=31,389,1341,1094 dither=nil t=1786236071.405309 
+2026-08-09 00:41:11 08/09/26-00:41:11 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786236071.557037 
+2026-08-09 00:41:11 08/09/26-00:41:11 INFO  [pn-refresh] ui partial rect=31,389,1341,1094 dither=nil t=1786236071.561397 
+2026-08-09 00:41:15 08/09/26-00:41:15 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786236075.646734 
+2026-08-09 00:41:15 08/09/26-00:41:15 INFO  [pn-refresh] ui partial rect=31,389,1341,1094 dither=nil t=1786236075.653411 
+2026-08-09 00:41:16 08/09/26-00:41:16 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786236076.473956 
+2026-08-09 00:41:16 08/09/26-00:41:16 INFO  [pn-refresh] ui partial rect=31,389,1341,1094 dither=nil t=1786236076.477504 
+2026-08-09 00:41:16 08/09/26-00:41:16 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786236076.665246 
+2026-08-09 00:41:16 08/09/26-00:41:16 INFO  [pn-refresh] ui partial rect=31,389,1341,1094 dither=nil t=1786236076.668388 
+2026-08-09 00:41:16 08/09/26-00:41:16 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786236076.934021 
+2026-08-09 00:41:16 08/09/26-00:41:16 INFO  [pn-refresh] ui partial rect=31,389,1341,1094 dither=nil t=1786236076.939374 
+2026-08-09 00:41:17 08/09/26-00:41:17 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786236077.188014 
+2026-08-09 00:41:17 08/09/26-00:41:17 INFO  [pn-refresh] ui partial rect=31,389,1341,1094 dither=nil t=1786236077.195366 
+2026-08-09 00:41:17 08/09/26-00:41:17 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786236077.343905 
+2026-08-09 00:41:17 08/09/26-00:41:17 INFO  [pn-refresh] ui partial rect=31,389,1341,1094 dither=nil t=1786236077.349390 
+2026-08-09 00:41:17 08/09/26-00:41:17 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786236077.476984 
+2026-08-09 00:41:17 08/09/26-00:41:17 INFO  [pn-refresh] ui partial rect=31,389,1341,1094 dither=nil t=1786236077.480396 
+2026-08-09 00:41:17 08/09/26-00:41:17 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786236077.677598 
+2026-08-09 00:41:17 08/09/26-00:41:17 INFO  [pn-refresh] ui partial rect=31,389,1341,1094 dither=nil t=1786236077.686342 
+2026-08-09 00:41:17 08/09/26-00:41:17 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786236077.843672 
+2026-08-09 00:41:17 08/09/26-00:41:17 INFO  [pn-refresh] ui partial rect=31,389,1341,1094 dither=nil t=1786236077.847354 
+2026-08-09 00:41:18 08/09/26-00:41:18 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786236078.028130 
+2026-08-09 00:41:18 08/09/26-00:41:18 INFO  [pn-refresh] ui partial rect=31,389,1341,1094 dither=nil t=1786236078.038356 
+2026-08-09 00:41:18 08/09/26-00:41:18 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786236078.238224 
+2026-08-09 00:41:18 08/09/26-00:41:18 INFO  [pn-refresh] ui partial rect=31,389,1341,1094 dither=nil t=1786236078.244568 
+2026-08-09 00:41:18 08/09/26-00:41:18 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786236078.367374 
+2026-08-09 00:41:18 08/09/26-00:41:18 INFO  [pn-refresh] ui partial rect=31,389,1341,1094 dither=nil t=1786236078.370233 
+2026-08-09 00:41:18 08/09/26-00:41:18 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786236078.600581 
+2026-08-09 00:41:18 08/09/26-00:41:18 INFO  [pn-refresh] ui partial rect=31,389,1341,1094 dither=nil t=1786236078.603339 
+2026-08-09 00:41:18 08/09/26-00:41:18 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786236078.809154 
+2026-08-09 00:41:18 08/09/26-00:41:18 INFO  [pn-refresh] ui partial rect=31,389,1341,1094 dither=nil t=1786236078.813411 
+2026-08-09 00:41:19 08/09/26-00:41:19 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786236079.016971 
+2026-08-09 00:41:19 08/09/26-00:41:19 INFO  [pn-refresh] ui partial rect=31,389,1341,1094 dither=nil t=1786236079.025352 
+2026-08-09 00:41:19 08/09/26-00:41:19 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786236079.179475 
+2026-08-09 00:41:19 08/09/26-00:41:19 INFO  [pn-refresh] ui partial rect=31,389,1341,1094 dither=nil t=1786236079.182352 
+2026-08-09 00:41:19 08/09/26-00:41:19 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786236079.433048 
+2026-08-09 00:41:19 08/09/26-00:41:19 INFO  [pn-refresh] ui partial rect=31,389,1341,1094 dither=nil t=1786236079.442441 
+2026-08-09 00:41:19 08/09/26-00:41:19 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786236079.685053 
+2026-08-09 00:41:19 08/09/26-00:41:19 INFO  [pn-refresh] ui partial rect=31,389,1341,1094 dither=nil t=1786236079.691549 
+2026-08-09 00:41:19 08/09/26-00:41:19 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786236079.908248 
+2026-08-09 00:41:19 08/09/26-00:41:19 INFO  [pn-refresh] ui partial rect=31,389,1341,1094 dither=nil t=1786236079.915377 
+2026-08-09 00:41:20 08/09/26-00:41:20 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786236080.497454 
+2026-08-09 00:41:20 08/09/26-00:41:20 INFO  [pn-refresh] ui partial rect=31,389,1341,1094 dither=nil t=1786236080.504416 
+2026-08-09 00:41:21 08/09/26-00:41:21 INFO  [pn-refresh] ui partial rect=31,389,1341,1094 dither=nil t=1786236081.129954 
+2026-08-09 00:41:22 08/09/26-00:41:22 INFO  [pn-refresh] ui partial rect=31,389,1341,1094 dither=nil t=1786236082.420630 
+2026-08-09 00:41:23 08/09/26-00:41:23 INFO  [pn-refresh] ui partial rect=31,389,1341,1094 dither=nil t=1786236083.730617 
+2026-08-09 00:41:24 08/09/26-00:41:24 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786236084.475887 
+2026-08-09 00:41:24 08/09/26-00:41:24 INFO  [pn-refresh] ui partial rect=31,389,1341,1094 dither=nil t=1786236084.479510 
+2026-08-09 00:41:24 08/09/26-00:41:24 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786236084.738694 
+2026-08-09 00:41:24 08/09/26-00:41:24 INFO  [pn-refresh] ui partial rect=31,389,1341,1094 dither=nil t=1786236084.746516 
+2026-08-09 00:41:24 08/09/26-00:41:24 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786236084.910601 
+2026-08-09 00:41:24 08/09/26-00:41:24 INFO  [pn-refresh] ui partial rect=31,389,1341,1094 dither=nil t=1786236084.913451 
+2026-08-09 00:41:25 08/09/26-00:41:25 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786236085.010032 
+2026-08-09 00:41:25 08/09/26-00:41:25 INFO  [pn-refresh] ui partial rect=31,389,1341,1094 dither=nil t=1786236085.012482 
+2026-08-09 00:41:26 08/09/26-00:41:26 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786236086.922029 
+2026-08-09 00:41:26 08/09/26-00:41:26 INFO  [pn-refresh] ui partial rect=31,389,1341,1094 dither=nil t=1786236086.926364 
+2026-08-09 00:41:27 08/09/26-00:41:27 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786236087.208616 
+2026-08-09 00:41:27 08/09/26-00:41:27 INFO  [pn-refresh] ui partial rect=31,389,1341,1094 dither=nil t=1786236087.253361 
+2026-08-09 00:41:31 08/09/26-00:41:31 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786236091.394957 
+2026-08-09 00:41:31 08/09/26-00:41:31 INFO  [pn-refresh] ui partial rect=31,389,1341,1094 dither=nil t=1786236091.397598 
+2026-08-09 00:41:31 08/09/26-00:41:31 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786236091.715473 
+2026-08-09 00:41:31 08/09/26-00:41:31 INFO  [pn-refresh] ui partial rect=31,389,1341,1094 dither=nil t=1786236091.763849 
+2026-08-09 00:41:32 08/09/26-00:41:32 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786236092.709655 
+2026-08-09 00:41:32 08/09/26-00:41:32 INFO  [pn-refresh] ui partial rect=31,389,1341,1094 dither=nil t=1786236092.713128 
+2026-08-09 00:41:33 08/09/26-00:41:33 INFO  [pn-refresh] ui partial rect=31,389,1341,1094 dither=nil t=1786236093.134144 
+2026-08-09 00:41:33 08/09/26-00:41:33 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786236093.139680 
+2026-08-09 00:41:33 08/09/26-00:41:33 INFO  [pn-refresh] ui partial rect=31,389,1341,1094 dither=nil t=1786236093.499957 
+2026-08-09 00:41:33 08/09/26-00:41:33 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786236093.506056 
+2026-08-09 00:41:33 08/09/26-00:41:33 INFO  [pn-refresh] ui partial rect=31,389,1341,1094 dither=nil t=1786236093.639076 
+2026-08-09 00:41:34 08/09/26-00:41:34 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786236094.298977 
+2026-08-09 00:41:34 08/09/26-00:41:34 INFO  [pn-refresh] ui partial rect=31,389,1341,1094 dither=nil t=1786236094.307621 
+2026-08-09 00:41:34 08/09/26-00:41:34 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786236094.635022 
+2026-08-09 00:41:35 08/09/26-00:41:35 INFO  [pn-refresh] ui partial rect=31,389,1341,1094 dither=nil t=1786236095.217925 
+2026-08-09 00:41:35 08/09/26-00:41:35 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786236095.225336 
+2026-08-09 00:41:35 08/09/26-00:41:35 INFO  [pn-refresh] ui partial rect=31,389,1341,1094 dither=nil t=1786236095.875706 
+2026-08-09 00:41:35 08/09/26-00:41:35 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786236095.878443 
+2026-08-09 00:41:36 08/09/26-00:41:36 INFO  [pn-refresh] ui partial rect=31,389,1341,1094 dither=nil t=1786236096.757983 
+2026-08-09 00:41:36 08/09/26-00:41:36 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786236096.765322 
+2026-08-09 00:41:37 08/09/26-00:41:37 INFO  [pn-refresh] ui partial rect=31,389,1341,1094 dither=nil t=1786236097.346021 
+2026-08-09 00:41:37 08/09/26-00:41:37 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786236097.350360 
+2026-08-09 00:41:37 08/09/26-00:41:37 INFO  [pn-refresh] ui partial rect=31,389,1341,1094 dither=nil t=1786236097.775814 
+2026-08-09 00:41:37 08/09/26-00:41:37 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786236097.781499 
+2026-08-09 00:41:37 08/09/26-00:41:37 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786236097.948484 
+2026-08-09 00:41:37 08/09/26-00:41:37 INFO  [pn-refresh] ui partial rect=31,389,1341,1094 dither=nil t=1786236097.952518 
+2026-08-09 00:41:38 08/09/26-00:41:38 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786236098.219119 
+2026-08-09 00:41:38 08/09/26-00:41:38 INFO  [pn-refresh] ui partial rect=31,389,1341,1094 dither=nil t=1786236098.558220 
+2026-08-09 00:41:38 08/09/26-00:41:38 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786236098.560795 
+2026-08-09 00:41:39 08/09/26-00:41:39 INFO  [pn-refresh] ui partial rect=31,389,1341,1094 dither=nil t=1786236099.089449 
+2026-08-09 00:41:39 08/09/26-00:41:39 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786236099.092321 
+2026-08-09 00:41:39 08/09/26-00:41:39 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786236099.444326 
+2026-08-09 00:41:39 08/09/26-00:41:39 INFO  [pn-refresh] ui partial rect=31,389,1341,1094 dither=nil t=1786236099.494149 
+2026-08-09 00:41:40 08/09/26-00:41:40 INFO  [pn-refresh] flashui partial rect=31,389,1341,1094 dither=nil t=1786236100.222631 
+2026-08-09 00:41:42 08/09/26-00:41:42 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786236102.066484 
+2026-08-09 00:41:44 08/09/26-00:41:44 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786236104.361941 
+2026-08-09 00:41:46 08/09/26-00:41:46 INFO  [pn-refresh] flashui global rect=-28,0,1460,1872 dither=nil t=1786236106.662934 
+2026-08-09 00:41:59 08/09/26-00:41:59 INFO  [pn-refresh] ui partial rect=0,0,1404,1438 dither=nil t=1786236119.264289 
+2026-08-09 00:42:01 08/09/26-00:42:01 INFO  [pn-refresh] flashui global rect=0,0,1404,1872 dither=nil t=1786236121.440054 
+2026-08-09 00:42:03 08/09/26-00:42:03 INFO  [pn-refresh] partial partial rect=-28,1424,1460,448 dither=nil t=1786236123.346898 
+2026-08-09 00:42:05 08/09/26-00:42:05 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786236125.471597 
+2026-08-09 00:42:07 08/09/26-00:42:07 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786236127.224642 
+2026-08-09 00:42:10 08/09/26-00:42:10 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786236130.376640 
+2026-08-09 00:42:12 08/09/26-00:42:12 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786236132.631564 
+2026-08-09 00:42:13 08/09/26-00:42:13 INFO  [pn-refresh] ui partial rect=85,1086,75,50 dither=nil t=1786236133.714191 
+2026-08-09 00:42:14 08/09/26-00:42:14 INFO  [pn-refresh] flashui partial rect=94,313,1216,1210 dither=nil t=1786236134.458159 
+2026-08-09 00:42:16 08/09/26-00:42:16 INFO  [pn-refresh] flashui global rect=0,0,1404,1872 dither=nil t=1786236136.220591 
+2026-08-09 00:42:17 08/09/26-00:42:17 INFO  [pn-refresh] ui partial rect=0,0,1404,1872 dither=nil t=1786236137.078376 
+2026-08-09 00:42:17 08/09/26-00:42:17 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786236137.693822 
+2026-08-09 00:42:18 08/09/26-00:42:18 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786236138.196398 
+2026-08-09 00:42:18 08/09/26-00:42:18 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786236138.473209 
+2026-08-09 00:42:18 08/09/26-00:42:18 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786236138.705092 
+2026-08-09 00:42:19 08/09/26-00:42:19 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786236139.012536 
+2026-08-09 00:42:19 08/09/26-00:42:19 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786236139.311035 
+2026-08-09 00:42:19 08/09/26-00:42:19 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786236139.632740 
+2026-08-09 00:42:19 08/09/26-00:42:19 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786236139.954250 
+2026-08-09 00:42:21 08/09/26-00:42:21 INFO  [pn-refresh] ui partial rect=132,1686,23,50 dither=nil t=1786236141.495446 
+2026-08-09 00:42:23 08/09/26-00:42:23 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786236143.341931 
+2026-08-09 00:42:31 08/09/26-00:42:31 INFO  [pn-refresh] flashui global rect=-28,0,1460,1872 dither=nil t=1786236151.285098 
+2026-08-09 00:42:33 08/09/26-00:42:33 INFO  [pn-refresh] partial partial rect=-28,0,1460,1872 dither=nil t=1786236153.873054 
+2026-08-09 00:42:37 08/09/26-00:42:37 INFO  [pn-refresh] ui partial rect=0,0,1404,1438 dither=nil t=1786236157.918995 
+2026-08-09 00:42:39 08/09/26-00:42:39 INFO  [pn-refresh] flashui global rect=0,0,1404,1872 dither=nil t=1786236159.629121 
+2026-08-09 00:42:41 08/09/26-00:42:41 INFO  [pn-refresh] ui partial rect=0,0,1404,1872 dither=nil t=1786236161.963336 
+2026-08-09 00:42:44 08/09/26-00:42:44 INFO  [pn-refresh] flashui global rect=-28,0,1460,1872 dither=nil t=1786236164.293961 
+2026-08-09 00:42:45 08/09/26-00:42:45 INFO  [pn-refresh] flashui global rect=-28,0,1460,1872 dither=nil t=1786236165.735884 
+2026-08-09 00:42:47 08/09/26-00:42:47 INFO  [pn-refresh] ui partial rect=0,0,1404,1872 dither=nil t=1786236167.855295 
+2026-08-09 00:42:50 08/09/26-00:42:50 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786236170.377930 
+2026-08-09 00:42:50 08/09/26-00:42:50 INFO  [pn-refresh] fast partial rect=0,182,59,44 dither=nil t=1786236170.882303 
+2026-08-09 00:42:51 08/09/26-00:42:51 INFO  [pn-refresh] ui partial rect=0,182,59,44 dither=nil t=1786236171.884990 
+2026-08-09 00:43:00 08/09/26-00:43:00 INFO  [pn-refresh] flashui global rect=-28,0,1460,1872 dither=nil t=1786236180.705930 
+2026-08-09 00:43:02 08/09/26-00:43:02 INFO  [pn-refresh] partial partial rect=-28,0,1460,1872 dither=nil t=1786236182.737318 
+2026-08-09 00:43:06 08/09/26-00:43:06 INFO  [pn-refresh] ui partial rect=0,0,1404,1438 dither=nil t=1786236186.343534 
+2026-08-09 00:43:09 08/09/26-00:43:09 INFO  [pn-refresh] ui partial rect=0,0,1404,1438 dither=nil t=1786236189.939040 
+2026-08-09 00:43:11 08/09/26-00:43:11 INFO  [pn-refresh] ui partial rect=0,0,1404,1438 dither=nil t=1786236191.081229 
+2026-08-09 00:43:13 08/09/26-00:43:13 INFO  [pn-refresh] ui partial rect=0,0,1404,1198 dither=nil t=1786236193.764231 
+2026-08-09 00:43:15 08/09/26-00:43:15 INFO  [pn-refresh] ui partial rect=0,0,1404,1198 dither=nil t=1786236195.908395 
+2026-08-09 00:43:18 08/09/26-00:43:18 INFO  [pn-refresh] ui partial rect=0,0,1404,1198 dither=nil t=1786236198.049608 
+2026-08-09 00:43:19 08/09/26-00:43:19 INFO  [pn-refresh] ui partial rect=0,0,1404,838 dither=nil t=1786236199.627865 
+2026-08-09 00:43:19 08/09/26-00:43:19 INFO  Inhibiting user input 
+2026-08-09 00:43:21 08/09/26-00:43:21 INFO  TOC had 1 bogus page numbers: fixed 1 items to keep them ordered. 
+2026-08-09 00:43:21 08/09/26-00:43:21 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786236201.936997 
+2026-08-09 00:43:21 08/09/26-00:43:21 INFO  Restoring user input handling 
+2026-08-09 00:43:24 08/09/26-00:43:24 INFO  [pn-refresh] ui partial rect=0,0,1404,838 dither=nil t=1786236204.100890 
+2026-08-09 00:43:25 08/09/26-00:43:25 INFO  [pn-refresh] ui partial rect=0,0,1404,838 dither=nil t=1786236205.622796 
+2026-08-09 00:43:28 08/09/26-00:43:28 INFO  Inhibiting user input 
+2026-08-09 00:43:30 08/09/26-00:43:30 INFO  TOC had 1 bogus page numbers: fixed 1 items to keep them ordered. 
+2026-08-09 00:43:30 08/09/26-00:43:30 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786236210.185938 
+2026-08-09 00:43:30 08/09/26-00:43:30 INFO  Restoring user input handling 
+2026-08-09 00:43:34 08/09/26-00:43:34 INFO  [pn-refresh] ui partial rect=0,0,1404,1198 dither=nil t=1786236214.577595 
+2026-08-09 00:43:38 08/09/26-00:43:38 INFO  [pn-refresh] ui partial rect=0,0,1404,1198 dither=nil t=1786236218.634595 
+2026-08-09 00:43:42 08/09/26-00:43:42 INFO  [pn-refresh] ui partial rect=0,0,1404,1198 dither=nil t=1786236222.944671 
+2026-08-09 00:43:53 08/09/26-00:43:53 INFO  [pn-refresh] flashui global rect=0,0,1404,1872 dither=nil t=1786236233.837441 
+2026-08-09 00:43:56 08/09/26-00:43:56 INFO  [pn-refresh] ui partial rect=440,12,523,131 dither=nil t=1786236236.561067 
+2026-08-09 00:43:56 08/09/26-00:43:56 INFO  Inhibiting user input 
+2026-08-09 00:43:58 08/09/26-00:43:58 INFO  TOC had 1 bogus page numbers: fixed 1 items to keep them ordered. 
+2026-08-09 00:43:58 08/09/26-00:43:58 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786236238.417813 
+2026-08-09 00:43:58 08/09/26-00:43:58 INFO  Restoring user input handling 
+2026-08-09 00:43:58 08/09/26-00:43:58 INFO  [pn-refresh] ui partial rect=440,12,523,131 dither=nil t=1786236238.742319 
+2026-08-09 00:44:00 08/09/26-00:44:00 INFO  [pn-refresh] ui partial rect=463,143,478,131 dither=nil t=1786236240.695584 
+2026-08-09 00:44:05 08/09/26-00:44:05 INFO  [pn-refresh] ui partial rect=-28,1424,1460,448 dither=nil t=1786236245.732072 
+2026-08-09 00:44:08 08/09/26-00:44:08 INFO  [pn-refresh] ui partial rect=-28,1190,1460,682 dither=nil t=1786236248.559824 
+2026-08-09 00:44:09 08/09/26-00:44:09 INFO  [pn-refresh] ui partial rect=-28,1190,1460,682 dither=nil t=1786236249.365236 
+2026-08-09 00:44:15 08/09/26-00:44:15 INFO  Inhibiting user input 
+2026-08-09 00:44:15 08/09/26-00:44:15 INFO  [pn-refresh] partial partial rect=-28,0,1460,1872 dither=nil t=1786236255.497856 
+2026-08-09 00:44:15 08/09/26-00:44:15 INFO  Restoring user input handling 
+2026-08-09 00:44:22 08/09/26-00:44:22 INFO  [pn-refresh] ui partial rect=439,1490,929,89 dither=nil t=1786236262.062746 
+2026-08-09 00:44:22 08/09/26-00:44:22 INFO  Inhibiting user input 
+2026-08-09 00:44:25 08/09/26-00:44:25 INFO  TOC had 1 bogus page numbers: fixed 1 items to keep them ordered. 
+2026-08-09 00:44:25 08/09/26-00:44:25 INFO  [pn-refresh] partial partial rect=-28,0,1460,1872 dither=nil t=1786236265.804750 
+2026-08-09 00:44:25 08/09/26-00:44:25 INFO  Restoring user input handling 
+2026-08-09 00:44:26 08/09/26-00:44:26 INFO  Inhibiting user input 
+2026-08-09 00:44:30 08/09/26-00:44:30 INFO  TOC had 1 bogus page numbers: fixed 1 items to keep them ordered. 
+2026-08-09 00:44:30 08/09/26-00:44:30 INFO  [pn-refresh] partial partial rect=-28,0,1460,1872 dither=nil t=1786236270.550139 
+2026-08-09 00:44:30 08/09/26-00:44:30 INFO  Restoring user input handling 
+2026-08-09 00:44:33 08/09/26-00:44:33 INFO  [pn-refresh] ui partial rect=-28,1190,1460,682 dither=nil t=1786236273.432848 
+2026-08-09 00:44:40 08/09/26-00:44:40 INFO  [pn-refresh] partial partial rect=-28,0,1460,1872 dither=nil t=1786236280.703331 
+2026-08-09 00:44:42 08/09/26-00:44:42 INFO  [pn-refresh] ui partial rect=414,12,576,131 dither=nil t=1786236282.664230 
+2026-08-09 00:44:46 08/09/26-00:44:46 INFO  [pn-refresh] partial partial rect=-28,0,1460,1872 dither=nil t=1786236286.033065 
+2026-08-09 00:44:48 08/09/26-00:44:48 INFO  [pn-refresh] ui partial rect=414,12,576,131 dither=nil t=1786236288.036500 
+2026-08-09 00:44:49 08/09/26-00:44:49 INFO  [pn-refresh] partial partial rect=-28,0,1460,1872 dither=nil t=1786236289.642518 
+2026-08-09 00:44:51 08/09/26-00:44:51 INFO  [pn-refresh] ui partial rect=434,12,536,131 dither=nil t=1786236291.638839 
+2026-08-09 00:44:56 08/09/26-00:44:56 INFO  [pn-refresh] ui partial rect=-28,1190,1460,682 dither=nil t=1786236296.372836 
+2026-08-09 00:45:10 08/09/26-00:45:10 INFO  [pn-refresh] ui partial rect=-28,1190,1460,682 dither=nil t=1786236310.020763 
+2026-08-09 00:45:14 08/09/26-00:45:14 INFO  [pn-refresh] ui partial rect=-28,1190,1460,682 dither=nil t=1786236314.939123 
+2026-08-09 00:45:20 08/09/26-00:45:20 INFO  [pn-refresh] ui partial rect=-28,1190,1460,682 dither=nil t=1786236320.663385 
+2026-08-09 00:45:24 08/09/26-00:45:24 INFO  [pn-refresh] ui partial rect=-28,1190,1460,682 dither=nil t=1786236324.914588 
+2026-08-09 00:45:27 08/09/26-00:45:27 INFO  [pn-refresh] ui partial rect=-28,1190,1460,682 dither=nil t=1786236327.456138 
+2026-08-09 00:45:29 08/09/26-00:45:29 INFO  [pn-refresh] partial partial rect=-28,1424,1460,448 dither=nil t=1786236329.908962 
+2026-08-09 00:45:54 08/09/26-00:45:54 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786236354.653113 
+2026-08-09 00:47:05 08/09/26-00:47:05 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786236425.545147 
+2026-08-09 00:47:43 08/09/26-00:47:43 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786236463.408586 
+2026-08-09 00:48:27 08/09/26-00:48:27 INFO  [idlewasher] idle wash (debt=26) 
+2026-08-09 00:48:28 08/09/26-00:48:28 INFO  [pn-refresh] full global rect=0,0,1404,1872 dither=nil t=1786236508.125028 
+2026-08-09 00:48:38 08/09/26-00:48:38 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786236518.913837 
+2026-08-09 00:49:41 08/09/26-00:49:41 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786236581.543721 
+2026-08-09 00:49:54 08/09/26-00:49:54 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786236594.815753 
+2026-08-09 00:50:09 08/09/26-00:50:09 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786236609.922878 
+2026-08-09 00:50:13 08/09/26-00:50:13 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786236613.593387 
+2026-08-09 00:50:15 08/09/26-00:50:15 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786236615.081186 
+2026-08-09 00:50:17 08/09/26-00:50:17 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786236617.608616 
+2026-08-09 00:50:44 08/09/26-00:50:44 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786236644.960977 
+2026-08-09 00:51:37 08/09/26-00:51:37 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786236697.702939 
+2026-08-09 00:52:28 08/09/26-00:52:28 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786236748.448102 
+2026-08-09 00:52:43 08/09/26-00:52:43 INFO  [pn-refresh] ui partial rect=440,12,523,131 dither=nil t=1786236763.481702 
+2026-08-09 00:52:43 08/09/26-00:52:43 INFO  Inhibiting user input 
+2026-08-09 00:52:47 08/09/26-00:52:47 INFO  TOC had 1 bogus page numbers: fixed 1 items to keep them ordered. 
+2026-08-09 00:52:47 08/09/26-00:52:47 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786236767.987859 
+2026-08-09 00:52:47 08/09/26-00:52:47 INFO  Restoring user input handling 
+2026-08-09 00:52:48 08/09/26-00:52:48 INFO  [pn-refresh] ui partial rect=463,143,478,131 dither=nil t=1786236768.142080 
+2026-08-09 00:52:51 08/09/26-00:52:51 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786236771.650350 
+2026-08-09 00:52:58 08/09/26-00:52:58 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786236778.059072 
+2026-08-09 00:53:03 08/09/26-00:53:03 INFO  [pn-refresh] ui partial rect=-28,1424,1460,448 dither=nil t=1786236783.609654 
+2026-08-09 00:53:03 08/09/26-00:53:03 INFO  [pn-refresh] flashui global rect=0,0,1404,1198 dither=nil t=1786236783.616630 
+2026-08-09 00:53:05 08/09/26-00:53:05 INFO  [pn-refresh] flashui global rect=-28,0,1460,1872 dither=nil t=1786236785.660647 
+2026-08-09 00:53:23 08/09/26-00:53:23 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786236803.223076 
+2026-08-09 00:53:54 08/09/26-00:53:54 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786236834.464474 
+2026-08-09 00:54:03 08/09/26-00:54:03 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786236843.935669 
+2026-08-09 00:54:05 08/09/26-00:54:05 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786236845.965642 
+2026-08-09 00:54:10 08/09/26-00:54:10 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786236850.664846 
+2026-08-09 00:54:34 08/09/26-00:54:34 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786236874.695637 
+2026-08-09 00:54:59 08/09/26-00:54:59 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786236899.459484 
+2026-08-09 00:55:44 08/09/26-00:55:44 INFO  [idlewasher] idle wash (debt=20) 
+2026-08-09 00:55:44 08/09/26-00:55:44 INFO  [pn-refresh] full global rect=0,0,1404,1872 dither=nil t=1786236944.466372 
+2026-08-09 00:56:25 08/09/26-00:56:25 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786236985.703333 
+2026-08-09 00:58:11 08/09/26-00:58:11 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786237091.552356 
+2026-08-09 00:59:00 08/09/26-00:59:00 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786237140.566283 
+2026-08-09 00:59:23 08/09/26-00:59:23 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786237163.455471 
+2026-08-09 00:59:30 08/09/26-00:59:30 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786237170.327940 
+2026-08-09 01:18:44 08/09/26-01:18:44 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786238324.272944 
+2026-08-09 01:19:41 08/09/26-01:19:41 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786238381.454356 
+2026-08-09 01:21:12 08/09/26-01:21:12 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786238472.134178 
+2026-08-09 01:21:52 08/09/26-01:21:52 INFO  [pn-refresh] full global rect=0,0,1404,1872 dither=nil t=1786238512.545263 
+2026-08-09 01:21:56 08/09/26-01:21:56 INFO  [pn-refresh] full global rect=0,0,1404,1872 dither=nil t=1786238516.172916 
+2026-08-09 01:22:00 08/09/26-01:22:00 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786238520.217762 
+2026-08-09 01:22:04 08/09/26-01:22:04 INFO  [pn-refresh] full global rect=0,0,1404,1872 dither=nil t=1786238524.846090 
+2026-08-09 01:22:07 08/09/26-01:22:07 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786238527.350945 
+2026-08-09 01:22:07 08/09/26-01:22:07 INFO  [pn-refresh] ui partial rect=477,12,449,131 dither=nil t=1786238527.354892 
+2026-08-09 01:22:08 08/09/26-01:22:08 INFO  [pn-refresh] ui partial rect=477,12,449,131 dither=nil t=1786238528.730166 
+2026-08-09 01:22:09 08/09/26-01:22:09 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786238529.060100 
+2026-08-09 01:22:09 08/09/26-01:22:09 INFO  [pn-refresh] ui partial rect=477,12,449,131 dither=nil t=1786238529.063605 
+2026-08-09 01:22:10 08/09/26-01:22:10 INFO  [pn-refresh] ui partial rect=477,12,449,131 dither=nil t=1786238530.366683 
+2026-08-09 01:22:12 08/09/26-01:22:12 INFO  [pn-refresh] ui partial rect=-28,1424,1460,448 dither=nil t=1786238532.902458 
+2026-08-09 01:22:15 08/09/26-01:22:15 INFO  [pn-refresh] partial partial rect=-28,1424,1460,448 dither=nil t=1786238535.088857 
+2026-08-09 01:22:17 08/09/26-01:22:17 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786238537.060791 
+2026-08-09 01:22:17 08/09/26-01:22:17 INFO  [pn-refresh] ui partial rect=477,12,449,131 dither=nil t=1786238537.064618 
+2026-08-09 01:22:19 08/09/26-01:22:19 INFO  [pn-refresh] ui partial rect=477,12,449,131 dither=nil t=1786238539.223904 
+2026-08-09 01:22:24 08/09/26-01:22:24 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786238544.312108 
+2026-08-09 01:22:24 08/09/26-01:22:24 INFO  [pn-refresh] ui partial rect=477,12,449,131 dither=nil t=1786238544.315376 
+2026-08-09 01:22:24 08/09/26-01:22:24 INFO  [pn-refresh] ui partial rect=477,12,449,131 dither=nil t=1786238544.905250 
+2026-08-09 01:22:26 08/09/26-01:22:26 INFO  [pn-refresh] full global rect=0,0,1404,1872 dither=nil t=1786238546.448556 
+2026-08-09 01:22:26 08/09/26-01:22:26 INFO  [pn-refresh] full global rect=0,0,1404,1872 dither=nil t=1786238546.899943 
+2026-08-09 01:22:29 08/09/26-01:22:29 INFO  [pn-refresh] full global rect=0,0,1404,1872 dither=nil t=1786238549.151132 
+2026-08-09 01:22:30 08/09/26-01:22:30 INFO  [pn-refresh] full global rect=0,0,1404,1872 dither=nil t=1786238550.448647 
+2026-08-09 01:22:31 08/09/26-01:22:31 INFO  [pn-refresh] full global rect=0,0,1404,1872 dither=nil t=1786238551.690036 
+2026-08-09 01:22:32 08/09/26-01:22:32 INFO  [pn-refresh] full global rect=0,0,1404,1872 dither=nil t=1786238552.920872 
+2026-08-09 01:22:34 08/09/26-01:22:34 INFO  [pn-refresh] full global rect=0,0,1404,1872 dither=nil t=1786238554.102133 
+2026-08-09 01:22:35 08/09/26-01:22:35 INFO  [pn-refresh] full global rect=0,0,1404,1872 dither=nil t=1786238555.143233 
+2026-08-09 01:22:36 08/09/26-01:22:36 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786238556.650013 
+2026-08-09 01:22:38 08/09/26-01:22:38 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786238558.333074 
+2026-08-09 01:23:33 08/09/26-01:23:33 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786238613.522796 
+2026-08-09 01:24:14 08/09/26-01:24:14 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786238654.727400 
+2026-08-09 01:24:52 08/09/26-01:24:52 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786238692.531415 
+2026-08-09 01:25:12 08/09/26-01:25:12 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786238712.847522 
+2026-08-09 01:25:26 08/09/26-01:25:26 INFO  [pn-refresh] ui partial rect=-28,1424,1460,448 dither=nil t=1786238726.644412 
+2026-08-09 01:25:26 08/09/26-01:25:26 INFO  [pn-refresh] flashui global rect=0,0,1404,1198 dither=nil t=1786238726.647127 
+2026-08-09 01:25:29 08/09/26-01:25:29 INFO  [pn-refresh] partial partial rect=-28,0,1460,1872 dither=nil t=1786238729.962834 
+2026-08-09 01:25:32 08/09/26-01:25:32 INFO  [pn-refresh] ui partial rect=0,0,1404,1438 dither=nil t=1786238732.479404 
+2026-08-09 01:25:38 08/09/26-01:25:38 INFO  [pn-refresh] flashui global rect=0,0,1404,1872 dither=nil t=1786238738.604277 
+2026-08-09 01:25:50 08/09/26-01:25:50 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786238750.348308 
+2026-08-09 01:26:11 08/09/26-01:26:11 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786238771.359065 
+2026-08-09 01:26:32 08/09/26-01:26:32 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786238792.923460 
+2026-08-09 01:27:05 08/09/26-01:27:05 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786238825.753731 
+2026-08-09 01:27:28 08/09/26-01:27:28 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786238848.869399 
+2026-08-09 01:28:09 08/09/26-01:28:09 INFO  [pn-refresh] full global rect=0,0,1404,1872 dither=nil t=1786238889.131901 
+2026-08-09 01:28:28 08/09/26-01:28:28 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786238908.026763 
+2026-08-09 01:28:41 08/09/26-01:28:41 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786238921.187981 
+2026-08-09 01:28:47 08/09/26-01:28:47 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786238927.316211 
+2026-08-09 01:29:20 08/09/26-01:29:20 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786238960.600412 
+2026-08-09 01:29:42 08/09/26-01:29:42 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786238982.591785 
+2026-08-09 01:29:54 08/09/26-01:29:54 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786238994.753600 
+2026-08-09 01:30:03 08/09/26-01:30:03 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786239003.969389 
+2026-08-09 01:30:26 08/09/26-01:30:26 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786239026.920206 
+2026-08-09 01:30:31 08/09/26-01:30:31 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786239031.000797 
+2026-08-09 01:30:41 08/09/26-01:30:41 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786239041.604135 
+2026-08-09 01:30:49 08/09/26-01:30:49 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786239049.763219 
+2026-08-09 01:31:34 08/09/26-01:31:34 INFO  [idlewasher] idle wash (debt=31) 
+2026-08-09 01:31:34 08/09/26-01:31:34 INFO  [pn-refresh] full global rect=0,0,1404,1872 dither=nil t=1786239094.700909 
+2026-08-09 01:31:39 08/09/26-01:31:39 INFO  Inhibiting user input 
+2026-08-09 01:31:42 08/09/26-01:31:42 INFO  TOC had 1 bogus page numbers: fixed 1 items to keep them ordered. 
+2026-08-09 01:31:43 08/09/26-01:31:43 INFO  [pn-refresh] full global rect=0,0,1872,1404 dither=nil t=1786239103.057190 
+2026-08-09 01:31:43 08/09/26-01:31:43 INFO  Restoring user input handling 
+2026-08-09 01:31:46 08/09/26-01:31:46 INFO  Inhibiting user input 
+2026-08-09 01:31:51 08/09/26-01:31:51 INFO  TOC had 1 bogus page numbers: fixed 1 items to keep them ordered. 
+2026-08-09 01:31:51 08/09/26-01:31:51 INFO  [pn-refresh] full global rect=0,0,1404,1872 dither=nil t=1786239111.337565 
+2026-08-09 01:31:51 08/09/26-01:31:51 INFO  Restoring user input handling 
+2026-08-09 01:31:59 08/09/26-01:31:59 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786239119.384975 
+2026-08-09 01:32:32 08/09/26-01:32:32 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786239152.444801 
+2026-08-09 01:32:49 08/09/26-01:32:49 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786239169.306775 
+2026-08-09 01:33:37 08/09/26-01:33:37 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786239217.173991 
+2026-08-09 01:34:07 08/09/26-01:34:07 INFO  [pn-refresh] ui partial rect=0,0,1404,1872 dither=nil t=1786239247.752058 
+2026-08-09 01:34:07 08/09/26-01:34:07 INFO  [pn-refresh] ui partial rect=0,0,1404,1872 dither=nil t=1786239247.961856 
+2026-08-09 01:34:08 08/09/26-01:34:08 INFO  [pn-refresh] ui partial rect=0,0,1404,1872 dither=nil t=1786239248.030162 
+2026-08-09 01:34:10 08/09/26-01:34:10 INFO  [pn-refresh] flashui global rect=0,0,1404,1872 dither=nil t=1786239250.323135 
+2026-08-09 01:34:11 08/09/26-01:34:11 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786239251.511914 
+2026-08-09 01:34:37 08/09/26-01:34:37 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786239277.380319 
+2026-08-09 01:34:37 08/09/26-01:34:37 INFO  [pn-refresh] ui partial rect=460,12,483,131 dither=nil t=1786239277.382559 
+2026-08-09 01:34:39 08/09/26-01:34:39 INFO  [pn-refresh] ui partial rect=460,12,483,131 dither=nil t=1786239279.663066 
+2026-08-09 01:34:40 08/09/26-01:34:40 INFO  [pn-refresh] full global rect=0,0,1404,1872 dither=nil t=1786239280.938131 
+2026-08-09 01:34:44 08/09/26-01:34:44 INFO  [pn-refresh] full global rect=0,0,1404,1872 dither=nil t=1786239284.213097 
+2026-08-09 01:34:48 08/09/26-01:34:48 INFO  [pn-refresh] full global rect=0,0,1404,1872 dither=nil t=1786239288.469349 
+2026-08-09 01:34:51 08/09/26-01:34:51 INFO  [pn-refresh] full global rect=0,0,1404,1872 dither=nil t=1786239291.009543 
+2026-08-09 01:34:55 08/09/26-01:34:55 INFO  [pn-refresh] flashui global rect=-28,0,1460,1872 dither=nil t=1786239295.204923 
+2026-08-09 01:34:58 08/09/26-01:34:58 INFO  [pn-refresh] partial partial rect=-28,0,1460,1872 dither=nil t=1786239298.133945 
+2026-08-09 01:34:59 08/09/26-01:34:59 INFO  [pn-refresh] flashui global rect=0,0,1404,1872 dither=nil t=1786239299.928868 
+2026-08-09 01:35:02 08/09/26-01:35:02 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786239302.369599 
+2026-08-09 01:35:02 08/09/26-01:35:02 INFO  [pn-refresh] ui partial rect=31,387,1341,1098 dither=nil t=1786239302.375576 
+2026-08-09 01:35:03 08/09/26-01:35:03 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786239303.173842 
+2026-08-09 01:35:03 08/09/26-01:35:03 INFO  [pn-refresh] ui partial rect=31,387,1341,1098 dither=nil t=1786239303.180551 
+2026-08-09 01:35:03 08/09/26-01:35:03 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786239303.825788 
+2026-08-09 01:35:03 08/09/26-01:35:03 INFO  [pn-refresh] ui partial rect=31,387,1341,1098 dither=nil t=1786239303.830989 
+2026-08-09 01:35:04 08/09/26-01:35:04 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786239304.967523 
+2026-08-09 01:35:04 08/09/26-01:35:04 INFO  [pn-refresh] ui partial rect=31,387,1341,1098 dither=nil t=1786239304.976536 
+2026-08-09 01:35:05 08/09/26-01:35:05 INFO  [pn-refresh] ui partial rect=31,387,1341,1098 dither=nil t=1786239305.505905 
+2026-08-09 01:35:05 08/09/26-01:35:05 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786239305.512585 
+2026-08-09 01:35:05 08/09/26-01:35:05 INFO  [pn-refresh] ui partial rect=31,387,1341,1098 dither=nil t=1786239305.776334 
+2026-08-09 01:35:05 08/09/26-01:35:05 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786239305.784611 
+2026-08-09 01:35:05 08/09/26-01:35:05 INFO  [pn-refresh] ui partial rect=31,387,1341,1098 dither=nil t=1786239305.922872 
+2026-08-09 01:35:06 08/09/26-01:35:06 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786239306.254634 
+2026-08-09 01:35:06 08/09/26-01:35:06 INFO  [pn-refresh] ui partial rect=31,387,1341,1098 dither=nil t=1786239306.257536 
+2026-08-09 01:35:06 08/09/26-01:35:06 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786239306.521348 
+2026-08-09 01:35:06 08/09/26-01:35:06 INFO  [pn-refresh] ui partial rect=31,387,1341,1098 dither=nil t=1786239306.902125 
+2026-08-09 01:35:06 08/09/26-01:35:06 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786239306.909568 
+2026-08-09 01:35:07 08/09/26-01:35:07 INFO  [pn-refresh] ui partial rect=31,387,1341,1098 dither=nil t=1786239307.242902 
+2026-08-09 01:35:07 08/09/26-01:35:07 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786239307.245385 
+2026-08-09 01:35:07 08/09/26-01:35:07 INFO  [pn-refresh] ui partial rect=31,387,1341,1098 dither=nil t=1786239307.400959 
+2026-08-09 01:35:07 08/09/26-01:35:07 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786239307.403523 
+2026-08-09 01:35:07 08/09/26-01:35:07 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786239307.675971 
+2026-08-09 01:35:07 08/09/26-01:35:07 INFO  [pn-refresh] ui partial rect=31,387,1341,1098 dither=nil t=1786239307.972894 
+2026-08-09 01:35:07 08/09/26-01:35:07 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786239307.975154 
+2026-08-09 01:35:08 08/09/26-01:35:08 INFO  [pn-refresh] ui partial rect=31,387,1341,1098 dither=nil t=1786239308.421920 
+2026-08-09 01:35:08 08/09/26-01:35:08 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786239308.428544 
+2026-08-09 01:35:08 08/09/26-01:35:08 INFO  [pn-refresh] ui partial rect=31,387,1341,1098 dither=nil t=1786239308.667665 
+2026-08-09 01:35:08 08/09/26-01:35:08 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786239308.673347 
+2026-08-09 01:35:08 08/09/26-01:35:08 INFO  [pn-refresh] ui partial rect=31,387,1341,1098 dither=nil t=1786239308.789085 
+2026-08-09 01:35:12 08/09/26-01:35:12 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786239312.336998 
+2026-08-09 01:35:12 08/09/26-01:35:12 INFO  [pn-refresh] ui partial rect=31,387,1341,1098 dither=nil t=1786239312.340820 
+2026-08-09 01:35:12 08/09/26-01:35:12 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786239312.714827 
+2026-08-09 01:35:12 08/09/26-01:35:12 INFO  [pn-refresh] ui partial rect=31,387,1341,1098 dither=nil t=1786239312.718731 
+2026-08-09 01:35:13 08/09/26-01:35:13 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786239313.054177 
+2026-08-09 01:35:13 08/09/26-01:35:13 INFO  [pn-refresh] ui partial rect=31,387,1341,1098 dither=nil t=1786239313.059323 
+2026-08-09 01:35:13 08/09/26-01:35:13 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786239313.384668 
+2026-08-09 01:35:13 08/09/26-01:35:13 INFO  [pn-refresh] ui partial rect=31,387,1341,1098 dither=nil t=1786239313.389750 
+2026-08-09 01:35:16 08/09/26-01:35:16 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786239316.262845 
+2026-08-09 01:35:16 08/09/26-01:35:16 INFO  [pn-refresh] ui partial rect=31,387,1341,1098 dither=nil t=1786239316.268557 
+2026-08-09 01:35:20 08/09/26-01:35:20 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786239320.009782 
+2026-08-09 01:35:20 08/09/26-01:35:20 INFO  [pn-refresh] ui partial rect=31,387,1341,1098 dither=nil t=1786239320.015277 
+2026-08-09 01:35:25 08/09/26-01:35:25 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786239325.622523 
+2026-08-09 01:35:25 08/09/26-01:35:25 INFO  [pn-refresh] ui partial rect=31,387,1341,1098 dither=nil t=1786239325.627712 
+2026-08-09 01:35:26 08/09/26-01:35:26 INFO  [pn-refresh] ui partial rect=59,1237,1285,103 dither=nil t=1786239326.493398 
+2026-08-09 01:35:28 08/09/26-01:35:28 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786239328.301098 
+2026-08-09 01:35:28 08/09/26-01:35:28 INFO  [pn-refresh] ui partial rect=31,387,1341,1098 dither=nil t=1786239328.303468 
+2026-08-09 01:35:30 08/09/26-01:35:30 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786239330.928387 
+2026-08-09 01:35:30 08/09/26-01:35:30 INFO  [pn-refresh] ui partial rect=31,387,1341,1098 dither=nil t=1786239330.936576 
+2026-08-09 01:35:31 08/09/26-01:35:31 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786239331.751542 
+2026-08-09 01:35:31 08/09/26-01:35:31 INFO  [pn-refresh] ui partial rect=31,387,1341,1098 dither=nil t=1786239331.754667 
+2026-08-09 01:35:35 08/09/26-01:35:35 INFO  [pn-refresh] flashui partial rect=31,387,1341,1098 dither=nil t=1786239335.718914 
+2026-08-09 01:35:56 08/09/26-01:35:56 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786239356.258173 
+2026-08-09 01:36:49 08/09/26-01:36:49 INFO  [pn-refresh] full global rect=0,0,1404,1872 dither=nil t=1786239409.135029 
+2026-08-09 01:36:53 08/09/26-01:36:53 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786239413.290093 
+2026-08-09 01:37:44 08/09/26-01:37:44 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786239464.516059 
+2026-08-09 01:41:27 08/09/26-01:41:27 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786239687.348383 
+2026-08-09 01:41:54 08/09/26-01:41:54 INFO  [pn-refresh] full global rect=0,0,1404,1872 dither=nil t=1786239714.169551 
+2026-08-09 01:41:56 08/09/26-01:41:56 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786239716.341783 
+2026-08-09 01:42:47 08/09/26-01:42:47 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786239767.283840 
+2026-08-09 01:43:32 08/09/26-01:43:32 INFO  [idlewasher] idle wash (debt=15) 
+2026-08-09 01:43:32 08/09/26-01:43:32 INFO  [pn-refresh] full global rect=0,0,1404,1872 dither=nil t=1786239812.399546 
+2026-08-09 02:00:22 08/09/26-02:00:22 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786240822.744846 
+2026-08-09 02:29:40 08/09/26-02:29:40 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786242580.224768 
+2026-08-09 02:29:50 08/09/26-02:29:50 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786242590.601570 
+2026-08-09 02:29:55 08/09/26-02:29:55 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786242595.658728 
+2026-08-09 02:30:14 08/09/26-02:30:14 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786242614.713451 
+2026-08-09 02:30:35 08/09/26-02:30:35 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786242635.985898 
+2026-08-09 02:30:54 08/09/26-02:30:54 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786242654.258312 
+2026-08-09 02:31:25 08/09/26-02:31:25 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786242685.200904 
+2026-08-09 02:31:41 08/09/26-02:31:41 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786242701.305475 
+2026-08-09 02:31:45 08/09/26-02:31:45 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786242705.988718 
+2026-08-09 02:31:47 08/09/26-02:31:47 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786242707.581801 
+2026-08-09 02:31:51 08/09/26-02:31:51 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786242711.646695 
+2026-08-09 02:31:53 08/09/26-02:31:53 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786242713.556781 
+2026-08-09 02:31:55 08/09/26-02:31:55 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786242715.304296 
+2026-08-09 02:31:57 08/09/26-02:31:57 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786242717.884706 
+2026-08-09 02:32:03 08/09/26-02:32:03 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786242723.944899 
+2026-08-09 02:32:05 08/09/26-02:32:05 INFO  [pn-refresh] full global rect=0,0,1404,1872 dither=nil t=1786242725.987236 
+2026-08-09 02:32:09 08/09/26-02:32:09 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786242729.013152 
+2026-08-09 02:32:13 08/09/26-02:32:13 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786242733.966579 
+2026-08-09 02:32:15 08/09/26-02:32:15 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786242735.649031 
+2026-08-09 02:32:43 08/09/26-02:32:43 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786242763.197098 
+2026-08-09 02:32:46 08/09/26-02:32:46 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786242766.843447 
+2026-08-09 02:33:18 08/09/26-02:33:18 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786242798.181224 
+2026-08-09 02:33:20 08/09/26-02:33:20 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786242800.376652 
+2026-08-09 02:33:22 08/09/26-02:33:22 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786242802.375170 
+2026-08-09 02:33:27 08/09/26-02:33:27 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786242807.420886 
+2026-08-09 02:33:41 08/09/26-02:33:41 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786242821.319070 
+2026-08-09 02:33:47 08/09/26-02:33:47 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786242827.879217 
+2026-08-09 02:33:51 08/09/26-02:33:51 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786242831.089414 
+2026-08-09 03:34:31 08/09/26-03:34:31 INFO  [idlewasher] idle wash (debt=28) 
+2026-08-09 03:34:31 08/09/26-03:34:31 INFO  [pn-refresh] full global rect=0,0,1404,1872 dither=nil t=1786246471.447689 
+2026-08-09 03:35:45 08/09/26-03:35:45 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786246545.260662 
+2026-08-09 03:35:47 08/09/26-03:35:47 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786246547.337541 
+2026-08-09 03:36:29 08/09/26-03:36:29 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786246589.170207 
+2026-08-09 03:37:14 08/09/26-03:37:14 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786246634.087272 
+2026-08-09 03:37:42 08/09/26-03:37:42 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786246662.951906 
+2026-08-09 03:38:06 08/09/26-03:38:06 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786246686.940656 
+2026-08-09 03:38:37 08/09/26-03:38:37 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786246717.742416 
+2026-08-09 03:39:05 08/09/26-03:39:05 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786246745.018003 
+2026-08-09 03:39:09 08/09/26-03:39:09 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786246749.772287 
+2026-08-09 03:39:20 08/09/26-03:39:20 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786246760.012948 
+2026-08-09 03:39:40 08/09/26-03:39:40 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786246780.061929 
+2026-08-09 03:40:15 08/09/26-03:40:15 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786246815.005495 
+2026-08-09 03:40:48 08/09/26-03:40:48 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786246848.466975 
+2026-08-09 03:41:21 08/09/26-03:41:21 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786246881.051744 
+2026-08-09 03:41:28 08/09/26-03:41:28 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786246888.776494 
+2026-08-09 03:42:01 08/09/26-03:42:01 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786246921.125937 
+2026-08-09 03:42:26 08/09/26-03:42:26 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786246946.728280 
+2026-08-09 03:42:36 08/09/26-03:42:36 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786246956.170520 
+2026-08-09 03:42:45 08/09/26-03:42:45 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786246965.024818 
+2026-08-09 03:42:51 08/09/26-03:42:51 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786246971.439531 
+2026-08-09 03:43:15 08/09/26-03:43:15 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786246995.592044 
+2026-08-09 03:43:33 08/09/26-03:43:33 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786247013.154456 
+2026-08-09 03:43:55 08/09/26-03:43:55 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786247035.021756 
+2026-08-09 03:43:57 08/09/26-03:43:57 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786247037.256401 
+2026-08-09 03:43:59 08/09/26-03:43:59 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786247039.542332 
+2026-08-09 03:44:35 08/09/26-03:44:35 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786247075.030580 
+2026-08-09 03:44:41 08/09/26-03:44:41 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786247081.124280 
+2026-08-09 03:44:50 08/09/26-03:44:50 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786247090.942265 
+2026-08-09 03:45:04 08/09/26-03:45:04 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786247104.577510 
+2026-08-09 03:45:33 08/09/26-03:45:33 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786247133.251588 
+2026-08-09 03:45:55 08/09/26-03:45:55 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786247155.666782 
+2026-08-09 03:46:23 08/09/26-03:46:23 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786247183.516025 
+2026-08-09 03:46:48 08/09/26-03:46:48 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786247208.613008 
+2026-08-09 03:47:13 08/09/26-03:47:13 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786247233.483944 
+2026-08-09 03:47:35 08/09/26-03:47:35 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786247255.223152 
+2026-08-09 03:47:39 08/09/26-03:47:39 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786247259.413182 
+2026-08-09 03:47:52 08/09/26-03:47:52 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786247272.372751 
+2026-08-09 03:48:28 08/09/26-03:48:28 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786247308.011114 
+2026-08-09 03:48:41 08/09/26-03:48:41 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786247321.255156 
+2026-08-09 03:49:22 08/09/26-03:49:22 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786247362.108175 
+2026-08-09 03:49:57 08/09/26-03:49:57 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786247397.664352 
+2026-08-09 03:50:20 08/09/26-03:50:20 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786247420.627111 
+2026-08-09 03:51:05 08/09/26-03:51:05 INFO  [idlewasher] idle wash (debt=42) 
+2026-08-09 03:51:05 08/09/26-03:51:05 INFO  [pn-refresh] full global rect=0,0,1404,1872 dither=nil t=1786247465.513621 
+2026-08-09 03:51:07 08/09/26-03:51:07 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786247467.893977 
+2026-08-09 03:51:37 08/09/26-03:51:37 INFO  [pn-refresh] full global rect=0,0,1404,1872 dither=nil t=1786247497.282546 
+2026-08-09 03:51:40 08/09/26-03:51:40 INFO  [pn-refresh] full global rect=0,0,1404,1872 dither=nil t=1786247500.439140 
+2026-08-09 03:51:42 08/09/26-03:51:42 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786247502.147147 
+2026-08-09 03:52:07 08/09/26-03:52:07 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786247527.913305 
+2026-08-09 03:52:39 08/09/26-03:52:39 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786247559.397277 
+2026-08-09 03:53:05 08/09/26-03:53:05 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786247585.160934 
+2026-08-09 03:53:28 08/09/26-03:53:28 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786247608.852111 
+2026-08-09 03:53:51 08/09/26-03:53:51 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786247631.265539 
+2026-08-09 03:53:58 08/09/26-03:53:58 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786247638.989012 
+2026-08-09 03:54:20 08/09/26-03:54:20 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786247660.698858 
+2026-08-09 03:54:46 08/09/26-03:54:46 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786247686.922510 
+2026-08-09 03:54:52 08/09/26-03:54:52 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786247692.625189 
+2026-08-09 03:55:03 08/09/26-03:55:03 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786247703.004702 
+2026-08-09 03:55:11 08/09/26-03:55:11 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786247711.821020 
+2026-08-09 03:55:33 08/09/26-03:55:33 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786247733.671707 
+2026-08-09 03:55:53 08/09/26-03:55:53 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786247753.330258 
+2026-08-09 03:56:24 08/09/26-03:56:24 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786247784.724245 
+2026-08-09 03:56:54 08/09/26-03:56:54 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786247814.381848 
+2026-08-09 03:57:34 08/09/26-03:57:34 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786247854.745639 
+2026-08-09 03:58:05 08/09/26-03:58:05 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786247885.625148 
+2026-08-09 03:58:34 08/09/26-03:58:34 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786247914.378547 
+2026-08-09 03:59:14 08/09/26-03:59:14 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786247954.937296 
+2026-08-09 03:59:27 08/09/26-03:59:27 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786247967.269997 
+2026-08-09 03:59:50 08/09/26-03:59:50 INFO  [pn-refresh] full global rect=0,0,1404,1872 dither=nil t=1786247990.134738 
+2026-08-09 03:59:52 08/09/26-03:59:52 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786247992.762515 
+2026-08-09 04:00:28 08/09/26-04:00:28 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786248028.308604 
+2026-08-09 04:00:57 08/09/26-04:00:57 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786248057.608457 
+2026-08-09 04:01:19 08/09/26-04:01:19 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786248079.595722 
+2026-08-09 04:01:35 08/09/26-04:01:35 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786248095.476754 
+2026-08-09 04:02:00 08/09/26-04:02:00 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786248120.757909 
+2026-08-09 04:02:39 08/09/26-04:02:39 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786248159.639265 
+2026-08-09 04:03:05 08/09/26-04:03:05 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786248185.928759 
+2026-08-09 04:03:21 08/09/26-04:03:21 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786248201.938008 
+2026-08-09 04:03:30 08/09/26-04:03:30 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786248210.595222 
+2026-08-09 04:04:05 08/09/26-04:04:05 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786248245.169312 
+2026-08-09 04:04:23 08/09/26-04:04:23 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786248263.861450 
+2026-08-09 04:04:51 08/09/26-04:04:51 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786248291.073477 
+2026-08-09 04:05:19 08/09/26-04:05:19 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786248319.535474 
+2026-08-09 04:05:42 08/09/26-04:05:42 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786248342.528606 
+2026-08-09 04:06:00 08/09/26-04:06:00 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786248360.329631 
+2026-08-09 04:06:20 08/09/26-04:06:20 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786248380.748807 
+2026-08-09 04:06:26 08/09/26-04:06:26 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786248386.477510 
+2026-08-09 04:06:31 08/09/26-04:06:31 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786248391.864641 
+2026-08-09 04:06:36 08/09/26-04:06:36 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786248396.652230 
+2026-08-09 04:06:53 08/09/26-04:06:53 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786248413.093839 
+2026-08-09 04:07:24 08/09/26-04:07:24 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786248444.685310 
+2026-08-09 04:07:31 08/09/26-04:07:31 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786248451.679805 
+2026-08-09 04:07:58 08/09/26-04:07:58 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786248478.181353 
+2026-08-09 04:08:02 08/09/26-04:08:02 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786248482.933122 
+2026-08-09 04:08:08 08/09/26-04:08:08 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786248488.892144 
+2026-08-09 04:08:10 08/09/26-04:08:10 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786248490.570126 
+2026-08-09 04:08:22 08/09/26-04:08:22 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786248502.395545 
+2026-08-09 04:08:59 08/09/26-04:08:59 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786248539.261469 
+2026-08-09 04:09:39 08/09/26-04:09:39 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786248579.150526 
+2026-08-09 04:10:17 08/09/26-04:10:17 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786248617.044656 
+2026-08-09 04:10:41 08/09/26-04:10:41 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786248641.819253 
+2026-08-09 04:11:16 08/09/26-04:11:16 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786248676.378064 
+2026-08-09 04:12:00 08/09/26-04:12:00 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786248720.414186 
+2026-08-09 04:12:27 08/09/26-04:12:27 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786248747.720341 
+2026-08-09 04:12:59 08/09/26-04:12:59 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786248779.045260 
+2026-08-09 04:13:24 08/09/26-04:13:24 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786248804.559900 
+2026-08-09 04:13:36 08/09/26-04:13:36 INFO  [idlewasher] bundled wash (debt max) 
+2026-08-09 04:13:36 08/09/26-04:13:36 INFO  [pn-refresh] full global rect=0,0,1404,1872 dither=nil t=1786248816.436821 
+2026-08-09 04:13:43 08/09/26-04:13:43 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786248823.621715 
+2026-08-09 04:13:45 08/09/26-04:13:45 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786248825.050533 
+2026-08-09 04:13:47 08/09/26-04:13:47 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786248827.102579 
+2026-08-09 04:14:01 08/09/26-04:14:01 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786248841.859045 
+2026-08-09 04:14:05 08/09/26-04:14:05 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786248845.870644 
+2026-08-09 04:14:07 08/09/26-04:14:07 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786248847.554857 
+2026-08-09 04:14:09 08/09/26-04:14:09 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786248849.604870 
+2026-08-09 04:14:11 08/09/26-04:14:11 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786248851.460770 
+2026-08-09 04:14:13 08/09/26-04:14:13 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786248853.114755 
+2026-08-09 04:14:14 08/09/26-04:14:14 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786248854.721289 
+2026-08-09 04:14:16 08/09/26-04:14:16 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786248856.353171 
+2026-08-09 04:14:20 08/09/26-04:14:20 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786248860.110104 
+2026-08-09 04:14:24 08/09/26-04:14:24 INFO  [pn-refresh] flashui global rect=-28,0,1460,1872 dither=nil t=1786248864.719669 
+2026-08-09 04:14:34 08/09/26-04:14:34 INFO  [pn-refresh] partial partial rect=-28,0,1460,1872 dither=nil t=1786248874.430273 
+2026-08-09 04:14:36 ffi.findlib: turbojpeg [0.4.0]
+2026-08-09 04:14:36 ffi.load: libs/libturbojpeg.so.0.4.0
+2026-08-09 04:14:36 08/09/26-04:14:36 INFO  [pn-refresh] full global rect=0,0,1404,1872 dither=nil t=1786248876.279788 
+2026-08-09 04:14:38 08/09/26-04:14:38 INFO  [pn-refresh] flashpartial global rect=0,0,1404,1872 dither=nil t=1786248878.837688 
+2026-08-09 05:15:45 08/09/26-05:15:45 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786252545.712361 
+2026-08-09 05:15:47 08/09/26-05:15:47 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786252547.525772 
+2026-08-09 06:10:56 08/09/26-06:10:56 INFO  [pn-refresh] ui partial rect=0,1836,1404,36 dither=nil t=1786255856.290640 
+2026-08-09 06:10:56 08/09/26-06:10:56 INFO  [pn-refresh] ui partial rect=477,12,449,131 dither=nil t=1786255856.295239 
+2026-08-09 06:10:58 08/09/26-06:10:58 INFO  [pn-refresh] ui partial rect=477,12,449,131 dither=nil t=1786255858.477689 
+2026-08-09 06:11:38 08/09/26-06:11:38 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786255898.466755 
+2026-08-09 06:11:39 08/09/26-06:11:39 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786255899.998309 
+2026-08-09 07:12:19 08/09/26-07:12:19 INFO  [idlewasher] idle wash (debt=16) 
+2026-08-09 07:12:19 08/09/26-07:12:19 INFO  [pn-refresh] full global rect=0,0,1404,1872 dither=nil t=1786259539.852713 
+2026-08-09 07:20:14 08/09/26-07:20:14 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786260014.704308 
+2026-08-09 07:20:18 08/09/26-07:20:18 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786260018.204337 
+2026-08-09 07:20:20 08/09/26-07:20:20 INFO  [pn-refresh] full global rect=0,0,1404,1872 dither=nil t=1786260020.058527 
+2026-08-09 07:20:24 08/09/26-07:20:24 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786260024.418715 
+2026-08-09 07:20:46 08/09/26-07:20:46 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786260046.735078 
+2026-08-09 07:21:15 08/09/26-07:21:15 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786260075.033592 
+2026-08-09 13:32:01 08/09/26-13:32:01 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786282321.720245 
+2026-08-09 13:32:06 08/09/26-13:32:06 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786282326.021671 
+2026-08-09 16:37:42 08/09/26-16:37:42 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786293462.777592 
+2026-08-09 16:38:29 08/09/26-16:38:29 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786293509.376174 
+2026-08-09 16:38:58 08/09/26-16:38:58 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786293538.065451 
+2026-08-09 16:39:01 08/09/26-16:39:01 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786293541.420825 
+2026-08-09 16:39:07 08/09/26-16:39:07 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786293547.949485 
+2026-08-09 16:39:53 08/09/26-16:39:53 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786293593.450531 
+2026-08-09 16:40:19 08/09/26-16:40:19 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786293619.205917 
+2026-08-09 16:40:40 08/09/26-16:40:40 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786293640.654268 
+2026-08-09 16:41:25 08/09/26-16:41:25 INFO  [idlewasher] idle wash (debt=15) 
+2026-08-09 16:41:25 08/09/26-16:41:25 INFO  [pn-refresh] full global rect=0,0,1404,1872 dither=nil t=1786293685.586597 
+2026-08-09 18:08:35 08/09/26-18:08:35 INFO  [idlewasher] deep clean (GC16) 
+2026-08-09 18:08:35 08/09/26-18:08:35 INFO  [pn-refresh] full global rect=0,0,1404,1872 dither=nil t=1786298915.484252 
+2026-08-09 18:08:38 08/09/26-18:08:38 INFO  [idlewasher] deep clean restore (refresh_waveform=6) 
+2026-08-09 18:08:39 08/09/26-18:08:39 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786298919.970727 
+2026-08-09 18:09:16 08/09/26-18:09:16 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786298956.324087 
+2026-08-09 18:09:38 08/09/26-18:09:38 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786298978.555380 
+2026-08-09 18:10:12 08/09/26-18:10:12 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786299012.354442 
+2026-08-09 18:10:52 08/09/26-18:10:52 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786299052.569933 
+2026-08-09 18:11:21 08/09/26-18:11:21 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1786299081.277882 
+
+2026-08-09 22:01:41 Rotating log.
