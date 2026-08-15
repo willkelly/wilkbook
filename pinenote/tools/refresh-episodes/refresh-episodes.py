@@ -62,6 +62,15 @@ DEFAULT_THRESHOLDS = [0.10, 0.15, 0.20, 0.25, 0.30, 0.40, 0.50, 0.70,
 HIST_EDGES = [0.0, 0.10, 0.15, 0.20, 0.30, 0.40, 0.50, 0.70, 1.00,
               1.50, 2.00, 3.00, 5.00, 10.00, 30.00, float("inf")]
 
+# The field rates from the issue-#14 re-analysis, as (threshold_s, k, n)
+# over its 399 adjacent full-panel pairs.  Used only to ask "would this
+# log have shown the defect if it occurred at the field rate?" — which is
+# the only honest thing a NON-reproduction can report.  Counts come from
+# the published sorted low tail:
+#   <0.5 s : 131 184 214 232 277 298 307 322 322 391          = 10
+#   <1.0 s : the same plus 503 746 933                        = 13
+FIELD_RATES = [(0.5, 10, 399), (1.0, 13, 399)]
+
 
 class Trace:
     __slots__ = ("intent", "decision", "x", "y", "w", "h", "dither", "t", "line")
@@ -262,6 +271,8 @@ def main(argv=None):
     ap.add_argument("--clock-offset", type=float, default=0.0,
                     help="seconds to ADD to ledger host timestamps to reach guest clock")
     ap.add_argument("--json", type=str, default="")
+    ap.add_argument("--no-field-bound", action="store_true",
+                    help="skip the comparison against the issue-#14 field rates")
     args = ap.parse_args(argv)
 
     thresholds = ([float(v) for v in args.thresholds.split(",") if v.strip()]
@@ -323,6 +334,11 @@ def main(argv=None):
     print("-" * 72)
     print("%8s %8s %9s %9s %8s   %s"
           % ("thresh", "gaps<T", "episodes", "max run", "hits", "P(>=hits | base)"))
+    # Base rate is a property of the log, not of the threshold — computing
+    # it inside the sweep re-walks every trace once per threshold.
+    base_hits = sum(1 for tr in fullpart
+                    if has_menu_antecedent(tr.t, traces, extent, args.window)[0])
+    base = base_hits / len(fullpart)
     sweep = []
     for T in thresholds:
         eps = episodes_at(fullpart, T)
@@ -332,9 +348,6 @@ def main(argv=None):
         for e in eps:
             ok, _, _ = has_menu_antecedent(e[0].t, traces, extent, args.window)
             hits += 1 if ok else 0
-        base_hits = sum(1 for tr in fullpart
-                        if has_menu_antecedent(tr.t, traces, extent, args.window)[0])
-        base = base_hits / len(fullpart)
         p = binom_at_least(hits, len(eps), base) if eps else float("nan")
         sweep.append({"threshold_s": T, "gaps_below": n_gaps,
                       "episodes": len(eps), "max_run": maxrun,
@@ -365,6 +378,30 @@ def main(argv=None):
     if n_ui == 0:
         print("  NOTE: no full-panel ui/partial occurs anywhere in this log, so the")
         print("        conjunction CANNOT fire — read the flash*/global column instead.")
+
+    # ---- power: would the field rate have shown up in this log? ----
+    #
+    # A non-reproduction is only worth anything with a bound attached.
+    # "We saw none" is compatible with both "it does not happen here"
+    # and "we did not look long enough"; the binomial separates them.
+    if not args.no_field_bound:
+        print("\n" + "-" * 72)
+        print("BOUND vs the field rate  (what a NON-reproduction is worth)")
+        print("-" * 72)
+        bounds = []
+        for T, k, n in FIELD_RATES:
+            rate = k / n
+            obs = sum(1 for g in capped if g[0] < T)
+            p_le = sum(math.comb(len(capped), i) * rate ** i *
+                       (1 - rate) ** (len(capped) - i) for i in range(obs + 1))
+            bounds.append({"threshold_s": T, "field_rate": rate,
+                           "observed": obs, "pairs": len(capped), "p_le": p_le})
+            print("  gaps < %.2f s: field %d/%d = %.2f %%; here %d/%d.  "
+                  "P(<=%d | field rate) = %.3g"
+                  % (T, k, n, 100 * rate, obs, len(capped), obs, p_le))
+        out["field_bound"] = bounds
+        print("  (this compares RATES PER ADJACENT PAIR only; it does not")
+        print("   claim the two logs sampled the same reading behaviour)")
 
     # ---- low tail, as ratios: is there a boundary at all? ----
     print("\n" + "-" * 72)
