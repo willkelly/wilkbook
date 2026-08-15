@@ -295,6 +295,20 @@ It does not change Linux 7.0's `ROCKCHIP_SLEEP_PD_CONFIG=0xff` pmdomain ABI.
   top of the forward-port patch **and** the `charger { … }` child
   further down. **dtc stops at the first error**, so dropping only the
   `charger` hunk moves the failure to `battery` rather than fixing it.
+
+  Verified directly against the mainline source rather than inferred
+  from the commit: in `linux-7.1.5`'s
+  `arch/arm64/boot/dts/rockchip/rk3566-pinenote.dtsi`,
+
+  ```
+   43:	battery: battery {
+   44:		compatible = "simple-battery";
+  287:		charger {
+  288:			monitored-battery = <&battery>;
+  ```
+
+  so on a 7.1+ rebase **both** backported hunks must go, and what
+  remains to check is whatever else moved behind that first dtc error.
   Measured 2026-08-14 (issue #13); `make kernel-version-check` now
   detects the drift in ~0.6 s instead of at `dtbs` failure time.
 
