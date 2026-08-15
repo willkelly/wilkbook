@@ -94,18 +94,32 @@ best.
    supply being up.
 3. **Something else in hrdl's configuration keeps this path alive** that
    we adopted without isolating.
-4. **Measurement artifact — the device may have woken earlier.** E-ink
-   retains its image with the rails down, and the RTC backstop fires
-   hourly (`pinenote/services/autosuspend.scm`, `backstop-seconds`
-   default 3600). "I opened the cover and it was awake" is therefore
-   also consistent with a backstop wake minutes earlier that nobody
-   saw. The daemon logs `resumed after %ds (charge_now=%s)` on every
-   resume (`pinenote/tools/power/autosuspend.lua`), and that duration
-   separates the two readings — a cover wake shows a sleep far shorter
-   than the backstop period. The 2026-08-09 observation was recorded
-   without an artifact directory and without checking that log, so this
-   candidate is not yet excluded. **Check the log before spending a
-   session on candidates 1–3.**
+4. ~~**Measurement artifact — the device may have woken earlier.**~~
+   **REFUTED 2026-08-15 by direct IRQ attribution.** This candidate was
+   added earlier the same day on the reasoning that the 2026-08-09
+   observation carried no artifact directory and no log check. It does
+   not survive the measurement: a cover-close suspend followed by a
+   cover-open wake **8 seconds later** reported
+   `/sys/power/pm_wakeup_irq = 63`, which the kernel labels `cover`
+   (`rockchip_gpio_irq 23 Edge`), against `30` (`rk817`) for a
+   power-button wake in the paired control.
+   `doc/artifacts/pinenote-cover-wake-attribution-20260815/`.
+
+**ANSWERED 2026-08-15: the cover really does wake it, through GPIO0.**
+hwirq 23 is `gpio0` pin 23 = RK_PC7, matching the live DT. So a pad on a
+supply marked `regulator-off-in-suspend` delivered an edge. Candidates 1
+and 2 remain live; **2 fits without requiring the measured 4.64 mA to be
+wrong**, since GPIO0 is the PMU bank and `RKPM_SLP_PMUALIVE_32K` is set
+in `cfg 0x5ec`, so alive-domain logic may see a level change with the IO
+supply down. The mechanism is still unmeasured — this attributed the
+effect, not the cause.
+
+**Do not use the wakeup counters as the discriminator.** The paired
+control falsified that: `gpio-keys` incremented on a *power-button* wake
+(189 → 190 across suspends 170 → 171, a constant offset of 19), because
+the driver re-reads `SW_LID` on every resume. Reading that counter as
+"the cover actuated 189 times" is wrong by roughly the number of
+resumes. `pm_wakeup_irq` is the instrument that works.
 
 **What the firmware word actually arms.** The DT sets
 `rockchip,suspend-config`'s companion `rockchip,wakeup-config = <0x10>`

@@ -1,0 +1,36 @@
+=== BASELINE ===
+t=04:35:05
+suspend_success=170 fail=0
+pm_wakeup_irq=30
+src ws8100_pen             event=1 active=1
+src rk808-rtc.3.auto       event=134 active=134
+src rk817-battery          event=2 active=2
+src rk817-charger          event=2 active=2
+src gpio-keys              event=189 active=189
+last_resume=2026-08-15 04:01:04 [autosuspend] resumed after 850s (charge_now=2358464)
+
+=== ROUND 1: power-button suspend, power-button wake ===
+t=04:35:45
+suspend_success=171 fail=0
+pm_wakeup_irq=30
+src ws8100_pen             event=1 active=1
+src rk808-rtc.3.auto       event=134 active=134
+src rk817-battery          event=2 active=2
+src rk817-charger          event=2 active=2
+src gpio-keys              event=190 active=190
+last_resume=2026-08-15 04:35:34 [autosuspend] resumed after 23s (charge_now=2553168)
+
+=== ROUND 2: cover-close suspend, cover-open wake ===
+t=04:38:56
+suspend_success=172 fail=0
+pm_wakeup_irq=63
+src ws8100_pen             event=1 active=1
+src rk808-rtc.3.auto       event=134 active=134
+src rk817-battery          event=3 active=3
+src rk817-charger          event=3 active=3
+src gpio-keys              event=203 active=203
+-- tail of the daemon log
+2026-08-15 04:35:34 [autosuspend] resumed after 23s (charge_now=2553168)
+2026-08-15 04:37:43 [autosuspend] external power gone -- auto-suspend active again
+2026-08-15 04:37:47 [autosuspend] cover closed -- suspending on request
+2026-08-15 04:38:07 [autosuspend] resumed after 8s (charge_now=2601156)
