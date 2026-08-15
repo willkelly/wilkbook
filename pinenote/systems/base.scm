@@ -2,7 +2,8 @@
   #:use-module (gnu bootloader)
   #:use-module ((gnu packages linux) #:select (wireless-regdb))
   #:use-module (pinenote images pinenote-bootloader)
-  #:use-module ((gnu services) #:select (service service-kind))
+  #:use-module ((gnu services) #:select (service service-kind modify-services))
+  #:use-module ((guix packages) #:select (package? package-name))
   #:use-module (gnu services base)
   #:use-module (gnu system)
   #:use-module (gnu system accounts)
@@ -11,6 +12,7 @@
   #:use-module (pinenote images pinenote-initramfs)
   #:use-module (pinenote images pinenote-partitions)
   #:use-module (pinenote packages boot)
+  #:use-module (pinenote packages cross-fixes)
   #:use-module (pinenote packages ebc-test)
   #:use-module (pinenote packages firmware)
   #:use-module (pinenote packages kernel)
@@ -47,12 +49,30 @@
         (service pinenote-ebc-test-service-type)
         (service pinenote-state-service-type)))
 
+;; The udev rule PROVIDERS are packages too (lvm2, fuse, alsa-utils, crda), and
+;; they arrive through services, not through the `packages' field -- so the
+;; rewrite applied there never sees them.  alsa-utils is exactly the one that
+;; needs it: cross-building alsa-lib bootstraps with libtoolize, which pulls
+;; automake, whose own test suite does not survive a cross build.
+(define (%fix-cross-udev-rules services)
+  (modify-services services
+    (udev-service-type
+     config => (udev-configuration
+                (inherit config)
+                (rules (map (lambda (r)
+                              (if (and (package? r)
+                                       (string=? (package-name r) "alsa-utils"))
+                                  (fix-cross-builds r)
+                                  r))
+                            (udev-configuration-rules config)))))))
+
 (define %base-services-without-guix
   ;; Release-slot flavors should not carry on-device package management unless
   ;; they explicitly opt in, as pinenote-dev does below.
-  (filter (lambda (base-service)
-            (not (eq? (service-kind base-service) guix-service-type)))
-          %base-services))
+  (%fix-cross-udev-rules
+   (filter (lambda (base-service)
+             (not (eq? (service-kind base-service) guix-service-type)))
+           %base-services)))
 
 (define %pinenote-base-services
   (append %pinenote-bringup-services %base-services-without-guix))
@@ -93,5 +113,20 @@
             (group "users")
             (supplementary-groups '("wheel" "input" "video" "tty")))
            %base-user-accounts))
-    (packages packages)
+    ;; Applied HERE, not to the #:packages default: pinenote-reader.scm passes
+    ;; its own #:packages, so a default-arg rewrite is silently skipped for the
+    ;; flavor that matters.
+    ;;
+    ;; SURGICAL, and it has to be.  Mapping fix-cross-builds over the whole
+    ;; list makes a rewritten variant of everything that build-depends on
+    ;; automake, and the profile then refuses to hold two e2fsprogs
+    ;; ("You cannot have two different versions or variants of `e2fsprogs'").
+    ;; man-db is the one leaf that pulls the broken groff-minimal, and nothing
+    ;; propagates it, so rewriting just that collides with nothing.
+    (packages (map (lambda (p)
+                     (if (and (package? p)
+                              (string=? (package-name p) "man-db"))
+                         (fix-cross-builds p)
+                         p))
+                   packages))
     (services services)))
