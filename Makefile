@@ -63,7 +63,7 @@ FLAVORS = minimal slim networked dev usb-console usb-console-linux-6-6 reader re
 
 .PHONY: help packages kernel kernel-drv reader-system-drv qemu-smoke qemu-virt qemu-virt-check \
          check-host wbf-check wbf-notice ebc-logic-check ebc-barrier-check rastersim-check koreader-input-check orientation-check optics-check power-check rockchip-pm-check activation-positive-check suspend-check \
-         battery-dtb-check time-machine-check kernel-version-check library-check ultra-coupling-check \
+         battery-dtb-check time-machine-check gexp-modules-check kernel-version-check library-check ultra-coupling-check \
         $(FLAVORS) $(addprefix image-,$(FLAVORS)) $(addprefix rootfs-,$(FLAVORS))
 
 help:
@@ -89,6 +89,7 @@ help:
 	@echo "  rockchip-pm-check dormant BSP SIP/PM model, DTB, and zero-call checks"
 	@echo "  activation-positive-check  fake capabilities/coordinator + active PM scenario; production hard-off"
 	@echo "  suspend-check     offline fail-closed e-reader suspend qualification gates"
+	@echo "  gexp-modules-check  no use-modules in a shepherd start/stop without a (modules ..) field"
 	@echo
 	@echo "Flags:"
 	@echo "  TIME_MACHINE=1    build through channels.scm (pinned/reproducible; required for releases)"
@@ -253,7 +254,8 @@ qemu-virt-visual:
 CHECK_HOST_TARGETS = ebc-logic-check ebc-barrier-check rastersim-check \
         koreader-input-check orientation-check optics-check power-check \
         rockchip-pm-check activation-positive-check suspend-check \
-        library-check ultra-coupling-check battery-dtb-check time-machine-check
+        library-check ultra-coupling-check battery-dtb-check time-machine-check \
+        gexp-modules-check
 
 # Parse time, not recipe time: a recipe-level guard would run only AFTER every
 # prerequisite had already completed, so it could not prevent the mistake it
@@ -286,6 +288,14 @@ battery-dtb-check:
 # pin it to channels.scm.  Pure text analysis of this file; needs no guix.
 time-machine-check:
 	sh pinenote/scripts/preflight/validate-time-machine-wiring.sh
+
+# A shepherd service file is COMPILED, so a `use-modules' inside a start/stop
+# lambda imports nothing and every call it was meant to satisfy throws Unbound
+# variable -- inside a catch #t, silently.  Shipped twice (dmc.scm, live
+# 2026-08-07; frontlight.scm).  Pure text analysis of the service sources;
+# needs no guix.
+gexp-modules-check:
+	sh pinenote/scripts/preflight/validate-gexp-modules.sh
 
 # Host-side waveform parser tests (offline ladder rung 1); needs the
 # per-device .wbf (never committed): make wbf-check WBF=/path/to/ebc.wbf
