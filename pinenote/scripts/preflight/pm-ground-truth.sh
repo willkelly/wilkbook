@@ -35,15 +35,44 @@ for r in /sys/class/regulator/regulator.*; do
     "$(cat "$r/suspend_mem_state" 2>/dev/null || echo '?')"
 done
 
+# Wakeup sources, WITH COUNTS -- not just names.
+#
+# The names-only form could say which sources were armed but never which one
+# actually fired, so "what woke it?" stayed a hardware question. The counters
+# plus /sys/power/pm_wakeup_irq are the attribution: pm_wakeup_irq names the
+# IRQ that ended the last suspend, which is the discriminator the cover-wake
+# investigation needs (the cover switch and the rk817 pwrkey are different
+# interrupts). Same fields pinenote/tools/power/power-snapshot.scm already
+# records, so the vocabulary is not new.
 echo "== wakeup sources"
-for w in /sys/class/wakeup/wakeup*/name; do
-  [ -e "$w" ] && cat "$w"
+for r in /sys/class/wakeup/wakeup*; do
+  [ -e "$r/name" ] || continue
+  printf '%s:active=%s:event=%s:wakeup=%s:expire=%s\n' \
+    "$(cat "$r/name" 2>/dev/null || echo '?')" \
+    "$(cat "$r/active_count" 2>/dev/null || echo '?')" \
+    "$(cat "$r/event_count" 2>/dev/null || echo '?')" \
+    "$(cat "$r/wakeup_count" 2>/dev/null || echo '?')" \
+    "$(cat "$r/expire_count" 2>/dev/null || echo '?')"
 done | sort
+printf 'wakeup_count=%s\n' "$(cat /sys/power/wakeup_count 2>/dev/null || echo '?')"
+printf 'pm_wakeup_irq=%s\n' "$(cat /sys/power/pm_wakeup_irq 2>/dev/null || echo '?')"
 
 echo "== battery"
 for f in charge_now charge_full voltage_now capacity status; do
   printf '%s=%s\n' "$f" "$(cat /sys/class/power_supply/rk817-bat*/$f 2>/dev/null || echo '?')"
 done
+
+# Memory. The README advertises a boot-RAM figure whose only provenance was a
+# one-off reading nobody can reproduce; capturing it here means the number
+# comes out of the same staged, SHA-verified capture as everything else, for
+# free, on every run -- rather than costing its own supervised session.
+echo "== memory"
+for f in MemTotal MemFree MemAvailable Buffers Cached Shmem Slab; do
+  printf '%s\n' "$(grep "^$f:" /proc/meminfo 2>/dev/null || echo "$f: ?")"
+done
+free -m 2>/dev/null || echo "free unavailable"
+echo "-- top RSS"
+ps -eo rss,comm --sort=-rss 2>/dev/null | head -20 || echo "ps unavailable"
 
 echo "== suspend state"
 cat /sys/power/mem_sleep 2>/dev/null || echo "mem_sleep unavailable"

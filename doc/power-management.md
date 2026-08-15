@@ -86,6 +86,36 @@ best.
    supply being up.
 3. **Something else in hrdl's configuration keeps this path alive** that
    we adopted without isolating.
+4. **Measurement artifact — the device may have woken earlier.** E-ink
+   retains its image with the rails down, and the RTC backstop fires
+   hourly (`pinenote/services/autosuspend.scm`, `backstop-seconds`
+   default 3600). "I opened the cover and it was awake" is therefore
+   also consistent with a backstop wake minutes earlier that nobody
+   saw. The daemon logs `resumed after %ds (charge_now=%s)` on every
+   resume (`pinenote/tools/power/autosuspend.lua`), and that duration
+   separates the two readings — a cover wake shows a sleep far shorter
+   than the backstop period. The 2026-08-09 observation was recorded
+   without an artifact directory and without checking that log, so this
+   candidate is not yet excluded. **Check the log before spending a
+   session on candidates 1–3.**
+
+**What the firmware word actually arms.** The DT sets
+`rockchip,suspend-config`'s companion `rockchip,wakeup-config = <0x10>`
+(`linux-pinenote-7.0-bsp-sip-probe.patch`, carried unchanged by the
+ultra-rails patch). The BSP header in that same patch defines
+`RKPM_GPIO_WKUP_EN BIT(4)` — so `0x10` arms **GPIO wake and nothing
+else**: not UART0 (`BIT(5)`), not SDMMC0 (`BIT(6)`), not the per-CPU
+wakes (`BIT(0..3)`). That literal is quoted raw in several places in
+this document and pinned without semantics by
+`pinenote/scripts/preflight/inspect-kernel-source.sh`; it means one
+thing, and this is it.
+
+**How the next capture answers this without a dedicated session.**
+`pinenote/scripts/preflight/pm-ground-truth.sh` now records per-source
+wakeup counters (`active/event/wakeup/expire`) plus
+`/sys/power/pm_wakeup_irq`, which names the IRQ that ended the last
+suspend. Cover and pwrkey are different interrupts, so a pre/post
+capture pair attributes the wake instead of leaving it to recollection.
 
 **Why it matters even though the news is good.** A third wake source is
 a product win. But the same reasoning that said "cover cannot wake"
