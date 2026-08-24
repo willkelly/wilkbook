@@ -20,6 +20,82 @@ deepens), `doc/kernel-forward-port.md` (the 2026-07-04 cherry-pick
 record), `doc/driver-findings-report.md` (our findings; the corruption
 investigation), `doc/refresh-policy.md` (decisions this would affect).
 
+## Corrections from the 2026-08-24 re-read (tip 819ba1724a6f, re-verified)
+
+Re-read against a fresh shallow clone when interactive refresh became an
+active question (issue #20, ink). The branch topology, architecture, UAPI
+table, bug-class analysis and the §5 corruption-hunt strategy all still
+check out. Four corrections, most consequential first:
+
+1. **§1.2 attributes the 85 Hz to the panel-simple mode. It does not come
+   from there.** `70cbadbce9ab` adds an 85 Hz entry, but
+   `DRM_MODE_TYPE_PREFERRED` remains on the 40 Hz one and
+   `rockchip_ebc_crtc_atomic_check` overwrites `mode->clock` with whatever
+   `rockchip_ebc_set_dclk()` achieved. The mode list is decorative -- the
+   same conclusion this repo already reached for its own driver. The rate
+   actually comes from `SDCLK_DIV` and a `cpll_333m` reclock:
+
+   | | mechanism | sdck | rate |
+   |---|---|---|---|
+   | ours | dclk 200 MHz, SDCLK_DIV=7 (/8) | 25 MHz | **63.744 Hz** |
+   | hrdl LUT/3WIN | cpll_333m->250, dclk->250, /8 | 31.25 MHz | **79.68 Hz** |
+   | hrdl direct | cpll_333m->33.33, dclk->34, **/1** | 33.33 MHz | **84.99 Hz** |
+
+   His `9444147d35a2` message states the /1 trick is undocumented in the
+   RK3568 TRM, reverse-engineered from the Lenovo Smart Paper, and that
+   "LUT mode and 3WIN mode are not compatible with this setting". So
+   **85 Hz is structurally direct-mode-only; 79.68 Hz is not.**
+
+2. **The clock work is SEPARABLE, and `doc/refresh-policy.md` writes off
+   the lever it enables.** That document's timing correction says
+   `dclk_select=1` is a no-op because `DCLK_EBC` is a divider-less mux
+   over {400, 333, 200} -- true, and the reason is that nothing reclocks
+   the mux parent. `CPLL_333M` is `COMPOSITE_NOMUX` off cpll with its own
+   divider, so setting it to 250 MHz first lets the EBC mux select 250
+   exactly. Cost: ~2 DT lines + ~10 driver lines. Gain: 1.25x on every
+   mode we ship (GL16 596 -> 477 ms, A2 157 -> 126 ms) and 94% of the
+   waveform's authored rate instead of 75%. **Gated on DDR** -- EBC fetch
+   rises ~335 -> ~419 MB/s on the path the 2026-08-07 A/B proved starves
+   silently at 324 MHz. Not to be shipped on arithmetic.
+
+3. **`ROCKCHIP_EBC_DRIVER_MODE_FAST` is named in the UAPI table and
+   nowhere else, and it is the interesting one.** It is a separate
+   scheduler, not a parameterisation: no hints, no LUT walk, every pixel
+   binary from two precomputed constants, and cancellation is
+   **unconditional** (`q8_cancel = q8_start & ~q8_idle_finish`, no
+   `can_cancel` gate). ~11.7 ms to first motion at the cost of 1-bit
+   output and visible smear. §1.2's cancellation paragraph describes only
+   the NORMAL-mode variant, which is gated to binary-pixel DU->DU
+   transitions -- **a Y4 GL16/GC16 transition cannot be aborted in his
+   driver either.**
+
+4. **§3.2's "not separable" list is too broad.** Three items are
+   independent of `custom_wf.bin`, the NEON blitters and direct mode: the
+   clock reclock (above); the **work-item drain gate** (he stops folding
+   new damage in once a work item is pending, so the pipeline drains and
+   the global launches -- ~5 lines, and the structural fix for the
+   sustained-damage lesson we currently handle by procedure); and
+   `shrink_virtual_window` (ships default-off in his tree, so treat as
+   experiment, not cherry-pick).
+
+**Also worth carrying:** direct mode's phase buffer is 2 bits/pixel, so
+it fetches ~56 MB/s against 3WIN's ~335 MB/s -- roughly **6x less** DDR.
+Given that our one confirmed EBC failure mode is DDR starvation of the
+phase fetch, that reads as an argument *for* direct mode rather than a
+hazard, and it changes how §3.1's tradeoff should be weighed.
+
+**Cancellation, FAST, hints, `redraw_delay` and the CLUT remain
+inseparable** -- all require the driver to own per-frame phase bytes,
+which 3WIN/LUT mode cannot express (one hardware phase counter per
+scheduled area; no register says "this pixel is 6 frames into a different
+transition"). §3.1's rejection of the full swap therefore still stands on
+its strongest ground: the verbatim host harness and `ebc-replay` both
+stop compiling on x86.
+
+**Trigger status.** §3.1 said to re-evaluate "when the corruption hunt
+closes, when pen latency becomes the active track ... or when a community
+rebase forces a structural decision." The first two have now fired.
+
 ## 1. What the rewrite actually is (from source)
 
 ### 1.1 Branch topology — there are two drivers, and he maintains both
