@@ -315,3 +315,22 @@ the start of this track — no panel required. Policy background in
       policy (the Onyx pattern); pen fast path via driver hints;
       `gud-gadget` (PineNote as USB e-ink monitor) as a display-debug
       path and party trick.
+- [ ] **1.x — audio, deferred with intent (2026-08-24, #18).** The
+      hardware and kernel are ready and were verified on glass: ALSA card
+      0 `simple-card` registers at boot with every codec module loaded.
+      What is missing is userland — `aplay`/`amixer` are not on `PATH`,
+      there is no mixer state, and the KOReader bundle carries no TTS
+      plugin and no audio decoder at all. Two directions, and they
+      compose rather than compete: **TTS** (works on any book, no content
+      pipeline, accessibility) and **audiobook position handoff** —
+      bundling metadata that maps a position in a DRM-free book to a
+      position in a DRM-free audiobook of the same work. The second is
+      the one a phone structurally cannot do, because the commercial
+      ecosystems that offer it only do so inside their own DRM.
+      Playback needs a power state the device does not have (panel and
+      frontlight down, CPU alive) and suspend inhibition, which
+      `autosuspend.lua` has no concept of — it idles on input activity,
+      and a listener touches nothing. **Draining battery while actively
+      listening is fine**: it is opt-in, it costs nothing when unused, and
+      it does not touch the idle-standby figures the reader story rests
+      on. The constraint is that it must not surprise anyone.
