@@ -23,6 +23,14 @@ worse than this, that's a bug report; if it does better, brag.
 - **The stylus works as a pointer** — taps and UI interaction — but
   **there is no drawing or writing yet**. No notes app, no annotation.
   That's roadmap, not regression.
+- **There is a `Manuals` folder in your library, and nobody put books
+  there.** The device generates it: every man page and GNU manual that
+  ships with the system, converted to EPUB when the image was built. It
+  is meant to be read, so if it looks bad — bad line breaks, a broken
+  table of contents, a link that goes nowhere, or a book that takes an
+  age to open the first time — that is worth reporting, because **no
+  human has yet looked at these on the panel** (`doc/manuals.md`).
+  Deleting the folder is fine; it will not come back.
 - **Auto-rotation works.** The accelerometer is live and the screen
   follows the device through all four orientations (hardware-validated
   2026-07-19, re-verified on the 2026-08-07 acceptance). Rotation can be

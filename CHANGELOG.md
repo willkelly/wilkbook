@@ -79,6 +79,30 @@ was proven was proven on that image.
 - Still true and still annoying: the image runs UTC, because the
   timezone is not set at build time (issue #6).
 
+### Reading material
+
+- **The device's own manuals are now books.** Every man page and Texinfo
+  manual carried by the software on the reader — 532 pages and 24 GNU
+  manuals as it stands — is converted to EPUB when the image is built and
+  staged into `/data/books/Manuals`, where KOReader opens them like any
+  other document. `Manual pages.epub` has a section index with every
+  page's one-line description and working `grep(1) -> sed(1)` cross
+  references; each GNU manual is its own book with its node tree as the
+  table of contents. About 4.9 MB on the data partition.
+- Why it matters beyond novelty: this stuff has always shipped —
+  `man-db` and `info-reader` come with the base system — and there has
+  never been a way to read a word of it, because the device has no
+  terminal. It also means a device with an empty library has something
+  in it on first boot.
+- **Nothing here has been rendered by KOReader yet.** The conversion is
+  tested offline and every book is structurally sound with every
+  internal link resolving, but no engine has laid one out: typography,
+  table-of-contents behaviour and how long the big man book takes to
+  open the first time are all unknown. Read `doc/manuals.md` before
+  quoting anything about how it looks.
+- If you delete the `Manuals` folder it stays deleted, including across
+  a reflash. Books you put in it yourself are never touched.
+
 ### Display and page turns
 
 One real change to the display driver this cycle, and it has not run on
@@ -170,6 +194,11 @@ and a bound.
   workflow uses a secret or the fork-privileged pull-request trigger.
   Every run also prints what green does **not** mean: nothing was built,
   nothing was booted, and the waveform parser cannot be covered at all.
+- **New rung-1 gate: `make manuals-check`** — the man/info -> EPUB
+  converter behind the manuals shelf, run as the file the image is
+  actually built from. Python standard library, no Guix module, no
+  store, no device; `mandoc` is now on the CI toolchain so the
+  end-to-end pass runs there rather than only on a workstation.
 - The host gates now run without Guix installed (`HOST_TOOLCHAIN=1`),
   and `guix time-machine -C channels.scm` is finally wired into the
   build targets (`TIME_MACHINE=1`), so the reproducibility claim in

@@ -35,7 +35,7 @@ code review — before a single reboot. That's the standard.
   PM, ultra rails-off suspend) — the inventory lives in `doc/kernel-forward-port.md`.
 - `pinenote/services/`, `pinenote/images/`, `pinenote/systems/` — Guix
   system services, initrd, and flavor entrypoints.
-- `pinenote/tools/` — twelve host-side test and diagnostic tools; the
+- `pinenote/tools/` — thirteen host-side test and diagnostic tools; the
   table in `doc/testing.md` says what each covers. The core display trio
   (`wbf`, `ebc-logic`, `rastersim`) compiles the *verbatim* driver source
   out of the patch and tests it on your workstation.
@@ -102,6 +102,10 @@ code review — before a single reboot. That's the standard.
   worth *watching* (hrdl's kernel + pinenote-dist, m-weigand, PNDeb,
   rkbin, the schematic), what each is authoritative for, and the access
   traps. Look here before theorising about a hard PineNote problem.
+- `doc/manuals.md` — the manuals shelf (issue #17): how the image's own
+  man pages and Texinfo manuals become EPUBs KOReader can open, the
+  measurements behind each decision, and the standing list of what has
+  never been rendered.
 - `doc/pinenote-flavors.md` — the system flavors.
 - `doc/koreader-spike.md` + `doc/ebc-harness-spike.md` — completed
   spike/decision records (kept for their still-cited evidence).
