@@ -521,10 +521,77 @@ frame with its OWN fiducial fit and self-checks the geometry in panel
 space (fiducial squares must be dark) before reading any cell; 30 fps
 frame-window extraction with per-frame tables and PNGs around every
 claimed event; and a verbatim rerun of the campaign's patch-strip
-detector, which reproduced every claimed event time exactly. Scripts:
-`audit-validity.py`, `audit2-perframe.py`, `inspect-window.py` (session
-scratchpad — not preserved in the repo; the verdicts, per-frame tables,
-and the verbatim detector rerun described here are the durable record).
+detector, which reproduced every claimed event time exactly.
+
+**Re-running this audit (2026-08-24).** The original scripts —
+`audit-validity.py`, `audit2-perframe.py`, `inspect-window.py` — lived in
+a session scratchpad and are **unrecoverable**: no object in the repo's
+history holds them and they are gone from the capture workstation. They
+have been **reconstructed from the descriptions above** as
+`pinenote/tools/optics/audit.py`, whose four passes (`validity`,
+`perframe`, `window`, `strip`) are built on `ingest.py`'s primitives
+rather than on copies of them. Read that file's header before quoting
+anything it prints: it is a re-derivation from this prose, not the
+original code, and it has never been run against the 2026-07 videos —
+this repo has no copy of them. Its only validation is the synthetic
+fixtures in `test_audit.py`, gated by `make optics-check`.
+
+**What a third party can and cannot re-run.** All four frame passes read
+camera frames, and the committed dataset carries **no pixel data** —
+`doc/datasets/2026-07-optics/` is session JSON, KOReader traces and
+defect reports (~1.2 MB). Their only possible input is a bundle's
+`capture.mkv`: 12.28 GB across the 19 finalized captures, gitignored by
+policy and present in the repo only as sha256 in `checksums.txt`. So the
+frame passes are re-runnable by someone **handed the videos**, not from a
+checkout.
+
+What a checkout alone re-runs is `make optics-audit-dataset`
+(`audit.py dataset`, stdlib only, no numpy or ffmpeg). It recomputes
+every audit-adjacent claim the committed files support and checks each
+against the number published here: **43/43 reproduce** as of 2026-08-24 —
+the segmentation-symptom counts this audit voids (never-a 0, never-b 429,
+driver-owned 6, never-c 48, cadence.r01 19, sweep1.r02 1), the per-run
+trace full/partial counts, the timeline stamps (driver-owned 18:26, armB
+19:14, neverx3's third capture 18:15, all 18 committed sessions inside
+one 3.82 h night), the ux→novel `[2,2,2]` double flash, noise-pilot's
+instrument sigma, and soak1's recorded interventions. It then prints an
+explicit register of the **13 claims that are NOT reproducible from this
+repo** and why. That register is the honest output; a green run means the
+reproducible subset reproduced, not that the audit reproduced.
+
+Not reproducible, in short: every reflectance verdict below (never-a's
+ghost paints, never-b's 0.22–0.38, driver-owned's 0.006–0.018, armC's
+0.08–0.10, sweep1.r02's crisp frames), the 96–97 % validity figures, the
+graphic-page-opener partition, and the patch-strip detector rerun — all
+need the videos; and armC, armB2, idlewasher and repro v1–v5 are not in
+the committed dataset at all (`doc/optics-dataset-2026-07.md` §6).
+
+**One disagreement the re-check surfaced.** This section lists
+`sweep1.r02` among the runs that "opened on crisp pages and their reports
+are quantitative". Its committed report segments **1 of 48** — the
+second-worst collapse in the catalog, after never-a's 0 and ahead of
+driver-owned's 6, both of which this audit calls instrument-poisoned.
+Nothing in the committed dataset supports putting sweep1.r02 on the
+sound-instrument side of that partition; the dataset doc independently
+flags the same number (§5.1). This does not disturb the sweep1.r02
+verdict below, which VOIDs its barcode readings and is the conservative
+direction either way — but the partition sentence should not be quoted as
+if sweep1.r02's report were known-sound.
+
+**The graphic-opener mechanism does not reproduce offline.** The audit
+blames a `graphic` card page in a capture's opening frames for distorting
+the Otsu panel-quad detection so that the session homography "lands
+displaced" while validity flags stay green. `test_audit.py` builds that
+capture synthetically. At realistic dark-box geometry the graphic page
+shatters the Otsu component into 41 fragments, the largest 1.9 % of the
+frame, and the panel-presence gate **rejects it outright**; at every
+larger panel size tested it decodes its own pid correctly. On the
+synthetic camera the mode is fail-closed — it never produced a
+displaced-but-valid fit. So the tree now pins the first half of the
+mechanism (a graphic page defeats panel detection) and the production
+trust rule's protection against it; the displaced-geometry half rests on
+the 2026-07 videos alone and should be read as an inference from them,
+not as an offline-reproducible result.
 
 **Instrument verdicts first.** The v4 blank-page mode did NOT drive the
 campaign numbers: every walk bundle holds 96-97% per-frame fiducial

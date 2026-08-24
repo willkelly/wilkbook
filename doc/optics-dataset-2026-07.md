@@ -526,6 +526,12 @@ committed reports except the two pre-fix lineage reports were produced by
 it; dataset assembled and audited at repo HEAD `947f656`.
 
 ```sh
+# 0a) Re-check this document's and the evidence audit's numbers against the
+#     COMMITTED files alone -- stdlib python, no numpy/ffmpeg, no video.
+#     43/43 reproduce as of 2026-08-24; the command also prints the register
+#     of claims that CANNOT be recomputed from the repo and why.
+make optics-audit-dataset
+
 # 0) Offline self-test of the whole pipeline (no hardware, no camera):
 make optics-check
 # = guix shell python python-numpy python-scipy python-pillow ffmpeg -- \
@@ -550,7 +556,19 @@ python3 recorder.py record \
 # 3) Analyze (exact flags used for every committed report):
 python3 analyze.py build/bundles/<name> \
   --analysis-scale 0.5 --max-fps 30 -o build/bundles/<name>-report.json
+
+# 4) The 2026-07-12 evidence audit's frame passes, on a bundle you have the
+#    VIDEO for (they cannot run against doc/datasets/ — no pixel data):
+python3 audit.py validity build/bundles/<name>
+python3 audit.py perframe build/bundles/<name>
+python3 audit.py window   build/bundles/<name> --at 109.2 --span 2 --png /tmp/w
+python3 audit.py strip    build/bundles/<name>
 ```
+
+`audit.py` is a **reconstruction** of the audit's lost scratchpad scripts
+from their description in `doc/driver-findings-report.md`, not the original
+code, and it has never been run against the 2026-07 captures. Read its header
+before quoting it.
 
 Raw videos: `pinenote/tools/optics/build/bundles/<bundle>/capture.mkv` on
 the capture workstation (gitignored; 12.28 GB for the 19 finalized
