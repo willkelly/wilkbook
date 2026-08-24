@@ -173,6 +173,30 @@ and a bound.
   `pinenote/tools/koreader-input/test-continuous-gesture-cost.lua`, in
   `make koreader-input-check`. **Nothing in this item has been seen on a
   panel.**
+- **Four of the five candidate causes are now ruled out**, from the
+  committed traces plus KOReader's own source: a footer or progress-bar
+  repaint growing to full page, the page-turn animation path, a document
+  re-render, and our own idle washer. The survivor is a duplicated touch
+  — and it is precisely the one a refresh log cannot see, because no
+  trace records an input. Closing it means logging page turns on the
+  input side, which changes the shipped reader, then reading for another
+  few days (`doc/pageturn-program.md` §6).
+- Two claims from the earlier analysis are **corrected by the same
+  files**. The "hard floor at 131 ms" is not a floor: those six days
+  contain identical full-screen repaints **68 ms** apart. And the
+  behaviour is not specific to page turns — counting full-screen
+  repaints of every kind there are **11** rapid runs, not five, and the
+  largest is ten in 3.7 seconds.
+- **A second, far more regular two-step surfaced.** Dismissing a menu
+  produces a full-screen wash and then *another* full-screen repaint
+  about 0.85 s later — two full-screen updates for one dismissal, at a
+  near-constant delay. It is not universal: about one dismissal in five
+  (6 of 27 washes), four of them at about 0.85 s. Nobody has watched the panel during one, and it
+  is unexplained, but it is much easier to chase than the page-turn case.
+- `make refresh-trigger-check` re-derives every number above from the
+  committed logs. It is the first gate in the offline roster whose input
+  is field evidence rather than a fixture: if those logs move, it fails
+  loudly instead of quietly measuring something else.
 - A re-read of hrdl's driver found a **potential 1.25× on every refresh
   mode** — a clock reclock to 79.68 Hz, worth about two device-tree
   lines and ten driver lines. It is not shipped and not measured: it

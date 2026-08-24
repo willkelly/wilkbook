@@ -572,3 +572,233 @@ status note up top), then buy the big win (DU + delayed repaint)
 only after the workbench's new desync shadow and flip scheduler say
 it's sound, with the v2 debug kernel making every camera number
 attributable and the camera keeping the final word on glass.
+
+## 6. Issue #14 — the repeated full-screen update: trigger analysis (2026-08-24, offline)
+
+Issue #14 established *that* KOReader occasionally issues two or more
+identical full-page refresh requests in quick succession, and that the
+cause sits above the driver. It left the **trigger** open, with three
+candidates. This section is the offline attempt to narrow them. Nothing
+in it is hardware-proven; no panel ran while it was written.
+
+**Everything below is re-derivable from committed data by one command:**
+
+```
+make refresh-trigger-check          # the pinned numbers
+python3 pinenote/tools/refresh-episodes/refresh-triggers.py \
+    doc/artifacts/pinenote-refresh-traces-20260815/reader-session-*.log
+```
+
+The corpus is the committed
+`doc/artifacts/pinenote-refresh-traces-20260815/` — 764 traces over
+6.19 days on image `9a08803e…`, one operator. The analyser needs the
+**whole** session log, not a grep of the `[pn-refresh]` lines: KOReader's
+other INFO lines are what separate a page turn from a document
+re-render (see §6.2 D).
+
+### 6.1 Three corrections to the issue's framing
+
+**(a) Two identical full-panel traces cannot share one repaint drain —
+so the second request is a separate turn of the event loop.**
+`UIManager:_refresh` merges any enqueued refresh whose region
+`openIntersectWith`es the new one; identical rects always intersect,
+`update_mode("partial","partial")` is `"partial"`, and `region:combine`
+of two identical rects is that rect. A same-drain duplicate is therefore
+impossible *by construction*. The log shows the contrast directly: 173
+adjacent trace pairs cover **disjoint** rects (the footer strip and the
+config-dialog body do not intersect) and their minimum gap is **2.2 ms**
+— those genuinely do share one drain. The minimum gap between two
+*identical* rect+intent traces is 68.3 ms. The issue's "the cause is
+above the driver" holds for a stronger reason than it stated.
+
+**(b) 131 ms is not a floor of the mechanism.** The same corpus contains
+three identical full-panel `ui/partial` repaints at 2026-08-09 01:34:07
+with gaps of **210 ms and 68 ms**. Fastest identical repeat, by rect
+class and intent:
+
+| class / intent | n | fastest |
+| --- | --- | --- |
+| full-panel `ui/partial` | 3 | **68.3 ms** |
+| full-panel `partial/partial` | 347 | 131.0 ms |
+| bottom-strip `ui/partial` | 12 | 167.0 ms |
+| full-panel `flashui/global` | 1 | 196.8 ms |
+| full-panel `full/global` | 14 | 451.4 ms |
+
+131 ms is the low end of a 347-sample tail, not a hard floor: a
+full-screen repaint is demonstrably re-issuable in 68 ms on this device.
+The issue's *inference* that "the 131 ms floor argues the second repaint
+is waiting on the previous e-ink pass" is therefore **not supported**. It
+also has no mechanism: `refreshPartialImp` traces and then `publish()`,
+which is `fsync` on the fbdev fd — `fb_deferred_io_fsync`, i.e. run the
+pending deferred-io flush *now*. It does not wait for the e-ink pass,
+and `device.lua` says so at the definition. There is no path by which
+KOReader blocks on the panel.
+
+**(c) The population was too narrow.** Counting only `partial/partial`
+gives 5 runs. Over **all** full-panel repaints regardless of intent
+there are **11**, and the largest is **10 traces in 3.73 s**:
+
+| when | n | gaps (ms) | intents |
+| --- | --- | --- | --- |
+| 2026-08-09 00:42:16 | 10 | 858, 615, 503, 277, 232, 307, 298, 322, 322 | `flashui/global` + `ui/partial` + 8× `partial/partial` |
+| 2026-08-09 01:22:26 | 2 | 451 | 2× `full/global` |
+| 2026-08-09 01:34:07 | 3 | 210, 68 | 3× `ui/partial` |
+| 2026-08-09 22:08:10 | 2 | 861 | `flashui/global` + `ui/partial` |
+| 2026-08-10 00:51:10 | 2 | 131 | 2× `partial/partial` |
+| 2026-08-10 04:16:27 | 2 | 875 | `flashui/global` + `ui/partial` |
+| 2026-08-10 04:54:12 | 2 | 741 | `full/global` + `partial/partial` |
+| 2026-08-10 15:16:46 | 2 | 787 | `flashui/global` + `ui/partial` |
+| 2026-08-10 15:16:55 | 2 | 933 | 2× `partial/partial` |
+| 2026-08-12 07:19:15 | 6 | 184, 746, 214, 166, 197 | 4× `partial/partial` + 2× `flashui/global` |
+| 2026-08-12 07:20:23 | 2 | 391 | 2× `partial/partial` |
+
+The "asked twice" behaviour is not confined to the page-turn intent — it
+appears on `ui`, on `flash*`, and on `full`. A fix aimed only at
+`refreshPartial` would leave most of this table standing.
+
+### 6.2 Candidate scorecard
+
+**A. A footer / progress-bar repaint promoted to full page — EXCLUDED.**
+Source: `ReaderFooter`'s two repaint paths (`readerfooter.lua` ~2339 and
+~2344) both pass a region — `footer_content.dimen`, or the footer strip
+— and both ask for `"ui"`/`"fast"`. The one region-less `"partial"` the
+footer can request (`refreshFooter`'s `signal` branch, :2619) is guarded
+by `document.provider ~= "crengine"`, which an epub cannot reach. And
+UIManager never *enlarges* a region except by the colliding merge above,
+which yields one trace. Data: 100 bottom-strip repaints exist, all
+`ui/partial` at `0,1836,1404,36` (1.9 % of the panel); **0** fall inside
+an episode, **0** land within 2 s of an episode start, and **0 of 412**
+full-panel page turns have a footer repaint within 0.5 s. In this corpus
+the footer does not repaint on page turns at all — its traces cluster
+with the config-dialog body, milliseconds apart, which is the
+disjoint-rect case from §6.1(a).
+
+**B. A second paint from the page-turn / animation path — EXCLUDED.**
+Every animation-ish path downgrades to `"fast"` or `"a2"`
+(`UIManager.currently_scrolling`, `ReaderScrolling`). The corpus has
+**one** `fast` trace in 6.19 days and **zero** `a2`; neither is within
+15 s of an episode. The strongest mechanistic version of this candidate
+was crengine's **partial-rerendering cascade**: `ReaderView:paintTo`
+calls `ReaderRolling:handlePartialRerendering`, which on a changed
+rerender count fires a `PageUpdate` *from inside the paint*, producing
+another repaint on the next tick — a plausible generator for a run of
+eight at the reader's own render rate. It is excluded on trace evidence:
+that automation repaints ReaderFlipping's status icon
+(`cre.render.partial/working/ready/reload`) with mode `"ui"` on **every**
+state change, at least three per run, and **zero** small `ui` rects
+repeat three or more times anywhere in the corpus. `reader-session.scm`
+also seeds `cre_partial_rerendering=false`, but that seed is weaker than
+it looks — it writes `settings.reader.lua` only when the file is absent,
+and `partial_rerendering` is read from the book's `.sdr` sidecar first —
+so the icon count, not the seed, is what closes this.
+
+**C. A genuine double input event — NOT SEPARABLE FROM THIS DATA.**
+No input event is logged anywhere, and no refresh trace can see a tap.
+What can be said:
+
+- The episodes' cadence does **not** identify a machine repeat. Episode
+  CVs are 0.244 (the 8-run) and 0.677 (the 4-run), against 28 ordinary
+  reading runs of ≥4 turns whose CVs span 0.077–1.247, median 0.571 —
+  two of those 28 ordinary runs are tighter than 0.244. The 8-run's last
+  six gaps average 293 ms at CV 0.107, but ~300 ms is roughly what the
+  reader needs to render and publish a page, so *any* producer faster
+  than the reader lands at that cadence, human or not. Cadence cannot
+  discriminate here.
+- **Kernel key auto-repeat is not the mechanism today.** Checked three
+  ways, all offline: no patch in `pinenote/patches/` sets `EV_REP` or an
+  `autorepeat` DT property; the **built** `rk3566-pinenote-v1.2.dtb`
+  from the 7.0.11 store output — the kernel the device was running when
+  these traces were taken — contains **zero** `autorepeat` properties,
+  and its `gpio-keys` node holds only the cover switch (`EV_SW`), no key
+  at all; and `ws8100_pen_input` reports every pen button as an
+  immediate press *and* release in the same call. This is worth stating
+  because KOReader would act on repeats if they existed:
+  `InputContainer:onKeyRepeat` is a verbatim copy of `onKeyPress`,
+  `RPgFwd`/`RPgBack` are bound to `GotoViewRel` (the PineNote device
+  sets `hasKeys = yes`), and `Input:handleKeyBoardEv` throttles repeats
+  only to ≥80 ms. If any input node ever gains `EV_REP`, a held
+  page-turn button becomes a repeating page turn.
+- What remains is a duplicated **touch** gesture, and the repo already
+  pins inherited warts of that shape: `make koreader-input-check` carries
+  `quirk:buddy-slots-0-1-only`, where two contacts in slots `{0,2}` leave
+  as **two swipes** rather than one spread. A thumb resting while a
+  finger swipes is the right shape. That is a mechanism, not evidence.
+
+**D. A document re-render (`ReaderRolling:onUpdatePos`) — EXCLUDED for
+these episodes, but a confound worth recording.** `onUpdatePos` ends in
+`UIManager:setDirty(self.view.dialog, "partial")` with no region
+(`readerrolling.lua:1056`), i.e. a full-panel `partial/partial` trace
+**identical in every field to a page turn**. Any analysis that reads
+"full-panel `partial/partial`" as "page turn" is silently counting
+re-renders too. It *is* separable, because it brackets itself:
+`Input:inhibitInput(true)` and the 0.2 s `inhibitInputUntil` release log
+"Inhibiting user input" / "Restoring user input handling"
+(`input.lua:1610/1650`). Data: 14 brackets in the corpus; **7 of 412**
+full-panel partials (1.7 %) sit inside one; one bracket held two.
+**0 of 18** episode traces sit inside a bracket.
+
+**E. The wilkbook idle washer — EXCLUDED.** It only ever calls
+`UIManager:setDirty("all","full")`, which reaches `refreshFullImp` and
+traces as `full/global` — never a partial. 28 `[idlewasher]` action
+lines; **0** episodes have one within 15 s. (22 of the 82 global traces
+sit within 2 s of an `[idlewasher]` line; the rest are KOReader's own
+promotion and menu washes.)
+
+### 6.3 What the data does point at (association, not cause)
+
+- **2 of the 5 episode starts are immediately preceded by a full-panel
+  `ui/partial`** — the menu-dismissal repaint — against a base rate of
+  6/412 = 1.46 % over the population. P(≥2 of 5) = **2.1e-3**.
+- At session granularity (a >900 s gap splits a session): **3 of the 4**
+  episode-bearing sessions contained menu activity, base rate 8/36 =
+  22.2 %, P(≥3) = **0.037**. That is the issue's per-episode 15 s
+  antecedent (4/5, P≈1e-4) surviving on a coarser unit.
+- **A distinct, much more regular two-step exists at menu dismissal.**
+  6 of 27 `flash*/global` washes are followed within 3 s by a full-panel
+  `ui` repaint; four of those at **0.787 / 0.858 / 0.861 / 0.875 s**, i.e.
+  0.845 ± 0.034 s (the other two are 2.12 and 2.33 s). That is two
+  full-screen updates for one dismissal, on a near-constant latency. It
+  is a different phenomenon from the page-turn doubling, far more
+  reproducible, and **not explained here** — of the two, it is the
+  tractable target. Nobody has watched the panel during one, so whether
+  it is visible as a double draw is unknown.
+- **No clustering by orientation**: the corpus holds 3 landscape
+  full-panel traces in total, and every episode trace is portrait.
+- **No readable clustering by time of day**: 5 episode starts over the
+  15 hours-of-day that saw any reading. Reported, not read.
+- **Episodes do not need a preceding pause**: the gaps before the five
+  starts are 0.6, 18.2, 8.7, 2.7 and 1.2 s, against a median inter-turn
+  gap of 21.4 s.
+
+### 6.4 What would settle C, and what it costs
+
+The `[pn-refresh]` trace is on the wrong side of the question: it records
+what was *asked for*, and C is about what *arrived*. Two ways to close
+it, neither offline:
+
+1. **An input-side trace.** `device.lua` already owns the input wiring;
+   one unconditional `logger.info` where a page turn is dispatched (the
+   `GotoViewRel` handler, or the gesture that reaches it) would make "one
+   gesture → two turns" versus "two gestures → two turns" directly
+   readable in the same log the refresh traces land in. It must be
+   unconditional and unsampled, exactly like `trace()`, or it re-opens
+   the sampling doubt issue #14 closed. Cost: a few lines in the wilkbook
+   device graft, a `koreader-input` harness test, a rebuild and a
+   redeploy — **it changes the shipped reader** — and then another
+   multi-day reading window, because the observed rate is about one
+   episode per 1.2 days.
+2. **Raw evdev capture beside the session log** — `evemu-record` on the
+   cyttsp5 node into a ring buffer. No image change, but it needs the
+   device, storage, and an operator willing to leave it running for days.
+
+Everything offline that could narrow this has now been done. Four of the
+five candidates are out; the survivor is the one this instrument
+structurally cannot see.
+
+### 6.5 What this section does not claim
+
+Nothing here was observed on glass — no trace says the panel drew twice,
+and the operator's "occasional 2-step page turns" remains the only
+optical evidence. Every association is one operator, one image
+(`9a08803e…`), 6.19 days. The episodes' trigger is still
+**unidentified**.
