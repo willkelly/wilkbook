@@ -34,9 +34,9 @@ worse than this, that's a bug report; if it does better, brag.
   awake floor is 156.9 mA (frontlight off) against ~230 mA stock idle on
   the same hardware; the 1.3× is the operator's conservative real-use
   estimate, not the raw ratio.
-- **Standby: about 30 days. In real use: about 16.** Both are measured,
-  from the same six-day unplugged run, and the difference between them
-  is *you reading the thing*:
+- **Standby: about 30 days. In real use: about 16.** Both come from the
+  same six-day unplugged run — a measured draw, projected onto a full
+  charge — and the difference between them is *you reading the thing*:
 
   | | draw | from a full charge |
   |---|---|---|

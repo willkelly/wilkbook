@@ -227,10 +227,12 @@ them):
   undoing it** (`enabled=1`, or delete the file — re-read before every
   idle wait, no reboot). Skip it and suspend works out of the box.
   What it controls: auto-suspend sleeps the device to
-  ultra suspend (rails-off, 4.64 mA measured 2026-08-08) after 5 minutes
-  of no *input* (an SSH session does not count). Waking takes the power
-  button, the RTC backstop, plugging in a charger, or opening the cover
-  (confirmed 2026-08-09); the serial console cannot wake it. The daemon reads this file first and the
+  ultra suspend (rails-off; **5.47 mA idle standby measured** across a
+  6.17-day unplugged soak, 170 cycles and zero failures, 2026-08-15)
+  after 5 minutes of no *input* (an SSH session does not count). Waking
+  takes the power button, the RTC backstop, plugging in a charger, or
+  opening the cover (confirmed 2026-08-09); the serial console cannot
+  wake it. The daemon reads this file first and the
   `/var/lib/pinenote/autosuspend.conf` runtime knob second (so a same-boot
   change there still wins), and unlike `/var/lib` it survives reflashes
   and is writable from os1 — which is exactly why it exists
@@ -316,7 +318,12 @@ Stated plainly, because the alternative is implying a tested path.
 - Anything power-related: every measured number in this repo is from one
   device, and the ones that are arithmetic rather than measurement are
   labelled as such (`doc/alpha-checklist.md`, "The numbers alpha may
-  state"). Do not expect your device to reproduce them.
+  state"). Do not expect your device to reproduce them. In particular
+  the standby *days* — ~30 idle, ~16 as actually read — are projections
+  from a **measured draw** (5.47 / 10.07 mA over 6.17 unplugged days,
+  `doc/artifacts/pinenote-ultra-soak-20260815/`) onto a 4000 mAh
+  charge. Nobody has run this device flat from full; your battery's
+  real capacity, and how much you read, both move the answer.
 
 ## 10. Root posture — what you are actually installing
 

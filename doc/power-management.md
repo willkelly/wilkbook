@@ -1,6 +1,6 @@
 # PineNote power management: evidence first
 
-**Current state (2026-08-08).** What is hardware-proven, in one place:
+**Current state (2026-08-15).** What is hardware-proven, in one place:
 
 - **Ultra suspend is in production** (2026-08-08, R12): hrdl's rails-off
   configuration adopted whole on the primary kernel
@@ -33,6 +33,10 @@
   in tree (`626cb02`), default backstop 900 s → 1 h; **not deployed, and
   every post-fix figure is arithmetic.** Numbers and acceptance: "The
   idle duty cycle" below.
+  [Closed 2026-08-15: standby **is** measured now — 5.47 mA idle and
+  10.07 mA as actually lived in, over 148 h unplugged on the deployed
+  post-fix daemon. The fix works: the hourly backstop costs ~0.83 mA,
+  not a fresh idle period. `doc/artifacts/pinenote-ultra-soak-20260815/`.]
 - **The awake floor fell twice on 2026-08-06**: vdd_cpu auto-PFM is
   accepted on hardware (settled reader idle 174 → **156.9 mA**,
   ~25.5 h), and DDR DVFS landed (`wilkbook_dmc` + input-driven boost;
@@ -180,6 +184,10 @@ issue #8):
 (2026-08-08: ultra landed at 4.64 mA, clearing the 18-day target on paper
 with ~2× slack — hibernation is re-priced from "the only step change" to
 a pre-1.0 option, still gated on the os2-default-boot question.)
+(2026-08-15: the soak replaced that paper with measurement — 5.47 mA
+idle standby → ~30.5 d — and it holds. Hibernation stays a pre-1.0
+option; see "Sequencing" below, where the pre-registered decision rule
+is now resolved.)
 
 Raised as an interim step the same night the ultra handshake came back
 unwakeable. It deserves the serious treatment because it is the only
@@ -324,7 +332,17 @@ If real standby comes back near the arithmetic, hibernation is a large
 lift for a target already close. If it comes back at 2x the model, it is
 the whole ballgame. One night decides which.
 
-## Power program: targets, measured gaps, and ordering (2026-08-02, figures refreshed 2026-08-06)
+[Resolved 2026-08-15, and the rule above decides it: the measurement
+came back **near the arithmetic** — 5.47 mA idle standby against a
+4.64 mA-derived estimate, i.e. ~30.5 d measured against the ~28–36 d
+that estimate predicted. So hibernation is the "large lift for a target
+already close" branch, not the ballgame. It stays a pre-1.0 option, still gated on the
+os2-default-boot question. The lever that *did* turn out to matter is
+awake draw: reading costs ~4.6 mA of average draw and roughly halves the
+figure (~16.6 d as actually read), and hibernation does nothing for it.
+`doc/artifacts/pinenote-ultra-soak-20260815/`.]
+
+## Power program: targets, measured gaps, and ordering (2026-08-02, figures refreshed 2026-08-15)
 
 Will's targets, and where we actually stand. All from a 4000 mAh charge
 (`charge_full`), against measurements in
@@ -335,8 +353,8 @@ Will's targets, and where we actually stand. All from a 4000 mAh charge
 | target | needs | measured | verdict |
 | --- | --- | --- | --- |
 | **>= 25 h active reading** | <= 160 mA | awake floor **156.9 mA** (25.5 h) since the vdd_cpu fix | **met on the floor, thinly** — and the floor was measured at frontlight ZERO, so this is "25.5 h in daylight". Two switchable domains take it to 144.6 mA / **27.7 h** (below), leaving **15.4 mA of budget for the frontlight** before 25 h is at risk. The frontlight's cost is unmeasured — that is the open term. |
-| **>= 18 days suspend** (accepted) | <= 9.2 mA idle average | delivered standby **~22.6 mA** (~7.4 d) after the 2026-08-07 duty-cycle fix — arithmetic, never measured | **~2.5x short.** No awake-side lever touches it. Only ultra-suspend can close it, and its own pessimistic end (9 mA) lands *exactly* here: 17.0 d at a 1 h backstop, **18.1 d at 4 h**. |
-| **> 30 days suspend** (desired) | <= 5.56 mA idle average | as above | needs ultra at **<= 4.71 mA** (1 h backstop) or **<= 5.35 mA** (4 h) — the optimistic half of hrdl's unreplicated bracket. Wanted, not counted on. |
+| **>= 18 days suspend** (accepted) | <= 9.2 mA idle average | **5.47 mA idle standby, measured** over 6.17 unplugged days (2026-08-15) — and **10.07 mA as actually read** over the same window | **met on idle standby** (5.47 well inside 9.2, → ~30.5 d). **Missed as actually read**: 10.07 mA → ~16.6 d, ~1.4 d short. What now stands between here and 18 days is the *awake* term, not the suspend term. |
+| **> 30 days suspend** (desired) | <= 5.56 mA idle average | as above | **met, by 1.6 %.** 5.47 vs 5.56 mA, from one six-day run on one device — real, but with no margin to spend. Not met as actually read (~16.6 d), so quote both: ">30 days" is a statement about *suspend*, not about reading. |
 
 Targets revised 2026-08-07 to Kindle-class: >= 25 h reading, >= 18 days
 standby accepted with > 30 desired. They supersede the older "~40 h
@@ -348,6 +366,11 @@ best case?" into "does ultra work at all?" — worth knowing, because even
 the pessimistic 9 mA end clears it. It also makes the backstop length
 load-bearing for the first time: at 9 mA, 1 h gives 17.0 d (miss) and 4 h
 gives 18.1 d (meet). That is a runtime knob, not a rebuild.
+[Measured 2026-08-15: the 1 h backstop costs **~0.83 mA** (5.47 idle
+standby vs R12's 4.64 mA in a backstop-free bracket), so lengthening it
+to 4 h is worth roughly 0.6 mA — ~4 days of idle standby. Still a
+runtime knob, and now a priced one; but the reading term (~4.6 mA) is
+five times larger, so the backstop is no longer where the money is.]
 
 **The awake path to comfortable margin**, from the 2026-08-06 domain
 teardown — only 14 mA of the awake draw is switchable at all, and two of
@@ -429,6 +452,22 @@ a device whose button wake has regressed (15 min → 1 h); bounded
 self-recovery survives that, and `backstop=` remains a runtime knob for
 anyone who wants denser cycles. **No measured standby number exists yet
 — the multi-day unplugged soak still has not been run.**
+[Closed 2026-08-15: it has been run. The **~22.6 mA / ~7.4 d** figures
+above are *deep*-based and are superseded outright by the measured ultra
+numbers — **5.47 mA idle, 10.07 mA as read** over 6.17 unplugged days
+(`doc/artifacts/pinenote-ultra-soak-20260815/`).
+
+The one term that can be compared like for like is the backstop's cost,
+and the model was **pessimistic**: measured 5.47 − 4.64 ≈ **0.83 mA**,
+i.e. ~0.83 mAh per wake at the 1 h backstop, against the ~1.3 mAh/wake
+the retired 36 → 28 day estimate implied. The post-`626cb02` behaviour —
+a backstop wake re-suspends after a ~20 s settle instead of burning a
+fresh idle period — is what closed that gap.
+
+Deliberately *not* back-calculated here: the per-cycle figures above are
+an excess over a deep baseline, not a total per-wake cost, so dividing
+them onto ultra's 4.64 mA base compares two different quantities and
+produces a number that looks like a prediction and is not one.]
 
 **The durable lesson: the measurement was already in the record, and had
 been read.** The 2026-08-03 unplugged soak
@@ -551,6 +590,9 @@ that bl31 preserves a non-boot DDR rate across suspend/resume.
    charging inhibit, and short-press-to-suspend (2026-08-04). Cover
    wake remains unproven. The unplugged multi-day soak that would
    validate standby end to end has **not** been run.
+   [Run and closed 2026-08-15: 6.17 days unplugged on this daemon, 170
+   suspend cycles, zero failures, 5.47 mA idle standby / 10.07 mA as
+   actually read. `doc/artifacts/pinenote-ultra-soak-20260815/`.]
 2. **Measure one wake+render+refresh cycle.** It sets whether
    suspend-between-page-turns is viable and what resume latency budget we
    have.

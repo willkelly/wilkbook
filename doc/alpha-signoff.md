@@ -34,9 +34,12 @@ That phrasing is the actual specification, so it is worth making precise:
 - [ ] Both slots backed up and SHA-verified per `doc/device-runbook.md`.
 - [ ] os1 boots and is reachable. It is the rescue path; if it is sick,
       stop.
-- [ ] The one end-to-end standby measurement exists (alpha checklist
+- [x] The one end-to-end standby measurement exists (alpha checklist
       blocker 4). Alpha may ship a disappointing number. It may not ship
-      an unmeasured one.
+      an unmeasured one. **Done 2026-08-15**: 6.17 days unplugged,
+      5.47 mA idle standby and 10.07 mA as actually read, 170 suspend
+      cycles / 0 failures (`doc/artifacts/pinenote-ultra-soak-20260815/`).
+      The number alpha states is **both** of those, never just the first.
 
 ## 1. Do not re-check these by hand
 
@@ -83,6 +86,12 @@ Debian home. Record the verdict for each. **Stop at the first covid.**
       seen on glass).
 - [ ] Second press: wakes, panel intact, no corruption.
 - [ ] Leave it idle past the auto-suspend threshold, then wake. Same.
+- [ ] **Leave it asleep overnight** — several RTC backstop cycles — then
+      wake it with one short press. Panel intact, no corruption, and it
+      must **not** need a long-press. The 2026-08-15 soak ran 170 such
+      cycles with zero failures, but unattended and judged by a log; this
+      is the same event judged by a human eye the next morning, which is
+      the case a second person actually meets.
 - [ ] Frontlight is off while asleep.
 
 ### 2.4 Getting books on
@@ -121,8 +130,10 @@ not on this list that costs them anything, it is a defect.
 - **Suspend is ultra (rails-off), and only the power button, the RTC,
   the charger, and the cover can wake it.** The pen cannot. (Cover wake
   was confirmed 2026-08-09 and contradicts the rails model — see
-  `doc/power-management.md`; the tradeoff below is otherwise (4.64 mA vs
-  deep's ~20, `doc/artifacts/pinenote-ultra-r12-20260808/`). One cold
+  `doc/power-management.md`; the tradeoff below is otherwise
+  5.47 mA idle standby vs deep's ~20 mA, measured over six unplugged
+  days with 170 wakes and no failures,
+  `doc/artifacts/pinenote-ultra-soak-20260815/`). One cold
   touch-controller timeout on resume is absorbed by a carried
   workaround; the panel must come back clean.
 - **No on-device Wi-Fi picker.** Credentials are staged out of band.

@@ -190,7 +190,7 @@ truth is per-device, so never overwrite another operator's entries; add
 your own. Don't commit the per-device waveform, anything under a tool's
 gitignored `build/`, or the reader's static address.
 
-## Where we are (2026-08-08)
+## Where we are (2026-08-15)
 
 - **Product**: the reader image on os2 — KOReader natively on fbdev with
   pen/finger input, four orientations, publish-on-call single-pass page
@@ -212,27 +212,37 @@ gitignored `build/`, or the reader's static address.
   workaround — a MATCHED PAIR pinned by `make ultra-coupling-check`;
   either half alone is proven broken. Three consecutive rails-off
   resumes on glass (RTC backstop + power button); **4.64 mA measured**
-  vs deep's ~20 mA (`doc/artifacts/pinenote-ultra-r12-20260808/`);
-  ~36 days of pure suspend on paper — arithmetic, labelled as such.
-  Promoted image `9a08803e…` is on os2 and the **≥3-day unplugged soak
-  is running** (exit criteria: `doc/alpha-checklist.md` §3c; a failed
-  wake gets the U-Boot INT_STS forensics before any forced power-off).
+  vs deep's ~20 mA (`doc/artifacts/pinenote-ultra-r12-20260808/`).
+  Promoted image `9a08803e…` is on os2 and the unplugged soak
+  **CONCLUDED 2026-08-15**, meeting every `doc/alpha-checklist.md` §3c
+  exit criterion: 6.17 days unplugged, **170 suspend cycles / 0
+  failures**, and standby measured at last — **5.47 mA idle** and
+  **10.07 mA as actually read**, projecting to **~30.5 and ~16.6 days**
+  from 4000 mAh (`doc/artifacts/pinenote-ultra-soak-20260815/`). Quote
+  **both** numbers: ">30 days" describes a device nobody is reading. The
+  old "~36 days pure / ~28 effective" arithmetic off R12's single
+  bracket is retired — it was pessimistic on standby (the hourly RTC
+  backstop costs ~0.83 mA, not ~1.3) and silent on the reading term.
   Documented tradeoff: GPIO0 is unpowered in suspend, so the pen cannot
   wake it. Wake sources are the RTC, power button, charger — **and the
   cover, confirmed 2026-08-09, which the rails model does not explain**
   (open question, `doc/power-management.md`). Auto-suspend (5 min idle) is live, so **SSH to the
   reader is intermittent** — write `enabled=0` to
   `/var/lib/pinenote/autosuspend.conf` before working on it
-  (`doc/device-access.md`). Not yet proven: the soak; the TPS `ENABLE`
-  2f→20 delta after suspend is still unexplained.
+  (`doc/device-access.md`). Still unexplained: the TPS `ENABLE` 2f→20
+  delta after suspend, and one 13.09 mA idle segment in the soak.
 - **Power**: awake reader idle ~157 mA after the vdd_cpu auto-PFM fix
-  (was ~174); suspend 4.64 mA ultra (deep's ~20 mA is superseded as the
-  shipping figure). **DDR DVFS is built but SHIPS DISABLED**: 324 MHz
-  starves the EBC's phase-data fetch and corrupts the display silently
-  (no underrun interrupt), proven by one-variable A/B 2026-08-07, so
+  (was ~174); suspend 4.64 mA ultra in a quiet bracket, **5.47 mA as
+  idle standby** once the hourly backstop is included (deep's ~20 mA is
+  superseded as the shipping figure). **DDR DVFS is built but SHIPS
+  DISABLED**: 324 MHz starves the EBC's phase-data fetch and corrupts
+  the display silently (no underrun interrupt), proven by one-variable A/B 2026-08-07, so
   `wilkbook_dmc` defaults to `mode=off` and the boost is off too.
-  End-to-end standby is what the running soak measures — the daemon
-  self-logs `charge_now` per resume. Ledger and next levers:
+  End-to-end standby is **measured, not arithmetic** (2026-08-15):
+  5.47 mA idle and 10.07 mA as actually read, from the daemon's own
+  `charge_now` series over 6.17 unplugged days. The ~30.5/~16.6-day
+  figures are projections from that measured draw, not an observed run
+  to empty. Ledger and next levers:
   `doc/power-management.md`.
 - **Display**: the portrait double-refresh is fixed on glass
   (publish-on-call + `defio_delay_ms=250`); the generation barrier is

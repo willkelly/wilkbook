@@ -108,7 +108,10 @@ order on top of the vanilla source:
    ultra-coupling-check` enforces it, and this patch must apply **after**
    the bsp-sip patch whose `/rockchip-suspend` node it extends. 4.64 mA
    suspend measured on glass 2026-08-08
-   (`doc/artifacts/pinenote-ultra-r12-20260808/`).
+   (`doc/artifacts/pinenote-ultra-r12-20260808/`); as shipped, with the
+   hourly RTC backstop, idle standby is **5.47 mA** over a 6.17-day
+   unplugged soak with 170 cycles and no failures
+   (`doc/artifacts/pinenote-ultra-soak-20260815/`).
 
 `linux-pinenote-debug` stacks `linux-pinenote-debug-extract-fbs.patch`
 on top of the same seven.

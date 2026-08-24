@@ -100,28 +100,41 @@ can**, confirmed 2026-08-09 — which contradicts the model above and is
 an open question rather than a settled tradeoff (`doc/power-management.md`).  A cold touch controller times out once on
 resume and is reset by the carried workaround.
 
-### 3c. NEW BLOCKER — the multi-day ultra soak
+### 3c. ~~NEW BLOCKER — the multi-day ultra soak~~ — DONE 2026-08-15
 
 The operator's call: ultra ships in alpha, "if we have to soak for
 multiple days, so be it."  Three suspends are proof of mechanism, not of
-endurance.  The soak is the endurance proof:
+endurance.  The soak was the endurance proof, and it **ran 6.17 days and
+met every exit criterion**
+(`doc/artifacts/pinenote-ultra-soak-20260815/`):
 
-- [ ] Deploy the promoted reader image (auto-suspend ON, ultra standing).
-- [ ] ≥3 days unplugged, normal light use: pick it up, read, put it down.
-      Every idle suspend is an ultra cycle; every backstop wake logs
-      `charge_now` (the daemon now records it per resume), so the soak is
-      self-instrumenting.
-- [ ] Exit criteria: zero non-wakes (a single long-press-required event
+- [x] Deploy the promoted reader image (auto-suspend ON, ultra standing).
+      Image `9a08803e…`, deployed 2026-08-08, readback-verified.
+- [x] ≥3 days unplugged, normal light use: pick it up, read, put it down.
+      **6.17 days** (2026-08-08 23:57 → 2026-08-15 04:01 UTC), never on a
+      charger — `charge_now` fell monotonically across all 170 samples,
+      so no charge event contaminates the series. The daemon's per-resume
+      `charge_now` line made the soak self-instrumenting as intended.
+- [x] Exit criteria: zero non-wakes (a single long-press-required event
       fails the soak), no touch/Wi-Fi/display degradation across
       hundreds of cycles, and a measured multi-day standby figure to
-      publish in place of the 4.64 mA × arithmetic.
+      publish in place of the 4.64 mA × arithmetic. **All three met:**
+      `suspend_stats` **170 success / 0 fail**, no forced power-off and
+      so no INT_STS forensics needed, no peripheral degradation reported
+      by the operator across the window, and the figure below.
 - [x] The R12 measurement predicted ~28–36 days standby. **The soak
-      answered it (2026-08-15): 5.47 mA idle → ~30 days, and 10.07 mA
-      as actually lived in → ~16 days, over 148 h unplugged with 170
+      answered it (2026-08-15): 5.47 mA idle → ~30.5 days, and 10.07 mA
+      as actually lived in → ~16.6 days, over 148 h unplugged with 170
       suspend cycles and zero failures**
       (`doc/artifacts/pinenote-ultra-soak-20260815/`). The estimate was
       slightly pessimistic on standby and silent on the reading term,
-      which is the half a tester actually feels.
+      which is the half a tester actually feels. Both day figures are
+      projections from the measured draw onto 4000 mAh; the window
+      opened at ~96 %, so nothing here is an observed run to empty.
+
+One line in six days of logs wants follow-up and is **not** a blocker:
+3 × `EBC still active after ~10s wait -- proceeding anyway`, the idle
+gate timing out and suspending regardless. No suspend failed.
 
 ### 3b. ~~Original session B~~ — DONE 2026-08-07
 
@@ -138,14 +151,23 @@ shipping suspend, and the deferred rail payload below is now moot rather
 than merely deferred. Record:
 `doc/artifacts/pinenote-ultra-handshake-20260807/RESULT.md`.
 
-### 4. One end-to-end standby measurement
+### 4. ~~One end-to-end standby measurement~~ — DONE 2026-08-15
 
-- [ ] Overnight, unattended, unplugged, no reboot: `charge_now` bracket
-      over ≥6 h. **No standby figure in this repo has ever been
-      measured** — every multi-day number is arithmetic on ≤900 s
-      windows. The precedent is exact: the 2026-08-03 soak *measured* the
-      duty-cycle bug, was written up as an argument for the setting that
-      made it worse, and the model said 8.6 days while reality was 3.0.
+- [x] Overnight, unattended, unplugged, no reboot: `charge_now` bracket
+      over ≥6 h. Discharged by §3c's soak, which is the same measurement
+      at 24× the length: **148 h unattended and unplugged, no reboot**,
+      giving **5.47 mA idle standby** (median of 119 hour-long
+      backstop-to-backstop segments) and **10.07 mA across the whole
+      window as actually read**
+      (`doc/artifacts/pinenote-ultra-soak-20260815/`, raw 170-resume log
+      committed). Written before the fact: "**No standby figure in this
+      repo has ever been measured** — every multi-day number is
+      arithmetic on ≤900 s windows. The precedent is exact: the
+      2026-08-03 soak *measured* the duty-cycle bug, was written up as an
+      argument for the setting that made it worse, and the model said 8.6
+      days while reality was 3.0." This time the model said ~28–36 days
+      and reality said 30.5 — the first standby estimate in this repo
+      that survived contact with a measurement.
 
 ### 5. ~~Fresh-clone first boot~~ — DONE 2026-08-07
 
@@ -250,8 +272,9 @@ The machinery now exists; the acts themselves wait for sign-off.
       `v0.1.0-prealpha` cut as an annotated tag + prerelease naming image
       `9a08803e…`. The DHCP-lease addresses in historical docs went out
       with it, per the recorded 2026-08-06 exposure decision.
-- [ ] The **alpha** tag, naming the QC'd image. After sign-off and the
-      soak verdict — the prealpha tag explicitly is not it.
+- [ ] The **alpha** tag, naming the QC'd image. The soak verdict is in
+      (§3c, 2026-08-15), so this now waits only on sign-off — and the
+      prealpha tag explicitly is not it.
 
 Calibration, from surveying hrdl's `pinenote-dist` on 2026-08-07: they
 have zero tags across 66 commits and 14 months, a mutable artifact URL,
@@ -398,9 +421,21 @@ Measured, and labelled as such:
 
 - awake reader idle **156.9 mA**, at frontlight zero
 - deep suspend **~20 mA** (superseded as shipping suspend)
-- ultra suspend **4.64 mA** (one 40-minute bracket, 2026-08-08; the
-  soak's end-to-end figure supersedes it)
-- whatever the one standby observation says
+- ultra suspend **4.64 mA** (one 40-minute bracket, 2026-08-08,
+  containing no backstop wake — a floor, not a standby figure)
+- **idle standby 5.47 mA** and **10.07 mA as actually read**, both from
+  the 6.17-day unplugged soak (2026-08-15,
+  `doc/artifacts/pinenote-ultra-soak-20260815/`)
+- suspend reliability **170 cycles, 0 failures** over that window
 
-The multi-day extrapolations — 25.5 h, 7.4/18/36 days — are arithmetic.
-Goals, not claims, until the running soak lands its measured figure.
+Derived from those by division, and to be labelled as projections rather
+than observations: **~30.5 days** idle standby and **~16.6 days** as
+actually read, both onto a 4000 mAh charge; **25.5 h** of reading at the
+awake floor. Nobody has run this device from full to empty, so no day
+figure in this repo is an observation.
+
+**Quote both standby numbers or neither.** ">30 days" is true of a
+device in a bag and is not what a person who reads will see; the gap
+between them is ~40 min/day of reading. The older extrapolations —
+7.4 days, and the ~28–36 days off the 4.64 mA bracket — are **retired**,
+superseded by the soak rather than merely re-labelled.
