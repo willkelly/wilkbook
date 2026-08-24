@@ -149,6 +149,30 @@ and a bound.
 - New host tool `pinenote/tools/refresh-episodes/` scores a device log
   and a harness log the same way, with a threshold sweep instead of one
   convenient cutoff.
+- **Pinch-to-resize costs one page pass, not one per size step** — and
+  we know that because we measured it before building anything (#26).
+  The worry was that a pinch spanning several font sizes would redraw
+  the page for each one, seconds of panel activity for one gesture. It
+  does not: KOReader classifies pinch and spread only when the fingers
+  *lift*, so the interaction is a single redraw however long it takes or
+  however fast the panel samples. The proposed "small indicator while
+  you pinch, full render on lift" plugin was therefore **not built** —
+  the deferral already exists a layer lower, and drawing an indicator
+  would have *added* panel activity to an interaction that currently
+  costs one pass (`doc/refresh-policy.md`).
+- **What the measurement found instead: pinch briskly.** Upstream only
+  accepts the gesture if the whole pinch finishes in under about a
+  second; slower than that and nothing happens at all, with no message
+  saying why. On a display that teaches you to slow down, that is
+  backwards. Reproduced offline as a one-variable A/B and recorded for
+  upstream rather than patched locally (`doc/upstream-register.md`
+  item 12); `doc/alpha-expectations.md` now tells testers.
+- New offline coverage for both, plus which two-finger gestures are
+  actually reachable here (pinch, spread, rotate, two-finger tap,
+  two-finger swipe):
+  `pinenote/tools/koreader-input/test-continuous-gesture-cost.lua`, in
+  `make koreader-input-check`. **Nothing in this item has been seen on a
+  panel.**
 - A re-read of hrdl's driver found a **potential 1.25× on every refresh
   mode** — a clock reclock to 79.68 Hz, worth about two device-tree
   lines and ten driver lines. It is not shipped and not measured: it

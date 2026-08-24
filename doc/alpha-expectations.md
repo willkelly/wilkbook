@@ -20,6 +20,17 @@ worse than this, that's a bug report; if it does better, brag.
 - **Menus open and close fast, without blinking.** Tapping into the menu
   and back out should not flash the screen.
 - **Touch works.** Taps, swipes, the file browser.
+- **Two-finger gestures work, including pinch/spread to change the font
+  size.** Pinch and spread each redraw the page **once**, on the lift —
+  not once per size step — so the cost is one page pass, the same as a
+  page turn. Two-finger tap and two-finger swipe work too.
+  **Pinch briskly.** Upstream KOReader only classifies the gesture if the
+  whole thing finishes in under about a second; a slow, careful pinch
+  produces nothing at all, with no message saying why. That is an
+  upstream behavior we have reproduced offline and not patched
+  (`doc/upstream-register.md` item 12); if it annoys you in practice,
+  say so — that is exactly the kind of report that decides whether we
+  work around it.
 - **The stylus works as a pointer** — taps and UI interaction — but
   **there is no drawing or writing yet**. No notes app, no annotation.
   That's roadmap, not regression.

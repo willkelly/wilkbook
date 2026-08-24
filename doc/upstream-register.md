@@ -496,6 +496,61 @@ controller hands out a colliding or non-adjacent slot — one capture says
 "not never", which is not a rate. Reporting a frequency we did not
 measure is exactly the credibility cost this register exists to avoid.
 
+### 12. A pinch slower than 900 ms silently does nothing — **ready** (reproduced offline, one pinned test)
+
+`Contact:panState` only builds `pinch`/`spread` (and `two_finger_swipe`,
+and `rotate`) on the contact-lift branch, and gates that whole branch on
+`Contact:isSwipe()` — which requires the interaction to finish within
+`ges_swipe_interval`, default `SWIPE_INTERVAL_MS = 900`. Past that the
+lift emits `two_finger_pan_release` instead, and **nothing in KOReader
+consumes `two_finger_pan_release`** (nor `inward_pan`, `outward_pan`,
+`two_finger_pan` or `two_finger_hold_pan` — a scan of the bundle's
+`frontend/` + `plugins/` finds no subscriber outside the detector that
+emits them). So the user gets no font-size change, no page turn, and no
+feedback of any kind.
+
+The failure is *inverted from the user's mental model*: the more slowly
+and deliberately you pinch, the more likely it is to do nothing. That is
+a poor fit for any device, and a specifically bad one for e-ink, where a
+~600 ms panel update trains the reader to move slowly.
+
+**Why this is a design question and not a one-line bump.** Reusing the
+*swipe* interval for pinch/spread conflates two different intents: a
+swipe is a flick and genuinely should be time-bounded, while a pinch is a
+positioning gesture with no reason to be. Candidate shapes: a separate
+interval for the span-changing gestures; classifying on span change
+rather than elapsed time; or emitting the terminal gesture on lift
+regardless of duration when both contacts crossed `PAN_THRESHOLD` in
+opposite directions. Upstream should pick.
+
+**Where it lives in our tree:**
+`quirk:slow-pinch-is-a-silent-no-op` in
+`pinenote/tools/koreader-input/test-continuous-gesture-cost.lua`, run by
+`make koreader-input-check` against the bundle's **verbatim**
+`input.lua`/`gesturedetector.lua`. It is a one-variable A/B: the same
+pinch geometry, the same frames, only the inter-frame gap differs — 20 ms
+(260 ms end to end) gives one `pinch`, 80 ms (1040 ms) gives none. The
+same file's whole-tree scan is the evidence for the "no consumer" half,
+and goes red if upstream ever adds one.
+
+**Deliberately not worked around locally.** `ges_swipe_interval_ms` is
+already a `G_reader_settings` key, so raising it is a settings change
+rather than a patch — but it would raise it for *swipes* too, which is
+the wrong trade, and it would hide the defect from the very users best
+placed to report it. The measurement that found this is in
+`doc/refresh-policy.md` ("Continuous gestures already defer").
+
+**For:** KOReader upstream (`github.com/koreader/koreader`) — application
+code, same destination as item 11, and worth sending in the same issue or
+an adjacent one since both are `gesturedetector.lua`.
+**Shape:** an issue with the A/B reproducer, since the fix is a design
+choice.
+**What has to be true first:** the standing baseline gate. Say plainly
+that this is reproduced **offline only** — no PineNote panel has been
+used to confirm how often a real user's pinch exceeds 900 ms, and we
+should not imply a rate we did not measure.
+**Status:** ready.
+
 ## Standing caveats
 
 - **We are ahead of, not aligned with, the lineage.** Line numbers and
