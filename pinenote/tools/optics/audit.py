@@ -73,7 +73,11 @@ CAPTURE_UTC_OFFSET_H = -6
 # doc/datasets/2026-07-optics/ and reports agreement. Pure stdlib: no numpy,
 # no ffmpeg, no video.
 
-# doc/driver-findings-report.md:545,563,571,585,548 -- the "segmentation-symptom
+# NOTE: these citations name SECTIONS, not line numbers.  An earlier version
+# used line numbers and they went stale inside a single two-commit series when
+# ~67 lines were inserted above them -- a reader following them landed on the
+# wrong text.  Cite headings; they survive edits.
+# doc/driver-findings-report.md, the "segmentation-symptom
 # numbers" the audit declares instrument-dominated. Voiding them is only
 # meaningful if a third party can see the numbers being voided; these are the
 # analyzer's own n_transitions, straight out of the committed reports.
@@ -111,7 +115,7 @@ PUBLISHED_TRACE_FP = {
     "armB": (1, 46),
 }
 
-# doc/driver-findings-report.md:624-627, "Timeline forensics (capture mtimes)".
+# doc/driver-findings-report.md, section "Timeline forensics (capture mtimes)".
 # session.json records ONE created_utc per session, written when the session
 # was finalized -- so a multi-run session (neverx3's three captures) carries
 # only the last capture's clock. The two single-capture sessions the report
@@ -157,7 +161,7 @@ PUBLISHED_NOISE_PILOT = {
     "blank->novel": (11, 0.0061, 0.0098, 0.0132),
 }
 
-# doc/driver-findings-report.md:616-624 -- soak1's recorded interventions, the
+# doc/driver-findings-report.md, soak1's recorded interventions -- the
 # alignment anchor for its two unexplained events. The EVENT TIMES the audit
 # found are pixel-derived (not reproducible); the recorded interventions the
 # audit aligned them to are committed.

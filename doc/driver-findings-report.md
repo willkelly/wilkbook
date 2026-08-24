@@ -584,8 +584,10 @@ the Otsu panel-quad detection so that the session homography "lands
 displaced" while validity flags stay green. `test_audit.py` builds that
 capture synthetically. At realistic dark-box geometry the graphic page
 shatters the Otsu component into 41 fragments, the largest 1.9 % of the
-frame, and the panel-presence gate **rejects it outright**; at every
-larger panel size tested it decodes its own pid correctly. On the
+frame, and the panel-presence gate **rejects it outright**. That is the
+only geometry the fixture exercises — `INSET` is a module constant and
+there is no size sweep — so the "it would decode correctly at a larger
+panel size" branch is **untested**, not confirmed. On the
 synthetic camera the mode is fail-closed — it never produced a
 displaced-but-valid fit. So the tree now pins the first half of the
 mechanism (a graphic page defeats panel detection) and the production

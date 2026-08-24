@@ -404,10 +404,22 @@ def case_graphic_opener(manifest, tmpdir):
           "(the mode that poisoned the campaign is not reachable here)",
           all(v != "verified" or p == 46 for v, p in opener), f"{opener}")
 
-    note("the opener frames come back %s -- on this synthetic rig a graphic "
-         "page either decodes CORRECTLY or is rejected outright by the "
-         "panel-presence gate; it never produced the audit's "
-         "displaced-but-valid fit." % sorted(verdicts))
+    # The check above is an implication, and an implication over a set with no
+    # "verified" member is VACUOUSLY true -- it would keep passing if this
+    # fixture silently stopped producing fits at all.  Pin the regime itself so
+    # a change in outcome is a test failure rather than a silent no-op.
+    check("the opener fixture stays in the regime this case was written for "
+          "(at least one opening frame reaches a verdict, and the assertion "
+          "above is therefore not vacuous by accident)",
+          len(opener) == n_open and bool(verdicts), f"{opener}")
+
+    note("the opener frames come back %s. That is the ONLY geometry this "
+         "fixture exercises (INSET is a module constant, there is no size "
+         "sweep), and at it the graphic page is rejected outright by the "
+         "panel-presence gate. The correct-decode branch is NOT exercised "
+         "here -- do not read this fixture as evidence for it. What it does "
+         "establish is that the audit's displaced-but-valid fit was never "
+         "produced." % sorted(verdicts))
     note("so this fixture pins the fail-closed half of the mechanism and the "
          "trust rule's protection. The audit's displaced-geometry half is NOT "
          "reproduced offline and rests on the 2026-07 videos alone.")
