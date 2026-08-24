@@ -327,6 +327,47 @@ What it takes, concretely:
   (no hardware LUT in direct mode) but its independent waveform decode
   becomes the natural cross-check for the CLUT compiler. The
   `koreader-input` harness and rung 4/4v are unaffected.
+
+  **[Probe, 2026-08-24 — this objection is much weaker than written.]**
+  The recovery was called "none cheap". It was measured instead of
+  estimated, on the CURRENT driver, and it costs **one typedef**.
+
+  `guix shell` supplies `cross-gcc`/`cross-libc`/`cross-binutils`/
+  `cross-kernel-headers` for `aarch64-linux-gnu` with nothing to build
+  but a profile derivation, and `qemu-aarch64` (user mode) ships in
+  Guix's `qemu`. With those:
+
+  | | |
+  |---|---|
+  | `ebc-drain-gate-test` cross-built, run under qemu-user | **31 PASS / 0 FAIL, EXIT=0** — identical to native |
+  | `ebc-refresh-test` **with AddressSanitizer** | **148 PASS / 0 FAIL, EXIT=0** |
+  | wall time, same test | native 22 ms → qemu **65 ms (~3x)** |
+
+  The only source change needed was `shim/kernel-shim.h`'s `__u64`:
+  `uint64_t` is `unsigned long` on aarch64, and glibc's `<signal.h>`
+  pulls in the real `asm/sigcontext.h` → `linux/types.h` →
+  `asm-generic/int-ll64.h`, which types `__u64` as `unsigned long long`.
+  Matching the kernel is strictly more correct and is native-neutral
+  (`make check-host` EXIT=0, 3073 PASS, unchanged).
+
+  Two real costs remain, and neither is the harness:
+
+  - **LeakSanitizer does not work under qemu-user** (it needs ptrace-like
+    introspection). `ASAN_OPTIONS=detect_leaks=0` is required; ASan's
+    *memory-error* detection is unaffected. Exit-time leak checking is
+    genuinely lost on this path.
+  - **qemu emulates NEON**, so a harness run there tests ASIMD through an
+    emulator. That is the same class of objection raised against an
+    sse2neon shim — but qemu's ASIMD is vastly more exercised than a
+    hand-rolled header, and unlike the shim it needs no code we maintain.
+
+  **What this does and does not prove.** It proves the execution model
+  survives cross-compilation and emulation for the *current* driver. It
+  does **not** prove hrdl's NEON hot paths run correctly under qemu —
+  nobody has compiled them. But the objection was that the harness would
+  not exist at all on an x86 workstation, and that is now false: the
+  binary runs as aarch64, so NEON intrinsics compile for their real
+  target and execute under an emulator that supports them.
 - **Policy/UX stack**: `GLOBAL_REFRESH` and the idle-washer survive
   unchanged, but **every wash is GC16** — there is no
   `refresh_waveform`, so Decision 2 (GL16 washes) has no equivalent; the
