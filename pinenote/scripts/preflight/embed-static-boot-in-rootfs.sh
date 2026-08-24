@@ -156,7 +156,7 @@ esac
 
 append_args=$(normalize_append_root "$append_args")
 
-tmpdir=$(mktemp -d /tmp/opencode/pinenote-static-boot.XXXXXX)
+tmpdir=$(mktemp -d /tmp/wilkbook/pinenote-static-boot.XXXXXX)
 trap 'rm -rf "$tmpdir"' EXIT HUP INT TERM
 
 dump_rootfs_file "$kernel_path" "$tmpdir/Image"

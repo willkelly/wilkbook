@@ -20,10 +20,20 @@ GUIX = $(if $(TIME_MACHINE),$(GUIX_BASE) time-machine -C channels.scm --,$(GUIX_
 TARGET = aarch64-linux-gnu
 GUIX_FLAGS = -L . --target=$(TARGET)
 
-# Per-checkout build flags, gitignored.  The only supported knob today is
-# WILKBOOK_VERY_INSECURE_FOR_CONVENIENCE (pinenote/insecure.scm), which is
-# OFF unless this file turns it on -- so a plain checkout cannot build the
-# development conveniences by accident.
+# Per-checkout build flags, gitignored.  Two supported knobs, one
+# mechanism -- an environment variable the system definition reads, with
+# this file as the way to make the choice stick:
+#
+#   WILKBOOK_VERY_INSECURE_FOR_CONVENIENCE  (pinenote/insecure.scm) -- OFF
+#     unless this file turns it on, so a plain checkout cannot build the
+#     development conveniences by accident.
+#   WILKBOOK_TIMEZONE                       (pinenote/timezone.scm)  -- the
+#     build-time timezone for every flavor; Etc/UTC unless set, and an
+#     unusable name is refused at evaluation time rather than shipped as a
+#     dangling /etc/localtime.
+#
+# Both want the `export' form here (export WILKBOOK_TIMEZONE = Europe/Dublin),
+# because what reads them is guix, not make.
 -include local.mk
 
 # CI / preprovisioned toolchains.  Every host suite below runs fine under an
@@ -43,14 +53,12 @@ else
 guix-shell = guix shell $(1) --
 endif
 # Volatile by design: /tmp does not survive a host reboot, so rebuild
-# (or copy out) anything a later deploy will reference.  The
-# /tmp/opencode root is a historical name (a previous coding tool) that
-# is load-bearing as the write-containment boundary hard-coded in the
-# preflight/qemu scripts, so an ARTIFACTS override must still resolve
-# under /tmp/opencode for the qemu-virt* targets (the scripts fail
-# loudly on anything outside it).  Renaming the root is an open task
-# that must move those scripts in the same change.
-ARTIFACTS ?= /tmp/opencode/pinenote-rootfs-artifacts
+# (or copy out) anything a later deploy will reference.  /tmp/wilkbook
+# is load-bearing beyond being this default: it is the write-containment
+# boundary hard-coded in the preflight/qemu scripts, so an ARTIFACTS
+# override must still resolve under /tmp/wilkbook for the qemu-virt*
+# targets (the scripts fail loudly on anything outside it).
+ARTIFACTS ?= /tmp/wilkbook/pinenote-rootfs-artifacts
 # Which synthetic p7 qemu-data-check boots against:
 #   os1-used     a lived-in Debian home, no library yet (the migrating friend)
 #   with-library an existing /books that must be left alone (author's device)
@@ -62,8 +70,8 @@ FIXTURE ?= os1-used
 FLAVORS = minimal slim networked dev usb-console usb-console-linux-6-6 reader reader-debug
 
 .PHONY: help packages kernel kernel-drv reader-system-drv qemu-smoke qemu-virt qemu-virt-check qemu-pageturn-campaign refresh-episodes-check \
-         check-host wbf-check wbf-notice ebc-logic-check ebc-barrier-check rastersim-check koreader-input-check orientation-check optics-check power-check rockchip-pm-check activation-positive-check suspend-check \
-         battery-dtb-check time-machine-check gexp-modules-check kernel-version-check library-check ultra-coupling-check \
+         check-host wbf-check wbf-notice ebc-logic-check ebc-barrier-check rastersim-check koreader-input-check orientation-check optics-check optics-audit-dataset power-check rockchip-pm-check activation-positive-check suspend-check \
+         battery-dtb-check time-machine-check gexp-modules-check timezone-check kernel-version-check library-check ultra-coupling-check \
         $(FLAVORS) $(addprefix image-,$(FLAVORS)) $(addprefix rootfs-,$(FLAVORS))
 
 help:
@@ -86,12 +94,14 @@ help:
 	@echo "  rastersim-check   raster/waveform simulation checks ([WBF=..])"
 	@echo "  koreader-input-check  KOReader input, touch, and virtual-node lifecycle tests"
 	@echo "  orientation-check SC7A20 classifier and uinput bridge tests"
-	@echo "  optics-check      deterministic recorder/bundle/analysis tests"
+	@echo "  optics-check      deterministic recorder/bundle/analysis tests (incl. the evidence-audit passes)"
+	@echo "  optics-audit-dataset  re-check the 2026-07-12 evidence audit against doc/datasets (stdlib only)"
 	@echo "  power-check       fake-root tests for the read-only Guile power recorder; auto-suspend post-wake policy"
 	@echo "  rockchip-pm-check dormant BSP SIP/PM model, DTB, and zero-call checks"
 	@echo "  activation-positive-check  fake capabilities/coordinator + active PM scenario; production hard-off"
 	@echo "  suspend-check     offline fail-closed e-reader suspend qualification gates"
 	@echo "  gexp-modules-check  no use-modules in a shepherd start/stop without a (modules ..) field"
+	@echo "  timezone-check    the build-time timezone knob resolves, and refuses an unusable name"
 	@echo
 	@echo "Flags:"
 	@echo "  TIME_MACHINE=1    build through channels.scm (pinned/reproducible; required for releases)"
@@ -290,7 +300,7 @@ CHECK_HOST_TARGETS = ebc-logic-check ebc-barrier-check rastersim-check \
         koreader-input-check orientation-check optics-check power-check \
         rockchip-pm-check activation-positive-check suspend-check \
         library-check ultra-coupling-check battery-dtb-check time-machine-check \
-        gexp-modules-check
+        gexp-modules-check timezone-check
 
 # Parse time, not recipe time: a recipe-level guard would run only AFTER every
 # prerequisite had already completed, so it could not prevent the mistake it
@@ -332,6 +342,16 @@ time-machine-check:
 gexp-modules-check:
 	sh pinenote/scripts/preflight/validate-gexp-modules.sh
 
+# Guix never opens the timezone string -- /etc/localtime is `file-append
+# tzdata "/share/zoneinfo/" timezone', pure concatenation -- so a typo'd
+# WILKBOOK_TIMEZONE builds, images and deploys cleanly and then dangles,
+# and glibc falls back to UTC without a word.  This gate pins the refusal
+# that pinenote/timezone.scm does at evaluation time, plus the local.mk
+# wiring the docs promise.  Guile is a toolchain convenience here: the
+# script text-gates either way and says SKIP for what it could not run.
+timezone-check:
+	$(call guix-shell,guile) sh pinenote/scripts/preflight/validate-timezone-selection.sh
+
 # Host-side waveform parser tests (offline ladder rung 1); needs the
 # per-device .wbf (never committed): make wbf-check WBF=/path/to/ebc.wbf
 wbf-check:
@@ -372,10 +392,19 @@ orientation-check:
 
 # E-ink optical-defect detectors (optics harness analysis core). Deterministic
 # validation of the flash/ghost/settle/double-flash classifiers against
-# synthetic clips with known injected defects; no camera, no device.
+# synthetic clips with known injected defects; no camera, no device. Also
+# re-runs the committed-data half of the 2026-07-12 evidence audit against
+# doc/datasets/2026-07-optics (audit.py dataset).
 #   make optics-check
 optics-check:
 	$(call guix-shell,python python-numpy python-scipy python-pillow ffmpeg) $(MAKE) -C pinenote/tools/optics check
+
+# The evidence audit's committed-data re-check on its own: stdlib python only,
+# no numpy/ffmpeg/guix shell, ~instant. The frame passes it cannot run need a
+# bundle's gitignored capture.mkv -- see pinenote/tools/optics/audit.py.
+#   make optics-audit-dataset
+optics-audit-dataset:
+	$(MAKE) -C pinenote/tools/optics audit-dataset
 
 # Read-only power snapshot/delta recorder tests.  Guile is present in the
 # final4 system profile and the tool uses only base Guile modules.  luajit

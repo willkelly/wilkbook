@@ -23,11 +23,11 @@ resolve_directory() {
   (CDPATH= cd -P "$directory" && pwd -P)
 }
 
-require_inside_opencode() {
+require_inside_artifact_root() {
   path=$1
   case $path in
-    "$opencode_root"/*) ;;
-    *) fail "boot bundle directory must resolve under $opencode_root" ;;
+    "$artifact_root"/*) ;;
+    *) fail "boot bundle directory must resolve under $artifact_root" ;;
   esac
 }
 
@@ -59,7 +59,7 @@ if [ ! -d "$system_directory" ]; then
 fi
 system_directory=$(resolve_directory "$system_directory") || fail "cannot resolve system directory: $system_directory"
 
-opencode_root=$(resolve_directory /tmp/opencode) || fail "cannot resolve /tmp/opencode"
+artifact_root=$(resolve_directory /tmp/wilkbook) || fail "cannot resolve /tmp/wilkbook"
 
 if [ "$#" -eq 2 ]; then
   requested_bundle=$2
@@ -72,18 +72,18 @@ if [ "$#" -eq 2 ]; then
 
   parent_root=$(resolve_directory "$parent") || fail "boot bundle parent does not exist: $parent"
   bundle=$parent_root/$basename
-  require_inside_opencode "$bundle"
+  require_inside_artifact_root "$bundle"
 
   if [ -e "$bundle" ] || [ -L "$bundle" ]; then
     fail "boot bundle path already exists; refusing to reuse it: $bundle"
   fi
   mkdir -- "$bundle"
 else
-  bundle=$(mktemp -d "$opencode_root/pinenote-boot-bundle.XXXXXX")
+  bundle=$(mktemp -d "$artifact_root/pinenote-boot-bundle.XXXXXX")
 fi
 
 bundle=$(resolve_directory "$bundle") || fail "cannot resolve boot bundle directory: $bundle"
-require_inside_opencode "$bundle"
+require_inside_artifact_root "$bundle"
 
 kernel_image=$system_directory/kernel/Image
 kernel_config=$system_directory/kernel/.config

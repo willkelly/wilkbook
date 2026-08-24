@@ -84,7 +84,7 @@ normalize_extlinux_root() {
 
   append_args=$(normalize_append_root "$append_args")
 
-  normalized_extlinux=$(mktemp /tmp/opencode/pinenote-extlinux.XXXXXX)
+  normalized_extlinux=$(mktemp /tmp/wilkbook/pinenote-extlinux.XXXXXX)
   {
     printf '%s\n' '# Generated from Guix image output for PineNote Gate 6 preflight.'
     printf '%s\n' '# Do not persist U-Boot environment changes when using this entry.'

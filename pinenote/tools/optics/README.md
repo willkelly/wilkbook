@@ -117,6 +117,34 @@ offline-tested (`test_bundle.py`, wired into `make check`):
   runs the full `ingest` → `optics.classify_transition` pipeline, and emits a
   per-panel defect report (JSON + a human-readable table). CLI:
   `python3 analyze.py BUNDLE_DIR [-o report.json]`.
+- **`audit.py`** — the 2026-07-12 evidence audit (`doc/driver-findings-report.md`
+  § "Evidence audit"), reconstructed. Its scratchpad scripts
+  (`audit-validity.py`, `audit2-perframe.py`, `inspect-window.py`) are
+  unrecoverable; these four passes are re-derivations from the report's prose,
+  built on `ingest.py`'s primitives:
+  - `validity BUNDLE` — per-frame fiducial-validity accounting, with every hole
+    attributed to the card page in effect at that time.
+  - `perframe BUNDLE` — warps every frame with its OWN fit and self-checks the
+    geometry in panel space (marker ink where the card put it + a framed page-id
+    in the manifest) before reading any cell; reports the verified fraction per
+    time bin and how far the production session homography sits from the
+    verified fits — the poisoning diagnostic.
+  - `window BUNDLE --at T` — full-fps per-frame table (+ optional PNGs) around a
+    claimed event. Panel/strip readings here are RAW warped intensity: a
+    per-frame photometry fit re-normalizes a whole-panel drive away.
+  - `strip BUNDLE` — the patch-strip wash detector. Only a global redraws the
+    static gray-step strip, and it is watched through the SESSION homography on
+    every frame — a global is exactly what makes a frame's own fiducials
+    undetectable, so gating on per-frame validity blinds the detector at the
+    events it exists to count.
+
+  All four need a bundle's `capture.mkv`. **They cannot run against
+  `doc/datasets/`, which has no pixel data**; `audit.py dataset`
+  (`make optics-audit-dataset`, stdlib only) is the part a checkout runs — it
+  re-checks 43 published numbers against the committed files and prints the
+  register of claims that need the videos. `test_audit.py` validates the frame
+  passes on synthetic footage with injected defects; they have never been run
+  against the 2026-07 captures.
 - **`recorder.py`** — the record-side CLI. `package` (real) wraps a pre-recorded
   video + metadata into a bundle; `analyze` (real) runs the path above; `record`
   is the **on-device scenario player**. Its device-driving is real, factored in
@@ -227,6 +255,15 @@ declines explicitly rather than guessing.
 
 ## Honest limits
 
+- **The 2026-07 evidence audit is only partly re-runnable.** `audit.py`'s frame
+  passes are reconstructions validated on synthetic footage, never on the
+  captures the audit analyzed, and the committed dataset holds no pixels — so
+  every reflectance verdict in `doc/driver-findings-report.md`'s audit section
+  rests on 12.28 GB of gitignored video. The one mechanism claim that fails to
+  reproduce offline is the graphic-page-opener poisoning mode: on the synthetic
+  camera a graphic page shatters the Otsu panel region and is *rejected* (fail
+  closed), never producing the audit's displaced-but-valid fit. See
+  `test_audit.py`'s `note:` lines.
 - We lean entirely on **differential / relative** metrics (before/after,
   region-vs-reference). Absolute reflectance is hard and unnecessary for ranking
   candidates.

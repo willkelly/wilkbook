@@ -89,8 +89,35 @@ the probes' own black-on-black no-op writes were a major confound.
 resume-baseline finding. Do that before sending; the same fetch method
 works.
 
+**Update (2026-08-24, issue #22): the starvation finding now ships with a
+fix, and the shape of the report changes.** We adopted hrdl's own drain
+gate (`v6.19_ebc_custom` @ `819ba1724a6f`), adapted to this driver's area
+list — see the update block in `doc/driver-findings-report.md`. Two things
+follow for whoever sends this:
+
+- **It is no longer "here is a bug"; it is "here is a bug, here is your
+  own fix applied to the older branch, and here is an offline
+  reproduction".** That is a stronger send, and it is aimed at a
+  *different* audience than before: hrdl has already fixed it on
+  `v6.19_ebc_custom`, so the people who still need it are the branches
+  that have not taken that work — `v6.19_ebc`, m-weigand, and ayakael's
+  pmaports `linux-pine64-pinenote` (which ships to postmarketOS users).
+  Frame it as a backport request, not a discovery.
+- **The blast radius is larger than the report currently says.** The same
+  loop stalls `kthread_park()`, so it stalls a **system suspend** under
+  sustained damage, not just a global refresh. That is worth leading with
+  for a battery-powered device.
+
+**Also new and sendable with it:** the offline reproduction itself
+(`ebc-refresh-starvation-test` + `ebc-drain-gate-test` +
+`mutate-drain-gate.py`) — a desk-runnable proof that the boundary is the
+waveform's phase count rather than any timeout. Nobody in the lineage has
+an executable model of the refresh machine; that may be worth more to them
+than the patch.
+
 **Gate:** baseline done. Also re-confirm findings 2–7 and the
-resume-baseline finding still apply.
+resume-baseline finding still apply, and re-check *which* branches still
+carry the ungated splice before framing the starvation item.
 
 ### 2. `DRM_IOCTL_ROCKCHIP_EBC_REFRESH_BARRIER` — **needs-verification**
 
@@ -300,6 +327,7 @@ register once it exists.
 | postmarketOS | pmaports `device/community/{device,linux}-pine64-pinenote` | GitLab MR on **`gitlab.postmarketos.org`** | **live** — kernel 6.19.3, device pkgver 11, maintainer Antoine Martin (ayakael) `<dev@ayakael.net>`. Builds vanilla kernel.org tarball + one big patch, same shape as us. Device package sources hrdl's `pinenote-dist` @ `28d2c05` |
 | ayakael | the Forgejo fork pmOS's kernel patch is generated from | via the pmOS maintainer address above | host `ayakael.net` is up (200) but `/forge/linux-pinenote` **404s**, including the exact `…/compare/526524233b…..v6.19.patch` URL pmaports fetches. Verified 2026-07-31. May be transient or a move — re-probe before relying on it |
 | dri-devel | mainline DRM | `git send-email` | only relevant if the driver is ever resubmitted; no EPD infrastructure in mainline and none pending |
+| KOReader | `github.com/koreader/koreader` — the reader we ship | GitHub issue, then PR | **not probed** — confirm the issue template and where input-stack changes are reviewed before opening item 11 |
 
 ### 9. rk356x has no CPU `idle-states` — **needs-work** (works; does NOT do what you would expect)
 
@@ -397,6 +425,76 @@ against the then-current mainline at send time; the fix itself must NOT
 be "tested" by invoking the broken path on hardware (it provably drops
 the CPU rail 400 mV) — correctness is by inspection plus, if wanted, a
 regmap-level unit test.
+
+### 11. KOReader's slot numbers are treated as identities — **ready** (reproduced offline, two pinned tests)
+
+Two defects in KOReader's `frontend/device/input.lua` +
+`gesturedetector.lua`, both from the same assumption: that a kernel MT
+**slot number** identifies *which* thing is touching, rather than being
+an opaque index the controller chooses.
+
+**11a. `pen_slot = main_finger_slot + 4` collides with a real panel
+slot.** `Input` keeps one `ev_slots` table for every input device, so a
+touchscreen contact assigned kernel slot 4 and the pen are the same
+entry. The finger's `ABS_MT_TRACKING_ID`/`ABS_MT_POSITION_*` land on a
+slot still marked `tool = TOOL_TYPE_PEN`, which makes
+`handleMixedTouchEv` honor the pen's next hover `ABS_X`/`ABS_Y` and
+rewrite the live contact to the pen's position. The tap crosses
+`PAN_THRESHOLD` along the finger→pen bearing and leaves as a swipe.
+`BTN_TOUCH` from the pen is worse: it writes the pen's contact state onto
+the finger's tracking id and *neither* survives, so an ink stroke leaves
+as a page-turn swipe.
+
+**11b. Two-finger gestures only work in slots 0 and 1.**
+`GestureDetector:newContact` computes a buddy only for
+`main_finger_slot` and `main_finger_slot + 1`; contacts in any other slot
+have no buddy and are classified independently. The same two fingers in
+slots `{0,2}` produce two swipes instead of a spread — two page turns
+instead of a font-size change.
+
+**Not a five-finger hypothetical.** `mixedrouter.lua` carried that
+framing until 2026-08-24, when a live capture disproved it: cyttsp5
+advertises 32 MT slots (`ABS_MT_SLOT` max = 31) and does **not** allocate
+them densely — a 120 s session peaking at *three* simultaneous contacts
+used slots `{0, 1, 2, 5}`
+(`doc/artifacts/pinenote-input-clocks-20260824/`). A lone finger can be
+handed slot 4.
+
+**Where it lives in our tree:** four pinned scenarios in
+`pinenote/tools/koreader-input/test-mixedrouter.lua`
+(`quirk:pen-slot-collision`, `quirk:pen-slot-collision-tip`,
+`quirk:buddy-slots-0-1-only`, plus the `pen-hover-finger-slot3` control),
+run by `make koreader-input-check` against the bundle's **verbatim**
+`input.lua`/`gesturedetector.lua`. The collision scenario reproduces a
+gesture stream byte-identical to the 2026-07-05 hardware bug
+`mixedrouter.lua` was written to fix — same mechanism, different route
+in.
+
+**Deliberately not fixed locally, and the reason is the module's remit.**
+`mixedrouter.lua` disambiguates by event **source**; when the pen and a
+finger agree on the slot *number* there is nothing left for it to
+disambiguate. A fix has to change the slot *space* — move the pen above
+the panel's advertised `ABS_MT_SLOT` max — which is a different job from
+"restore the routing upstream already assumes", and it would put a
+per-controller hardware constant inside a KOReader module. Upstream can
+do it properly and once, for every `wacom_protocol` device
+(reMarkable, Elipsa, Sage), by querying the panel's slot range instead of
+hard-coding `+ 4`. Same for 11b: generalizing buddy detection beyond a
+hard-coded pair is upstream's call, not a local override that our next
+KOReader bump has to re-litigate.
+
+**For:** KOReader upstream (`github.com/koreader/koreader`), not the
+kernel lineage — this is application code, and `cyttsp5` is behaving
+correctly.
+**Shape:** an issue with the two reproducers, since the fix is a design
+choice (query the panel's range vs. reserve a high constant) rather than
+an obvious patch. Our test file is directly quotable: it runs their own
+source.
+**What has to be true first:** the standing baseline gate. Also worth
+saying plainly in the report that we have **not** measured how often the
+controller hands out a colliding or non-adjacent slot — one capture says
+"not never", which is not a rate. Reporting a frequency we did not
+measure is exactly the credibility cost this register exists to avoid.
 
 ## Standing caveats
 

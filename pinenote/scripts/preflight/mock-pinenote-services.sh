@@ -24,11 +24,11 @@ resolve_directory() {
   (CDPATH= cd -P "$directory" && pwd -P)
 }
 
-require_inside_opencode() {
+require_inside_artifact_root() {
   path=$1
   case $path in
-    "$opencode_root"/*) ;;
-    *) fail "temporary directory must resolve under $opencode_root" ;;
+    "$artifact_root"/*) ;;
+    *) fail "temporary directory must resolve under $artifact_root" ;;
   esac
 }
 
@@ -37,7 +37,7 @@ if [ "$#" -gt 1 ]; then
   exit 2
 fi
 
-opencode_root=$(resolve_directory /tmp/opencode) || fail "cannot resolve /tmp/opencode"
+artifact_root=$(resolve_directory /tmp/wilkbook) || fail "cannot resolve /tmp/wilkbook"
 
 if [ "$#" -eq 1 ]; then
   requested_root=$1
@@ -50,21 +50,21 @@ if [ "$#" -eq 1 ]; then
 
   parent_root=$(resolve_directory "$parent") || fail "temporary directory parent does not exist: $parent"
   intended_root=$parent_root/$basename
-  require_inside_opencode "$intended_root"
+  require_inside_artifact_root "$intended_root"
 
   if [ -e "$intended_root" ]; then
     if [ ! -d "$intended_root" ]; then
       fail "temporary directory exists but is not a directory: $intended_root"
     fi
     temp_root=$(resolve_directory "$intended_root") || fail "cannot resolve temporary directory: $intended_root"
-    require_inside_opencode "$temp_root"
+    require_inside_artifact_root "$temp_root"
   else
     temp_root=$intended_root
   fi
 else
-  temp_root=$(mktemp -d "$opencode_root/pinenote-preflight.XXXXXX")
+  temp_root=$(mktemp -d "$artifact_root/pinenote-preflight.XXXXXX")
   temp_root=$(resolve_directory "$temp_root") || fail "cannot resolve temporary directory: $temp_root"
-  require_inside_opencode "$temp_root"
+  require_inside_artifact_root "$temp_root"
 fi
 
 mkdir -p -- "$temp_root"
@@ -76,7 +76,7 @@ fi
 
 mkdir -- "$fixture"
 resolved_fixture=$(resolve_directory "$fixture") || fail "cannot resolve fixture path: $fixture"
-require_inside_opencode "$resolved_fixture"
+require_inside_artifact_root "$resolved_fixture"
 
 mkdir -- "$fixture/state"
 mkdir -- "$fixture/state/firmware"

@@ -30,6 +30,16 @@
 #                     after the drain, exactly what commit 8665ed8
 #                     changed).  run-tests.sh requires this one to FAIL:
 #                     a test that passes on both orderings proves nothing.
+#   ebc-drain-gate-test  issue #22: under a sustained damage supply a
+#                     queued global refresh (or a kthread_park) must
+#                     still launch, within one area lifetime.
+#   ebc-drain-gate-test-nogate  the SAME source against the driver with
+#                     the drain gate removed (mutate-drain-gate.py).
+#                     EXPECTED TO FAIL; run-tests.sh asserts that it does.
+#   ebc-refresh-starvation-test  the pinned `quirk:` reproduction of the
+#                     inherited starvation, ALSO built against the
+#                     ungated driver -- the shipping one no longer
+#                     starves, which is what the drain-gate test proves.
 #   ebc-replay        the rung-7a phase-B workbench: replays KOReader
 #                     [pn-refresh] traces through the same machine under
 #                     candidate refresh policies (doc/refresh-policy.md).
@@ -83,8 +93,15 @@ DBG_DRIVER := $(DBGDIR)/drivers/gpu/drm/rockchip/rockchip_ebc.c
 PREFIXDIR := $(BUILD)/prefix
 PREFIX_DRIVER := $(PREFIXDIR)/drivers/gpu/drm/rockchip/rockchip_ebc.c
 
+# The pre-issue-#22 variant: the same extraction with the work-item drain
+# gate removed, i.e. the driver as the m-weigand lineage still ships it.
+# It carries the pinned starvation `quirk:` and negative-tests the gate.
+NOGATEDIR := $(BUILD)/nogate
+NOGATE_DRIVER := $(NOGATEDIR)/drivers/gpu/drm/rockchip/rockchip_ebc.c
+
 all: header-check $(BUILD)/ebc-logic-test $(BUILD)/ebc-refresh-test \
      $(BUILD)/ebc-refresh-test-dbg $(BUILD)/ebc-refresh-starvation-test \
+     $(BUILD)/ebc-drain-gate-test $(BUILD)/ebc-drain-gate-test-nogate \
      $(BUILD)/ebc-suspend-bracket-test \
      $(BUILD)/ebc-fbdev-order-test $(BUILD)/ebc-fbdev-order-test-prefix \
      $(BUILD)/ebc-replay \
@@ -139,10 +156,37 @@ $(BUILD)/ebc-refresh-test-dbg: ebc-refresh-test.c $(EXTRACTED) \
 # global-refresh / REFRESH_BARRIER path (the 2026-07-29 hardware failure).
 # Waveform-gated, because the starvation boundary IS the waveform's phase
 # count -- it skips cleanly without a WBF.
+#
+# Built against build/nogate (the extraction with the issue-#22 work-item
+# drain gate REMOVED): this file is the pinned `quirk:` record of the
+# inherited m-weigand-lineage defect, and the shipping driver no longer
+# reproduces it.  ebc-drain-gate-test is the shipping driver's side.
 $(BUILD)/ebc-refresh-starvation-test: ebc-refresh-starvation-test.c \
                                       $(EXTRACTED) shim/kernel-shim.h \
-                                      shim/fake-ebc.h
-	$(CC) $(CFLAGS) $(ASAN) $(CPPFLAGS) -o $@ ebc-refresh-starvation-test.c
+                                      shim/fake-ebc.h $(NOGATE_DRIVER)
+	$(CC) $(CFLAGS) $(ASAN) \
+	  -I$(NOGATEDIR)/drivers/gpu/drm/rockchip $(CPPFLAGS) \
+	  -o $@ ebc-refresh-starvation-test.c
+
+# The positive counterpart (issue #22): under the same sustained damage
+# supply, a queued global refresh / park MUST launch within a bounded
+# number of frames.  Waveform-gated for the same reason -- the bound IS
+# the waveform's phase count.
+$(BUILD)/ebc-drain-gate-test: ebc-drain-gate-test.c \
+                              $(EXTRACTED) shim/kernel-shim.h \
+                              shim/fake-ebc.h
+	$(CC) $(CFLAGS) $(ASAN) $(CPPFLAGS) -o $@ ebc-drain-gate-test.c
+
+# ... and the negative test of that test: the SAME source against the
+# ungated driver.  This binary is EXPECTED TO FAIL; run-tests.sh asserts
+# that it does.  A liveness test that passes with and without the gate
+# would prove nothing.
+$(BUILD)/ebc-drain-gate-test-nogate: ebc-drain-gate-test.c $(EXTRACTED) \
+                                     shim/kernel-shim.h shim/fake-ebc.h \
+                                     $(NOGATE_DRIVER)
+	$(CC) $(CFLAGS) $(ASAN) \
+	  -I$(NOGATEDIR)/drivers/gpu/drm/rockchip $(CPPFLAGS) \
+	  -o $@ ebc-drain-gate-test.c
 
 # Not waveform-gated: drives only the system-sleep park/wake bracket.
 $(BUILD)/ebc-suspend-bracket-test: ebc-suspend-bracket-test.c \
@@ -161,6 +205,11 @@ $(BUILD)/ebc-fbdev-order-test: ebc-fbdev-order-test.c $(EXTRACTED) \
 $(PREFIX_DRIVER): $(EXTRACTED) mutate-prefix-order.py
 	rm -rf $(PREFIXDIR)
 	python3 mutate-prefix-order.py \
+	  $(BUILD)/drivers/gpu/drm/rockchip/rockchip_ebc.c $@
+
+$(NOGATE_DRIVER): $(EXTRACTED) mutate-drain-gate.py
+	rm -rf $(NOGATEDIR)
+	python3 mutate-drain-gate.py \
 	  $(BUILD)/drivers/gpu/drm/rockchip/rockchip_ebc.c $@
 
 # -I$(PREFIXDIR)/... first so `#include "rockchip_ebc.c"` resolves to the

@@ -245,6 +245,19 @@ local function count(gestures, ges, x, y)
     return n
 end
 
+-- White-box view of Input's per-slot bookkeeping (self.ev_slots is the
+-- ONE table upstream keeps for every input device, keyed by slot number).
+local function snapshot(input, slot)
+    local s = input.ev_slots[slot] or {}
+    return { id = s.id, x = s.x, y = s.y, tool = s.tool }
+end
+
+local function snapToString(s)
+    return string.format("id=%s x=%s y=%s tool=%s",
+                         tostring(s.id), tostring(s.x),
+                         tostring(s.y), tostring(s.tool))
+end
+
 ------------------------------------------------------------------------
 -- Scenario event streams.
 ------------------------------------------------------------------------
@@ -339,45 +352,244 @@ scenarios[#scenarios + 1] = {
     end,
 }
 
+-- A finger contact in a CHOSEN touchscreen slot while the pen hovers.
+--
+-- Reaching Input.pen_slot needs no fifth finger.  cyttsp5 advertises 32
+-- MT slots (ABS_MT_SLOT max = 31) and does NOT allocate them densely: a
+-- live 120 s capture whose peak was three simultaneous contacts used
+-- slots {0, 1, 2, 5} (doc/artifacts/pinenote-input-clocks-20260824/).
+-- A lone contact can therefore be assigned slot 4 -- which is exactly
+-- upstream's pen_slot (main_finger_slot + 4).
+--
+-- The kernel DOES emit the explicit ABS_MT_SLOT here, because the
+-- touchscreen's own slot is moving off its 0 default.  That is what
+-- makes this a different bug from quirk:pen-hover-tap-capture rather
+-- than another instance of it: there, the slot event was suppressed by
+-- kernel dedup and the router synthesizes it back; here it arrives, is
+-- honored, and still lands on the pen.
+local function penHoverFingerInSlot(slot)
+    return {
+        frame(PEN, { { EV_KEY, BTN_TOOL_PEN, 1 } }),
+        frame(PEN, { { EV_ABS, ABS_X, 1200 }, { EV_ABS, ABS_Y, 300 } }),
+        frame(PEN, { { EV_ABS, ABS_X, 1202 }, { EV_ABS, ABS_Y, 301 } }),
+        -- Finger down at (500,700) in `slot`.
+        frame(TOUCH, { { EV_ABS, ABS_MT_SLOT, slot },
+                       { EV_ABS, ABS_MT_TRACKING_ID, 77 },
+                       { EV_ABS, ABS_MT_POSITION_X, 500 },
+                       { EV_ABS, ABS_MT_POSITION_Y, 700 } }),
+        -- Pen keeps hovering while the finger is down.
+        frame(PEN, { { EV_ABS, ABS_X, 1206 }, { EV_ABS, ABS_Y, 303 } }),
+        frame(PEN, { { EV_ABS, ABS_X, 1208 }, { EV_ABS, ABS_Y, 304 } }),
+        -- Finger lift (~60 ms after contact: well inside tap timing).
+        -- The touchscreen's own slot has not moved, so the kernel
+        -- deduplicates ABS_MT_SLOT on the way out.
+        frame(TOUCH, { { EV_ABS, ABS_MT_TRACKING_ID, -1 } }),
+        frame(PEN, { { EV_KEY, BTN_TOOL_PEN, 0 } }),
+    }
+end
+
+-- Feed that stream in stages, so the scenario can look at Input's
+-- per-slot bookkeeping while the finger is still down.
+local function runFingerInSlot(input, slot)
+    local frames = penHoverFingerInSlot(slot)
+    local gestures = {}
+    local notes = { lines = {} }
+    local function stage(first, last)
+        local part = {}
+        for i = first, last do part[#part + 1] = frames[i] end
+        for _, g in ipairs(feed(input, part)) do
+            gestures[#gestures + 1] = g
+        end
+    end
+    local function record(key, label)
+        notes[key] = snapshot(input, input.pen_slot)
+        notes[key .. "_finger"] = snapshot(input, slot)
+        notes.lines[#notes.lines + 1] = string.format(
+            "%-14s pen_slot(%d): %-40s touch slot %d: %s",
+            label, input.pen_slot, snapToString(notes[key]),
+            slot, snapToString(notes[key .. "_finger"]))
+    end
+    stage(1, 3)     -- pen enters hover range and moves
+    stage(4, 4)     -- finger down
+    record("after_contact", "after contact")
+    stage(5, 6)     -- pen hovers on while the finger is down
+    record("after_hover", "after hover")
+    stage(7, 8)     -- finger lift, then pen leaves proximity
+    return gestures, notes
+end
+
+-- Control half of a one-variable A/B: identical stream, identical
+-- coordinates, identical timing -- only the touchscreen slot number
+-- differs, and it is chosen NOT to collide with pen_slot.
 scenarios[#scenarios + 1] = {
-    name = "two-finger-spread",
+    name = "pen-hover-finger-slot3",
+    run = function(input) return runFingerInSlot(input, 3) end,
+    check_both = function(g, notes)
+        if count(g, "tap", 500, 700) ~= 1 or count(g, "tap") ~= 1 then
+            return false, "expected exactly one tap at (500,700)"
+        end
+        if count(g, "pan") + count(g, "swipe") + count(g, "multiswipe") ~= 0 then
+            return false, "expected no pan/swipe"
+        end
+        if notes.after_hover.id ~= nil then
+            return false, "the pen slot must not carry a finger tracking id"
+        end
+        if notes.after_hover_finger.x ~= 500 or notes.after_hover_finger.y ~= 700 then
+            return false, "the finger's own slot must still hold (500,700)"
+        end
+        return true, "finger tap at (500,700) survives; pen and finger keep separate slots"
+    end,
+    -- The pen only hovers, so the hover tracking the router restores is
+    -- invisible in the gesture stream: it must not change the outcome.
+    compare_streams = true,
+}
+
+-- quirk: THE SAME STREAM with the contact one slot over -- on pen_slot.
+--
+-- Upstream keeps ONE ev_slots table for every input device, so the pen
+-- and a finger assigned kernel slot 4 write to the same entry.  The
+-- router disambiguates by SOURCE, but here the two sources agree on the
+-- slot number and there is nothing left for it to disambiguate; fixing
+-- this means moving the pen out of the panel's slot space, which is a
+-- different job from restoring the routing upstream already assumes
+-- (mixedrouter.lua's header).  So BOTH halves assert today's behavior:
+-- this is a pin, and any future change -- ours or upstream's -- turns it
+-- red.  See doc/upstream-register.md item 11.
+scenarios[#scenarios + 1] = {
+    name = "quirk:pen-slot-collision",
+    run = function(input) return runFingerInSlot(input, 4) end,
+    check_both = function(g, notes)
+        if count(g, "tap") ~= 0 then
+            return false, "expected NO tap (the collision swallows it), got one"
+        end
+        if count(g, "pan", 1206, 303) ~= 1 or count(g, "swipe", 500, 700) ~= 1 then
+            return false, "expected the pan-at-pen-coords + swipe misclassification"
+        end
+        -- White box: the finger's contact data lands IN the pen's slot...
+        if notes.after_contact.id ~= 77
+           or notes.after_contact.x ~= 500 or notes.after_contact.y ~= 700 then
+            return false, "expected the finger's id/coords to land in the pen slot"
+        end
+        if notes.after_contact.tool ~= 1 then -- TOOL_TYPE_PEN
+            return false, "expected the colliding slot to still be marked tool=PEN"
+        end
+        -- ...and the next hover frame overwrites it, because
+        -- handleMixedTouchEv honors ABS_X/ABS_Y on a PEN-tooled slot.
+        if notes.after_hover.id ~= 77
+           or notes.after_hover.x ~= 1208 or notes.after_hover.y ~= 304 then
+            return false, "expected pen hover coords to overwrite the live finger contact"
+        end
+        return true, "SHOULD be one tap at (500,700): finger id 77 lands in pen_slot 4, "
+                     .. "pen hover rewrites it to (1208,304), the tap leaves as pan+swipe"
+    end,
+    -- Pins mixedrouter.lua's own claim that the collision is unchanged
+    -- by it: the router is neutral here, for better and for worse.
+    compare_streams = true,
+}
+
+-- quirk: the collision costs the PEN too, not only the finger.
+--
+-- With the finger one slot over, pen-contact-after-interleave above gets
+-- BOTH the pen's tap and the finger's out of this shape of stream.  On
+-- pen_slot, upstream's BTN_TOUCH handler writes the pen's contact state
+-- onto the finger's live tracking id and neither survives -- so on a
+-- device whose pen is for writing, an ink stroke leaves as a page-turn
+-- swipe.  That is the stake for #20's stroke capture, not just for taps.
+scenarios[#scenarios + 1] = {
+    name = "quirk:pen-slot-collision-tip",
     run = function(input)
         return feed(input, {
-            -- Two contacts down: multi-finger frames DO carry explicit
-            -- ABS_MT_SLOT switches.
-            frame(TOUCH, { { EV_ABS, ABS_MT_SLOT, 0 },
-                           { EV_ABS, ABS_MT_TRACKING_ID, 10 },
-                           { EV_ABS, ABS_MT_POSITION_X, 800 },
-                           { EV_ABS, ABS_MT_POSITION_Y, 702 },
-                           { EV_ABS, ABS_MT_SLOT, 1 },
-                           { EV_ABS, ABS_MT_TRACKING_ID, 11 },
-                           { EV_ABS, ABS_MT_POSITION_X, 1000 },
-                           { EV_ABS, ABS_MT_POSITION_Y, 698 } }),
-            -- Fingers move apart (only X changes -> Y deduplicated).
-            frame(TOUCH, { { EV_ABS, ABS_MT_SLOT, 0 },
-                           { EV_ABS, ABS_MT_POSITION_X, 600 },
-                           { EV_ABS, ABS_MT_SLOT, 1 },
-                           { EV_ABS, ABS_MT_POSITION_X, 1200 } }),
-            -- Both lift.
-            frame(TOUCH, { { EV_ABS, ABS_MT_SLOT, 0 },
-                           { EV_ABS, ABS_MT_TRACKING_ID, -1 },
-                           { EV_ABS, ABS_MT_SLOT, 1 },
-                           { EV_ABS, ABS_MT_TRACKING_ID, -1 } }),
+            frame(PEN, { { EV_KEY, BTN_TOOL_PEN, 1 } }),
+            frame(PEN, { { EV_ABS, ABS_X, 1200 }, { EV_ABS, ABS_Y, 300 } }),
+            frame(TOUCH, { { EV_ABS, ABS_MT_SLOT, 4 },
+                           { EV_ABS, ABS_MT_TRACKING_ID, 77 },
+                           { EV_ABS, ABS_MT_POSITION_X, 500 },
+                           { EV_ABS, ABS_MT_POSITION_Y, 700 } }),
+            -- Pen tip down and up while the finger is still down.
+            frame(PEN, { { EV_KEY, BTN_TOUCH, 1 },
+                         { EV_ABS, ABS_X, 1210 }, { EV_ABS, ABS_Y, 306 } }),
+            frame(PEN, { { EV_KEY, BTN_TOUCH, 0 } }),
+            frame(TOUCH, { { EV_ABS, ABS_MT_TRACKING_ID, -1 } }),
+            frame(PEN, { { EV_KEY, BTN_TOOL_PEN, 0 } }),
         })
     end,
-    check_without = function(g)
-        if count(g, "spread") ~= 1 then
-            return false, "expected one spread gesture"
+    check_both = function(g)
+        if count(g, "tap") ~= 0 or count(g, "hold") ~= 0 then
+            return false, "expected NEITHER contact to produce a tap"
         end
-        return true, "spread detected"
+        if count(g, "swipe", 500, 700) ~= 1 then
+            return false, "expected the swipe misclassification"
+        end
+        return true, "SHOULD be a pen tap at (1210,306) and a finger tap at (500,700): "
+                     .. "both are lost, the stroke leaves as a swipe"
     end,
-    check_with = function(g)
+    compare_streams = true,
+}
+
+-- Two fingers moving apart, in a CHOSEN pair of touchscreen slots.
+local function twoFingerSpread(a, b)
+    return {
+        -- Two contacts down: multi-finger frames DO carry explicit
+        -- ABS_MT_SLOT switches.
+        frame(TOUCH, { { EV_ABS, ABS_MT_SLOT, a },
+                       { EV_ABS, ABS_MT_TRACKING_ID, 10 },
+                       { EV_ABS, ABS_MT_POSITION_X, 800 },
+                       { EV_ABS, ABS_MT_POSITION_Y, 702 },
+                       { EV_ABS, ABS_MT_SLOT, b },
+                       { EV_ABS, ABS_MT_TRACKING_ID, 11 },
+                       { EV_ABS, ABS_MT_POSITION_X, 1000 },
+                       { EV_ABS, ABS_MT_POSITION_Y, 698 } }),
+        -- Fingers move apart (only X changes -> Y deduplicated).
+        frame(TOUCH, { { EV_ABS, ABS_MT_SLOT, a },
+                       { EV_ABS, ABS_MT_POSITION_X, 600 },
+                       { EV_ABS, ABS_MT_SLOT, b },
+                       { EV_ABS, ABS_MT_POSITION_X, 1200 } }),
+        -- Both lift.
+        frame(TOUCH, { { EV_ABS, ABS_MT_SLOT, a },
+                       { EV_ABS, ABS_MT_TRACKING_ID, -1 },
+                       { EV_ABS, ABS_MT_SLOT, b },
+                       { EV_ABS, ABS_MT_TRACKING_ID, -1 } }),
+    }
+end
+
+scenarios[#scenarios + 1] = {
+    name = "two-finger-spread",
+    run = function(input) return feed(input, twoFingerSpread(0, 1)) end,
+    check_both = function(g)
         if count(g, "spread") ~= 1 then
             return false, "expected one spread gesture"
         end
         return true, "spread detected"
     end,
     -- Plus: the full gesture streams must be identical (asserted below).
+    compare_streams = true,
+}
+
+-- quirk: the same two fingers, one slot over, are not a gesture at all.
+--
+-- GestureDetector pairs contacts only when their slots are exactly
+-- main_finger_slot and main_finger_slot + 1 (newContact's buddy_slot);
+-- every other slot number has no buddy and is classified alone.  So the
+-- SAME two fingers in slots {0,2} produce two independent swipes instead
+-- of a spread -- on a reader, two page turns instead of a font-size
+-- change.  Pinch works in the field because the controller usually hands
+-- the first two contacts slots 0 and 1, not because slot numbers are
+-- handled generally; the live capture that used {0,1,2,5} shows it does
+-- not always.  Same root cause family as the pen-slot collision above:
+-- upstream treats a slot NUMBER as an identity.  Pinned, not fixed --
+-- doc/upstream-register.md item 11.
+scenarios[#scenarios + 1] = {
+    name = "quirk:buddy-slots-0-1-only",
+    run = function(input) return feed(input, twoFingerSpread(0, 2)) end,
+    check_both = function(g)
+        if count(g, "spread") ~= 0 or count(g, "pinch") ~= 0 then
+            return false, "expected NO two-finger gesture from slots {0,2}"
+        end
+        if count(g, "swipe", 800, 702) ~= 1 or count(g, "swipe", 1000, 698) ~= 1 then
+            return false, "expected the two contacts to be classified independently"
+        end
+        return true, "SHOULD be one spread: slots {0,2} have no buddy, so it is two swipes"
+    end,
     compare_streams = true,
 }
 
@@ -412,23 +624,31 @@ scenarios[#scenarios + 1] = {
 
 local fail = 0
 
-local function report(ok, label, msg, stream)
+local function report(ok, label, msg, stream, notes)
     print(string.format("%s: %s: %s", ok and "PASS" or "FAIL", label, msg))
     print(string.format("      gestures: %s", stream))
+    if notes and notes.lines then
+        for _, line in ipairs(notes.lines) do
+            print(string.format("      slots:    %s", line))
+        end
+    end
     if not ok then fail = fail + 1 end
 end
 
 for _, sc in ipairs(scenarios) do
     local streams = {}
-    for _, mode in ipairs({ { false, "no-router", sc.check_without },
-                            { true, "mixedrouter", sc.check_with } }) do
+    -- check_both is for scenarios whose expectation is the same with and
+    -- without the router (a quirk the router does not address, or a
+    -- control it must not perturb).
+    for _, mode in ipairs({ { false, "no-router", sc.check_without or sc.check_both },
+                            { true, "mixedrouter", sc.check_with or sc.check_both } }) do
         local with_router, label, check = mode[1], mode[2], mode[3]
         clock_us = 2000000 -- fresh 2.000000s epoch per case
         local input = makeInput(with_router)
-        local gestures = sc.run(input)
+        local gestures, notes = sc.run(input)
         streams[label] = streamToString(gestures)
-        local ok, msg = check(gestures)
-        report(ok, sc.name .. " [" .. label .. "]", msg, streams[label])
+        local ok, msg = check(gestures, notes)
+        report(ok, sc.name .. " [" .. label .. "]", msg, streams[label], notes)
     end
     if sc.compare_streams then
         if streams["no-router"] == streams["mixedrouter"] then

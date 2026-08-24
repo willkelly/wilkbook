@@ -274,29 +274,31 @@ the start of this track — no panel required. Policy background in
       unplugged energy measurements" before any idle autosuspend; the
       2026-08-03 deployment superseded that gate, with the charging
       inhibit and the runtime disable knob as compensating controls — the
-      unplugged multi-day soak remains the outstanding validation, not a
-      precondition. Full history: `doc/status.md`; campaign records:
+      unplugged multi-day soak was the outstanding validation rather than
+      a precondition, and it ran clean 2026-08-15. Full history: `doc/status.md`; campaign records:
       `doc/power-management.md`.
 - [ ] Suspend program, remaining direction: the week-scale unplugged soak
-      (a first short unplugged soak passed clean 2026-08-03 — no spurious
-      wakes at the 240 s dwell; its 64.4 mA duty-cycle average was itself
-      the RTC-rewake bug fixed 2026-08-07, so standby is still unmeasured:
-      the deep floor is 8.1 d at 20.6 mA but no idle device ever sat
-      there, and the post-fix ~7.4 d is arithmetic —
-      `doc/power-management.md`, "The idle duty cycle"); wake attribution
-      and the cover wake source; the
-      unexplained TPS `ENABLE` 2f->20 delta after deep; resume latency as
-      a UX metric (~1.1 s kernel time today; measure one full
-      wake+render+refresh cycle); ultra suspend — ADOPTED
-      2026-08-08: hrdl's rails-off pair on the primary kernel, 4.64 mA
-      measured (~36 d paper; `doc/artifacts/pinenote-ultra-r12-20260808/`),
-      wake via RTC/power/charger and, unexpectedly, the cover
-      (confirmed 2026-08-09 — the pad supply is off-in-suspend, so the
-      mechanism is unexplained); the pen cannot wake; the wake-collision gate was
-      answered by adoption, and the running ≥3-day ultra soak plus its
-      end-to-end standby figure are now the outstanding validation.
-      Upstream TF-A stays a separate, later, recovery-qualified migration
-      — never a hybrid.
+      is **done** (2026-08-15) — 6.17 days unplugged, 170 suspend cycles
+      and zero failures, and standby measured end to end at last:
+      **5.47 mA idle** and **10.07 mA as actually read**, projecting to
+      ~30.5 and ~16.6 days from a 4000 mAh charge
+      (`doc/artifacts/pinenote-ultra-soak-20260815/`). That retires the
+      ~7.4 d arithmetic off the duty-cycle model and the ~28–36 d paper
+      estimate off R12's single bracket alike; quote **both** measured
+      numbers, never only the idle one. Still open: wake attribution and
+      the cover wake source; the unexplained TPS `ENABLE` 2f->20 delta
+      after deep; resume latency as a UX metric (~1.1 s kernel time
+      today; measure one full wake+render+refresh cycle); and the awake
+      term, which the soak showed is now the larger half of the standby
+      answer — reading roughly halves the figure. Ultra suspend —
+      ADOPTED 2026-08-08: hrdl's rails-off pair on the primary kernel,
+      4.64 mA measured in a backstop-free bracket
+      (`doc/artifacts/pinenote-ultra-r12-20260808/`), wake via
+      RTC/power/charger and, unexpectedly, the cover (confirmed
+      2026-08-09 — the pad supply is off-in-suspend, so the mechanism is
+      unexplained); the pen cannot wake; the wake-collision gate was
+      answered by adoption. Upstream TF-A stays a separate, later,
+      recovery-qualified migration — never a hybrid.
 - [ ] Reader polish, next: refresh-policy tuning (KOReader's
       partial/UI/full hints → EBC behavior; the `org.pinenote.ebc`
       dbus/UAPI compatibility story remains relevant for community

@@ -17,9 +17,9 @@ honestly labelled:
 |---|---|---|
 | RAM in use at boot | **~162 MiB** | the whole OS, KOReader painted, Wi-Fi up. **Measured** 2 min post-boot (`doc/artifacts/pinenote-boot-ram-20260815/`); ~148 MiB without the SSH session used to read it |
 | Awake, reading | ~157 mA | measured floor 156.9 mA; stock Debian idles ~230 mA on the same glass (`doc/alpha-expectations.md`, `doc/power-management.md`) |
-| Suspended | **4.64 mA** | **measured on hardware 2026-08-08** (`doc/artifacts/pinenote-ultra-r12-20260808/`) |
-| Standby, idle | **~30 days** | **measured** over 6.17 days unplugged, 5.47 mA (`doc/artifacts/pinenote-ultra-soak-20260815/`) |
-| Standby, as actually read | **~16 days** | same run, 10.07 mA — the difference is ~40 min/day of reading |
+| Suspended | **4.64 mA** | **measured on hardware 2026-08-08** in a quiet 40-min bracket (`doc/artifacts/pinenote-ultra-r12-20260808/`); with the hourly RTC backstop included it is the 5.47 mA below |
+| Standby, idle | **~30 days** | projected from **5.47 mA measured** over 6.17 days unplugged (`doc/artifacts/pinenote-ultra-soak-20260815/`) |
+| Standby, as actually read | **~16 days** | same run, **10.07 mA measured** — the difference is ~40 min/day of reading |
 | Suspend reliability | **170/170** | suspend cycles with zero failures over that run |
 
 "Measured" means a battery gauge, a wall clock, and the ABBA discipline
@@ -215,10 +215,11 @@ ping go dead. If it never sleeps, check
 `cat /data/wilkbook/autosuspend.conf` first — see the previous step.
 
 **6. Read.** Page turns are single-pass, the device suspends itself when
-you drift off, and it sips 4.64 mA while you sleep. Left idle it lasts
-**~30 days**; read ~40 min a day it lasts **~16** — both measured over a
-six-day unplugged run. What it should feel like, and what is
-known-broken: `doc/alpha-expectations.md`. That is the whole product.
+you drift off, and it sips about 5 mA while you sleep. Left idle it
+lasts **~30 days**; read ~40 min a day it lasts **~16** — both projected
+from draw measured over a six-day unplugged run. What it should feel
+like, and what is known-broken: `doc/alpha-expectations.md`. That is the
+whole product.
 
 ## What to steal
 
@@ -325,7 +326,7 @@ build time, never hand-copied — so they cannot drift from the driver.
   re-pasted code, "absence of an error is not a passing test", and why a
   single-stack harness models ordering but not races.
 
-## Status (2026-08-08)
+## Status (2026-08-15)
 
 - **Product**: the reader image on os2 — KOReader natively on fbdev with
   pen/finger input, four orientations, publish-on-call single-pass page
@@ -338,18 +339,14 @@ build time, never hand-copied — so they cannot drift from the driver.
   deep's ~20 mA. The six-day unplugged soak has since concluded:
   **5.47 mA idle standby (~30 days) and 10.07 mA as actually read
   (~16 days), 170 suspend cycles with zero failures**
-  (`doc/artifacts/pinenote-ultra-soak-20260815/`) — measured, not
-  arithmetic. The device sleeps after 5 idle minutes; only the power
+  (`doc/artifacts/pinenote-ultra-soak-20260815/`) — the **draws** are
+  measured; the ~30 and ~16 day figures are those draws divided onto a
+  4000 mAh charge, not an observed run to empty. The device sleeps after 5 idle minutes; only the power
   button, the RTC backstop, and the charger can wake it — the rails-off
   tradeoff unpowers GPIO0 during suspend, so the pen cannot — though
   the cover demonstrably does wake it (2026-08-09), which the model does
-  not yet explain.
-  The soak has CONCLUDED (2026-08-15): 6.17 days unplugged, **170
-  suspend cycles with zero failures**, 5.47 mA idle (~30 days) and
-  10.07 mA as actually read (~16 days) —
-  `doc/artifacts/pinenote-ultra-soak-20260815/`. SSH to a deployed
-  reader is intermittent while auto-suspend is enabled
-  (`doc/device-access.md`).
+  not yet explain. SSH to a deployed reader is intermittent while
+  auto-suspend is enabled (`doc/device-access.md`).
 - **Kernel**: the vanilla-7.0.x forward port is the hardware-proven
   primary (display, PREEMPT_RT, Wi-Fi/BT, gadget). Seven patches total —
   `doc/kernel-forward-port.md`.
@@ -369,6 +366,8 @@ prealpha tag and that bar.
 ## Reading order (humans)
 
 1. This file, then `doc/status.md` (current-state header) — where we are.
+   `CHANGELOG.md` — what has changed since the last tag, in the terms a
+   person holding the device would notice.
 2. `doc/building.md` — host setup and your first build.
 3. `doc/install.md` — the path from a stock PineNote to a booting os2, if
    the device is yours rather than the author's. Then
@@ -445,7 +444,17 @@ boot-order changes. Reboots and other destructive steps are user-present.
 
 ## Build flags
 
-One knob, off by default: `WILKBOOK_VERY_INSECURE_FOR_CONVENIENCE`.
+Two knobs, one mechanism: an environment variable the system definition
+reads, with a gitignored `local.mk` at the repo root when you want the
+choice to stick. Both leave a plain clone building exactly what it built
+before the knob existed.
+
+| Flag | Default | What it does |
+| --- | --- | --- |
+| `WILKBOOK_VERY_INSECURE_FOR_CONVENIENCE` | off | development conveniences on the reader flavor (`pinenote/insecure.scm`) |
+| `WILKBOOK_TIMEZONE` | `Etc/UTC` | the build-time timezone for every flavor (`pinenote/timezone.scm`) |
+
+### `WILKBOOK_VERY_INSECURE_FOR_CONVENIENCE`
 
 Bring-up on a one-port device sometimes genuinely needs an
 unauthenticated shell — the debug cable and the charger are mutually
@@ -497,6 +506,52 @@ on the kernel console, so **the SBU debug cable is a passwordless root
 shell on any build** while the device is awake (`doc/device-access.md`).
 That is the recovery channel, deliberately. "Default" means not reachable
 over a USB data cable, not locked down.
+
+### `WILKBOOK_TIMEZONE`
+
+The image runs UTC unless you say otherwise, which puts KOReader's clock
+and every log timestamp an offset away from the person reading them.
+Set the zone at build time:
+
+```make
+# local.mk at the repo root -- gitignored, per-checkout
+export WILKBOOK_TIMEZONE = Europe/Dublin
+```
+
+or `WILKBOOK_TIMEZONE=Europe/Dublin make image-reader` for a one-off.
+
+**It applies to every flavor**, not just the reader. The reader is what
+has a user-visible clock, but what the timezone is really for is
+reconstructing a session from its logs — and a `dev` or `usb-console`
+image stamping UTC while the reader stamped local time would put a
+mental conversion in the middle of every cross-flavor comparison. One
+value, all flavors. (`qemu-aarch64-smoke.scm` is deliberately excluded:
+it is a generic ARM64 smoke VM whose boot output is asserted host-side,
+so it stays pinned to UTC.)
+
+**The default stays `Etc/UTC` on purpose.** There is no sane guess at
+where a stranger cloning this channel lives, and the repo's own evidence
+trail — `doc/status.md`, `doc/artifacts/`, the autosuspend resume log —
+is already written in UTC; moving the default would reinterpret every
+future log against a different clock while the old ones stayed put.
+
+**An unusable name fails the build, loudly, before anything is built.**
+Guix does not check this string: `/etc/localtime` is built by
+concatenating the zone onto tzdata's path and is never opened, so a
+typo produces a *dangling* symlink, glibc falls back to UTC, and the
+device boots looking exactly like one nobody configured — discoverable
+only by noticing the clock after a full build and deploy. So
+`pinenote/timezone.scm` refuses at evaluation time: malformed names on
+syntax alone (including `..`, which would otherwise walk `/etc/localtime`
+out of the zoneinfo tree), and well-formed-but-nonexistent names against
+the host's zoneinfo database. If that database is older than the zone
+you want, point `TZDIR` at a newer one — glibc's own variable, not an
+invented second knob. When no database can be found at all, the check
+says so rather than passing on silence.
+
+Empty, whitespace-only, and unset all mean the default, so a half-edited
+`local.mk` is not a build failure. `make timezone-check` (part of `make
+check-host`) pins all of this.
 
 ## Hosting
 

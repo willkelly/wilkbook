@@ -25,6 +25,16 @@
  * actual behavior.  Nothing in rockchip_ebc.c, the forward-port patch,
  * the shim, or any existing test file is modified.
  *
+ * 2026-08-24 (issue #22): the SHIPPING driver no longer behaves this way
+ * -- it carries the work-item drain gate, and ebc-drain-gate-test pins
+ * the guarantee.  This file is unchanged and now compiles against
+ * build/nogate, the same extraction with the gate removed
+ * (mutate-drain-gate.py, byte-identical to the pre-gate source).  It
+ * therefore remains the pinned `quirk:` record of an INHERITED defect --
+ * what the m-weigand -> hrdl -> ayakael lineage's published trees still
+ * do -- and doubles as the reason to believe the gate is load-bearing.
+ * Read every assertion below as "the ungated driver does this".
+ *
  * Build (from pinenote/tools/ebc-logic, inside `guix shell gcc-toolchain
  * python`, after `make` has produced build/ and build/fw):
  *   gcc -O2 -Wall -Wextra -Wno-unused-parameter -Wno-maybe-uninitialized \

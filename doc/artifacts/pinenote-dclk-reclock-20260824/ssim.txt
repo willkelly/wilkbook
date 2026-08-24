@@ -1,0 +1,18 @@
+Panel-region crop: crop=1500:1090:550:60 of 2560x1440 MJPEG, format=gray
+Metric A: ffmpeg ssim (higher = more similar)
+Metric B: ffmpeg blend=difference,signalstats  YAVG = mean |A-B| on 0..255
+
+WITHIN-STATE (same clock, consecutive frames -- the noise floor)
+  A1 1v2=0.928660  1v3=0.932904  2v3=0.933808      YAVG 3.21959  YMAX 41
+  B4 1v2=0.931626  1v3=0.932293  2v3=0.932526      YAVG 2.75529  YMAX 38
+  A2 1v2=0.929656  1v3=0.934570  2v3=0.931524
+  N  1v2=0.933062  1v3=0.929437   (earlier triplet, 250 MHz)
+
+ACROSS-STATE (200 MHz vs 250 MHz -- the treatment)
+  A1 vs B4  0.910192                                YAVG 3.21686  YMAX 48
+  B4 vs A2  0.927090                                YAVG 3.64039  YMAX 42
+
+DRIFT CONTROL (same state, opposite ends of the sequence)
+  A1 vs A2  0.897680                                YAVG 3.78147  YMAX 53
+
+Ordering on both metrics: WITHIN <= ACROSS <= DRIFT.

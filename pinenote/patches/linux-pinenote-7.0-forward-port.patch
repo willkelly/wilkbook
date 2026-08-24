@@ -2790,7 +2790,7 @@ new file mode 100755
 index 000000000..8db4c36cd
 --- /dev/null
 +++ b/drivers/gpu/drm/rockchip/rockchip_ebc.c
-@@ -0,0 +1,3436 @@
+@@ -0,0 +1,3481 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/*
 + * Copyright (C) 2021-2022 Samuel Holland <samuel@sholland.org>
@@ -4170,6 +4170,43 @@ index 000000000..8db4c36cd
 +	}
 +}
 +
++/*
++ * wilkbook 2026-08-24 (issue #22): the work-item drain gate.
++ *
++ * rockchip_ebc_partial_refresh()'s only exit is an empty local `areas`
++ * list, and it re-splices ctx->queue into that list every frame.  A
++ * damage supply arriving at least once per area lifetime therefore keeps
++ * the list permanently non-empty, the loop never returns, and the
++ * refresh thread never gets back to the top of its inner loop.  So a
++ * queued global refresh (REFRESH_BARRIER, the GLOBAL_REFRESH ioctl, the
++ * post-resume restore, the auto-refresh wash) never launches, and the
++ * kthread_park() that rockchip_ebc_quiesce_worker() blocks on never
++ * completes -- for as long as something keeps producing damage.
++ * Observed on hardware 2026-07-29 (fbcon's blinking cursor was the
++ * producer) and reproduced offline by ebc-refresh-starvation-test.
++ *
++ * The fix is hrdl's (v6.19_ebc_custom @ 819ba1724a6f, adapted to this
++ * driver's area list): once a work item is pending, stop folding new
++ * damage in.  Areas already in flight still play out in full -- dropping
++ * them mid-waveform would leave undriven pixels -- so the list drains
++ * within one area lifetime and the work item runs.  Damage refused here
++ * stays queued on ctx->queue for the next pass, or is subsumed by the
++ * global, which repaints ctx->final wholesale.
++ *
++ * kthread_should_park()/_stop() are only meaningful on the refresh
++ * thread; it is the only caller of rockchip_ebc_partial_refresh().
++ */
++static bool rockchip_ebc_work_item_pending(struct rockchip_ebc *ebc)
++{
++	bool pending;
++
++	spin_lock(&ebc->refresh_once_lock);
++	pending = ebc->do_one_full_refresh;
++	spin_unlock(&ebc->refresh_once_lock);
++
++	return pending || kthread_should_park() || kthread_should_stop();
++}
++
 +static int rockchip_ebc_partial_refresh(struct rockchip_ebc *ebc,
 +					 struct rockchip_ebc_ctx *ctx,
 +					 dma_addr_t next_handle,
@@ -4213,6 +4250,13 @@ index 000000000..8db4c36cd
 +		 * sync_y1 < 0 means no area blitted anything this frame */
 +		int sync_y1 = -1, sync_y2 = 0;
 +		int split_counter = 0;
++		/* The drain gate.  Re-read every frame: a work item can be
++		 * queued at any point during a long partial refresh.  Only
++		 * the mid-frame splice below is gated -- frame 0's splice is
++		 * this refresh's own starting set, not new damage, and the
++		 * thread has already consumed any work item pending when it
++		 * chose a partial over a global. */
++		bool work_item_pending = rockchip_ebc_work_item_pending(ebc);
 +
 +		// now the CPU is allowed to change the phase buffer
 +		dma_sync_single_for_cpu(dev, phase_handle, ctx->phase_size, DMA_TO_DEVICE);
@@ -4373,7 +4417,8 @@ index 000000000..8db4c36cd
 +		// acquire the lock
 +		for (int i=0; i <= 5; i++){
 +			if (spin_trylock(&ctx->queue_lock)){
-+				list_splice_tail_init(&ctx->queue, &areas);
++				if (!work_item_pending)
++					list_splice_tail_init(&ctx->queue, &areas);
 +				// switch buffers
 +				if(ctx->switch_required){
 +					ctx->ebc_buffer_index = !ctx->ebc_buffer_index;

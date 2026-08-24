@@ -103,17 +103,17 @@ config=$bundle/extlinux/extlinux.conf
 [ -f "$disk" ]   || fail "disk image is not a regular file: $disk"
 
 # Write containment: everything this harness produces stays under
-# /tmp/opencode, the boundary the other qemu/preflight scripts hard-code.
-opencode_root=$(CDPATH= cd -P /tmp/opencode 2>/dev/null && pwd -P) || \
-  fail "cannot resolve /tmp/opencode (the write-containment boundary)"
+# /tmp/wilkbook, the boundary the other qemu/preflight scripts hard-code.
+artifact_root=$(CDPATH= cd -P /tmp/wilkbook 2>/dev/null && pwd -P) || \
+  fail "cannot resolve /tmp/wilkbook (the write-containment boundary)"
 if [ -z "$outdir" ]; then
-  outdir=$opencode_root/pinenote-virt-pageturn-$$
+  outdir=$artifact_root/pinenote-virt-pageturn-$$
 fi
 mkdir -p "$outdir" || fail "cannot create output dir: $outdir"
 outdir=$(CDPATH= cd -P "$outdir" && pwd -P)
 case "$outdir/" in
-  "$opencode_root"/*) ;;
-  *) fail "OUT_DIR must live under $opencode_root (got $outdir)" ;;
+  "$artifact_root"/*) ;;
+  *) fail "OUT_DIR must live under $artifact_root (got $outdir)" ;;
 esac
 
 log=$outdir/console.log

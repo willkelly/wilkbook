@@ -15,6 +15,10 @@
 (define pinenote-qemu-smoke-operating-system
   (operating-system
     (host-name "pinenote-qemu-smoke")
+    ;; Hard-coded on purpose, and NOT %pinenote-timezone: this is a
+    ;; generic ARM64 smoke VM, not a device flavor.  Its boot output is
+    ;; asserted host-side, so pinning UTC keeps those assertions
+    ;; independent of whatever zone the operator built the images with.
     (timezone "Etc/UTC")
     (locale "en_US.utf8")
     (bootloader

@@ -6,7 +6,7 @@ fixed at the corrected 1404x1872 portrait coordinate space, with numbered
 crosshair targets, quarter-grid lines, and edge rulers.  The page is a
 full-resolution grayscale PNG in the same fixed-layout XHTML packaging used by
 the hardware-proven optics card (rather than inline SVG).  Its default output
-is `/tmp/opencode/pinenote-touch-targets.epub`; pass another path to override
+is `/tmp/wilkbook/pinenote-touch-targets.epub`; pass another path to override
 it, or use `--check PATH` to validate an existing artifact.
 
 ```sh
@@ -92,10 +92,73 @@ behavior) and with it (expects the fix):
 | --- | --- | --- |
 | `quirk:pen-hover-tap-capture` | NO tap; the finger tap re-emerges as pan(s) + swipe at pen-bearing coords | exactly one tap at (500,700) |
 | `pen-contact-after-interleave` | pen tap works (upstream baseline) | pen tap AND the finger tap both survive |
-| `two-finger-spread` | spread | identical stream with/without router |
+| `pen-hover-finger-slot3` | tap at (500,700); pen and finger keep separate slots | identical stream with/without router |
+| `quirk:pen-slot-collision` | NO tap; pan at pen coords + swipe | **identical** — the router does not address this |
+| `quirk:pen-slot-collision-tip` | neither the pen's nor the finger's tap survives | **identical** — as above |
+| `two-finger-spread` | spread (slots 0+1) | identical stream with/without router |
+| `quirk:buddy-slots-0-1-only` | the same two fingers in slots 0+2: no spread, two independent swipes | **identical** — not a routing problem |
 | `baseline-tap` | tap at finger coords | identical stream with/without router |
 
 `run-tests.sh` also checks output determinism across two runs.
+
+## The pen-slot collision (`quirk:pen-slot-collision`)
+
+Upstream keeps **one** `ev_slots` table for every input device, and parks
+the pen at `main_finger_slot + 4` = slot **4**.  The touchscreen's slot
+numbers come from the controller, so if it ever hands a contact slot 4,
+the pen and that finger are the same table entry.
+
+This was long recorded as needing five simultaneous fingers.  It does
+not.  cyttsp5 advertises **32** MT slots (`ABS_MT_SLOT` max = 31) and does
+not allocate them densely: a 120 s live capture whose peak was **three**
+simultaneous contacts used slots **{0, 1, 2, 5}**
+(`doc/artifacts/pinenote-input-clocks-20260824/`).  A lone finger can
+land on slot 4.
+
+The three scenarios above are a one-variable A/B — same coordinates, same
+timing, same frames, only the touchscreen slot number differs:
+
+```
+pen-hover-finger-slot3   touch@(500,700); tap@(500,700)
+  after contact  pen_slot(4): id=nil x=1202 y=301 tool=1   touch slot 3: id=77 x=500 y=700 tool=nil
+
+quirk:pen-slot-collision touch@(500,700); pan@(1206,303) dir=east dist=810.0;
+                         pan@(1208,304) dir=east dist=811.2; swipe@(500,700) dir=east dist=811.2
+  after contact  pen_slot(4): id=77 x=500  y=700 tool=1    touch slot 4: id=77 x=500  y=700 tool=1
+  after hover    pen_slot(4): id=77 x=1208 y=304 tool=1    touch slot 4: id=77 x=1208 y=304 tool=1
+```
+
+The finger's tracking id and coordinates land in the pen's slot, on an
+entry still marked `tool=TOOL_TYPE_PEN`; the next hover frame is therefore
+honored by `handleMixedTouchEv`'s `ABS_X`/`ABS_Y` branch and rewrites the
+live contact to the pen's position.  The resulting gesture stream is
+**byte-identical** to `quirk:pen-hover-tap-capture`'s buggy no-router
+stream — same mechanism, reached by a different route.
+
+**The router is neutral here, by design.** It disambiguates by *source*;
+when both sources agree on the slot *number* there is nothing left to
+disambiguate.  A fix has to move the pen out of the panel's slot space,
+which is a different job from restoring the routing upstream already
+assumes.  So all three scenarios assert **today's** behavior, and
+`compare_streams` pins the router's neutrality: a fix in either place
+turns them red on purpose.  The case for reporting rather than patching
+is `doc/upstream-register.md` item 11.
+
+### The same assumption costs two-finger gestures too
+
+`quirk:buddy-slots-0-1-only` is the second consequence of upstream
+treating a slot *number* as an identity.  `GestureDetector:newContact`
+pairs a contact with a "buddy" only when the two slots are exactly
+`main_finger_slot` and `main_finger_slot + 1`; any other slot has no
+buddy and is classified alone.  So the identical two-finger stream in
+slots `{0,2}` yields **two independent swipes** rather than one spread —
+on a reader, two page turns instead of a font-size change.
+
+Pinch working in the field is therefore not evidence that slot numbers
+are handled generally: it works because the controller usually hands the
+first two contacts slots 0 and 1.  The capture that used `{0,1,2,5}`
+shows it does not always.  How often the panel actually breaks the pair
+is a *hardware* question this suite cannot answer.
 
 The fake-sysfs portion additionally proves that only the exact
 `wilkbook-orientation` virtual-device name becomes the PineNote G-sensor slot.
@@ -122,6 +185,15 @@ adjust hook or `device.lua` `init()` glue (such as the
 create-before-KOReader-enumerates ordering, timer-driven gestures
 (hold, double-tap), or real touch panel timing/noise — those stay on
 the QEMU-visual and hardware rungs.
+
+It also cannot tell you **which slots the controller actually assigns**.
+The slot-collision and buddy-slot scenarios prove what happens *given* a
+slot number; how often cyttsp5 hands out a colliding or non-adjacent one
+is a hardware question. The one capture we have
+(`doc/artifacts/pinenote-input-clocks-20260824/`) says the answer is not
+"never", which is what makes the pins worth having; it does not say how
+often. `pinenote/scripts/preflight/pm-ground-truth.sh` now records the
+advertised `ABS_MT_SLOT` range on every run, but not the assignments.
 
 ```sh
 # from the repo root:

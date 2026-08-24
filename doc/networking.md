@@ -558,3 +558,17 @@ ledger and still need a decision or an os2 session:
   (`CONFIG_USB_CONFIGFS_ECM`) and an ECM gadget service are unbuilt and
   unproven; the RK3566 OTG role/`ep0out` history (`doc/status.md`) means the
   ECM path deserves the same bracketing the ACM path got.
+- **Time from the network — OPEN, deliberately not implemented
+  (2026-08-24).** The build-time timezone landed (issue #6,
+  `pinenote/timezone.scm`), but nothing sets the *clock*: the device
+  keeps whatever the RTC holds, and a flat battery or a drifting RTC
+  makes `doc/status.md` reconstruction and the autosuspend resume log
+  read wrong however good the zone is. NTP was split out of that change
+  rather than bundled, because it is a networking and *power* decision,
+  not a locale one: a daemon that wakes to poll, or a one-shot at
+  association, interacts with the 5-minute idle auto-suspend and the
+  4.64 mA ultra budget (`doc/power-management.md`), and it would put a
+  standing outbound connection on a device whose networking is otherwise
+  opt-in and credential-gated. Decide the shape (one-shot at
+  `wpa_supplicant` CONNECTED vs. a daemon; which servers; what happens
+  with no Wi-Fi) before writing any of it.

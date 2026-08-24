@@ -14,7 +14,7 @@
 # the invoking user; on a host whose uid is 1000 (the Debian user's uid)
 # that reproduces the real thing exactly.
 #
-# Host-side only, rootless (mke2fs -d), writes nothing outside /tmp/opencode.
+# Host-side only, rootless (mke2fs -d), writes nothing outside /tmp/wilkbook.
 #
 # usage: make-data-fixture.sh VARIANT OUTPUT_IMG
 #   os1-used       a lived-in Debian home, NO library yet   (the migrating
@@ -40,17 +40,17 @@ esac
 command -v mke2fs >/dev/null 2>&1 || \
   fail "mke2fs not found; run via: guix shell e2fsprogs -- $0 ..."
 
-opencode_root=$(CDPATH= cd -P /tmp/opencode && pwd -P) || \
-  fail "cannot resolve /tmp/opencode"
+artifact_root=$(CDPATH= cd -P /tmp/wilkbook && pwd -P) || \
+  fail "cannot resolve /tmp/wilkbook"
 out_parent=$(CDPATH= cd -P "$(dirname "$out")" && pwd -P) || \
   fail "output parent does not exist"
 out=$out_parent/$(basename "$out")
 case $out in
-  "$opencode_root"/*) ;;
-  *) fail "output image must resolve under $opencode_root" ;;
+  "$artifact_root"/*) ;;
+  *) fail "output image must resolve under $artifact_root" ;;
 esac
 
-tree=$(mktemp -d "$opencode_root/pinenote-datafix-XXXXXX")
+tree=$(mktemp -d "$artifact_root/pinenote-datafix-XXXXXX")
 trap 'rm -rf -- "$tree"' EXIT
 
 if [ "$variant" != "empty" ]; then

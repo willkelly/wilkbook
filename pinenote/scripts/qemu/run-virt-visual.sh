@@ -52,9 +52,9 @@ config=$bundle/extlinux/extlinux.conf
 [ -f "$disk" ]   || fail "disk image is not a regular file: $disk"
 
 if [ -z "$outdir" ]; then
-  opencode_root=$(CDPATH= cd -P /tmp/opencode 2>/dev/null && pwd -P) || \
-    fail "cannot resolve /tmp/opencode for the default output dir"
-  outdir=$opencode_root/pinenote-virt-visual-$$
+  artifact_root=$(CDPATH= cd -P /tmp/wilkbook 2>/dev/null && pwd -P) || \
+    fail "cannot resolve /tmp/wilkbook for the default output dir"
+  outdir=$artifact_root/pinenote-virt-visual-$$
 fi
 mkdir -p "$outdir" || fail "cannot create output dir: $outdir"
 log=$outdir/console.log
