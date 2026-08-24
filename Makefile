@@ -69,7 +69,7 @@ FIXTURE ?= os1-used
 # (linux-pinenote-debug); remove with the debug patch when done.
 FLAVORS = minimal slim networked dev usb-console usb-console-linux-6-6 reader reader-debug
 
-.PHONY: help packages kernel kernel-drv reader-system-drv qemu-smoke qemu-virt qemu-virt-check qemu-pageturn-campaign refresh-episodes-check \
+.PHONY: help packages kernel kernel-drv reader-system-drv qemu-smoke qemu-virt qemu-virt-check qemu-pageturn-campaign refresh-episodes-check refresh-trigger-check \
          check-host wbf-check wbf-notice ebc-logic-check ebc-barrier-check rastersim-check koreader-input-check orientation-check optics-check optics-audit-dataset power-check rockchip-pm-check activation-positive-check suspend-check \
          battery-dtb-check time-machine-check gexp-modules-check timezone-check kernel-version-check library-check manuals-check ultra-coupling-check \
         $(FLAVORS) $(addprefix image-,$(FLAVORS)) $(addprefix rootfs-,$(FLAVORS))
@@ -87,6 +87,7 @@ help:
 	@echo "  qemu-virt-check   mechanized virt boot assertions (ROOTFS=.. [WAVEFORM=..])"
 	@echo "  qemu-pageturn-campaign  scripted page-turn/menu campaign + [pn-refresh] episode analysis (ROOTFS=..)"
 	@echo "  refresh-episodes-check  self-test of the episode analyser against the issue-#14 fixture"
+	@echo "  refresh-trigger-check   self-test of the trigger analyser against the COMMITTED issue-#14 traces"
 	@echo "  check-host        every host suite needing no hardware ([WBF=..] adds wbf-check + waveform-gated tests)"
 	@echo "  wbf-check         waveform parser checks (WBF=..; never committed)"
 	@echo "  ebc-logic-check   extracted EBC driver logic checks ([WBF=..])"
@@ -289,6 +290,15 @@ qemu-pageturn-campaign:
 refresh-episodes-check:
 	python3 pinenote/tools/refresh-episodes/test-refresh-episodes.py
 
+# Self-test of the TRIGGER analyser, and the only suite in the roster
+# whose input is committed field evidence rather than a fixture: it runs
+# over doc/artifacts/pinenote-refresh-traces-20260815/ and requires the
+# published issue-#14 numbers back.  In CHECK_HOST_TARGETS deliberately
+# -- issue #4 is the record of an audit whose numbers stopped being
+# re-derivable because its scripts were reachable by nobody.
+refresh-trigger-check:
+	python3 pinenote/tools/refresh-episodes/test-refresh-triggers.py
+
 # Aggregate host gate (doc/testing.md, validation-ladder rung 1): every
 # suite that needs no hardware and no per-device waveform, in one
 # command.  wbf-check hard-requires WBF=, so it joins only when WBF is
@@ -301,7 +311,8 @@ CHECK_HOST_TARGETS = ebc-logic-check ebc-barrier-check rastersim-check \
         koreader-input-check orientation-check optics-check power-check \
         rockchip-pm-check activation-positive-check suspend-check \
         library-check manuals-check ultra-coupling-check battery-dtb-check \
-        time-machine-check gexp-modules-check timezone-check
+        time-machine-check gexp-modules-check timezone-check \
+        refresh-trigger-check
 
 # Parse time, not recipe time: a recipe-level guard would run only AFTER every
 # prerequisite had already completed, so it could not prevent the mistake it
