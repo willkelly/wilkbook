@@ -202,6 +202,33 @@ It does not change Linux 7.0's `ROCKCHIP_SLEEP_PD_CONFIG=0xff` pmdomain ABI.
   recoverable-without-reboot state, and on 2026-08-02 suspend-ladder
   rungs 1 and 2 PASS on s2idle with post-resume damage painting a full
   pass at both blanked and unblanked CRTC states (`doc/status.md`).
+- The work-item drain gate (added 2026-08-24, issue #22): one small
+  helper, `rockchip_ebc_work_item_pending()`, read once per frame at the
+  top of `rockchip_ebc_partial_refresh`'s `for (frame = 0;; frame++)`
+  body, gating **only** the mid-frame `list_splice_tail_init(&ctx->queue,
+  &areas)` inside the `spin_trylock` retry loop. The loop's sole exit is
+  an empty area list and it re-spliced the queue every frame, so a damage
+  supply arriving faster than one area lifetime kept it non-empty
+  forever: a queued global refresh never launched, and the
+  `kthread_park()` that `rockchip_ebc_quiesce_worker()` **blocks on**
+  never completed — a system-suspend stall the original 2026-07-29
+  finding did not notice. With the gate the list can only shrink, so the
+  loop returns within one area lifetime. This is hrdl's fix
+  (`~hrdl/linux` `v6.19_ebc_custom` @ `819ba1724a6f`) adapted to this
+  driver's area list, and it converts CLAUDE.md's sustained-damage
+  standing lesson from a procedure into a structural guarantee — the
+  cmdline `vt.global_cursor_default=0` and the campaign fbcon unbind stay
+  in place but stop being load-bearing.
+  Deliberately narrow: `frame == 0`'s splice is **not** gated (it is this
+  refresh's own starting set, and the thread has already consumed any
+  work item pending when it chose a partial over a global), and the
+  buffer switch / `ctx->final` retarget stay unconditional so the EBC
+  never reads a stale final buffer. Pinned by `ebc-drain-gate-test` in
+  the ebc-logic suite (waveform-gated), whose ungated build must FAIL;
+  `ebc-refresh-starvation-test` keeps the inherited `quirk:` record
+  against `mutate-drain-gate.py`'s gate-removed copy. **Not hardware-
+  proven** — no panel has run this; what a busy producer's extra wash
+  looks like on glass is still open.
 - The fbdev-client resume barrier (added 2026-08-01): four lines in
   `rockchip_ebc_resume()` plus one small helper. Vanilla
   `drm_fb_helper_set_suspend_unlocked(helper, false)` defers the
@@ -720,11 +747,27 @@ guard rebases. Highlights:
    blink, at 63 Hz) keeps `rockchip_ebc_refresh_thread` from ever
    reaching the `do_one_full_refresh` read — nothing times out (every
    frame lands inside the 25 ms `EBC_FRAME_TIMEOUT`) and nothing is
-   logged. Inherited verbatim from the `dd99c3f` import, so it is
-   reported in `doc/driver-findings-report.md` rather than patched;
-   `ebc-refresh-starvation-test` pins it against the verbatim driver,
-   and the shipped mitigations are policy-level (fbcon unbind before
-   barrier use, `vt.global_cursor_default=0`). The README's own
+   logged. Inherited verbatim from the `dd99c3f` import, so it was
+   reported in `doc/driver-findings-report.md` rather than patched, and
+   the shipped mitigations were policy-level (fbcon unbind before
+   barrier use, `vt.global_cursor_default=0`).
+   **(fixed in-tree 2026-08-24, hrdl `819ba1724a6f` adapted, issue #22.)**
+   `rockchip_ebc_work_item_pending()` is read once per frame and skips
+   **only** the mid-frame `ctx->queue` splice while a global refresh is
+   queued or the kthread is being parked/stopped, so the area list can
+   only shrink and the loop returns within one area lifetime. `frame ==
+   0`'s splice is deliberately NOT gated (it is the refresh's own
+   starting set, and gating it made a partial a zero-frame no-op in a
+   state only the harness reaches). The park term also fixes a stall the
+   original finding missed: `rockchip_ebc_quiesce_worker()` blocks in
+   `kthread_park()`, so sustained damage stalled **system suspend** too.
+   `ebc-refresh-starvation-test` still pins the inherited behaviour, now
+   against `build/nogate` (`mutate-drain-gate.py`'s gate-removed copy,
+   verified byte-identical to the pre-gate source);
+   `ebc-drain-gate-test` pins the guarantee against the shipping driver
+   and must FAIL against `build/nogate`. The finding stays open in
+   `doc/upstream-register.md` — the lineage should own the fix.
+   **Nothing about this has run on glass.** The README's own
    finding 7 — manual global washes never reset the auto-refresh
    accumulator, a policy-level inefficiency under `auto_refresh=1` —
    is also absent from this list; we ship `auto_refresh=0`.

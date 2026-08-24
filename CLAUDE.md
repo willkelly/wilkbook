@@ -274,4 +274,9 @@ gitignored `build/`, or the reader's static address.
 - **Sustained damage starves the global-refresh path** (the 2026-07-29
   lesson): fbcon's blinking cursor was the producer; the deployed cmdline
   carries `vt.global_cursor_default=0` and campaign procedures unbind
-  fbcon and require EBC-idle before supervised runs.
+  fbcon and require EBC-idle before supervised runs. **Structurally fixed
+  in the driver 2026-08-24** (issue #22, hrdl's work-item drain gate) —
+  the loop now drains within one area lifetime whenever a global refresh
+  or a park is pending, so those procedures stop being load-bearing. That
+  fix is harness-proven only; **no panel has run it.** Until a hardware
+  session says otherwise, keep the procedures.

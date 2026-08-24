@@ -61,7 +61,7 @@ with a clear message rather than fail.
 | Tool | Ladder rung | What it validates | Run |
 | --- | --- | --- | --- |
 | `pinenote/tools/wbf` | 1 | PVI `.wbf` parsing/decode (header, modes, temperature bins, LUT decode) exactly as `rockchip_ebc` loads it; `--dump-lut` exports a decoded LUT for the simulator | `make wbf-check WBF=…` |
-| `pinenote/tools/ebc-logic` | 1 | `ebc-logic-test`: the driver's pure logic — XRGB8888/R4→Y4 blitters, damage split/collision scheduling, threshold/dither paths — vs independent references.  `ebc-refresh-test` (ROADMAP §3's rung 7a): *executes* the refresh state machine (probe, global/partial orchestration, LUT upload, DMA windowing, IRQ/completion, buffer switching) against a behavioral device model under ASan — with non-coherent DMA (the device reads only synced shadows, so a missing `dma_sync` fails a test) — incl. a drive-sequence differential vs rastersim's independent waveform decode and WBF-gated disable-tail caller/off-screen retention plus exact completion accounting.  Phase B (`ebc-replay`): replays KOReader `[pn-refresh]` traces through the same machine under candidate refresh policies — the display-quality workbench, results in `doc/refresh-policy.md` | `make ebc-logic-check WBF=…` |
+| `pinenote/tools/ebc-logic` | 1 | `ebc-logic-test`: the driver's pure logic — XRGB8888/R4→Y4 blitters, damage split/collision scheduling, threshold/dither paths — vs independent references.  `ebc-refresh-test` (ROADMAP §3's rung 7a): *executes* the refresh state machine (probe, global/partial orchestration, LUT upload, DMA windowing, IRQ/completion, buffer switching) against a behavioral device model under ASan — with non-coherent DMA (the device reads only synced shadows, so a missing `dma_sync` fails a test) — incl. a drive-sequence differential vs rastersim's independent waveform decode and WBF-gated disable-tail caller/off-screen retention plus exact completion accounting.  **Liveness** (issue #22, waveform-gated): `ebc-refresh-starvation-test` pins the inherited sustained-damage starvation against `build/nogate` (the extraction with the work-item drain gate removed), and `ebc-drain-gate-test` pins the guarantee against the shipping driver — a queued global launches, and a `kthread_park` completes, within one area lifetime, while a no-work-item control proves the mid-frame splice is otherwise untouched; the same source against `build/nogate` must FAIL.  Phase B (`ebc-replay`): replays KOReader `[pn-refresh]` traces through the same machine under candidate refresh policies — the display-quality workbench, results in `doc/refresh-policy.md` | `make ebc-logic-check WBF=…` |
 | `pinenote/tools/ebc-barrier` | 1 | The separately invoked paint/barrier/restore diagnostic with fake framebuffer/DRM operations: strict fixed-width SUBMIT/WAIT ABI, high generation IDs, geometry/stride bounds, no-retry failure containment, exact restoration, cleanup precedence, double fail-closed reader ownership checks, and atomic pending/blocked signal acknowledgement. It never runs `--run` on the host | `make ebc-barrier-check` |
 | `pinenote/tools/rastersim` | 1 | A standalone Gray8→Y4 raster library + waveform *simulator* (state model + LUT playback), with golden-image and convergence tests | `make rastersim-check WBF=…` |
 | `pinenote/tools/koreader-input` | 1 | KOReader's *verbatim* `device/input.lua` + `gesturedetector.lua` (from the native `koreader-bin` bundle, under its own luajit) fed synthetic pen+touch evdev streams: reproduces the pen-hover tap-capture `quirk:` (finger tap → swipe), validates the `mixedrouter.lua` fix, checks exact `wilkbook-orientation` discovery plus source-gated MSC_RAW→MSC_GYRO translation, and pins cyttsp5 MT-axis normalization to five measured hardware targets | `make koreader-input-check` |
@@ -117,6 +117,22 @@ Two things that test earned, worth stealing:
   runs a SCHED_FIFO refresh thread against a SCHED_OTHER kworker. The
   harness pins *ordering*; it cannot show the absence of a race window.
   Never read a green run as race-freedom.
+
+A third thing, learned while fixing the sustained-damage starvation
+(issue #22, 2026-08-24): **a correctness-complete suite can be blind to a
+liveness bug, and the fix for one can be broken by the harness's own
+unrealistic state.** Nothing in the suite asserted that
+`rockchip_ebc_refresh` ever *returns*, so a multi-minute hang went unseen.
+And when the drain gate was first written to also skip the `frame == 0`
+splice, five direct-call tests went red — not because the driver was
+wrong, but because `harness_ebc` leaves `probe`'s initial
+`do_one_full_refresh = true` latched and those tests drive
+`run_refresh_synth` without the thread that would have cleared it. The
+harness was modelling a state the driver never reaches. The fix was to
+model the thread's read-and-clear in `run_refresh_synth` *and* to narrow
+the gate to the mid-frame splice, which is the only one that is "new
+damage". When a new gate makes old tests red, ask which side is
+unrealistic before assuming it is the driver.
 
 A third limit, found while trying to reproduce the post-resume dead-write
 window offline (2026-08-02): **the rung-7a harness drives

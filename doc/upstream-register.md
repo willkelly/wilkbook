@@ -89,8 +89,35 @@ the probes' own black-on-black no-op writes were a major confound.
 resume-baseline finding. Do that before sending; the same fetch method
 works.
 
+**Update (2026-08-24, issue #22): the starvation finding now ships with a
+fix, and the shape of the report changes.** We adopted hrdl's own drain
+gate (`v6.19_ebc_custom` @ `819ba1724a6f`), adapted to this driver's area
+list — see the update block in `doc/driver-findings-report.md`. Two things
+follow for whoever sends this:
+
+- **It is no longer "here is a bug"; it is "here is a bug, here is your
+  own fix applied to the older branch, and here is an offline
+  reproduction".** That is a stronger send, and it is aimed at a
+  *different* audience than before: hrdl has already fixed it on
+  `v6.19_ebc_custom`, so the people who still need it are the branches
+  that have not taken that work — `v6.19_ebc`, m-weigand, and ayakael's
+  pmaports `linux-pine64-pinenote` (which ships to postmarketOS users).
+  Frame it as a backport request, not a discovery.
+- **The blast radius is larger than the report currently says.** The same
+  loop stalls `kthread_park()`, so it stalls a **system suspend** under
+  sustained damage, not just a global refresh. That is worth leading with
+  for a battery-powered device.
+
+**Also new and sendable with it:** the offline reproduction itself
+(`ebc-refresh-starvation-test` + `ebc-drain-gate-test` +
+`mutate-drain-gate.py`) — a desk-runnable proof that the boundary is the
+waveform's phase count rather than any timeout. Nobody in the lineage has
+an executable model of the refresh machine; that may be worth more to them
+than the patch.
+
 **Gate:** baseline done. Also re-confirm findings 2–7 and the
-resume-baseline finding still apply.
+resume-baseline finding still apply, and re-check *which* branches still
+carry the ungated splice before framing the starvation item.
 
 ### 2. `DRM_IOCTL_ROCKCHIP_EBC_REFRESH_BARRIER` — **needs-verification**
 

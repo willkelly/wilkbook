@@ -78,6 +78,21 @@ check out. Four corrections, most consequential first:
    `shrink_virtual_window` (ships default-off in his tree, so treat as
    experiment, not cherry-pick).
 
+   **The drain gate is ADOPTED (2026-08-24, issue #22.)** Taken as
+   described above and adapted to this driver's area list rather than his
+   clip list: one `rockchip_ebc_work_item_pending()` helper read per
+   frame, gating only the mid-frame `ctx->queue` splice. Two things the
+   re-read did not say and that adopting it surfaced. First, the predicate
+   has to include `kthread_should_park()`, not just the pending global:
+   `rockchip_ebc_quiesce_worker()` blocks in `kthread_park()`, so the same
+   starvation stalls a **system suspend**, which is the worse half of the
+   bug on a battery-powered device. Second, "stop folding new damage in"
+   must NOT be read as gating the `frame == 0` splice — that one is the
+   refresh's own starting set, and gating it turns a partial into a
+   zero-frame no-op whenever the flag is set at entry. Offline evidence,
+   caveats and what remains unproven: `doc/driver-findings-report.md`
+   (2026-08-24 update block). The ~5-line estimate held.
+
 **Also worth carrying:** direct mode's phase buffer is 2 bits/pixel, so
 it fetches ~56 MB/s against 3WIN's ~335 MB/s -- roughly **6x less** DDR.
 Given that our one confirmed EBC failure mode is DDR starvation of the

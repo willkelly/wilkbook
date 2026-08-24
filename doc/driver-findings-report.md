@@ -948,11 +948,84 @@ starvation:
 A `dev_warn_once` when a partial refresh exceeds some large frame count would
 also have turned a silent multi-minute stall into a one-line diagnosis.
 
-Per this repo's policy we have **not** patched the driver for this. The
-configuration-level mitigations we did make are ours, not the driver's:
+Per this repo's policy we had **not** patched the driver for this. The
+configuration-level mitigations we made are ours, not the driver's:
 `vt.global_cursor_default=0` on the reader image's cmdline, and an explicit
 fbcon unbind in the supervised-campaign procedure
 (`doc/hardware-deploy.md`).
+
+### Update (2026-08-24, issue #22): fixed in this tree; the finding stays open for the lineage
+
+We have now taken disposition 2 above, in the shape hrdl already ships
+(`~hrdl/linux` `v6.19_ebc_custom` @ `819ba1724a6f`, adapted to this driver's
+area list rather than his clip list). **This does not close the finding** —
+the fix is small and local and the lineage should still own it; we are
+reporting *and* carrying it, and the report is what we would send.
+
+The change is three things:
+
+```c
+static bool rockchip_ebc_work_item_pending(struct rockchip_ebc *ebc)
+{
+	bool pending;
+
+	spin_lock(&ebc->refresh_once_lock);
+	pending = ebc->do_one_full_refresh;
+	spin_unlock(&ebc->refresh_once_lock);
+
+	return pending || kthread_should_park() || kthread_should_stop();
+}
+```
+
+read once per frame at the top of the `for (frame = 0;; frame++)` body, and
+used to skip **only** the mid-frame `list_splice_tail_init(&ctx->queue,
+&areas)` inside the `spin_trylock` retry loop. Areas already in flight still
+play out in full — abandoning them mid-waveform would leave undriven pixels —
+so the list can only shrink, `list_empty(&areas)` is reached within one area
+lifetime, and the thread returns to its `do_one_full_refresh` read.
+
+Three deliberate scope decisions, each of which we got wrong first and
+corrected against the harness:
+
+- **The `frame == 0` splice is NOT gated.** It is this refresh's own starting
+  set, not new damage, and the thread has already consumed any work item that
+  was pending when it chose a partial over a global. Gating it made a partial
+  refresh a zero-frame no-op whenever the flag happened to be set at entry,
+  which is a state the real driver reaches only in a narrow race — and it
+  broke five direct-call harness tests that had been driving partial refreshes
+  with `probe`'s initial `do_one_full_refresh = true` still latched.
+- **The buffer switch and the `ctx->final` retarget stay unconditional.** Only
+  the splice is skipped, so the EBC never reads a stale final buffer.
+- **`kthread_should_park()` is in the predicate on purpose.** The partial loop
+  only ever tested `kthread_should_stop()`, and
+  `rockchip_ebc_quiesce_worker()` calls `kthread_park()`, which *blocks* until
+  the thread parks. So the same defect stalls a **system suspend** for as long
+  as damage keeps arriving — the starvation finding above understates its own
+  blast radius. Offline, a park requested 60 commits into a live supply landed
+  only after the supply ran out, 294 frames later; with the gate it lands in
+  45.
+
+**What is proven, and where.** `pinenote/tools/ebc-logic/ebc-drain-gate-test.c`
+(waveform-gated, rung 7a) runs the real thread body against the behavioural
+fake EBC: under rotating and full-screen supplies a submitted barrier
+generation is credited **46 and 56 frames** after SUBMIT respectively (bound:
+2 x the 38-phase area lifetime), the park lands in 45, no queued damage is
+stranded, and — the anti-regression — with no work item pending a 300-commit
+supply still runs as ONE continuous partial refresh, so the splice that makes
+the driver efficient is untouched. The same source compiled against the
+**ungated** driver fails 12 of those assertions, and `run-tests.sh` requires
+that failure permanently. The ungated copy is produced by
+`mutate-drain-gate.py` and was verified byte-identical to the pre-gate
+extraction; `ebc-refresh-starvation-test` now runs against it, so the `quirk:`
+record of the inherited behaviour survives intact.
+
+**What is NOT proven.** Nothing here has run on glass. The harness models
+ordering, not races (`doc/testing.md`), and models no electrophoretic optics.
+Specifically unproven on hardware: that the extra wash a busy producer now
+receives is not itself visually objectionable; that the deferred damage's
+one-lifetime delay is imperceptible during ink or fast scrolling; and the
+suspend-latency improvement. `vt.global_cursor_default=0` and the campaign
+fbcon unbind stay in place — they stop being load-bearing, not useful.
 
 ## Finding (2026-08-01, live, twice): system sleep with an inactive CRTC frees the refresh thread's context under it — every later refresh is a silent zero-frame no-op
 

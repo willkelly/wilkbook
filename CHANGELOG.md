@@ -81,8 +81,30 @@ was proven was proven on that image.
 
 ### Display and page turns
 
-Nothing changed in how the panel behaves this cycle. What changed is
-that a long-suspected defect acquired evidence, a name and a bound.
+One real change to the display driver this cycle, and it has not run on
+a panel yet. Otherwise: a long-suspected defect acquired evidence, a name
+and a bound.
+
+- **The display can no longer be jammed by something that keeps drawing**
+  (#22). Until now, anything producing continuous screen damage — a
+  blinking console cursor, and in future continuous pen strokes — could
+  hold off a full-screen wash indefinitely, with nothing logged and
+  nothing timing out. The same stall could hold off a suspend, because
+  the sleep path waits for that same loop to finish. The driver now stops
+  absorbing new damage once a wash or a suspend is waiting, so the work
+  in flight finishes and the wash goes ahead. This is hrdl's own fix,
+  backported.
+- **What that is worth in practice, honestly:** the workarounds it
+  replaces (a disabled console cursor, and a procedure for supervised
+  test sessions) are still in place, so most readers will notice
+  nothing. It matters for what comes next — handwriting at ~6 fps is
+  exactly the kind of continuous producer that caused the original
+  failure.
+- **Not proven on hardware.** It is validated by an offline harness that
+  runs the real driver code against a simulated controller; no panel has
+  displayed a single frame of it. What a busy producer's extra wash looks
+  like on glass is an open question for the next device session
+  (`doc/driver-findings-report.md`).
 
 - **Occasional two-step page turns are now a documented issue** (#14):
   KOReader itself issues two or more identical full-page refreshes
@@ -168,6 +190,14 @@ that a long-suspected defect acquired evidence, a name and a bound.
 - The reader-energy tests run under bash with a real sleep, so they pass
   on any host whose `/bin/sh` is dash (every CI runner, and no
   workstation here, which is why it stayed hidden).
+- **The display harness can now fail a driver for hanging, not just for
+  being wrong.** It was correctness-complete and still missed a
+  multi-minute stall, because nothing asserted that a refresh ever
+  *returns*. The new `ebc-drain-gate-test` asserts exactly that, and — as
+  with the page-turn ordering gate before it — the same test is also
+  compiled against a copy of the driver with the fix removed and required
+  to **fail**. A liveness test that passes either way proves nothing
+  (issue #22).
 
 ### Docs and evidence
 
