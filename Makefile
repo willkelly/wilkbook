@@ -70,7 +70,7 @@ FIXTURE ?= os1-used
 FLAVORS = minimal slim networked dev usb-console usb-console-linux-6-6 reader reader-debug
 
 .PHONY: help packages kernel kernel-drv reader-system-drv qemu-smoke qemu-virt qemu-virt-check qemu-pageturn-campaign refresh-episodes-check \
-         check-host wbf-check wbf-notice ebc-logic-check ebc-barrier-check rastersim-check koreader-input-check orientation-check optics-check power-check rockchip-pm-check activation-positive-check suspend-check \
+         check-host wbf-check wbf-notice ebc-logic-check ebc-barrier-check rastersim-check koreader-input-check orientation-check optics-check optics-audit-dataset power-check rockchip-pm-check activation-positive-check suspend-check \
          battery-dtb-check time-machine-check gexp-modules-check timezone-check kernel-version-check library-check ultra-coupling-check \
         $(FLAVORS) $(addprefix image-,$(FLAVORS)) $(addprefix rootfs-,$(FLAVORS))
 
@@ -94,7 +94,8 @@ help:
 	@echo "  rastersim-check   raster/waveform simulation checks ([WBF=..])"
 	@echo "  koreader-input-check  KOReader input, touch, and virtual-node lifecycle tests"
 	@echo "  orientation-check SC7A20 classifier and uinput bridge tests"
-	@echo "  optics-check      deterministic recorder/bundle/analysis tests"
+	@echo "  optics-check      deterministic recorder/bundle/analysis tests (incl. the evidence-audit passes)"
+	@echo "  optics-audit-dataset  re-check the 2026-07-12 evidence audit against doc/datasets (stdlib only)"
 	@echo "  power-check       fake-root tests for the read-only Guile power recorder; auto-suspend post-wake policy"
 	@echo "  rockchip-pm-check dormant BSP SIP/PM model, DTB, and zero-call checks"
 	@echo "  activation-positive-check  fake capabilities/coordinator + active PM scenario; production hard-off"
@@ -391,10 +392,19 @@ orientation-check:
 
 # E-ink optical-defect detectors (optics harness analysis core). Deterministic
 # validation of the flash/ghost/settle/double-flash classifiers against
-# synthetic clips with known injected defects; no camera, no device.
+# synthetic clips with known injected defects; no camera, no device. Also
+# re-runs the committed-data half of the 2026-07-12 evidence audit against
+# doc/datasets/2026-07-optics (audit.py dataset).
 #   make optics-check
 optics-check:
 	$(call guix-shell,python python-numpy python-scipy python-pillow ffmpeg) $(MAKE) -C pinenote/tools/optics check
+
+# The evidence audit's committed-data re-check on its own: stdlib python only,
+# no numpy/ffmpeg/guix shell, ~instant. The frame passes it cannot run need a
+# bundle's gitignored capture.mkv -- see pinenote/tools/optics/audit.py.
+#   make optics-audit-dataset
+optics-audit-dataset:
+	$(MAKE) -C pinenote/tools/optics audit-dataset
 
 # Read-only power snapshot/delta recorder tests.  Guile is present in the
 # final4 system profile and the tool uses only base Guile modules.  luajit
