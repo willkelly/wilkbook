@@ -1,0 +1,381 @@
+===== /proc/bus/input/devices =====
+I: Bus=0019 Vendor=0000 Product=0000 Version=0000
+N: Name="rk805 pwrkey"
+P: Phys=rk805_pwrkey/input0
+S: Sysfs=/devices/platform/fdd40000.i2c/i2c-0/0-0020/rk805-pwrkey.2.auto/input/input0
+U: Uniq=
+H: Handlers=kbd event0 
+B: PROP=0
+B: EV=3
+B: KEY=10000000000000 0
+
+I: Bus=0019 Vendor=0001 Product=0001 Version=0100
+N: Name="gpio-keys"
+P: Phys=gpio-keys/input0
+S: Sysfs=/devices/platform/gpio-keys/input/input1
+U: Uniq=
+H: Handlers=event1 
+B: PROP=0
+B: EV=21
+B: SW=1
+
+I: Bus=0019 Vendor=0001 Product=0001 Version=0100
+N: Name="adc-keys"
+P: Phys=adc-keys/input0
+S: Sysfs=/devices/platform/adc-keys/input/input3
+U: Uniq=
+H: Handlers=event2 
+B: PROP=0
+B: EV=3
+B: KEY=10000000000 0 0 0 0 0
+
+I: Bus=0018 Vendor=2d1f Product=0095 Version=0100
+N: Name="w9013 2D1F:0095 Stylus"
+P: Phys=1-0009
+S: Sysfs=/devices/platform/fe5a0000.i2c/i2c-1/1-0009/0018:2D1F:0095.0001/input/input4
+U: Uniq=
+H: Handlers=event3 mouse0 
+B: PROP=2
+B: EV=1b
+B: KEY=1c03 0 0 0 0 0
+B: ABS=1000f000003
+B: MSC=10
+
+I: Bus=0018 Vendor=2d1f Product=0095 Version=0100
+N: Name="w9013 2D1F:0095"
+P: Phys=1-0009
+S: Sysfs=/devices/platform/fe5a0000.i2c/i2c-1/1-0009/0018:2D1F:0095.0001/input/input5
+U: Uniq=
+H: Handlers=event4 mouse1 
+B: PROP=0
+B: EV=1b
+B: KEY=c03 0 0 0 0 0
+B: ABS=1000f000003
+B: MSC=10
+
+I: Bus=0005 Vendor=0000 Product=0000 Version=0000
+N: Name="ws8100_pen"
+P: Phys=ws8100_pen/input0
+S: Sysfs=/devices/platform/spi-gpio/spi_master/spi4/spi4.0/input/input7
+U: Uniq=
+H: Handlers=kbd event5 
+B: PROP=0
+B: EV=13
+B: KEY=70000 0 0 0 0 1a03 0 0 c0004000 0 0
+B: MSC=10
+
+I: Bus=0000 Vendor=0000 Product=0000 Version=0000
+N: Name="cyttsp5"
+P: Phys=5-0024/input0
+S: Sysfs=/devices/platform/fe5e0000.i2c/i2c-5/5-0024/input/input2
+U: Uniq=
+H: Handlers=event6 mouse2 
+B: PROP=2
+B: EV=b
+B: KEY=400 0 0 0 0 0
+B: ABS=663800001000003
+
+I: Bus=0006 Vendor=1209 Product=0002 Version=0001
+N: Name="wilkbook-orientation"
+P: Phys=
+S: Sysfs=/devices/virtual/input/input8
+U: Uniq=
+H: Handlers=event7 
+B: PROP=0
+B: EV=11
+B: MSC=8
+
+
+===== evtest --version / availability =====
+(no evtest)
+
+===== per-event ABS caps via sysfs =====
+--- event0 : rk805 pwrkey
+    abs bitmap: 0
+    key bitmap: 10000000000000 0
+    properties: 0
+--- event1 : gpio-keys
+    abs bitmap: 0
+    key bitmap: 0
+    properties: 0
+--- event2 : adc-keys
+    abs bitmap: 0
+    key bitmap: 10000000000 0 0 0 0 0
+    properties: 0
+--- event3 : w9013 2D1F:0095 Stylus
+    abs bitmap: 1000f000003
+    key bitmap: 1c03 0 0 0 0 0
+    properties: 2
+--- event4 : w9013 2D1F:0095
+    abs bitmap: 1000f000003
+    key bitmap: c03 0 0 0 0 0
+    properties: 0
+--- event5 : ws8100_pen
+    abs bitmap: 0
+    key bitmap: 70000 0 0 0 0 1a03 0 0 c0004000 0 0
+    properties: 0
+--- event6 : cyttsp5
+    abs bitmap: 663800001000003
+    key bitmap: 400 0 0 0 0 0
+    properties: 2
+--- event7 : wilkbook-orientation
+    abs bitmap: 0
+    key bitmap: 0
+    properties: 0
+===== /dev/input/event3 =====
+  ABS_X                  min=0        max=20966    fuzz=0     flat=0     res=100   value=0
+  ABS_Y                  min=0        max=15725    fuzz=0     flat=0     res=100   value=0
+  ABS_PRESSURE           min=0        max=4095     fuzz=0     flat=0     res=0     value=0
+  ABS_DISTANCE           min=-255     max=0        fuzz=0     flat=0     res=0     value=0
+  ABS_TILT_X             min=-9000    max=9000     fuzz=0     flat=0     res=5730  value=0
+  ABS_TILT_Y             min=-9000    max=9000     fuzz=0     flat=0     res=5730  value=0
+  ABS_MISC               min=0        max=3        fuzz=0     flat=0     res=0     value=0
+===== /dev/input/event4 =====
+  ABS_X                  min=0        max=20966    fuzz=0     flat=0     res=100   value=0
+  ABS_Y                  min=0        max=15725    fuzz=0     flat=0     res=100   value=0
+  ABS_PRESSURE           min=0        max=4095     fuzz=0     flat=0     res=0     value=0
+  ABS_DISTANCE           min=-255     max=0        fuzz=0     flat=0     res=0     value=0
+  ABS_TILT_X             min=-9000    max=9000     fuzz=0     flat=0     res=5730  value=0
+  ABS_TILT_Y             min=-9000    max=9000     fuzz=0     flat=0     res=5730  value=0
+  ABS_MISC               min=0        max=3        fuzz=0     flat=0     res=0     value=0
+===== /dev/input/event6 =====
+  ABS_X                  min=0        max=1871     fuzz=0     flat=0     res=0     value=504
+  ABS_Y                  min=0        max=1403     fuzz=0     flat=0     res=0     value=1371
+  ABS_PRESSURE           min=0        max=255      fuzz=0     flat=0     res=0     value=0
+  ABS_MT_SLOT            min=0        max=31       fuzz=0     flat=0     res=0     value=0
+  ABS_MT_TOUCH_MAJOR     min=0        max=255      fuzz=0     flat=0     res=0     value=0
+  ABS_MT_TOUCH_MINOR     min=0        max=255      fuzz=0     flat=0     res=0     value=0
+  ABS_MT_POSITION_X      min=0        max=1871     fuzz=0     flat=0     res=0     value=0
+  ABS_MT_POSITION_Y      min=0        max=1403     fuzz=0     flat=0     res=0     value=0
+  ABS_MT_TRACKING_ID     min=0        max=65535    fuzz=0     flat=0     res=0     value=0
+  ABS_MT_PRESSURE        min=0        max=255      fuzz=0     flat=0     res=0     value=0
+===== full clk_summary rows for ebc + its ancestors (UNFILTERED context) =====
+                                 enable  prepare  protect                                duty  hardware                            connectio
+   clock                          count    count    count        rate   accuracy phase  cycle    enable   consumer                         i
+    pll_vpll                         0       0        0        500000000   0          0     50000      Y      deviceless                    
+    vpll                             0       0        0        24000000    0          0     50000      Y      deviceless                    
+    pll_npll                         1       1        0        1200000000  0          0     50000      Y      deviceless                    
+       npll                          1       1        0        1200000000  0          0     50000      Y         deviceless                 
+    pll_cpll                         1       1        0        1000000000  0          0     50000      Y      deviceless                    
+       cpll                          2       4        0        1000000000  0          0     50000      Y         deviceless                 
+          cpll_25m                   0       0        0        25000000    0          0     50000      Y            deviceless              
+          cpll_50m                   0       0        0        50000000    0          0     50000      N            deviceless              
+          cpll_62p5                  0       0        0        62500000    0          0     50000      Y            deviceless              
+          cpll_100m                  0       0        0        100000000   0          0     50000      Y            deviceless              
+          cpll_125m                  0       0        0        125000000   0          0     50000      Y            deviceless              
+          cpll_250m                  0       0        0        250000000   0          0     50000      Y            deviceless              
+          cpll_333m                  0       0        0        250000000   0          0     50000      N            deviceless              
+          cpll_500m                  0       0        0        500000000   0          0     50000      Y            deviceless              
+    pll_gpll                         1       1        0        1200000000  0          0     50000      Y      deviceless                    
+       gpll                          7       10       0        1200000000  0          0     50000      Y         deviceless                 
+          gpll_20m                   0       0        0        20000000    0          0     50000      Y            deviceless              
+          gpll_75m                   0       0        0        75000000    0          0     50000      Y            deviceless              
+          gpll_100m                  3       3        0        100000000   0          0     50000      Y            deviceless              
+          gpll_150m                  8       8        0        150000000   0          0     50000      Y            deviceless              
+          gpll_200m                  5       6        0        200000000   0          0     50000      Y            deviceless              
+             dclk_ebc                0       1        0        200000000   0          0     50000      N               fdec0000.ebc         
+                                                                                                                       ebc@fdec0000         
+          gpll_300m                  6       8        0        300000000   0          0     50000      Y            deviceless              
+                   hclk_ebc          0       1        0        150000000   0          0     50000      N                     fdec0000.ebc   
+                                                                                                                             ebc@fdec0000   
+          gpll_400m                  1       1        0        400000000   0          0     50000      Y            deviceless              
+
+===== dclk_ebc actual parent, authoritative =====
+--- dclk_ebc
+    rate          = 200000000
+    parent        = gpll_200m
+    possible      = gpll_400m cpll_333m gpll_200m
+    flags         = 
+--- hclk_ebc
+    rate          = 150000000
+    parent        = hclk_rga_pre
+    possible      = 
+    flags         = CLK_SET_RATE_PARENT 
+--- aclk_ebc : (no debugfs dir)
+
+===== cpll_333m detail =====
+    rate     = 250000000
+    parent   = cpll
+    flags    = CLK_IGNORE_UNUSED 
+
+===== ebc driver params =====
+auto_refresh
+bw_dither_invert
+bw_mode
+bw_threshold
+dclk_select
+default_waveform
+defio_delay_ms
+delay_a
+delay_b
+delay_c
+diff_mode
+direct_mode
+fourtone_hi_threshold
+fourtone_low_threshold
+fourtone_mid_threshold
+globre_convert_before
+hskew_override
+limit_fb_blits
+no_off_screen
+panel_reflection
+prepare_prev_before_a2
+refresh_threshold
+refresh_waveform
+skip_reset
+split_area_limit
+temp_override
+  auto_refresh = N
+  bw_dither_invert = 0
+  bw_mode = 0
+  bw_threshold = 7
+  dclk_select = 0
+  default_waveform = 4
+  defio_delay_ms = 250
+  delay_a = 2000
+  delay_b = 100000
+  delay_c = 1000
+  diff_mode = Y
+  direct_mode = N
+  fourtone_hi_threshold = 12
+  fourtone_low_threshold = 4
+  fourtone_mid_threshold = 7
+  globre_convert_before = N
+  hskew_override = 0
+  limit_fb_blits = -1
+  no_off_screen = N
+  panel_reflection = Y
+  prepare_prev_before_a2 = N
+  refresh_threshold = 60
+  refresh_waveform = 6
+  skip_reset = N
+  split_area_limit = 0
+  temp_override = 0
+===== ISSUE 23: clk_summary (cpll / dclk_ebc / cpll_333m) =====
+none on /sys/kernel/debug type debugfs (rw,relatime)
+                                 enable  prepare  protect                                duty  hardware                            connection
+   clock                          count    count    count        rate   accuracy phase  cycle    enable   consumer                         id
+    pll_cpll                         1       1        0        1000000000  0          0     50000      Y      deviceless                      no_connection_id         
+       cpll                          2       4        0        1000000000  0          0     50000      Y         deviceless                      no_connection_id         
+          cpll_25m                   0       0        0        25000000    0          0     50000      Y            deviceless                      no_connection_id         
+          cpll_50m                   0       0        0        50000000    0          0     50000      N            deviceless                      no_connection_id         
+          cpll_62p5                  0       0        0        62500000    0          0     50000      Y            deviceless                      no_connection_id         
+          cpll_100m                  0       0        0        100000000   0          0     50000      Y            deviceless                      no_connection_id         
+          cpll_125m                  0       0        0        125000000   0          0     50000      Y            deviceless                      no_connection_id         
+          cpll_250m                  0       0        0        250000000   0          0     50000      Y            deviceless                      no_connection_id         
+          cpll_333m                  0       0        0        250000000   0          0     50000      N            deviceless                      no_connection_id         
+             dclk_vicap              0       0        0        250000000   0          0     50000      N               deviceless                      no_connection_id         
+          cpll_500m                  0       0        0        500000000   0          0     50000      Y            deviceless                      no_connection_id         
+             dclk_ebc                0       1        0        200000000   0          0     50000      N               fdec0000.ebc                    dclk                     
+                                                                                                                       ebc@fdec0000                    no_connection_id         
+                   hclk_ebc          0       1        0        150000000   0          0     50000      N                     fdec0000.ebc                    hclk                     
+                                                                                                                             ebc@fdec0000                    no_connection_id         
+                aclk_vicap           0       0        0        400000000   0          0     50000      N                  deviceless                      no_connection_id         
+                   hclk_vicap        0       0        0        200000000   0          0     50000      N                     deviceless                      no_connection_id         
+ iclk_vicap_g                        0       0        0        0           0          0     50000      N   deviceless                      no_connection_id         
+
+----- direct rate nodes -----
+cpll = 1000000000
+cpll_333m = 250000000
+dclk_ebc = 200000000
+
+===== ISSUE 18: audio =====
+--- sound cards ---
+ 0 [PineNote       ]: simple-card - PineNote
+                      PineNote
+--- aplay -l ---
+bash: line 18: aplay: command not found
+--- loaded sound modules ---
+snd_soc_simple_card    20480  0
+snd_soc_simple_card_utils    24576  1 snd_soc_simple_card
+snd_soc_rockchip_pdm    16384  2
+snd_soc_rockchip_i2s_tdm    24576  2
+snd_soc_rk817          40960  1
+snd_soc_dmic           12288  1
+snd_soc_simple_amplifier    12288  1
+snd_soc_core          200704  7 snd_soc_rockchip_pdm,snd_soc_rockchip_i2s_tdm,snd_soc_rk817,snd_soc_simple_amplifier,snd_soc_simple_card_utils,snd_soc_simple_card,snd_soc_dmic
+snd_pcm_dmaengine      12288  1 snd_soc_core
+snd_pcm               114688  3 snd_soc_simple_card_utils,snd_soc_core,snd_pcm_dmaengine
+snd_timer              32768  1 snd_pcm
+snd                    73728  3 snd_timer,snd_soc_core,snd_pcm
+soundcore              12288  1 snd
+--- available sound modules in /lib/modules ---
+/run/booted-system/kernel/lib/modules/7.0.11/kernel/sound/core/snd-pcm.ko
+/run/booted-system/kernel/lib/modules/7.0.11/kernel/sound/core/snd-timer.ko
+/run/booted-system/kernel/lib/modules/7.0.11/kernel/sound/core/snd-pcm-dmaengine.ko
+/run/booted-system/kernel/lib/modules/7.0.11/kernel/sound/core/snd-rawmidi.ko
+/run/booted-system/kernel/lib/modules/7.0.11/kernel/sound/core/snd-hwdep.ko
+/run/booted-system/kernel/lib/modules/7.0.11/kernel/sound/core/snd-ump.ko
+/run/booted-system/kernel/lib/modules/7.0.11/kernel/sound/core/snd-hrtimer.ko
+/run/booted-system/kernel/lib/modules/7.0.11/kernel/sound/core/snd.ko
+/run/booted-system/kernel/lib/modules/7.0.11/kernel/sound/soc/generic/snd-soc-simple-card.ko
+/run/booted-system/kernel/lib/modules/7.0.11/kernel/sound/soc/generic/snd-soc-simple-card-utils.ko
+/run/booted-system/kernel/lib/modules/7.0.11/kernel/sound/soc/rockchip/snd-soc-rockchip-i2s-tdm.ko
+/run/booted-system/kernel/lib/modules/7.0.11/kernel/sound/soc/rockchip/snd-soc-rockchip-spdif.ko
+/run/booted-system/kernel/lib/modules/7.0.11/kernel/sound/soc/rockchip/snd-soc-rockchip-pdm.ko
+/run/booted-system/kernel/lib/modules/7.0.11/kernel/sound/soc/codecs/snd-soc-spdif-tx.ko
+/run/booted-system/kernel/lib/modules/7.0.11/kernel/sound/soc/codecs/snd-soc-dmic.ko
+/run/booted-system/kernel/lib/modules/7.0.11/kernel/sound/soc/codecs/snd-soc-spdif-rx.ko
+/run/booted-system/kernel/lib/modules/7.0.11/kernel/sound/soc/codecs/snd-soc-bt-sco.ko
+/run/booted-system/kernel/lib/modules/7.0.11/kernel/sound/soc/codecs/snd-soc-simple-amplifier.ko
+/run/booted-system/kernel/lib/modules/7.0.11/kernel/sound/soc/codecs/snd-soc-rk817.ko
+/run/booted-system/kernel/lib/modules/7.0.11/kernel/sound/soc/snd-soc-core.ko
+--- i2s / codec platform devices ---
+/sys/bus/platform/devices/audio-amplifier
+/sys/bus/platform/devices/fe410000.i2s
+/sys/bus/platform/devices/sound
+===== ISSUE 8: pmu regulators (awake baseline, plugged in) =====
+  vcc_3v3  state=enabled microvolts=3300000 num_users=4
+  vcca_1v8_pmu  state=enabled microvolts=1800000 num_users=3
+  vdda_0v9_pmu  state=enabled microvolts=900000 num_users=1
+  vcc_3v3_pmu  state=enabled microvolts=3300000 num_users=3
+  vcc_hall_3v3  state= microvolts=3300000 num_users=1
+
+===== wake attribution, last suspend =====
+  pm_wakeup_irq = 30
+229 0  (success fail)
+
+===== armed wakeup sources =====
+  ENABLED: /sys/bus/i2c/devices/0-0020/power/wakeup
+  ENABLED: /sys/bus/platform/devices/alarmtimer.4.auto/power/wakeup
+  ENABLED: /sys/bus/platform/devices/gpio-keys/power/wakeup
+  ENABLED: /sys/bus/platform/devices/rk805-pwrkey.2.auto/power/wakeup
+  ENABLED: /sys/bus/platform/devices/rk808-rtc.3.auto/power/wakeup
+  ENABLED: /sys/bus/serial/devices/serial0-0/power/wakeup
+  ENABLED: /sys/class/input/input0/device/power/wakeup
+  ENABLED: /sys/class/input/input1/device/power/wakeup
+
+===== 'EBC still active' log lines (open question from prior session) =====
+0
+
+===== warnings/errors in current session log =====
+0
+open /dev/input/event6      -> fd=3 OK
+open /dev/input/event3      -> fd=4 OK
+observing for 120s -- TOUCH THE SCREEN NOW
+  [t+10s] events=0 maxsim=0 pressure=none
+  [t+20s] events=0 maxsim=0 pressure=none
+  [t+30s] events=0 maxsim=0 pressure=none
+  ** simultaneous contacts: 1 (slot 0)
+  ** simultaneous contacts: 2 (slot 1)
+  ** simultaneous contacts: 3 (slot 2)
+  [t+40s] events=1215 maxsim=3 pressure=none
+  [t+50s] events=2671 maxsim=3 pressure=none
+  [t+60s] events=4185 maxsim=3 pressure=0..3851
+  [t+70s] events=7794 maxsim=3 pressure=0..4095
+  [t+80s] events=10384 maxsim=3 pressure=0..4095
+  [t+90s] events=11585 maxsim=3 pressure=0..4095
+  [t+100s] events=11585 maxsim=3 pressure=0..4095
+  [t+110s] events=15523 maxsim=3 pressure=0..4095
+  [t+120s] events=15614 maxsim=3 pressure=0..4095
+
+===== RESULT =====
+raw events observed        : 15614   (reads per device: /dev/input/event6:444 /dev/input/event3:3797)
+MAX SIMULTANEOUS CONTACTS  : 3
+distinct MT slots used     : 4 -> {0,1,2,5}
+stylus ABS_PRESSURE emitted: 0..4095
+stylus ABS_TILT emitted    : -4900..6200
+stylus ABS_DISTANCE emitted: -108..0
+buttons seen               : BTN_STYLUS=8  BTN_TOOL_PEN=24  BTN_TOUCH=30  
+
+[exited with code 0]
