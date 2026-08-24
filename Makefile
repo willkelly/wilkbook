@@ -20,10 +20,20 @@ GUIX = $(if $(TIME_MACHINE),$(GUIX_BASE) time-machine -C channels.scm --,$(GUIX_
 TARGET = aarch64-linux-gnu
 GUIX_FLAGS = -L . --target=$(TARGET)
 
-# Per-checkout build flags, gitignored.  The only supported knob today is
-# WILKBOOK_VERY_INSECURE_FOR_CONVENIENCE (pinenote/insecure.scm), which is
-# OFF unless this file turns it on -- so a plain checkout cannot build the
-# development conveniences by accident.
+# Per-checkout build flags, gitignored.  Two supported knobs, one
+# mechanism -- an environment variable the system definition reads, with
+# this file as the way to make the choice stick:
+#
+#   WILKBOOK_VERY_INSECURE_FOR_CONVENIENCE  (pinenote/insecure.scm) -- OFF
+#     unless this file turns it on, so a plain checkout cannot build the
+#     development conveniences by accident.
+#   WILKBOOK_TIMEZONE                       (pinenote/timezone.scm)  -- the
+#     build-time timezone for every flavor; Etc/UTC unless set, and an
+#     unusable name is refused at evaluation time rather than shipped as a
+#     dangling /etc/localtime.
+#
+# Both want the `export' form here (export WILKBOOK_TIMEZONE = Europe/Dublin),
+# because what reads them is guix, not make.
 -include local.mk
 
 # CI / preprovisioned toolchains.  Every host suite below runs fine under an
@@ -61,7 +71,7 @@ FLAVORS = minimal slim networked dev usb-console usb-console-linux-6-6 reader re
 
 .PHONY: help packages kernel kernel-drv reader-system-drv qemu-smoke qemu-virt qemu-virt-check qemu-pageturn-campaign refresh-episodes-check \
          check-host wbf-check wbf-notice ebc-logic-check ebc-barrier-check rastersim-check koreader-input-check orientation-check optics-check power-check rockchip-pm-check activation-positive-check suspend-check \
-         battery-dtb-check time-machine-check gexp-modules-check kernel-version-check library-check ultra-coupling-check \
+         battery-dtb-check time-machine-check gexp-modules-check timezone-check kernel-version-check library-check ultra-coupling-check \
         $(FLAVORS) $(addprefix image-,$(FLAVORS)) $(addprefix rootfs-,$(FLAVORS))
 
 help:
@@ -90,6 +100,7 @@ help:
 	@echo "  activation-positive-check  fake capabilities/coordinator + active PM scenario; production hard-off"
 	@echo "  suspend-check     offline fail-closed e-reader suspend qualification gates"
 	@echo "  gexp-modules-check  no use-modules in a shepherd start/stop without a (modules ..) field"
+	@echo "  timezone-check    the build-time timezone knob resolves, and refuses an unusable name"
 	@echo
 	@echo "Flags:"
 	@echo "  TIME_MACHINE=1    build through channels.scm (pinned/reproducible; required for releases)"
@@ -288,7 +299,7 @@ CHECK_HOST_TARGETS = ebc-logic-check ebc-barrier-check rastersim-check \
         koreader-input-check orientation-check optics-check power-check \
         rockchip-pm-check activation-positive-check suspend-check \
         library-check ultra-coupling-check battery-dtb-check time-machine-check \
-        gexp-modules-check
+        gexp-modules-check timezone-check
 
 # Parse time, not recipe time: a recipe-level guard would run only AFTER every
 # prerequisite had already completed, so it could not prevent the mistake it
@@ -329,6 +340,16 @@ time-machine-check:
 # needs no guix.
 gexp-modules-check:
 	sh pinenote/scripts/preflight/validate-gexp-modules.sh
+
+# Guix never opens the timezone string -- /etc/localtime is `file-append
+# tzdata "/share/zoneinfo/" timezone', pure concatenation -- so a typo'd
+# WILKBOOK_TIMEZONE builds, images and deploys cleanly and then dangles,
+# and glibc falls back to UTC without a word.  This gate pins the refusal
+# that pinenote/timezone.scm does at evaluation time, plus the local.mk
+# wiring the docs promise.  Guile is a toolchain convenience here: the
+# script text-gates either way and says SKIP for what it could not run.
+timezone-check:
+	$(call guix-shell,guile) sh pinenote/scripts/preflight/validate-timezone-selection.sh
 
 # Host-side waveform parser tests (offline ladder rung 1); needs the
 # per-device .wbf (never committed): make wbf-check WBF=/path/to/ebc.wbf

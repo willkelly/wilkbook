@@ -143,6 +143,27 @@ only; see `doc/status.md`) and `reader-debug` (the diagnostic kernel).
 `usb-console` is the bring-up/debug image — the gadget console without
 KOReader.
 
+### Per-checkout build flags
+
+Two environment variables change what gets built. The Makefile
+`-include`s a gitignored `local.mk` at the repo root, so a choice can be
+made once instead of retyped:
+
+```make
+# local.mk -- gitignored, never committed
+export WILKBOOK_TIMEZONE = Europe/Dublin
+export WILKBOOK_VERY_INSECURE_FOR_CONVENIENCE = 1
+```
+
+Either also works as a one-off prefix (`WILKBOOK_TIMEZONE=Europe/Dublin
+make image-reader`). `WILKBOOK_TIMEZONE` sets the timezone for **every**
+flavor and defaults to `Etc/UTC`; an unusable name aborts the evaluation
+with an explanation rather than shipping a dangling `/etc/localtime`
+(`pinenote/timezone.scm`, gated by `make timezone-check`).
+`WILKBOOK_VERY_INSECURE_FOR_CONVENIENCE` is the reader flavor's
+development-conveniences switch (`pinenote/insecure.scm`). The rationale
+for both is in `README.md` § Build flags.
+
 ## Packages
 
 ```sh

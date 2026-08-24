@@ -20,6 +20,7 @@
   #:use-module (pinenote services diagnostics)
   #:use-module (pinenote services ebc)
   #:use-module (pinenote services state)
+  #:use-module (pinenote timezone)
   #:export (%pinenote-local-packages
             %pinenote-firmware
             %pinenote-bringup-services
@@ -89,7 +90,11 @@
           (services %pinenote-base-services))
   (operating-system
     (host-name host-name)
-    (timezone "Etc/UTC")
+    ;; Build-time, and here rather than on the reader flavor so that every
+    ;; flavor's log timestamps agree -- see pinenote/timezone.scm for why
+    ;; the default stays Etc/UTC and how to override it (WILKBOOK_TIMEZONE
+    ;; or local.mk, the same mechanism as the insecure flag).
+    (timezone %pinenote-timezone)
     (locale "en_US.utf8")
     (kernel kernel)
     (firmware %pinenote-firmware)

@@ -445,7 +445,17 @@ boot-order changes. Reboots and other destructive steps are user-present.
 
 ## Build flags
 
-One knob, off by default: `WILKBOOK_VERY_INSECURE_FOR_CONVENIENCE`.
+Two knobs, one mechanism: an environment variable the system definition
+reads, with a gitignored `local.mk` at the repo root when you want the
+choice to stick. Both leave a plain clone building exactly what it built
+before the knob existed.
+
+| Flag | Default | What it does |
+| --- | --- | --- |
+| `WILKBOOK_VERY_INSECURE_FOR_CONVENIENCE` | off | development conveniences on the reader flavor (`pinenote/insecure.scm`) |
+| `WILKBOOK_TIMEZONE` | `Etc/UTC` | the build-time timezone for every flavor (`pinenote/timezone.scm`) |
+
+### `WILKBOOK_VERY_INSECURE_FOR_CONVENIENCE`
 
 Bring-up on a one-port device sometimes genuinely needs an
 unauthenticated shell — the debug cable and the charger are mutually
@@ -497,6 +507,52 @@ on the kernel console, so **the SBU debug cable is a passwordless root
 shell on any build** while the device is awake (`doc/device-access.md`).
 That is the recovery channel, deliberately. "Default" means not reachable
 over a USB data cable, not locked down.
+
+### `WILKBOOK_TIMEZONE`
+
+The image runs UTC unless you say otherwise, which puts KOReader's clock
+and every log timestamp an offset away from the person reading them.
+Set the zone at build time:
+
+```make
+# local.mk at the repo root -- gitignored, per-checkout
+export WILKBOOK_TIMEZONE = Europe/Dublin
+```
+
+or `WILKBOOK_TIMEZONE=Europe/Dublin make image-reader` for a one-off.
+
+**It applies to every flavor**, not just the reader. The reader is what
+has a user-visible clock, but what the timezone is really for is
+reconstructing a session from its logs — and a `dev` or `usb-console`
+image stamping UTC while the reader stamped local time would put a
+mental conversion in the middle of every cross-flavor comparison. One
+value, all flavors. (`qemu-aarch64-smoke.scm` is deliberately excluded:
+it is a generic ARM64 smoke VM whose boot output is asserted host-side,
+so it stays pinned to UTC.)
+
+**The default stays `Etc/UTC` on purpose.** There is no sane guess at
+where a stranger cloning this channel lives, and the repo's own evidence
+trail — `doc/status.md`, `doc/artifacts/`, the autosuspend resume log —
+is already written in UTC; moving the default would reinterpret every
+future log against a different clock while the old ones stayed put.
+
+**An unusable name fails the build, loudly, before anything is built.**
+Guix does not check this string: `/etc/localtime` is built by
+concatenating the zone onto tzdata's path and is never opened, so a
+typo produces a *dangling* symlink, glibc falls back to UTC, and the
+device boots looking exactly like one nobody configured — discoverable
+only by noticing the clock after a full build and deploy. So
+`pinenote/timezone.scm` refuses at evaluation time: malformed names on
+syntax alone (including `..`, which would otherwise walk `/etc/localtime`
+out of the zoneinfo tree), and well-formed-but-nonexistent names against
+the host's zoneinfo database. If that database is older than the zone
+you want, point `TZDIR` at a newer one — glibc's own variable, not an
+invented second knob. When no database can be found at all, the check
+says so rather than passing on silence.
+
+Empty, whitespace-only, and unset all mean the default, so a half-edited
+`local.mk` is not a build failure. `make timezone-check` (part of `make
+check-host`) pins all of this.
 
 ## Hosting
 
