@@ -231,7 +231,9 @@ elif [ -z "${CAMPAIGN_PLAN:-}" ]; then
   awk -v turns="$CAMPAIGN_TURNS" -v every="$CAMPAIGN_MENU_EVERY" \
       -v fx="$Z_FWD_X" -v fy="$Z_FWD_Y" \
       -v bx="$Z_BACK_X" -v by="$Z_BACK_Y" \
-      -v mx="$Z_MENU_X" -v my="$Z_MENU_Y" '
+      -v mx="$Z_MENU_X" -v my="$Z_MENU_Y" \
+      -v w_steady="$CAMPAIGN_STEADY_WAIT" -v w_mode="$CAMPAIGN_MODE_WAIT" \
+      -v w_burst="$CAMPAIGN_BURST_WAIT" '
     function jitter() { seed = (seed * 1103515245 + 12345) % 2147483648
                         return int((seed / 2147483648.0) * 80) - 40 }
     # one page turn in the current shuttle direction, then reverse at
@@ -262,11 +264,11 @@ elif [ -z "${CAMPAIGN_PLAN:-}" ]; then
           printf "TAP %d %d\n", bx + jitter(), by + jitter()
           if (page > 2) page -= 1        # the dismiss tap may also turn back
           printf "WAIT 1.0\n"
-          for (b = 0; b < 4 && n < turns; b++) { turn("postmenu", "0.9"); n++ }
+          for (b = 0; b < 4 && n < turns; b++) { turn("postmenu", w_burst); n++ }
           continue
         }
         # --- steady reading, with a mode-speed burst every 5th turn ---
-        turn("steady", (n % 5 == 4) ? "1.6" : "3.5")
+        turn("steady", (n % 5 == 4) ? w_mode : w_steady)
         n++
       }
       print "MARK campaign-end"
@@ -627,7 +629,6 @@ done
 printf '  baseline settled at %ss (%s retries)\n' "$(elapsed)" "$settle_tries"
 
 # Phase 4: run the plan.
-campaign_started=$(date +%s.%N)
 printf '  campaign starting at %ss\n' "$(elapsed)"
 guile -s "$qmp_driver" "$qmp" "$plan" "$ledger" "$FB_W" "$FB_H" "$CAMPAIGN_HOLD_MS" \
   > "$outdir/qmp-driver.out" 2>&1 || printf '  (qmp driver exited non-zero)\n'

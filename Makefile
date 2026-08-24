@@ -146,7 +146,7 @@ reader-system-drv:
 #   make kernel-version-check TIME_MACHINE=1  PASSES (7.0.11 via channels.scm).
 #
 # Deliberately NOT in CHECK_HOST_TARGETS: the CI runner installs no Guix.
-KERNEL_EXPECT ?= linux-pinenote-7.0.
+KERNEL_EXPECT ?= linux-pinenote-7.1.
 kernel-version-check:
 	@set -e; \
 	drv=$$($(GUIX) build -d --no-grafts $(GUIX_FLAGS) \
@@ -266,6 +266,9 @@ qemu-pageturn-campaign:
 	  pinenote/scripts/qemu/make-virt-disk.sh '$(ROOTFS)' \"$$disk\" $(WAVEFORM) && \
 	  CAMPAIGN_TURNS='$(CAMPAIGN_TURNS)' CAMPAIGN_MENU_EVERY='$(CAMPAIGN_MENU_EVERY)' \
 	  CAMPAIGN_PROBE='$(CAMPAIGN_PROBE)' CAMPAIGN_PLAN='$(CAMPAIGN_PLAN)' \
+	  CAMPAIGN_STEADY_WAIT='$(CAMPAIGN_STEADY_WAIT)' \
+	  CAMPAIGN_MODE_WAIT='$(CAMPAIGN_MODE_WAIT)' \
+	  CAMPAIGN_BURST_WAIT='$(CAMPAIGN_BURST_WAIT)' \
 	  pinenote/scripts/qemu/run-virt-pageturn-campaign.sh \"$$bundle\" \"$$disk\""
 
 # Self-test of the episode analyser (rung 1: no device, no VM, no guix).
