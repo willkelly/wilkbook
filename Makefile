@@ -71,7 +71,7 @@ FLAVORS = minimal slim networked dev usb-console usb-console-linux-6-6 reader re
 
 .PHONY: help packages kernel kernel-drv reader-system-drv qemu-smoke qemu-virt qemu-virt-check qemu-pageturn-campaign refresh-episodes-check \
          check-host wbf-check wbf-notice ebc-logic-check ebc-barrier-check rastersim-check koreader-input-check orientation-check optics-check optics-audit-dataset power-check rockchip-pm-check activation-positive-check suspend-check \
-         battery-dtb-check time-machine-check gexp-modules-check timezone-check kernel-version-check library-check ultra-coupling-check \
+         battery-dtb-check time-machine-check gexp-modules-check timezone-check kernel-version-check library-check manuals-check ultra-coupling-check \
         $(FLAVORS) $(addprefix image-,$(FLAVORS)) $(addprefix rootfs-,$(FLAVORS))
 
 help:
@@ -97,6 +97,7 @@ help:
 	@echo "  optics-check      deterministic recorder/bundle/analysis tests (incl. the evidence-audit passes)"
 	@echo "  optics-audit-dataset  re-check the 2026-07-12 evidence audit against doc/datasets (stdlib only)"
 	@echo "  power-check       fake-root tests for the read-only Guile power recorder; auto-suspend post-wake policy"
+	@echo "  manuals-check     man/info -> EPUB converter for the reader's manuals shelf"
 	@echo "  rockchip-pm-check dormant BSP SIP/PM model, DTB, and zero-call checks"
 	@echo "  activation-positive-check  fake capabilities/coordinator + active PM scenario; production hard-off"
 	@echo "  suspend-check     offline fail-closed e-reader suspend qualification gates"
@@ -299,8 +300,8 @@ refresh-episodes-check:
 CHECK_HOST_TARGETS = ebc-logic-check ebc-barrier-check rastersim-check \
         koreader-input-check orientation-check optics-check power-check \
         rockchip-pm-check activation-positive-check suspend-check \
-        library-check ultra-coupling-check battery-dtb-check time-machine-check \
-        gexp-modules-check timezone-check
+        library-check manuals-check ultra-coupling-check battery-dtb-check \
+        time-machine-check gexp-modules-check timezone-check
 
 # Parse time, not recipe time: a recipe-level guard would run only AFTER every
 # prerequisite had already completed, so it could not prevent the mistake it
@@ -461,6 +462,14 @@ release-manifest:
 # negative-tested against six ways it has to be able to fail.
 library-check:
 	sh pinenote/scripts/preflight/validate-koreader-library.sh
+
+# The man/info -> EPUB converter the manuals shelf is built from (issue #17).
+# Python 3 standard library over generated fixtures plus one committed
+# mandoc fragment; no Guix module is evaluated and the store is never read.
+# mandoc is a toolchain convenience: without it the roff stage reports SKIP
+# and the post-processor still runs against fixtures/wilkdemo.1.mandoc-html.
+manuals-check:
+	$(call guix-shell,mandoc python) sh pinenote/tools/manuals/run-tests.sh
 
 # The ultra payload is a matched pair (standing override + rails) that must
 # ship whole in one patch on the primary kernel; either half alone is a

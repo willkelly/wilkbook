@@ -1,0 +1,65 @@
+<table class="head">
+  <tr>
+    <td class="head-ltitle">WILKDEMO(1)</td>
+    <td class="head-vol">General Commands Manual</td>
+    <td class="head-rtitle">WILKDEMO(1)</td>
+  </tr>
+</table>
+<div class="manual-text">
+<section class="Sh">
+<h1 class="Sh" id="NAME"><a class="permalink" href="#NAME">NAME</a></h1>
+<p class="Pp"><code class="Nm">wilkdemo</code> &#x2014;
+    <span class="Nd">exercise every mandoc construct the converter has to
+    survive</span></p>
+</section>
+<section class="Sh">
+<h1 class="Sh" id="SYNOPSIS"><a class="permalink" href="#SYNOPSIS">SYNOPSIS</a></h1>
+<table class="Nm">
+  <tr>
+    <td><code class="Nm">wilkdemo</code></td>
+    <td>[<code class="Fl">-v</code>] <var class="Ar">file ...</var></td>
+  </tr>
+</table>
+</section>
+<section class="Sh">
+<h1 class="Sh" id="DESCRIPTION"><a class="permalink" href="#DESCRIPTION">DESCRIPTION</a></h1>
+<p class="Pp">A fixture page. It refers to
+    <a class="Xr" href="#wilkother.1">wilkother(1)</a>, which is in the same
+    book, and to <a class="Xr" href="#nosuchpage.9">nosuchpage(9)</a>, which is
+    not.</p>
+<section class="Ss">
+<h2 class="Ss" id="A_subsection"><a class="permalink" href="#A_subsection">A
+  subsection</a></h2>
+<dl class="Bl-tag">
+  <dt id="v"><a class="permalink" href="#v"><code class="Fl">-v</code></a></dt>
+  <dd>Be verbose.</dd>
+  <dt id="q"><a class="permalink" href="#q"><code class="Fl">-q</code></a></dt>
+  <dd>Be quiet.</dd>
+</dl>
+</section>
+</section>
+<section class="Sh">
+<h1 class="Sh" id="EXAMPLES"><a class="permalink" href="#EXAMPLES">EXAMPLES</a></h1>
+<div class="Bd Li">
+<pre>wilkdemo -v /tmp/x</pre>
+</div>
+</section>
+<section class="Sh">
+<h1 class="Sh" id="SEE_ALSO"><a class="permalink" href="#SEE_ALSO">SEE
+  ALSO</a></h1>
+<p class="Pp"><a class="Lk" href="https://example.invalid/with-scheme">an
+    absolute link</a></p>
+<p class="Pp"><a class="Lk" href="example.invalid/no-scheme">a bare link</a></p>
+</section>
+<section class="Sh">
+<h1 class="Sh" id="AUTHORS"><a class="permalink" href="#AUTHORS">AUTHORS</a></h1>
+<p class="Pp"><span class="An">A Fixture</span>
+    &lt;<a class="Mt" href="mailto:fixture@example.invalid">fixture@example.invalid</a>&gt;</p>
+</section>
+</div>
+<table class="foot">
+  <tr>
+    <td class="foot-date">August 24, 2026</td>
+    <td class="foot-os">PineNote</td>
+  </tr>
+</table>

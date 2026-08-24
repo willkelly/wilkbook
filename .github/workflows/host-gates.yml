@@ -159,10 +159,16 @@ jobs:
           sudo apt-get update -qq
           # Verified against a bare distro PATH: gcc, python3, numpy, scipy,
           # pillow, ffmpeg, git, patch and xz are already present on the runner
-          # image; luajit, dtc and guile are the only genuine additions.
+          # image; luajit, dtc, guile and mandoc are the genuine additions.
           sudo apt-get install -y --no-install-recommends \
             build-essential device-tree-compiler ffmpeg git guile-3.0 luajit \
-            patch python3 python3-numpy python3-pil python3-scipy xz-utils
+            mandoc patch python3 python3-numpy python3-pil python3-scipy \
+            xz-utils
+          # mandoc is manuals-check's roff formatter (issue #17).  It is NOT
+          # on the runner image, and without it that suite still passes --
+          # it says SKIP for the roff stage and covers the post-processor
+          # against its committed fixture.  Installed so the end-to-end pass
+          # is exercised here rather than only on a developer's machine.
           # pinenote/tools/power invokes `guile'; Debian ships it as guile-3.0.
           # The tool imports no (guix ...) or (gnu ...) module and never
           # inspects the store, so base Guile 3 is sufficient.
