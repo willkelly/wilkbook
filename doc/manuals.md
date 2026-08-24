@@ -143,13 +143,28 @@ work:
 
 ### 5. One book for all man sections, one XHTML per page
 
-Cross-section references are the common case in a man corpus
-(`crontab(1)` → `crontab(5)`, `ps(1)` → `proc(5)`), and **nothing can link
-from one EPUB into another**. Splitting the shelf per section would throw
-away most of the hypertext this is for, so the man corpus is a single
-`Manual pages.epub`: 1.87 MiB, 538 documents, one per page plus a per-section
-index chapter listing every page with its `NAME` one-liner. The table of
-contents nests page under section.
+**Nothing can link from one EPUB into another**, so a split shelf can
+never resolve a cross-section reference. That is the reason for one book:
+`Manual pages.epub`, 1.87 MiB, 538 documents, one per page plus a
+per-section index chapter listing every page with its `NAME` one-liner.
+The table of contents nests page under section.
+
+**Correction (review, 2026-08-24).** An earlier draft justified this by
+asserting that "cross-section references are the common case in a man
+corpus". That was not measured, and it is wrong in the direction that
+matters: `mandoc -O man=#%N.%S` linkifies only **mdoc** `.Xr` macros, and
+this corpus is overwhelmingly **man(7)**, where a cross reference is plain
+text that mandoc never turns into a link at all. So the single book
+currently buys a *small measured* number of working links, at an
+*unmeasured* cost — first-open parse time and `.cr3` cache size for a
+538-document EPUB on an RK3566, which §8 lists as unknown.
+
+The decision stands, because the cost is unmeasured rather than known-bad
+and splitting later is a small change in `man_book`. But it stands on
+weaker evidence than the earlier wording implied, and the honest way to
+make it strong is to *earn* the hypertext: post-process man(7)'s
+`<b>name</b>(section)` into a link whenever `name.section` is in
+`known_pages`. That is filed rather than done here.
 
 Per *page*, not per section, because section 1 alone is 2.3 MiB of generated
 markup; as one spine item that is an enormous document to lay out, and every

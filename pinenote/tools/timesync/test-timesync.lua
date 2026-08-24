@@ -521,6 +521,27 @@ do
     -- pinned rather than left to a comment.
     report(scm:find("%(servers%s+pinenote%-timesync%-servers%s*%(default%s+'%(%)%)%)") ~= nil,
         "the service ships with NO servers configured: opt-in by construction")
+
+    -- quirk: the RTC backstop re-arm must be VERIFIED, not assumed.
+    -- Shipped once (2026-08-24) discarding both write_file returns and
+    -- logging "re-armed ..." unconditionally, so a failed re-arm left the
+    -- device with no timer wake and said it had succeeded.  The backstop
+    -- is the self-recovery net (doc/power-management.md), so this is a
+    -- safety property, not tidiness.  set_rtc touches real sysfs and
+    -- cannot be executed here; pin it structurally instead.
+    local daemon_src = slurp(source_path) or ""
+    local rearm_block = daemon_src:match("if%s+rearm%s+then(.-)\n%s*end")
+    report(rearm_block ~= nil, "set_rtc has a re-arm block to inspect")
+    if rearm_block then
+        report(rearm_block:find("local%s+armed%s*=%s*write_file") ~= nil,
+            "quirk: the re-arm captures write_file's result instead of discarding it")
+        report(rearm_block:find("read_number") ~= nil,
+            "quirk: the re-arm reads the alarm back")
+        report(rearm_block:find("if%s+armed%s+and%s+got%s*==") ~= nil,
+            "quirk: success is logged only when the readback matches what was armed")
+        report(rearm_block:find("RE%-ARM FAILED") ~= nil,
+            "quirk: a failed re-arm is logged loudly")
+    end
 end
 
 if failures > 0 then

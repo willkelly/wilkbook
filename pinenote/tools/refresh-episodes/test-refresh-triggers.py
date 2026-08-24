@@ -51,6 +51,7 @@ spec = importlib.util.spec_from_file_location(
 RT = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(RT)
 
+
 FAILURES = []
 
 
@@ -125,8 +126,21 @@ def main():
     b = out["candidate_B"]
     check("fast+a2 traces in 6.2 days", b["fast_a2"], 1)
     check("...within 15 s of an episode", b["fast_a2_near_episode"], 0)
-    check("repeated small-box ui rects (rerender status icon)",
+    check("repeated corner-icon ui rects (rerender status icon)",
           b["repeated_icon_rects"], 0)
+
+    # POSITIVE CONTROL.  The assertion above is `== 0`, which a detector
+    # that can see nothing at all also satisfies -- and the first version
+    # of this detector was exactly that: it filtered on cls == "small-box",
+    # but classify() files the icon (y == 0, side 59) as "top-strip", so it
+    # could never match the signature it was named for.  A zero is only
+    # evidence if the detector demonstrably fires on the real shape.
+    icon = (0, 0, 59, 59)
+    other = (477, 12, 449, 131)          # crengine top status bar: NOT an icon
+    check("detector fires on the real corner-icon geometry",
+          RT.looks_like_icon(icon), True)
+    check("detector rejects the variable-width top status bar",
+          RT.looks_like_icon(other), False)
 
     print("\n  -- candidate C: cadence only, cannot be settled here --")
     c = out["candidate_C"]

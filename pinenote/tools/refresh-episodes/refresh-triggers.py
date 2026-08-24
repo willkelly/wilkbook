@@ -251,6 +251,25 @@ def classify(traces, extent):
             tr.cls = "small-box"
 
 
+ICON_SIDE = 59          # Screen:scaleBySize(32) on a 1404x1872 panel
+
+
+def looks_like_icon(r):
+    """Is this rect ReaderFlipping's top-left corner status icon?
+
+    Module scope on purpose: test-refresh-triggers.py imports THIS
+    function for its positive control.  A copy in the test would let the
+    two drift, and the bug this replaced was precisely a detector that
+    had stopped matching the thing it was named for.
+    """
+    x, y, w, h = r
+    if w <= 0 or h <= 0:
+        return False
+    return (x <= 40 and y <= 40                      # top-left corner
+            and abs(w - h) <= 0.35 * max(w, h)       # square-ish
+            and 0.5 * ICON_SIDE <= max(w, h) <= 2.0 * ICON_SIDE)
+
+
 def is_full_panel(tr, extent):
     return tr.area >= FULL_PANEL_TOL * extent[0] * extent[1]
 
@@ -646,19 +665,27 @@ def main(argv=None):
           % (args.window, anim_near))
     # crengine partial-rerendering automation: >=3 same-small-rect "ui"
     # traces, seconds apart, as the status icon cycles states.
+    # Detect the icon GEOMETRICALLY, not by cls.  ReaderFlipping paints it
+    # as the top-left corner indicator (readerview.lua:259) through a
+    # LeftContainer, so y == 0 and the side is Screen:scaleBySize(32) = 59 px
+    # here -- which classify() files as "top-strip" (h <= 0.10*long_ and
+    # y <= 0.10*long_), NEVER as "small-box".  Filtering on small-box could
+    # not see the thing it was named for.  Widening to top-strip is also
+    # wrong: that bucket holds the crengine top status bar (e.g.
+    # 477,12,449,131), which is variable-width text, not a square icon.
     icon_rects = {}
     for tr in traces:
-        if tr.kind == "ui/partial" and tr.cls == "small-box":
+        if tr.kind == "ui/partial" and looks_like_icon(tr.rect):
             icon_rects[tr.rect] = icon_rects.get(tr.rect, 0) + 1
     repeated_icons = {r: n for r, n in icon_rects.items() if n >= 3}
-    print("  distinct small-box ui/partial rects : %d" % len(icon_rects))
+    print("  distinct corner-icon ui/partial rects: %d" % len(icon_rects))
     print("  ... seen >=3 times (the crengine rerendering-automation")
     print("      status-icon signature)          : %d" % len(repeated_icons))
     for r, n in sorted(repeated_icons.items(), key=lambda kv: -kv[1])[:5]:
         print("        rect=%d,%d,%d,%d x%d" % (r[0], r[1], r[2], r[3], n))
     out["candidate_B"] = {"fast_a2": len(anim),
                           "fast_a2_near_episode": anim_near,
-                          "small_box_ui_rects": len(icon_rects),
+                          "corner_icon_ui_rects": len(icon_rects),
                           "repeated_icon_rects": len(repeated_icons)}
 
     # ---------------------------------------------------------------
@@ -854,7 +881,7 @@ def main(argv=None):
         "EXCLUDED" if (anim_near == 0 and not repeated_icons) else "OPEN",
         ["%d fast/a2 traces in the whole log; %d within %.0f s of an episode"
          % (len(anim), anim_near, args.window),
-         "%d repeated small-box ui rects (the rerendering-automation icon "
+         "%d repeated corner-icon ui rects (the rerendering-automation icon "
          "signature)" % len(repeated_icons),
          "the image also seeds cre_partial_rerendering=false "
          "(pinenote/services/reader-session.scm)"])

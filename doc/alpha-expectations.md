@@ -23,7 +23,9 @@ worse than this, that's a bug report; if it does better, brag.
 - **Two-finger gestures work, including pinch/spread to change the font
   size.** Pinch and spread each redraw the page **once**, on the lift —
   not once per size step — so the cost is one page pass, the same as a
-  page turn. Two-finger tap and two-finger swipe work too.
+  page turn. Two-finger swipe works too — east opens the table of
+  contents, west opens bookmarks. Two-finger *tap* is recognised but
+  is bound to nothing in the reader defaults, so it does nothing.
   **Pinch briskly.** Upstream KOReader only classifies the gesture if the
   whole thing finishes in under about a second; a slow, careful pinch
   produces nothing at all, with no message saying why. That is an

@@ -518,10 +518,26 @@ local function set_rtc()
     if rearm then
         -- Clearing first is required: the kernel refuses a new alarm over
         -- an armed one.  autosuspend.lua does the same dance.
-        write_file(opt.rtc .. "/wakealarm", "0")
-        write_file(opt.rtc .. "/wakealarm", tostring(math.floor(rearm)))
-        log("re-armed the pending RTC alarm %d -> %d (interval preserved)",
-            alarm, math.floor(rearm))
+        -- VERIFY BY READBACK.  The RTC backstop is the self-recovery net
+        -- (doc/power-management.md): a re-arm that silently failed leaves
+        -- the device with NO timer wake, and logging success we never
+        -- checked is how that would stay invisible.  write_file already
+        -- returns false on failure; do not discard it.
+        local want = math.floor(rearm)
+        local cleared = write_file(opt.rtc .. "/wakealarm", "0")
+        local armed = write_file(opt.rtc .. "/wakealarm", tostring(want))
+        local got = read_number(opt.rtc .. "/wakealarm")
+        if armed and got == want then
+            log("re-armed the pending RTC alarm %d -> %d (interval preserved)",
+                alarm, want)
+        else
+            -- Loud, and a failed return: the caller must not report the
+            -- clock update as wholly successful when the backstop is gone.
+            log("RTC ALARM RE-ARM FAILED: wanted %d, readback %s "
+                .. "(clear=%s arm=%s) -- the backstop wake is NOT armed",
+                want, tostring(got), tostring(cleared), tostring(armed))
+            return false, "rtc re-arm failed"
+        end
     end
     return true
 end

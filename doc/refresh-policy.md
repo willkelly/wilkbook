@@ -1089,7 +1089,12 @@ item 12).  If it turns out to bite in practice, the local lever is
 **Reachability**, since #21 left it open: all five terminal two-finger
 gestures classify on this stack from slots `{0,1}` — `pinch`, `spread`,
 `rotate`, `two_finger_tap`, `two_finger_swipe`.  `rotate_cw`/`rotate_ccw`
-ship unbound in the reader defaults, so `rotate` is reachable but inert.
+ship unbound in the reader defaults, so `rotate` is reachable but inert —
+**and so does `two_finger_tap`**, whose only binding is the
+corner-to-corner screenshot range, i.e. not the gesture.  Only
+`two_finger_swipe` is genuinely wired (`defaults.lua:126-127`:
+east → `toc`, west → `bookmarks`).  Classifying is not working, and this
+list must not be read as though it were.
 All of them inherit `quirk:buddy-slots-0-1-only`: the same pinch in slots
 `{0,2}` is not a two-finger gesture at all but two independent pans and
 swipes — and pans and swipes *are* consumed, so a mis-slotted pinch can

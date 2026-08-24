@@ -381,15 +381,19 @@ def main(argv):
         zpath = os.path.join(tmp, "c-zstd")
         with open(zpath, "wb") as fh:
             fh.write(b"\x28\xb5\x2f\xfd" + b"\x00" * 8)
+        # Use a decompressor that EXISTS and FAILS, not one that is missing.
+        # An absent binary raises OSError from exec and never reaches the
+        # `returncode != 0` branch -- which is the only branch that can fire
+        # inside the Guix derivation, where zstd is a real build input at an
+        # absolute path.  Accepting OSError as a pass made this quirk test
+        # vacuous with respect to the guard that actually operates.
         try:
-            got = M.read_doc(zpath, zstd="wilkbook-no-such-zstd")
-            check("read_doc refuses an undecodable zstd frame", False,
+            got = M.read_doc(zpath, zstd="false")
+            check("quirk: read_doc refuses an undecodable zstd frame", False,
                   "returned %d bytes instead of raising" % len(got))
         except M.CorpusError:
-            check("read_doc refuses an undecodable zstd frame", True)
-        except OSError:
-            check("read_doc refuses an undecodable zstd frame", True,
-                  "raised OSError")
+            check("quirk: read_doc refuses an undecodable zstd frame", True,
+                  "decompressor exited nonzero and read_doc raised")
 
         # -- discovery ----------------------------------------------------
         corpus = M.discover(roots)
