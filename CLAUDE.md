@@ -45,6 +45,8 @@ code review — before a single reboot. That's the standard.
 ## Doc map (what lives where)
 
 - `README.md` — project overview, quick start, human reading order.
+- `CHANGELOG.md` — what changed for someone holding the device, newest
+  first. Update it as work lands; entries are written for testers.
 - `ROADMAP.md` — direction, three tracks + the offline testing ladder.
   Not status.
 - `doc/status.md` — **the single source of hardware truth.** Update it

@@ -366,6 +366,8 @@ prealpha tag and that bar.
 ## Reading order (humans)
 
 1. This file, then `doc/status.md` (current-state header) — where we are.
+   `CHANGELOG.md` — what has changed since the last tag, in the terms a
+   person holding the device would notice.
 2. `doc/building.md` — host setup and your first build.
 3. `doc/install.md` — the path from a stock PineNote to a booting os2, if
    the device is yours rather than the author's. Then
