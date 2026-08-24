@@ -47,7 +47,10 @@ typedef int32_t s32;
 typedef int64_t s64;
 typedef uint16_t __le16;
 typedef uint32_t __le32;
-typedef uint64_t __u64;
+typedef unsigned long long __u64;  /* match asm-generic/int-ll64.h, not uint64_t:
+                                    * on aarch64 glibc's <signal.h> pulls in the real
+                                    * linux/types.h and uint64_t (unsigned long) is a
+                                    * DIFFERENT type to the kernel's unsigned long long. */
 typedef uint32_t __u32;
 typedef int32_t __s32;
 typedef u64 dma_addr_t;

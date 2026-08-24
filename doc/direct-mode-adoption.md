@@ -1,0 +1,238 @@
+# Adopting direct mode: the plan
+
+**Status: plan, not a decision record.** Nothing here has been built.
+Written 2026-08-24, after the operator named handwriting as a product
+direction that the current display path cannot support.
+
+Read `doc/hrdl-evaluation.md` first — this document assumes it.
+
+## Why now
+
+`doc/hrdl-evaluation.md` rejected the driver swap with an explicitly
+conditional verdict:
+
+> **Verdict: not now.** … Re-evaluate when the corruption hunt closes,
+> when pen latency becomes the active track …, or when a community
+> rebase forces a structural decision anyway.
+
+**Both of the first two have fired.** The corruption hunt closed; pen
+latency is now the active track, because handwriting — note-taking,
+drawn UIs in books, handwritten code that executes — is a stated product
+direction rather than a nice-to-have. Handwriting also adds *recognition*
+latency on top of ink latency, so the panel budget matters more, not
+less.
+
+**The current path cannot get there.** Ink latency floor today:
+
+| | |
+|---|---|
+| software path, damage → publish | 132–140 ms (measured) |
+| A2, the fastest LUT-mode waveform | 10 phases = 157 ms |
+| **floor** | **~290 ms** |
+
+For scale, reMarkable claims ~21 ms. At 290 ms the ink trails a third of
+a second behind the nib. #23's reclock takes A2 to 126 ms — real, and
+nowhere near enough. `DRIVER_MODE_FAST` reaches **~11.7 ms to first
+motion**, and it is structurally unavailable in 3WIN/LUT mode: it needs
+the driver to own per-frame phase bytes.
+
+## What the swap buys, beyond FAST mode
+
+| | |
+|---|---|
+| `DRIVER_MODE_FAST` | ~11.7 ms to first motion (1-bit, visible smear) |
+| **85 Hz** | needs `SDCLK_DIV=0`, direct-mode-only — **100 %** of the waveform's authored rate |
+| phase buffer 2 bits/px | **~6× less DDR** (56 vs 335 MB/s) — cheaper on our one confirmed failure mode |
+| per-pixel state | no areas, no queue, no `split_area_limit` — **area-collision bugs cease to exist as a class** |
+
+That last one deletes the bug class issue #22 lives in. **The drain gate
+we landed on 2026-08-24 is a fix for the driver we would be leaving.** It
+stays correct and stays owed to the m-weigand lineage; it simply does not
+port, because there is no queue to drain.
+
+## What today's probe changed
+
+The evaluation's strongest ground for rejecting was that the offline
+harness dies:
+
+> **Host tools — the big one.** … the entire offline refresh-machine
+> harness and the replay workbench stop compiling on the workstation.
+> Recovery options, none cheap …
+
+Measured 2026-08-24 (`907efce`): the harness cross-compiles to aarch64
+and runs under `qemu-aarch64` with **identical results** — drain-gate
+31 PASS/0 FAIL, refresh-test **with ASan** 148 PASS/0 FAIL, ~3× wall
+time. Cost: **one typedef**. Residual: LeakSanitizer does not work under
+qemu-user, and qemu *emulates* NEON.
+
+So the objection that killed the swap is now priced, and it is cheap.
+
+## The blockers, and the decision each needs
+
+### D1. `custom_wf.bin` has no producer we can run — **the hard one**
+
+hrdl's driver `request_firmware`s `rockchip/custom_wf.bin` and **probe
+fails `-EINVAL` if it is absent**. It is compiled from the device's own
+`ebc.wbf` by `wbf_to_custom.py`; ayakael's first-boot recipe runs that
+**on the device**.
+
+**We cannot.** The reader image has no Python, no Perl, no standalone
+Lua — verified 2026-08-24; KOReader's bundled `luajit` is the only
+interpreter (`doc/artifacts/pinenote-input-clocks-20260824/`).
+
+Three options:
+
+1. **Reimplement the CLUT compiler in C, ship it as an on-device binary.**
+   *Recommended.* There is already exactly this precedent:
+   `pinenote-install-waveform` is a compiled binary run by a one-shot
+   shepherd service before the EBC module loads
+   (`pinenote/services/ebc.scm`), and `pinenote-ebc-dump` in
+   `pinenote/packages/firmware.scm` is an on-device C tool we already
+   cross-build. Adding a sibling is the smallest change to a shape we
+   already have. It keeps Python off the device, preserves never-bundle
+   (compile from the device's own waveform at boot), and — crucially —
+   **a C implementation differential-tested against `wbf_to_custom.py`
+   is the "CLUT-compiler differential" §4.2 names as the natural first
+   joint artifact with hrdl.** The work pays twice.
+2. **Compile on the host at install time, stage to p7.** Simpler to
+   build, but moves a mandatory boot artifact into a manual step, and a
+   skipped step is a `-EINVAL` probe failure — i.e. no display at all.
+   Viable as a *bridge* while (1) is written; poor as the end state.
+3. **Put Python in the reader image.** Rejected: a large closure on a
+   device whose whole design is minimal, to run one compile once.
+
+### D2. A2 disappears from the vocabulary
+
+hrdl's CLUT compiles six sequences — DU, DU4, GL16, GC16, INIT, WAITING.
+**A2 is dropped**, folded into DU plus early cancellation. Bit depth *is*
+the waveform choice: Y1→DU, Y2→DU4, Y4→GL16, set per-rect by hints.
+
+`doc/refresh-policy.md` and KOReader's `device.lua` intent mapping are
+written in A2/DU/GL16/GC16 terms. Both need rewriting against hints. This
+is not hard, but it is not mechanical either — the policy decisions
+encoded there were bought with hardware sessions and must be re-derived,
+not transliterated.
+
+### D3. Rotation via fbdev is untested upstream
+
+> Nobody rotates via fbdev on his stack (sway does transforms).
+
+Four orientations with autorotation is a **shipped, hardware-validated**
+feature of ours (`final4`, 2026-07-19). His stack has never exercised
+that path. This is the single most likely place for a nasty surprise,
+and it must be an explicit bring-up gate rather than an assumption.
+
+### D4. `-EINVAL` on missing firmware is a worse first-boot failure
+
+Today a missing waveform fails visibly but the system boots. Under
+direct mode the EBC probe fails outright: no display. For an operator
+installing on their own device (`doc/install.md`) that is
+indistinguishable from a brick. Needs either a fallback path, or a
+loud pre-flight check, or both — decide deliberately.
+
+### D5. Kernel base
+
+His tree is `v6.19_ebc_custom`; ours builds 7.1.8. **Port his driver onto
+our kernel — do not adopt his kernel.** Our seven-patch stack, ultra
+suspend matched pair, and the whole gate apparatus are built around our
+base. This is the larger of the two rebase surfaces and should be sized
+before committing.
+
+### D6. Keep 3WIN as a bail-out?
+
+3WIN survives upstream behind `CONFIG_DRM_ROCKCHIP_EBC_3WIN_MODE`.
+Keeping it buildable costs little and preserves a retreat if direct mode
+disappoints on glass. Recommended, at least through P3.
+
+## The plan
+
+Cheapest decisive things first, in the ladder's order. **Each phase has a
+gate; a red gate stops the phase rather than deferring the problem.**
+
+### P0 — offline de-risking, no kernel code *(mostly done, all rung 1)*
+
+- ✅ **Harness goes aarch64.** Done 2026-08-24, `907efce`.
+- **Split cross and native build trees.** They share `build/` today, and
+  a stale aarch64 `.o` breaks the native link with a confusing
+  wrong-format error. Cheap, and it bites immediately otherwise.
+- **Port hrdl's `Sim`** (the Python simulator of the two-level counter
+  scheduler inside `wbf_to_custom.py`) into our harness as a reference
+  model. This is the oracle everything downstream differentials against.
+- **Build the CLUT differential**: `wbf-info --dump-lut` versus
+  `wbf_to_custom.py` output, on our own `ebc.wbf`. This is D1's
+  correctness gate *and* the upstream offer.
+
+**Gate:** the differential agrees on every temperature bin and sequence.
+If our independent waveform decode disagrees with his compiler, we do not
+yet understand the format and nothing later is trustworthy.
+
+### P1 — the CLUT compiler (D1)
+
+Write it in C, cross-built like `pinenote-ebc-dump`, run by a one-shot
+before the EBC module loads. Differential-test against `wbf_to_custom.py`
+on the host at rung 1.
+
+**Gate:** byte-identical `custom_wf.bin` from the C compiler and the
+Python one, on a real `ebc.wbf`. Not "equivalent" — identical.
+
+### P2 — port the driver onto 7.1.8, behind a flavor
+
+Direct mode only. New flavor (`reader-direct`) alongside the shipping
+reader, exactly as `reader-debug` exists today, so the production image
+is never the experiment. 3WIN kept buildable (D6).
+
+**Gate:** `make kernel` clean; `make check-host` green with the harness
+running aarch64-under-qemu; the drain-gate and ordering negative controls
+replaced by whatever the new architecture's equivalents are — **a suite
+that goes green because its subject vanished is worse than no suite.**
+
+### P3 — bring-up on glass, one variable at a time
+
+Order matters; each step is a separate session with the 2026-08-07
+one-variable protocol:
+
+1. Does it probe and display at all (D4's failure mode is here).
+2. Static rendering quality vs the LUT path — optics rig, not a webcam.
+3. **Rotation, all four orientations** (D3) — the highest-risk item.
+4. Suspend/resume with the ultra matched pair intact.
+5. Page-turn latency and quality against today's numbers.
+
+**Gate:** parity with the shipping reader on 1–5 before any ink work.
+Ink is the *reason*, but a reader that regresses reading to gain writing
+is not a trade this project should make.
+
+### P4 — policy rewrite (D2)
+
+Re-derive `doc/refresh-policy.md`'s decisions against hints. Rewrite
+`device.lua`'s intent mapping. Re-establish the idle washer and
+publish-on-call equivalents.
+
+### P5 — FAST mode and ink
+
+Only now does the thing we came for get built: `DRIVER_MODE_FAST` for
+pen-down rendering, stroke capture on top of it. #20's capture, storage
+and vectorization work is **independent of all of the above** and can
+proceed in parallel from day one — it needs no panel.
+
+## What only hardware can answer
+
+Everything in P3, plus: whether FAST mode's 1-bit output and visible
+smear are acceptable for ink in practice; whether 85 Hz is stable on this
+panel; and whether the 6×-lower DDR fetch actually removes the starvation
+margin or merely moves it.
+
+## Bail-out criteria
+
+State these now, while nobody is invested:
+
+- P0's differential does not converge → we do not understand the
+  waveform format well enough. Stop.
+- P3 step 3 (rotation) cannot be made to work → the shipped
+  four-orientation feature regresses. Stop, or descope orientations
+  deliberately.
+- P3 step 5 shows page-turn quality worse than today with no path back →
+  stop; reading is the product.
+
+Direct mode is a means to handwriting, not an end. If it costs the
+reader, it is the wrong trade and the plan should die here rather than
+be defended.

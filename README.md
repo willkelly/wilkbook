@@ -553,6 +553,37 @@ Empty, whitespace-only, and unset all mean the default, so a half-edited
 `local.mk` is not a build failure. `make timezone-check` (part of `make
 check-host`) pins all of this.
 
+### The clock itself (`pinenote-timesync`)
+
+The zone is only half the problem. Nothing sets the **time**: the reader
+keeps whatever its RTC holds, and a flat battery or plain drift makes
+every log timestamp read plausibly wrong. `pinenote-timesync` fixes that
+when you let it — it steps the clock from an NTP server whenever a
+network happens to be there, and writes the correction back to the RTC so
+it survives a cold boot.
+
+It is **off by default and that is the design**: this image otherwise
+makes no outbound connections, so reaching a time server is your choice,
+not the channel's. Name one in your system configuration — this is a Guix
+service configuration field, not a file on p7:
+
+```scheme
+(service pinenote-timesync-service-type
+         (pinenote-timesync-configuration
+          (servers '("192.168.1.1"))))
+```
+
+Your router is usually the right answer, and an IPv4 literal means no DNS
+traffic either. `pool.ntp.org` works too.
+
+With no server, or no Wi-Fi, it does nothing: it cannot wake the device,
+it will not open a socket without a route, and it backs off when a server
+does not answer — all of which matters because the standby budget it is
+spending from is 5.47 mA. The reasoning, including what it does to the
+RTC wake alarm, is `doc/networking.md` §7. `make timesync-check` is the
+gate. **Nothing here has run on a device; no clock has been set on a
+PineNote** (issue #27).
+
 ## Hosting
 
 The canonical public home is <https://github.com/willkelly/wilkbook>

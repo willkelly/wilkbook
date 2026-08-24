@@ -76,8 +76,60 @@ was proven was proven on that image.
 - The README no longer claims you need a serial cable to boot os2. The
   U-Boot menu works on the glass and the untouched default is os1; the
   cable is for the AI agent, which has no fingers or eyes.
-- Still true and still annoying: the image runs UTC, because the
-  timezone is not set at build time (issue #6).
+- The image runs UTC unless you say otherwise: `WILKBOOK_TIMEZONE`
+  chooses the zone at build time for every flavor, and the default stays
+  `Etc/UTC` because a guess at where you live would be wrong for most of
+  the world (issue #6, `README.md`).
+- **New, and off unless you turn it on: the device can set its own
+  clock.** Getting the zone right does not help if the underlying time is
+  wrong, and nothing here ever set it — the reader kept whatever the RTC
+  held. `pinenote-timesync` steps the clock from an NTP server whenever a
+  network happens to be there, and writes the correction back to the RTC
+  so it survives a flat battery. It ships with **no server configured**,
+  so out of the box the image still talks to nothing; naming one is a
+  line in your system configuration (`doc/networking.md` §7):
+
+  ```scheme
+  (service pinenote-timesync-service-type
+           (pinenote-timesync-configuration
+            (servers '("192.168.1.1"))))
+  ```
+
+  Your router is usually the right answer. With no Wi-Fi it does nothing,
+  quietly and forever — it cannot wake the device, it will not open a
+  socket without a route, and it gives up more slowly each time a server
+  does not answer, because the battery budget for all of this is 5.47 mA.
+  **Nothing here has been booted: no clock has been set on a PineNote**
+  (issue #27).
+- Why you would care: everything this project reconstructs about a device
+  — when a suspend happened, how long a page turn took, which day a log
+  line belongs to — is a timestamp. A clock that is quietly wrong makes
+  all of it read plausibly wrong, which is worse than reading obviously
+  wrong.
+
+### Reading material
+
+- **The device's own manuals are now books.** Every man page and Texinfo
+  manual carried by the software on the reader — 532 pages and 24 GNU
+  manuals as it stands — is converted to EPUB when the image is built and
+  staged into `/data/books/Manuals`, where KOReader opens them like any
+  other document. `Manual pages.epub` has a section index with every
+  page's one-line description and working `grep(1) -> sed(1)` cross
+  references; each GNU manual is its own book with its node tree as the
+  table of contents. About 4.9 MB on the data partition.
+- Why it matters beyond novelty: this stuff has always shipped —
+  `man-db` and `info-reader` come with the base system — and there has
+  never been a way to read a word of it, because the device has no
+  terminal. It also means a device with an empty library has something
+  in it on first boot.
+- **Nothing here has been rendered by KOReader yet.** The conversion is
+  tested offline and every book is structurally sound with every
+  internal link resolving, but no engine has laid one out: typography,
+  table-of-contents behaviour and how long the big man book takes to
+  open the first time are all unknown. Read `doc/manuals.md` before
+  quoting anything about how it looks.
+- If you delete the `Manuals` folder it stays deleted, including across
+  a reflash. Books you put in it yourself are never touched.
 
 ### Display and page turns
 
@@ -125,6 +177,54 @@ and a bound.
 - New host tool `pinenote/tools/refresh-episodes/` scores a device log
   and a harness log the same way, with a threshold sweep instead of one
   convenient cutoff.
+- **Pinch-to-resize costs one page pass, not one per size step** — and
+  we know that because we measured it before building anything (#26).
+  The worry was that a pinch spanning several font sizes would redraw
+  the page for each one, seconds of panel activity for one gesture. It
+  does not: KOReader classifies pinch and spread only when the fingers
+  *lift*, so the interaction is a single redraw however long it takes or
+  however fast the panel samples. The proposed "small indicator while
+  you pinch, full render on lift" plugin was therefore **not built** —
+  the deferral already exists a layer lower, and drawing an indicator
+  would have *added* panel activity to an interaction that currently
+  costs one pass (`doc/refresh-policy.md`).
+- **What the measurement found instead: pinch briskly.** Upstream only
+  accepts the gesture if the whole pinch finishes in under about a
+  second; slower than that and nothing happens at all, with no message
+  saying why. On a display that teaches you to slow down, that is
+  backwards. Reproduced offline as a one-variable A/B and recorded for
+  upstream rather than patched locally (`doc/upstream-register.md`
+  item 12); `doc/alpha-expectations.md` now tells testers.
+- New offline coverage for both, plus which two-finger gestures are
+  actually reachable here (pinch, spread, rotate, two-finger tap,
+  two-finger swipe):
+  `pinenote/tools/koreader-input/test-continuous-gesture-cost.lua`, in
+  `make koreader-input-check`. **Nothing in this item has been seen on a
+  panel.**
+- **Four of the five candidate causes are now ruled out**, from the
+  committed traces plus KOReader's own source: a footer or progress-bar
+  repaint growing to full page, the page-turn animation path, a document
+  re-render, and our own idle washer. The survivor is a duplicated touch
+  — and it is precisely the one a refresh log cannot see, because no
+  trace records an input. Closing it means logging page turns on the
+  input side, which changes the shipped reader, then reading for another
+  few days (`doc/pageturn-program.md` §6).
+- Two claims from the earlier analysis are **corrected by the same
+  files**. The "hard floor at 131 ms" is not a floor: those six days
+  contain identical full-screen repaints **68 ms** apart. And the
+  behaviour is not specific to page turns — counting full-screen
+  repaints of every kind there are **11** rapid runs, not five, and the
+  largest is ten in 3.7 seconds.
+- **A second, far more regular two-step surfaced.** Dismissing a menu
+  produces a full-screen wash and then *another* full-screen repaint
+  about 0.85 s later — two full-screen updates for one dismissal, at a
+  near-constant delay. It is not universal: about one dismissal in five
+  (6 of 27 washes), four of them at about 0.85 s. Nobody has watched the panel during one, and it
+  is unexplained, but it is much easier to chase than the page-turn case.
+- `make refresh-trigger-check` re-derives every number above from the
+  committed logs. It is the first gate in the offline roster whose input
+  is field evidence rather than a fixture: if those logs move, it fails
+  loudly instead of quietly measuring something else.
 - A re-read of hrdl's driver found a **potential 1.25× on every refresh
   mode** — a clock reclock to 79.68 Hz, worth about two device-tree
   lines and ten driver lines. It is not shipped and not measured: it
@@ -170,12 +270,26 @@ and a bound.
   workflow uses a secret or the fork-privileged pull-request trigger.
   Every run also prints what green does **not** mean: nothing was built,
   nothing was booted, and the waveform parser cannot be covered at all.
+- **New rung-1 gate: `make manuals-check`** — the man/info -> EPUB
+  converter behind the manuals shelf, run as the file the image is
+  actually built from. Python standard library, no Guix module, no
+  store, no device; `mandoc` is now on the CI toolchain so the
+  end-to-end pass runs there rather than only on a workstation.
 - The host gates now run without Guix installed (`HOST_TOOLCHAIN=1`),
   and `guix time-machine -C channels.scm` is finally wired into the
   build targets (`TIME_MACHINE=1`), so the reproducibility claim in
   `doc/release.md` is true of the commands it names (issue #2).
   `make help` gained a Flags section; these were undiscoverable without
   reading the Makefile.
+- **`make timesync-check`**, the gate behind the new clock service. It
+  pulls the SNTP client's protocol and policy functions verbatim out of
+  the shipped daemon and drives them with synthetic packets, then binds a
+  UDP socket on loopback, launches the real daemon at it, answers one
+  request with a time it chose, and requires that time back out. That
+  second half is what proves the FFI struct layouts a unit test cannot
+  reach — including glibc's `struct addrinfo` field order, where a wrong
+  guess gives a wrong address rather than a crash. No root, no network,
+  no device, and no clock is ever set.
 - **A gate for a bug that shipped twice.** A `use-modules` inside a
   Shepherd service's start lambda silently resolves nothing, and here
   the resulting exception was swallowed by a `catch #t`. It shipped live

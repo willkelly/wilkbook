@@ -18,6 +18,15 @@
 #                               finding 10's userspace-wash policy).
 #   * test-touch-normalization.lua -- cyttsp5 source-gated MT-axis mirror
 #                               against measured TOP-mode calibration points.
+#   * test-continuous-gesture-cost.lua -- what a continuous two-finger
+#                               gesture actually costs (issue #26): one
+#                               terminal pinch/spread per interaction
+#                               whatever the frame count, the mid-gesture
+#                               inward_pan/outward_pan variants having no
+#                               consumer anywhere, upstream's verbatim
+#                               gesToFontSize arithmetic, and the 900 ms
+#                               swipe-interval ceiling that makes a slow
+#                               pinch a silent no-op;
 #   * test-refresh-seam.lua  -- publish-on-call seam: every refresh*Imp
 #                               the REPO device.lua overrides must still
 #                               exist on the bundle's verbatim
@@ -45,7 +54,8 @@ koreader=$bundle/lib/koreader
 pinenote_dev=$repo_root/pinenote/packages/koreader-device/frontend/device/pinenote
 router=$pinenote_dev/mixedrouter.lua
 device_lua=$pinenote_dev/device.lua
-idlewasher=$repo_root/pinenote/packages/koreader-device/plugins/idlewasher.koplugin
+koreader_device=$repo_root/pinenote/packages/koreader-device
+idlewasher=$koreader_device/plugins/idlewasher.koplugin
 
 if [ ! -x "$luajit" ]; then
   echo "FAIL: no luajit at $luajit (is $bundle a koreader-bin bundle?)" >&2
@@ -112,6 +122,8 @@ run_case test-touch-normalization.lua "$tool_dir/test-touch-normalization.lua" \
   "$koreader" "$device_lua"
 run_case test-refresh-seam.lua "$tool_dir/test-refresh-seam.lua" \
   "$koreader" "$device_lua"
+run_case test-continuous-gesture-cost.lua \
+  "$tool_dir/test-continuous-gesture-cost.lua" "$koreader" "$koreader_device"
 
 # Required-device loss is a poll/HUP contract, independent of input-event
 # payloads. Exercise both registrations and an optional node independently.

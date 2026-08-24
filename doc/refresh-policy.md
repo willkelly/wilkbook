@@ -1012,6 +1012,97 @@ bundles + reports under `pinenote/tools/optics/build/bundles/sweep1.*`):
 Instrument provenance: 30 fps / exposure 312 / gain 32 / frontlight 255-255;
 ghost-rms repeatability sigma 0.003-0.006 between identical transitions.
 
+## Continuous gestures already defer (2026-08-24, issue #26, offline)
+
+Issue #26 asked for the publish-on-call shape to be applied to
+pinch-to-change-font-size: a small indicator region while the fingers are
+down, one full-page render on lift.  Its own first instruction was to
+measure before building — *"does KOReader already debounce this?"*  It
+does, and the answer changes the decision.
+
+**Measured** (`make koreader-input-check`,
+`pinenote/tools/koreader-input/test-continuous-gesture-cost.lua`, replaying
+synthetic evdev streams through the bundle's verbatim `input.lua` +
+`gesturedetector.lua`):
+
+- **One terminal gesture per interaction.** `pinch`/`spread` are built
+  only on `Contact:panState`'s contact-lift branch (`tev.id == -1`).  A
+  pinch spanning 1, 2, 6, 12, 20 or 40 evdev frames emits exactly **one**
+  of them, and with the same `distance` every time — the field is the
+  summed travel of both contacts, so the sample rate cannot move it
+  either.  It is not a debounce timer; the coalescing is structural, in
+  the classifier.
+- **The per-frame variants have no consumer.** The detector *does* emit
+  an `inward_pan`/`outward_pan` per moving frame (1, 2, 6, 11, 18, 35 for
+  those sweeps).  A scan of 482 `.lua` files — the bundle's `frontend/`
+  and `plugins/` plus our `koreader-device` overlay — finds nothing
+  outside `gesturedetector.lua` naming `inward_pan`, `outward_pan`,
+  `two_finger_pan`, `two_finger_hold_pan` or `two_finger_pan_release`.
+  Every two-finger consumer in KOReader binds a terminal gesture.  Those
+  events cost Lua cycles and **zero panel passes**.
+- **One gesture, one font step.** The verbatim `ReaderFont.steps` and
+  `ReaderFont:gesToFontSize` extracted from the bundle return the same
+  single delta for every frame count, capped by the steps table's last
+  entry (5 points).  The shipped reader defaults bind
+  `pinch_gesture = {decrease_font = 0}` / `spread_gesture =
+  {increase_font = 0}`, and 0 is exactly the Dispatcher
+  `incrementalnumber` value that forwards the gesture object — one
+  gesture, one event, one delta.
+
+**Source-derived, not measured** (this harness does not run UIManager or
+ReaderUI, so treat the count as a code read): the resulting repaint is
+`ReaderFont:onSetFontSize` → one `UpdatePos` → `ReaderRolling:updatePos`
+→ one `UIManager:setDirty(self.view.dialog, "partial")`, i.e. **one
+full-page `partial`**.  Around it sit the two `Notification` toasts the
+font path shows (`"Decreasing font size…"`, then `"Font size set to: N."`),
+each a small `ui` rect on show and another on its 2 s timeout.  So a
+pinch is on the order of one expensive pass plus a handful of small ones
+— not the "several size steps, each re-rendering the page" the issue
+assumed.
+
+**Decision: do not build the indicator plugin.**  The deferral it would
+add already exists, one layer lower and for every gesture at once.  An
+indicator region drawn while the fingers are down would *add* panel
+activity to an interaction that currently costs one pass, and it would
+add it in the worst place — sustained damage during a gesture is the
+producer pattern the 2026-07-29 starvation lesson is about (structurally
+fixed by #22's drain gate, but still not free).  It would also want a
+per-update waveform, which the driver UAPI does not have (see *Context
+that frames the policy space* above): an A2-class indicator means
+flipping `default_waveform` for the duration and back, on every pinch.
+The cost/benefit is upside-down.
+
+**What the measurement found instead, and it points the other way.**
+`Contact:isSwipe()` gates the terminal gesture on the whole interaction
+finishing inside `ges_swipe_interval` (`SWIPE_INTERVAL_MS = 900`).  The
+identical pinch geometry over 1040 ms emits **no** `pinch` at all — just
+a `two_finger_pan_release`, which nothing consumes.  So on a panel whose
+~596 ms updates actively teach the reader to slow down, the *slower and
+more deliberate* the pinch, the more likely it silently does nothing,
+with no feedback saying why.  That is an upstream wart in application
+code, so it is pinned rather than patched
+(`quirk:slow-pinch-is-a-silent-no-op`; `doc/upstream-register.md`
+item 12).  If it turns out to bite in practice, the local lever is
+`ges_swipe_interval_ms`, which `GestureDetector` already reads from
+`G_reader_settings` — a settings value, not new machinery.
+
+**Reachability**, since #21 left it open: all five terminal two-finger
+gestures classify on this stack from slots `{0,1}` — `pinch`, `spread`,
+`rotate`, `two_finger_tap`, `two_finger_swipe`.  `rotate_cw`/`rotate_ccw`
+ship unbound in the reader defaults, so `rotate` is reachable but inert —
+**and so does `two_finger_tap`**, whose only binding is the
+corner-to-corner screenshot range, i.e. not the gesture.  Only
+`two_finger_swipe` is genuinely wired (`defaults.lua:126-127`:
+east → `toc`, west → `bookmarks`).  Classifying is not working, and this
+list must not be read as though it were.
+All of them inherit `quirk:buddy-slots-0-1-only`: the same pinch in slots
+`{0,2}` is not a two-finger gesture at all but two independent pans and
+swipes — and pans and swipes *are* consumed, so a mis-slotted pinch can
+turn pages instead.  How often the controller breaks the pair is a
+hardware question this suite cannot answer.
+
+**Nothing here has been seen on a panel.**  The whole finding is rung 1.
+
 ## Measuring the optics directly (the harness that ends "hardware-only")
 
 Every "stays hardware-only, human eyeball" caveat above — how much residue

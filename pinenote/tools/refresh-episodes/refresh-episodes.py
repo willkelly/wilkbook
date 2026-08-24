@@ -25,6 +25,16 @@ Nothing here is specific to the harness: the same numbers come out of a
 device log, which is the point — an offline run is only meaningful if it
 is scored the same way the field data was.
 
+This script answers "how often, how big, how clustered".  Its sibling
+`refresh-triggers.py` answers "what asks twice", and needs the WHOLE
+session log rather than the trace lines alone.  Two of its findings bear
+on the numbers below and are recorded in `doc/pageturn-program.md` §6.1:
+the 131 ms figure this script reports as a "hard floor" is the low end of
+one intent's tail, not a floor of the mechanism (identical full-panel
+`ui` repaints occur 68 ms apart in the same corpus); and restricting the
+population to `partial`/`partial`, as this script does by design, hides
+that the same behaviour appears on the `ui`, `flash*` and `full` paths.
+
 Trace grammar (device.lua's trace(), one line per refresh DECISION,
 emitted before dispatch):
 

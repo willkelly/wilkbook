@@ -27,6 +27,7 @@
             %base-services-without-guix
             %pinenote-base-services
             %pinenote-dev-services
+            pinenote-fix-package-list
             make-pinenote-operating-system))
 
 (define %pinenote-local-packages
@@ -81,6 +82,27 @@
 (define %pinenote-dev-services
   (append %pinenote-bringup-services %base-services))
 
+;; SURGICAL, and it has to be.  Mapping fix-cross-builds over the whole list
+;; makes a rewritten variant of everything that build-depends on automake, and
+;; the profile then refuses to hold two e2fsprogs ("You cannot have two
+;; different versions or variants of `e2fsprogs'").  man-db is the one leaf
+;; that pulls the broken groff-minimal, and nothing propagates it, so
+;; rewriting just that collides with nothing.
+;;
+;; EXPORTED because a second consumer now needs the SAME list: the manuals
+;; shelf (pinenote/services/manuals.scm) converts the documentation of the
+;; packages the flavor installs, and handing it the un-rewritten man-db would
+;; pull the broken cross build back into the image's dependency graph through
+;; a side door -- a build failure whose cause is nowhere near its symptom.
+(define (pinenote-fix-package-list packages)
+  "Apply the surgical cross-build repairs to a flavor's package list."
+  (map (lambda (p)
+         (if (and (package? p)
+                  (string=? (package-name p) "man-db"))
+             (fix-cross-builds p)
+             p))
+       packages))
+
 (define* (make-pinenote-operating-system
           #:key
           (host-name "pinenote-guix")
@@ -120,18 +142,6 @@
            %base-user-accounts))
     ;; Applied HERE, not to the #:packages default: pinenote-reader.scm passes
     ;; its own #:packages, so a default-arg rewrite is silently skipped for the
-    ;; flavor that matters.
-    ;;
-    ;; SURGICAL, and it has to be.  Mapping fix-cross-builds over the whole
-    ;; list makes a rewritten variant of everything that build-depends on
-    ;; automake, and the profile then refuses to hold two e2fsprogs
-    ;; ("You cannot have two different versions or variants of `e2fsprogs'").
-    ;; man-db is the one leaf that pulls the broken groff-minimal, and nothing
-    ;; propagates it, so rewriting just that collides with nothing.
-    (packages (map (lambda (p)
-                     (if (and (package? p)
-                              (string=? (package-name p) "man-db"))
-                         (fix-cross-builds p)
-                         p))
-                   packages))
+    ;; flavor that matters.  See pinenote-fix-package-list above.
+    (packages (pinenote-fix-package-list packages))
     (services services)))

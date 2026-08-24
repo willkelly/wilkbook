@@ -20,9 +20,30 @@ worse than this, that's a bug report; if it does better, brag.
 - **Menus open and close fast, without blinking.** Tapping into the menu
   and back out should not flash the screen.
 - **Touch works.** Taps, swipes, the file browser.
+- **Two-finger gestures work, including pinch/spread to change the font
+  size.** Pinch and spread each redraw the page **once**, on the lift —
+  not once per size step — so the cost is one page pass, the same as a
+  page turn. Two-finger swipe works too — east opens the table of
+  contents, west opens bookmarks. Two-finger *tap* is recognised but
+  is bound to nothing in the reader defaults, so it does nothing.
+  **Pinch briskly.** Upstream KOReader only classifies the gesture if the
+  whole thing finishes in under about a second; a slow, careful pinch
+  produces nothing at all, with no message saying why. That is an
+  upstream behavior we have reproduced offline and not patched
+  (`doc/upstream-register.md` item 12); if it annoys you in practice,
+  say so — that is exactly the kind of report that decides whether we
+  work around it.
 - **The stylus works as a pointer** — taps and UI interaction — but
   **there is no drawing or writing yet**. No notes app, no annotation.
   That's roadmap, not regression.
+- **There is a `Manuals` folder in your library, and nobody put books
+  there.** The device generates it: every man page and GNU manual that
+  ships with the system, converted to EPUB when the image was built. It
+  is meant to be read, so if it looks bad — bad line breaks, a broken
+  table of contents, a link that goes nowhere, or a book that takes an
+  age to open the first time — that is worth reporting, because **no
+  human has yet looked at these on the panel** (`doc/manuals.md`).
+  Deleting the folder is fine; it will not come back.
 - **Auto-rotation works.** The accelerometer is live and the screen
   follows the device through all four orientations (hardware-validated
   2026-07-19, re-verified on the 2026-08-07 acceptance). Rotation can be

@@ -42,3 +42,34 @@ An earlier analysis of the current log alone put the rate at 2.6 % and
 described the distribution as sharply separated. The rate held (3.3 %
 over the full series); the sharp separation did not, and was an artifact
 of the smaller sample.
+
+## 2026-08-24 — these logs became a test input (appended)
+
+`pinenote/tools/refresh-episodes/test-refresh-triggers.py` now runs the
+trigger analyser over **these exact two files** and requires the
+published numbers back, so `make refresh-trigger-check` re-derives every
+figure in `doc/pageturn-program.md` §6 from this directory. That target
+is in `CHECK_HOST_TARGETS`, so CI runs it too. There is no fixture
+fallback: if these logs move or change, the gate fails loudly rather
+than quietly measuring something else.
+
+Consequence worth stating: **this directory is now load-bearing for a
+test, not only a record.** It stays append-only either way.
+
+The full log is the input, not a grep of it. The non-`[pn-refresh]`
+lines are what separate a page turn from a document re-render —
+`Inhibiting user input` / `Restoring user input handling` bracket
+`ReaderRolling:onUpdatePos`, which emits a full-panel `partial/partial`
+byte-identical to a page turn. The analyser prints a warning when handed
+marker-free input, and the self-test pins that warning.
+
+Two corrections to the analysis recorded above, both from these same
+files (details and derivations in `doc/pageturn-program.md` §6.1):
+
+- **The 131 ms "hard floor" is not a floor of the mechanism.** Three
+  identical full-panel `ui/partial` repaints occur at 2026-08-09
+  01:34:07 with gaps of 210 ms and **68 ms**.
+- **The repeated-refresh behaviour is not confined to
+  `partial/partial`.** Over full-panel repaints of *any* intent there
+  are **11** sub-second runs here, not 5, and the largest is **10
+  traces in 3.73 s**.

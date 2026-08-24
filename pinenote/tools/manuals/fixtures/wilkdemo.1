@@ -1,0 +1,33 @@
+.Dd August 24, 2026
+.Dt WILKDEMO 1
+.Os
+.Sh NAME
+.Nm wilkdemo
+.Nd exercise every mandoc construct the converter has to survive
+.Sh SYNOPSIS
+.Nm
+.Op Fl v
+.Ar file ...
+.Sh DESCRIPTION
+A fixture page.  It refers to
+.Xr wilkother 1 ,
+which is in the same book, and to
+.Xr nosuchpage 9 ,
+which is not.
+.Ss A subsection
+.Bl -tag -width Ds
+.It Fl v
+Be verbose.
+.It Fl q
+Be quiet.
+.El
+.Sh EXAMPLES
+.Bd -literal
+wilkdemo -v /tmp/x
+.Ed
+.Sh SEE ALSO
+.Lk https://example.invalid/with-scheme "an absolute link"
+.Pp
+.Lk example.invalid/no-scheme "a bare link"
+.Sh AUTHORS
+.An A Fixture Aq Mt fixture@example.invalid

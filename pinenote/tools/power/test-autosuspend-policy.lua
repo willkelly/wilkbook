@@ -416,6 +416,83 @@ do
         "the grace swallows the press that WOKE us; a cover-close is never that")
 end
 
+-- ---------------------------------------------------------------------
+-- The idle timer against a wall clock that STEPS (issue #27).
+--
+-- pinenote-timesync can move os.time() by years in one write, on a
+-- device whose RTC had reset and that has just reached a time server.
+-- This daemon measures idleness as a difference of wall-clock readings,
+-- so a step is not a small error in that measurement -- it destroys it,
+-- in whichever direction the clock moved:
+--
+--   backwards  the delta goes negative, `remaining' exceeds the entire
+--              idle period, and the device holds at ~157 mA until
+--              somebody touches it.  On a device that was just put
+--              down, that is the exact case auto-suspend exists for.
+--   forwards   the delta reads as years of idleness and the device
+--              suspends under the reader's fingers.
+--
+-- Both are answered by refusing to believe the delta.  Extracted
+-- verbatim so the guard cannot be quietly deleted.
+-- ---------------------------------------------------------------------
+do
+    local chunk = loadstring(extract_function("idle_elapsed") ..
+        "\nreturn idle_elapsed", "@idle_elapsed")
+    if not chunk then fatal("idle_elapsed does not compile standalone") end
+    local idle_elapsed = chunk()
+    local IDLE = 300
+
+    local e, stepped = idle_elapsed(1000, 1000, IDLE)
+    report(e == 0 and not stepped, "a fresh timer reads zero elapsed",
+        tostring(e))
+
+    e, stepped = idle_elapsed(1000 + 299, 1000, IDLE)
+    report(e == 299 and not stepped,
+        "an ordinary idle period is believed, not re-based", tostring(e))
+
+    e, stepped = idle_elapsed(1000 + 300, 1000, IDLE)
+    report(e == 300 and not stepped,
+        "reaching the idle period exactly still suspends", tostring(e))
+
+    -- The dangerous direction: a device that has just been put down.
+    e, stepped = idle_elapsed(1000, 1000 + 86400, IDLE)
+    report(e == 0 and stepped,
+        "a BACKWARD clock step re-bases instead of holding the device awake",
+        tostring(e))
+
+    e, stepped = idle_elapsed(1000, 1001, IDLE)
+    report(e == 0 and stepped,
+        "even a one-second backward step is refused: no threshold at all",
+        tostring(e))
+
+    -- The other direction: a 2026 correction on a device whose RTC read
+    -- 1970 is a step of ~1.8e9 seconds.
+    e, stepped = idle_elapsed(1787529600, 100, IDLE)
+    report(e == 0 and stepped,
+        "a FORWARD clock step does not suspend the device under the reader",
+        tostring(e))
+
+    -- ... but the guard must not fire on a long, legitimately configured
+    -- idle period, or a device set to sleep after an hour would never
+    -- sleep at all.
+    e, stepped = idle_elapsed(4000, 1000, 3000)
+    report(e == 3000 and not stepped,
+        "a long configured idle period is not mistaken for a clock step",
+        tostring(e))
+
+    -- The floor keeps a runtime idle= that was just SHORTENED from
+    -- reading as a step for anything under an hour.
+    e, stepped = idle_elapsed(1000 + 1800, 1000, 60)
+    report(e == 1800 and not stepped,
+        "the forward bound is floored at an hour, so a shortened idle= is tolerated",
+        tostring(e))
+
+    local src = table.concat(lines, "\n")
+    report(src:find("local elapsed, stepped = idle_elapsed(", 1, true) ~= nil,
+        "the main loop actually uses idle_elapsed",
+        "the guard exists but nothing calls it")
+end
+
 -- Cheapest gate available on a daemon nothing else on the host can run.
 report(loadfile(source_path) ~= nil, "autosuspend.lua compiles")
 

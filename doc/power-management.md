@@ -538,6 +538,59 @@ awk '/resumed after/ {
    is bigger than the 2026-08-03 extrapolation, and the backstop should go
    longer still.
 
+### A wall-clock step is an idle-timer bug, and an RTC write is a backstop bug (2026-08-24, issue #27)
+
+`pinenote-timesync` (`doc/networking.md` §7) can now move the wall clock
+by years in one write — a device whose RTC had reset, finally reaching a
+time server. Two things in this document's machinery are measured in
+clock readings and therefore break on a step. Both are handled in tree;
+**neither has run on hardware.**
+
+**The idle timer.** `autosuspend.lua` computes idleness as a difference
+of `os.time()` readings. A step does not add a small error to that
+measurement, it destroys it:
+
+| step | what the daemon computes | what happens |
+| --- | --- | --- |
+| backwards | elapsed < 0, so `remaining` exceeds the whole idle period | the device holds at ~157 mA until the next input event re-bases it — on a device just put down, exactly the case auto-suspend exists for |
+| forwards | elapsed reads as years of idleness | it suspends under the reader's fingers |
+
+`idle_elapsed()` now sits between the two. A negative delta re-bases with
+no threshold at all; a forward delta beyond twice the idle period —
+floored at an hour, so that shortening `idle=` at runtime is not mistaken
+for a step — does too. `make power-check` pins both directions and the
+two cases that must *not* re-base.
+
+**The RTC backstop.** `arm_backstop()` reads the RTC's *own* clock
+(`/sys/class/rtc/rtc0/since_epoch`) and writes `since_epoch + N` to
+`wakealarm`: an **absolute** value in RTC seconds. So —
+
+- a wrong *system* clock never misplaces the alarm. The arming arithmetic
+  never reads the system clock at all. Worth knowing before anyone
+  "fixes" the backstop for a device whose clock is out;
+- writing the *RTC* does. Step the RTC forward past a pending alarm and
+  the compare never matches, so that wake **silently never happens**.
+
+What the backstop means is an interval, not an instant, so timesync's
+`hwclock --systohc` is bracketed: read `wakealarm` and `since_epoch`
+before, write the RTC, re-arm at the new `since_epoch` plus the remaining
+time. The residual is a race, stated rather than papered over — the two
+daemons do not lock, so a sync landing inside the ≤10 s window between
+`arm_backstop()` and the `/sys/power/state` write can still cost that one
+cycle its alarm. It self-heals at the next suspend (every cycle re-arms
+from scratch) and the primary wake, the power button, is
+hardware-proven. `(set-rtc? #f)` opts out entirely.
+
+**Cost of the daemon itself against this document's budget: designed to
+be zero, and unmeasured.** It never arms a timer that can wake the device
+(every wait is `poll(NULL, 0, ms)` on CLOCK_MONOTONIC, which is not a
+wakeup source and is frozen across suspend), never opens a socket without
+a non-loopback route in `/proc/net/route`, and backs off exponentially on
+failure. With no servers configured — the shipped default — it logs one
+line and exits. None of that has been measured on a device; it is a
+design property argued from the source, and the next soak with a server
+configured is what would price it.
+
 ### The reframe that makes target 1 achievable
 
 On e-ink, "active use" is mostly *a static page with nothing happening* —

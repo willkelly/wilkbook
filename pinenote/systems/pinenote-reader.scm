@@ -14,10 +14,12 @@
   #:use-module (pinenote services reader-session)
   #:use-module (pinenote services dmc)
   #:use-module (pinenote services library)
+  #:use-module (pinenote services manuals)
   #:use-module (pinenote services frontlight)
   #:use-module (pinenote services ddr-boost)
   #:use-module (pinenote services autosuspend)
   #:use-module (pinenote services ssh-keys)
+  #:use-module (pinenote services timesync)
   #:use-module (pinenote services usb-gadget)
   #:use-module (pinenote services wifi)
   #:use-module (pinenote images pinenote-initramfs)
@@ -92,6 +94,23 @@ root ALL=(ALL) ALL
    "}\n"))
 
 
+;; Named, because two things now need the SAME list: the profile the device
+;; installs, and the manuals shelf, which converts the documentation of
+;; exactly the packages that are on the device and nothing else.
+(define %pinenote-reader-packages
+  (append (list koreader-bin pinenote-orientation-bridge
+                ;; wpa_supplicant + wpa_cli in the profile: pinenote-wifi
+                ;; execs them, and Phase 2's KOReader Wi-Fi UI will drive
+                ;; wpa_cli against the same conf.
+                wpa-supplicant)
+          ;; licensed fonts staged locally; #f on a fresh clone
+          ;; (pinenote/fonts/README.md)
+          (if pinenote-local-fonts
+              (list pinenote-local-fonts)
+              '())
+          %pinenote-local-packages
+          %base-packages))
+
 (define pinenote-reader-services
   (append %pinenote-bringup-services
            (list (service pinenote-orientation-bridge-service-type)
@@ -115,6 +134,20 @@ root ALL=(ALL) ALL
                  ;; reader-session's requirement, not implied by this
                  ;; list -- shepherd starts services concurrently.
                  (service pinenote-library-service-type)
+                 ;; The man pages and Texinfo manuals of the packages above,
+                 ;; converted to EPUB at BUILD time and staged into
+                 ;; /data/books/Manuals (issue #17).  They already ship --
+                 ;; man-db and info-reader come from %base-packages -- and
+                 ;; without this there is no way to read a word of them on a
+                 ;; device with no terminal.  Ordered after pinenote-library
+                 ;; (which creates /data/books) and deliberately NOT ahead of
+                 ;; reader-session: the shepherd ordering around the reader
+                 ;; cost the first two hardware sessions, and a shelf that
+                 ;; appears a second into the session is not worth touching it.
+                 (service pinenote-manuals-service-type
+                          (pinenote-manuals-configuration
+                           (packages (pinenote-fix-package-list
+                                      %pinenote-reader-packages))))
                  (service pinenote-reader-session-service-type)
                  ;; Sleep to deep after inactivity: ~7x on measured power
                  ;; (172 mA awake vs 19.3 mA deep, 2026-08-02).  Wake is by
@@ -130,6 +163,24 @@ root ALL=(ALL) ALL
                 ;; enters the image or the store.
                 (service pinenote-wifi-service-type)
                 (service dhcpcd-service-type)
+                ;; Set the clock from SNTP when a network happens to be
+                ;; there (issue #27).  SHIPPED INERT: the default
+                ;; `servers' list is empty, so the daemon logs one line
+                ;; and exits without opening a socket -- reaching a time
+                ;; server is an outbound connection on an image that
+                ;; otherwise makes none, so it is the operator's choice,
+                ;; not ours.  Give it one and the reader stops
+                ;; reconstructing its own sessions from whatever the RTC
+                ;; happened to hold:
+                ;;
+                ;;   (service pinenote-timesync-service-type
+                ;;            (pinenote-timesync-configuration
+                ;;             (servers '("192.168.1.1"))))
+                ;;
+                ;; The reader flavor only, not base.scm: this is the
+                ;; flavor that has Wi-Fi, and a service that can never
+                ;; find a network is not worth carrying elsewhere.
+                (service pinenote-timesync-service-type)
                 ;; SSH (key-only, no passwords) so the boxed device is
                 ;; reachable over Wi-Fi once the USB cable is removed — this is
                 ;; also the recorder's SSHTransport. Host keys land in /etc/ssh
@@ -277,19 +328,7 @@ over the serial console.  See doc/install.md in the wilkbook repository.
 (define pinenote-reader-base-os
   (make-pinenote-operating-system
    #:host-name "pinenote-reader"
-    #:packages (append (list koreader-bin pinenote-orientation-bridge
-                            ;; wpa_supplicant + wpa_cli in the
-                            ;; profile: pinenote-wifi execs them,
-                            ;; and Phase 2's KOReader Wi-Fi UI will
-                            ;; drive wpa_cli against the same conf.
-                            wpa-supplicant)
-                      ;; licensed fonts staged locally; #f on
-                      ;; a fresh clone (pinenote/fonts/README.md)
-                      (if pinenote-local-fonts
-                          (list pinenote-local-fonts)
-                          '())
-                      %pinenote-local-packages
-                      %base-packages)
+   #:packages %pinenote-reader-packages
    #:services pinenote-reader-services))
 
 (define pinenote-reader-operating-system
