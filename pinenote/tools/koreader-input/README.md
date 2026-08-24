@@ -42,6 +42,13 @@ The host suite runs entirely on the workstation — no device or KOReader UI:
    integration against KOReader's hook container.
 5. **`test-required-device.lua`** — required evdev-node loss returns the
    fatal sentinel; `run-tests.sh` executes it through a deterministic FIFO.
+6. **`test-continuous-gesture-cost.lua`** — what a continuous two-finger
+   gesture actually costs on this panel (issue #26): one terminal
+   `pinch`/`spread` per interaction whatever the frame count, the
+   mid-gesture variants having no consumer anywhere in the tree,
+   upstream's own `gesToFontSize` arithmetic, the 900 ms ceiling above
+   which a pinch silently does nothing, and the reachability of the
+   two-finger family on this input stack.
 
 **The bug** (hardware-observed 2026-07-05, mechanism in
 `mixedrouter.lua`'s header): upstream `Input` keeps ONE global
@@ -171,10 +178,86 @@ Re-enabling the accelerometer handler replays the bridge's current `/run`
 state, covering rotations that occurred while automatic events were ignored.
 The bridge classifier itself is tested separately with `make orientation-check`.
 
+## What a pinch costs (issue #26, measured 2026-08-24)
+
+`test-continuous-gesture-cost.lua` exists because issue #26 assumed a
+pinch "spans several size steps, and each step presumably re-renders and
+re-publishes the whole page" — seconds of panel activity at ~596 ms per
+GL16/GC16 full update.  Measured against the verbatim upstream stack,
+**that premise is false, and the deferral the issue asks for already
+exists.**
+
+`pinch` and `spread` are *terminal* gestures.  `Contact:panState` only
+builds them on the contact-lift branch (`tev.id == -1`), so a pinch
+spanning 1, 12 or 40 evdev frames emits exactly **one** of them, with the
+same `distance` every time — the field is the summed travel of both
+contacts, so the sample rate cannot change the outcome either:
+
+```
+pinch-emits-once: exactly one pinch per interaction across 1..40
+  intermediate frames, distance=760 px every time;
+  unconsumed mid-gesture pans (steps:n) 1:1 2:2 6:6 12:11 20:18 40:35
+one-gesture-one-font-step: one pinch -> one delta of 4 point(s) (cap 5)
+  for every frame count (steps:delta 1:4 2:4 6:4 12:4 20:4 40:4)
+```
+
+The detector *does* emit an `inward_pan`/`outward_pan` per frame while
+the fingers move — the "unconsumed mid-gesture pans" column above.  A
+whole-tree scan of the bundle's `frontend/` and `plugins/` plus this
+repo's `koreader-device` overlay (482 `.lua` files) finds **no consumer
+for any of them**, nor for `two_finger_pan`, `two_finger_hold_pan` or
+`two_finger_pan_release`, outside the detector that emits them.  Every
+two-finger consumer in KOReader binds a terminal gesture.  So the
+per-frame events cost Lua cycles and zero panel passes, and this suite
+goes red the day upstream adds a subscriber.
+
+(The *value* of the delta — 4 above — is a function of the screen
+dimension `gesToFontSize` divides by, and this harness uses
+test-mixedrouter's 1872x1404 convention.  What the case pins is that the
+delta is **the same for every frame count** and within the steps table's
+cap, not that a field pinch is worth four points.)
+
+### The failure mode is the opposite one: slow pinches do nothing
+
+`Contact:isSwipe()` gates the whole terminal-gesture branch on the
+interaction finishing inside `ges_swipe_interval`
+(`SWIPE_INTERVAL_MS = 900`).  Past that, the lift is a
+`two_finger_pan_release` — which, per the scan above, nothing consumes:
+
+```
+quirk:slow-pinch-is-a-silent-no-op: SWIPE_INTERVAL_MS=900; the same pinch
+  geometry over 1040 ms gives [inward_pan=11 touch=2
+  two_finger_pan_release=1] (no pinch, and two_finger_pan_release has no
+  consumer), over 260 ms gives [inward_pan=11 pinch=1 touch=2]
+```
+
+So the more carefully and slowly you pinch, the more likely it is that
+nothing at all happens, with no feedback saying why.  On a ~600 ms panel
+that is exactly the wrong incentive — deliberate input is what the
+display encourages.  Pinned, not fixed: `doc/upstream-register.md`
+item 12.
+
+### Reachability of the two-finger family
+
+All five terminal two-finger gestures classify correctly on this stack
+from slots `{0,1}`: `pinch`, `spread`, `rotate`, `two_finger_tap`,
+`two_finger_swipe`.  In the shipped reader defaults `pinch_gesture` and
+`spread_gesture` are bound to `decrease_font`/`increase_font` at value 0,
+which is the Dispatcher's `incrementalnumber` branch that forwards the
+*gesture object* — so the one delta really does come from the one
+gesture.  `rotate_cw`/`rotate_ccw` ship unbound.
+
+Every one of them inherits the slot constraint above.  The pinch half is
+pinned here (`quirk:buddy-slots-0-1-only:pinch`): the same pinch in slots
+`{0,2}` produces no two-finger gesture at all — it becomes 22 pans and
+2 swipes, and pans and swipes *are* consumed, so a mis-slotted pinch can
+turn pages instead of changing the font size.
+
 ## What this does and does not cover
 
 Covers the slot-routing logic and gesture classification for the mixed
-pen+touch protocol, the `findInputDevices` name→slot mapping, the
+pen+touch protocol, the continuous-gesture cost measurement above, the
+`findInputDevices` name→slot mapping, the
 injector's key-event chain (159/158 → RPgFwd/RPgBack), and — where the
 host permits — the injector daemon's uinput create/destroy path and required-fd
 loss, plus the pure source-gated touch adjustment seam (MT mirroring and
@@ -185,6 +268,12 @@ adjust hook or `device.lua` `init()` glue (such as the
 create-before-KOReader-enumerates ordering, timer-driven gestures
 (hold, double-tap), or real touch panel timing/noise — those stay on
 the QEMU-visual and hardware rungs.
+
+It does **not** cover how many `[pn-refresh]` traces the *downstream*
+repaint of a font-size change costs.  That needs UIManager + ReaderUI,
+which this harness does not run; the source-derived count is in
+`doc/refresh-policy.md` and labelled there as source-derived.  Nothing in
+this file has been seen on a panel.
 
 It also cannot tell you **which slots the controller actually assigns**.
 The slot-collision and buddy-slot scenarios prove what happens *given* a
