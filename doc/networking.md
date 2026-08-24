@@ -490,8 +490,8 @@ devices; USB-ECM is the reliable tethered fallback.
 
 ## 6. Hardware / os1-oracle validation ledger
 
-Sections 2–3 preserve the design reasoning; §4 records the implementation and
-§5 its recorder use. Resolved checks below carry dates and evidence links. The
+Sections 2–3 preserve the design reasoning; §4 records the implementation,
+§5 its recorder use, and §7 the clock (issue #27). Resolved checks below carry dates and evidence links. The
 remaining unlabelled checks — regdomain selection, SSH identity
 persistence, the `/state` partition, and the USB-ECM gadget — are the open
 ledger and still need a decision or an os2 session:
@@ -558,17 +558,198 @@ ledger and still need a decision or an os2 session:
   (`CONFIG_USB_CONFIGFS_ECM`) and an ECM gadget service are unbuilt and
   unproven; the RK3566 OTG role/`ep0out` history (`doc/status.md`) means the
   ECM path deserves the same bracketing the ACM path got.
-- **Time from the network — OPEN, deliberately not implemented
-  (2026-08-24).** The build-time timezone landed (issue #6,
-  `pinenote/timezone.scm`), but nothing sets the *clock*: the device
-  keeps whatever the RTC holds, and a flat battery or a drifting RTC
-  makes `doc/status.md` reconstruction and the autosuspend resume log
-  read wrong however good the zone is. NTP was split out of that change
-  rather than bundled, because it is a networking and *power* decision,
-  not a locale one: a daemon that wakes to poll, or a one-shot at
-  association, interacts with the 5-minute idle auto-suspend and the
-  4.64 mA ultra budget (`doc/power-management.md`), and it would put a
-  standing outbound connection on a device whose networking is otherwise
-  opt-in and credential-gated. Decide the shape (one-shot at
-  `wpa_supplicant` CONNECTED vs. a daemon; which servers; what happens
-  with no Wi-Fi) before writing any of it.
+- **Time from the network — IMPLEMENTED IN TREE (issue #27),
+  hardware-unproven, and SHIPPED INERT.** The shape questions are
+  answered and the code exists: `pinenote/services/timesync.scm` +
+  `pinenote/tools/timesync/timesync.lua`, described in §7 below. The
+  reader flavor carries the service with **no servers configured**, so
+  the shipped image still makes no outbound connection and the clock is
+  still whatever the RTC holds — configuring a server is a deliberate,
+  documented act. Rung 1 is green (`make timesync-check`: verbatim
+  protocol/policy extraction plus a real loopback round trip against the
+  daemon) and the reader system evaluates both with and without a server
+  configured. **Nothing has been booted and no clock has been set on a
+  device.** Remaining validation, at the next deployed image with a
+  server configured: that a step actually lands, that `hwclock --systohc`
+  succeeds against `rtc0`, that the interval-preserving alarm re-arm
+  behaves as reasoned, and that a device with no Wi-Fi shows exactly one
+  log line and no further activity.
+
+## 7. Time from the network (issue #27)
+
+The build-time timezone landed with issue #6; **the clock itself did
+not**. The RTC was the only source, and every method this project
+reconstructs a session with is a timestamp — dated `doc/status.md`
+entries, the auto-suspend daemon's per-resume `charge_now` series (the
+2026-08-15 soak's entire result is that series divided by its own
+intervals), the `[pn-refresh]` traces whose analysis is inter-arrival
+times, the post-mortem log harvest in `doc/device-access.md`. A drifted
+or reset RTC does not announce itself. It makes all of that read
+*plausibly* wrong, which is worse than reading obviously wrong.
+
+`pinenote-timesync` is the answer. It is deliberately small: one LuaJIT
+SNTP client (`pinenote/tools/timesync/timesync.lua`) under the same
+interpreter the reader and the auto-suspend daemon already run, wrapped
+by a Guix service with a configuration record. It adds **nothing** to the
+image closure — no `ntp`, no `chrony`, no `openssl` — and its protocol
+and policy logic is extracted verbatim by the rung-1 suite.
+
+### 7.1 The five decisions
+
+**One-shot or daemon?** A daemon, shaped like a one-shot that re-arms.
+
+A *boot* one-shot is far too rare to be useful: measured 2026-08-24, this
+device's uptime was 831901 s (9.6 days), so "once per boot" means "about
+once a fortnight, if Wi-Fi happened to be up in the first minute of it".
+
+A one-shot at `wpa_supplicant` CONNECTED is the right instinct — Wi-Fi
+dies across ultra suspend (`vcca_1v8_pmu` feeds VCCIO4) and the card
+re-associates on every resume, so association is naturally frequent. It
+fails on two counts. The only exec hook `wpa_supplicant` offers is
+`wpa_cli -a`, which needs a `ctrl_interface`; §4.1's provisioning recipe
+does set one, but that file is **operator data on the data partition**,
+not ours, and a device provisioned by hand or before that line existed
+will not have it — a clock that silently works only on
+correctly-provisioned devices is exactly the failure mode this repo keeps
+writing gates against. And decisively: CONNECTED fires *before* DHCP, so
+anything hanging off it has to wait for a route anyway. "One-shot at
+association" therefore collapses into "something that waits for a usable
+route", which is what the daemon is, minus the dependency on a file we do
+not own.
+
+What it is *not* is an NTP daemon. It does not discipline the clock, keep
+a drift file, or touch adjtime. At a ~1.5 % awake duty cycle (2026-08-24:
+uptime 831901 s against a newest printk timestamp of 12619 s; printk stops
+across suspend, so the difference is awake time) disciplining is
+meaningless — the thing being disciplined is asleep 98.5 % of the time and
+its oscillator is the RTC's regardless. It **steps** an unanchored clock
+and says so, in the log and in `/dev/kmsg`, so that a later analyst reading
+a discontinuity in a trace can *see* the step instead of inferring it.
+
+**Which servers?** None, by default, and the default is the decision.
+This image otherwise makes no outbound connections; adding a public pool
+silently would change what the device does on someone's network without
+anyone choosing it. The `servers` field is an ordinary Guix service
+configuration field:
+
+```scheme
+(service pinenote-timesync-service-type
+         (pinenote-timesync-configuration
+          (servers '("192.168.1.1"))))
+```
+
+The recommendation is a server on the LAN you already chose to join — a
+router almost always is one. An IPv4 literal takes the `inet_pton` path,
+so the daemon generates no DNS traffic either; a hostname goes through
+`getaddrinfo` and does. `pool.ntp.org` works and is a perfectly
+reasonable choice; it is simply not one the image makes for you.
+
+*Considered and rejected as a default:* taking the server from the DHCP
+lease (option 42). Convenient, and exactly the silent implicit
+destination this issue exists to avoid — the device would talk to
+whatever host the network nominated, chosen by nobody. A future
+`dhcp-servers?` field could offer it as an explicit opt-in.
+
+**No Wi-Fi at all** — the common case — is free and silent, and that is a
+*power-safety* property, not a nicety. Ultra suspend measures 5.47 mA
+idle standby and the hourly RTC backstop alone accounts for ~0.83 mA of
+it (`doc/artifacts/pinenote-ultra-soak-20260815/`), so a daemon that
+forced wakes or retried hard would spend from a budget a 6.17-day soak
+had to be run to establish. Concretely:
+
+- every wait is `poll(NULL, 0, ms)` — a CLOCK_MONOTONIC timeout, which is
+  **not a wakeup source** and does not advance across suspend. The daemon
+  is frozen with everything else and resumes mid-wait. A consequence
+  worth naming: the poll interval is therefore in *awake* seconds, so at
+  a 1.5 % duty cycle a 120 s poll is roughly one check every two hours of
+  wall time and several per session in which the device is being read —
+  it looks for a network exactly when one is likely to be there;
+- `/proc/net/route` is read before any socket is opened, and a
+  loopback-only table is "no network". With no Wi-Fi a poll is two file
+  reads;
+- a configured server that does not answer backs off `poll` → 2× → … →
+  cap (default 1 h). That is the whole of "must not retry-loop itself
+  awake";
+- with **no servers** the process logs one line and exits, which is why
+  the shepherd service sets `respawn? #f`.
+
+**Does it interact with the RTC backstop?** Yes, and sharply enough to be
+worth stating twice. `autosuspend.lua` arms the backstop by reading the
+RTC's *own* clock (`/sys/class/rtc/rtc0/since_epoch`) and writing
+`since_epoch + N` to `wakealarm` — an **absolute** value in RTC seconds.
+Two consequences:
+
+- **A wrong system clock never misplaces the alarm.** The arming
+  arithmetic never reads the system clock at all, so an unanchored device
+  still wakes on schedule. Worth knowing before anyone "fixes" it.
+- **Writing the RTC does.** Step the RTC forward past a pending alarm and
+  the compare never matches, so that wake *silently never happens*; step
+  it backward and it fires that much later.
+
+What the backstop *means* is an interval — "wake within the hour if
+nothing else does" — so the daemon preserves the **interval**, not the
+instant: it reads `wakealarm` and `since_epoch` before the write, writes
+the RTC, then re-arms at the new `since_epoch` plus the remaining time.
+`rearm_alarm_value()` is that arithmetic and the host suite pins it in
+both directions.
+
+*Residual, stated rather than papered over:* the two daemons do not lock
+against each other, so a sync landing inside the ≤10 s window between
+`arm_backstop()` and the `/sys/power/state` write inside `suspend_once()`
+can still leave that **one** cycle without a working alarm. Every
+subsequent suspend re-arms from scratch, so it self-heals at the next
+cycle, and the primary wake (the power button) is hardware-proven. Set
+`(set-rtc? #f)` if you would rather not carry even that.
+
+**Write back to the RTC?** Yes, default `#t`. Without it the correction
+dies at the next cold boot, and a device that syncs once and then never
+sees Wi-Fi again — entirely plausible for a reader — keeps nothing.
+`hwclock --systohc --utc --noadjfile` does the write, by absolute store
+path rather than a `PATH` lookup, because shepherd services start with an
+essentially empty environment on this device and a silent failure branch
+here would mean the RTC quietly never gets written while every gate
+stayed green.
+
+### 7.2 The other daemon this changed
+
+Stepping the clock is not free elsewhere. `autosuspend.lua` measures
+idleness as a difference of `os.time()` readings, and a step does not add
+a small error to that measurement — it destroys it, in whichever
+direction the clock moved. Backwards, the delta goes negative,
+`remaining` exceeds the whole idle period, and the device holds at
+~157 mA until somebody touches it — on a device that was just put down,
+the exact case auto-suspend exists for. Forwards, the delta reads as
+years of idleness and the device suspends under the reader's fingers.
+
+So `idle_elapsed()` now sits between the two: a negative delta re-bases
+with no threshold at all, and a forward delta beyond twice the idle
+period (floored at an hour, so that shortening `idle=` at runtime is not
+mistaken for a step) does too. `make power-check` pins both directions
+plus the two cases that must *not* re-base. This is a change to a
+shipping daemon that no hardware has run; it is arithmetic, extracted
+verbatim and tested, but it is not proven on glass.
+
+One smaller residual is deliberately **not** guarded: `power_ignore_until`
+— the grace period that stops the press which woke the device from
+immediately re-suspending it — is also wall-clock arithmetic, so a large
+backward step suppresses press-to-suspend until the clock catches up.
+That costs a convenience feature, not a wake and not a battery, it is
+re-set after every resume, and guarding it would mean threading a second
+clock through the daemon for very little. Recorded here so it is a known
+tradeoff rather than a surprise.
+
+### 7.3 What this is not
+
+SNTP is unauthenticated: whoever can answer on the path can set this
+clock, within the sanity window (`not-before`, default 2026-01-01, and a
+20-year `horizon-seconds`). That window is a junk filter — it catches the
+1970 of a reset RTC — **not** authentication, and it cannot catch an
+attacker who answers with a plausible date. That is the protocol, not an
+oversight, and it is part of why the default server list is empty.
+Nothing on the reader makes a security decision on the clock today (SSH
+is key-only and time-blind), but do not build one on this without saying
+so first.
+
+`not-before` is a constant rather than the build date on purpose:
+stamping the build date into a default would make the derivation
+unreproducible. It therefore ages, and the field is how you move it.

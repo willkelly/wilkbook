@@ -76,8 +76,36 @@ was proven was proven on that image.
 - The README no longer claims you need a serial cable to boot os2. The
   U-Boot menu works on the glass and the untouched default is os1; the
   cable is for the AI agent, which has no fingers or eyes.
-- Still true and still annoying: the image runs UTC, because the
-  timezone is not set at build time (issue #6).
+- The image runs UTC unless you say otherwise: `WILKBOOK_TIMEZONE`
+  chooses the zone at build time for every flavor, and the default stays
+  `Etc/UTC` because a guess at where you live would be wrong for most of
+  the world (issue #6, `README.md`).
+- **New, and off unless you turn it on: the device can set its own
+  clock.** Getting the zone right does not help if the underlying time is
+  wrong, and nothing here ever set it — the reader kept whatever the RTC
+  held. `pinenote-timesync` steps the clock from an NTP server whenever a
+  network happens to be there, and writes the correction back to the RTC
+  so it survives a flat battery. It ships with **no server configured**,
+  so out of the box the image still talks to nothing; naming one is a
+  line in your system configuration (`doc/networking.md` §7):
+
+  ```scheme
+  (service pinenote-timesync-service-type
+           (pinenote-timesync-configuration
+            (servers '("192.168.1.1"))))
+  ```
+
+  Your router is usually the right answer. With no Wi-Fi it does nothing,
+  quietly and forever — it cannot wake the device, it will not open a
+  socket without a route, and it gives up more slowly each time a server
+  does not answer, because the battery budget for all of this is 5.47 mA.
+  **Nothing here has been booted: no clock has been set on a PineNote**
+  (issue #27).
+- Why you would care: everything this project reconstructs about a device
+  — when a suspend happened, how long a page turn took, which day a log
+  line belongs to — is a timestamp. A clock that is quietly wrong makes
+  all of it read plausibly wrong, which is worse than reading obviously
+  wrong.
 
 ### Reading material
 
@@ -253,6 +281,15 @@ and a bound.
   `doc/release.md` is true of the commands it names (issue #2).
   `make help` gained a Flags section; these were undiscoverable without
   reading the Makefile.
+- **`make timesync-check`**, the gate behind the new clock service. It
+  pulls the SNTP client's protocol and policy functions verbatim out of
+  the shipped daemon and drives them with synthetic packets, then binds a
+  UDP socket on loopback, launches the real daemon at it, answers one
+  request with a time it chose, and requires that time back out. That
+  second half is what proves the FFI struct layouts a unit test cannot
+  reach — including glibc's `struct addrinfo` field order, where a wrong
+  guess gives a wrong address rather than a crash. No root, no network,
+  no device, and no clock is ever set.
 - **A gate for a bug that shipped twice.** A `use-modules` inside a
   Shepherd service's start lambda silently resolves nothing, and here
   the resulting exception was swallowed by a `catch #t`. It shipped live

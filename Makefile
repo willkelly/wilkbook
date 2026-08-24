@@ -71,7 +71,9 @@ FLAVORS = minimal slim networked dev usb-console usb-console-linux-6-6 reader re
 
 .PHONY: help packages kernel kernel-drv reader-system-drv qemu-smoke qemu-virt qemu-virt-check qemu-pageturn-campaign refresh-episodes-check refresh-trigger-check \
          check-host wbf-check wbf-notice ebc-logic-check ebc-barrier-check rastersim-check koreader-input-check orientation-check optics-check optics-audit-dataset power-check rockchip-pm-check activation-positive-check suspend-check \
-         battery-dtb-check time-machine-check gexp-modules-check timezone-check kernel-version-check library-check manuals-check ultra-coupling-check \
+        battery-dtb-check time-machine-check gexp-modules-check \
+        timezone-check kernel-version-check library-check \
+        manuals-check ultra-coupling-check timesync-check \
         $(FLAVORS) $(addprefix image-,$(FLAVORS)) $(addprefix rootfs-,$(FLAVORS))
 
 help:
@@ -104,6 +106,7 @@ help:
 	@echo "  suspend-check     offline fail-closed e-reader suspend qualification gates"
 	@echo "  gexp-modules-check  no use-modules in a shepherd start/stop without a (modules ..) field"
 	@echo "  timezone-check    the build-time timezone knob resolves, and refuses an unusable name"
+	@echo "  timesync-check    SNTP client protocol/policy tests plus a loopback round trip"
 	@echo
 	@echo "Flags:"
 	@echo "  TIME_MACHINE=1    build through channels.scm (pinned/reproducible; required for releases)"
@@ -310,9 +313,9 @@ refresh-trigger-check:
 CHECK_HOST_TARGETS = ebc-logic-check ebc-barrier-check rastersim-check \
         koreader-input-check orientation-check optics-check power-check \
         rockchip-pm-check activation-positive-check suspend-check \
-        library-check manuals-check ultra-coupling-check battery-dtb-check \
-        time-machine-check gexp-modules-check timezone-check \
-        refresh-trigger-check
+        library-check manuals-check ultra-coupling-check \
+        battery-dtb-check time-machine-check gexp-modules-check \
+        timezone-check refresh-trigger-check timesync-check
 
 # Parse time, not recipe time: a recipe-level guard would run only AFTER every
 # prerequisite had already completed, so it could not prevent the mistake it
@@ -424,6 +427,15 @@ optics-audit-dataset:
 # daemon's own extracted source.
 power-check:
 	$(call guix-shell,guile python luajit) $(MAKE) -C pinenote/tools/power check
+
+# The SNTP client behind pinenote-timesync (issue #27).  Its protocol and
+# policy functions are extracted VERBATIM from the shipped daemon, and the
+# suite then runs the real daemon against a fake NTP server it hosts on
+# 127.0.0.1 -- which is what proves the ffi.cdef struct layouts (including
+# glibc's addrinfo field order) that no unit test can reach.  Nothing here
+# needs root or a network: the daemon runs --dry-run and sets no clock.
+timesync-check:
+	$(call guix-shell,luajit) $(MAKE) -C pinenote/tools/timesync check
 
 rockchip-pm-check:
 	$(call guix-shell,dtc gcc-toolchain git python) $(MAKE) -C pinenote/tools/rockchip-pm check

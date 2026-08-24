@@ -36,6 +36,7 @@ code review — before a single reboot. That's the standard.
 - `pinenote/services/`, `pinenote/images/`, `pinenote/systems/` — Guix
   system services, initrd, and flavor entrypoints.
 - `pinenote/tools/` — thirteen host-side test and diagnostic tools; the
+- `pinenote/tools/` — fourteen host-side test and diagnostic tools; the
   table in `doc/testing.md` says what each covers. The core display trio
   (`wbf`, `ebc-logic`, `rastersim`) compiles the *verbatim* driver source
   out of the patch and tests it on your workstation.

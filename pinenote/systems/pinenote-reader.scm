@@ -19,6 +19,7 @@
   #:use-module (pinenote services ddr-boost)
   #:use-module (pinenote services autosuspend)
   #:use-module (pinenote services ssh-keys)
+  #:use-module (pinenote services timesync)
   #:use-module (pinenote services usb-gadget)
   #:use-module (pinenote services wifi)
   #:use-module (pinenote images pinenote-initramfs)
@@ -162,6 +163,24 @@ root ALL=(ALL) ALL
                 ;; enters the image or the store.
                 (service pinenote-wifi-service-type)
                 (service dhcpcd-service-type)
+                ;; Set the clock from SNTP when a network happens to be
+                ;; there (issue #27).  SHIPPED INERT: the default
+                ;; `servers' list is empty, so the daemon logs one line
+                ;; and exits without opening a socket -- reaching a time
+                ;; server is an outbound connection on an image that
+                ;; otherwise makes none, so it is the operator's choice,
+                ;; not ours.  Give it one and the reader stops
+                ;; reconstructing its own sessions from whatever the RTC
+                ;; happened to hold:
+                ;;
+                ;;   (service pinenote-timesync-service-type
+                ;;            (pinenote-timesync-configuration
+                ;;             (servers '("192.168.1.1"))))
+                ;;
+                ;; The reader flavor only, not base.scm: this is the
+                ;; flavor that has Wi-Fi, and a service that can never
+                ;; find a network is not worth carrying elsewhere.
+                (service pinenote-timesync-service-type)
                 ;; SSH (key-only, no passwords) so the boxed device is
                 ;; reachable over Wi-Fi once the USB cable is removed — this is
                 ;; also the recorder's SSHTransport. Host keys land in /etc/ssh
