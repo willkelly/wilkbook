@@ -300,6 +300,17 @@ static int run_refresh_synth(struct rockchip_ebc *ebc,
 	dma_addr_t next_handle, prev_handle;
 	int ret;
 
+	/* The refresh thread reads and CLEARS do_one_full_refresh before it
+	 * picks global vs partial, so no dispatch ever runs with the flag
+	 * still latched.  These direct calls bypass the thread, and since
+	 * issue #22 the partial loop's work-item drain gate reads that flag
+	 * -- so model the thread's read-and-clear here, or a direct call
+	 * would run from a state the real driver never reaches.  (The
+	 * auto-refresh epilogue below may set it again, as the driver does.) */
+	spin_lock(&ebc->refresh_once_lock);
+	ebc->do_one_full_refresh = false;
+	spin_unlock(&ebc->refresh_once_lock);
+
 	pm_runtime_get(dev);
 	pm_runtime_resume(dev);
 

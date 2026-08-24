@@ -80,12 +80,18 @@ if ! grep -q '^RESULT: ok$' "$rout"; then
   fail=1
 fi
 
-# --- rung 7a liveness: barrier starvation under sustained damage ---
+# --- rung 7a liveness: the inherited starvation, pinned ---
 # Reproduces the 2026-07-29 hardware failure offline: while damage arrives
 # faster than one area lifetime, rockchip_ebc_partial_refresh never returns,
 # so the refresh thread never reads do_one_full_refresh and a REFRESH_BARRIER
 # generation is never credited -- with no timeout and no log.  Waveform-gated:
 # the starvation boundary is the waveform's own phase count.
+#
+# Built against build/nogate (mutate-drain-gate.py removes the issue-#22
+# work-item drain gate), because the SHIPPING driver no longer starves.
+# This binary is the pinned `quirk:` record of what the m-weigand -> hrdl
+# lineage's published trees still do; ebc-drain-gate-test below is the
+# shipping driver's side of the same question.
 sout=$build/starvation.out
 if "$build/ebc-refresh-starvation-test" "$fwdir" > "$sout"; then
   :
@@ -114,6 +120,56 @@ fi
 if ! grep -qE '^RESULT: (ok|skipped)$' "$sout"; then
   echo "FAIL: ebc-refresh-starvation-test missing RESULT" >&2
   fail=1
+fi
+
+# --- rung 7a liveness: the work-item drain gate (issue #22) ---
+# The positive claim: under the SAME sustained damage supply, a queued
+# global refresh must launch, and a kthread_park must complete, within one
+# area lifetime.  Waveform-gated -- the bound IS the waveform's phase count.
+gout=$build/drain-gate.out
+if "$build/ebc-drain-gate-test" "$fwdir" > "$gout"; then
+  :
+else
+  echo "FAIL: ebc-drain-gate-test exited nonzero" >&2
+  fail=1
+fi
+
+cat "$gout"
+
+if grep -q '^FAIL' "$gout"; then
+  fail=1
+fi
+if ! grep -qE '^RESULT: (ok|skipped)$' "$gout"; then
+  echo "FAIL: ebc-drain-gate-test missing RESULT" >&2
+  fail=1
+fi
+
+# --- and the negative test of that test ---
+# The identical source compiled against build/nogate, i.e. the driver with
+# the drain gate removed -- what the m-weigand lineage still ships.  It MUST
+# fail; a liveness test that passes with and without the gate proves nothing.
+ngout=$build/drain-gate-nogate.out
+if [ -n "$wbf" ]; then
+  if "$build/ebc-drain-gate-test-nogate" "$fwdir" > "$ngout" 2>&1; then
+    echo "FAIL: the drain-gate test PASSES against the ungated driver -- it proves nothing" >&2
+    cat "$ngout" >&2
+    fail=1
+  elif grep -q '^FAIL: rotating-damage: the queued global LAUNCHED while damage kept arriving' "$ngout" &&
+       grep -q '^FAIL: park: parked ' "$ngout"; then
+    echo "PASS: drain-gate test goes red against the ungated driver ($(grep -c '^FAIL' "$ngout") assertions)"
+  else
+    echo "FAIL: ungated build failed, but not on the starvation assertions" >&2
+    cat "$ngout" >&2
+    fail=1
+  fi
+else
+  if "$build/ebc-drain-gate-test-nogate" "" > "$ngout" 2>&1 &&
+     grep -q '^RESULT: skipped$' "$ngout"; then
+    echo "PASS: drain-gate negative gate skipped (no WBF given)"
+  else
+    echo "FAIL: drain-gate negative gate did not skip cleanly without a WBF" >&2
+    fail=1
+  fi
 fi
 
 # --- the CONFIG_DRM_FBDEV_EMULATION blocks ---
@@ -245,13 +301,15 @@ fi
 # --- determinism: identical output across runs (all three binaries) ---
 pout2=$(mktemp)
 fout2=$(mktemp)
-trap 'rm -f -- "$out" "$out2" "$rout" "$rout2" "$pout" "$pout2" "$fout2" "$wout" "$wout2"' EXIT HUP INT TERM
+gout2=$(mktemp)
+trap 'rm -f -- "$out" "$out2" "$rout" "$rout2" "$pout" "$pout2" "$fout2" "$gout2" "$wout" "$wout2"' EXIT HUP INT TERM
 "$build/ebc-logic-test" "$wbf" > "$out2" || true
 "$build/ebc-refresh-test" "$fwdir" "$rsl" "$build" > "$rout2" || true
 "$build/ebc-replay" selftest "$fwdir" > "$pout2" || true
 "$build/ebc-fbdev-order-test" "$fwdir" > "$fout2" || true
+"$build/ebc-drain-gate-test" "$fwdir" > "$gout2" || true
 if cmp -s "$out" "$out2" && cmp -s "$rout" "$rout2" && cmp -s "$pout" "$pout2" &&
-   cmp -s "$fout" "$fout2"; then
+   cmp -s "$fout" "$fout2" && cmp -s "$gout" "$gout2"; then
   echo "PASS: deterministic output"
 else
   echo "FAIL: output differs between runs" >&2

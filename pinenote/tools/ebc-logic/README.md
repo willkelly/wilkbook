@@ -49,6 +49,22 @@ exactly the code the kernel ships — against a kernel-API shim
   `run-tests.sh` requires the binary to **FAIL**.  It does, with exactly
   the hardware signature: `globals 1, partial frames 38`.  A test that
   passes on both orderings is worthless, so this gate is permanent.
+- **`ebc-refresh-starvation-test`** (2026-07-29, waveform-gated): the pinned
+  `quirk:` reproduction of the inherited sustained-damage starvation —
+  finding 9 below.  Since 2026-08-24 it compiles against **`build/nogate`**,
+  `mutate-drain-gate.py`'s copy of the extraction with the work-item drain
+  gate removed (verified byte-identical to the pre-gate source), because the
+  shipping driver no longer starves.  It documents what the m-weigand → hrdl
+  → ayakael lineage's published trees still do.
+- **`ebc-drain-gate-test`** (2026-08-24, issue #22, waveform-gated): the
+  positive counterpart.  Under the same sustained supply a queued global
+  refresh must launch, and a `kthread_park` must complete, within one area
+  lifetime — and, the anti-regression, with *no* work item pending the
+  partial loop must still run as one continuous refresh.
+- **`ebc-drain-gate-test-nogate`**: the identical source against
+  `build/nogate`.  `run-tests.sh` requires it to **FAIL** (12 assertions).
+  Same rule as the prefix gate above: a liveness test that passes with and
+  without the fix proves nothing.
 - **`ebc-dump` / `ebc-dump-grab`** (2026-07-12): the EXTRACT_FBS dump
   pair over the shared `ebc-dump-format.h` container.  `ebc-dump-grab`
   runs on the device against the debug kernel (cross-built by the
@@ -476,16 +492,47 @@ line numbers below describe the *pre-fix* text and are kept for history.
    is logged, so on the device this presented as a 10 s barrier WAIT returning
    `-110` with a completely silent kernel log, a `D`-state kthread, and the EBC
    interrupt pinned at 63.4 Hz for minutes.
-   `ebc-refresh-starvation-test` (waveform-gated) pins it against the verbatim
-   driver, and its period sweep shows the boundary is the waveform's phase
-   count, not any timeout: starved at a commit every <=38 frames, serviced at
-   39, with `num_phases` = 38 at the harness temperature.
+   `ebc-refresh-starvation-test` (waveform-gated) pins it, and its period sweep
+   shows the boundary is the waveform's phase count, not any timeout: starved
+   at a commit every <=38 frames, serviced at 39, with `num_phases` = 38 at the
+   harness temperature.
    **This is inherited code, not ours** -- every load-bearing line is verbatim
    in the `dd99c3f` import (dd99c3f:3619, 3633, 3736, 3762, 4050, 2656) -- so
-   it is reported in `doc/driver-findings-report.md` rather than patched.
+   it was reported in `doc/driver-findings-report.md` rather than patched.
    The lesson for this suite: it was *correctness*-complete and still missed a
    multi-minute hang, because nothing asserted that `rockchip_ebc_refresh` ever
    **returns**.  Liveness now needs asserting too.
+
+   **FIXED in this tree 2026-08-24 (issue #22), and still reported.** The
+   driver now carries the *work-item drain gate*: while a work item is pending
+   -- a queued global refresh, or the kthread being parked or stopped -- the
+   mid-frame `ctx->queue` splice is skipped, so the area list only shrinks and
+   the loop returns within one area lifetime.  This is hrdl's fix
+   (`v6.19_ebc_custom` @ `819ba1724a6f`), adapted to this driver's area list;
+   the finding stays open in `doc/driver-findings-report.md` and
+   `doc/upstream-register.md` because the lineage should own it.  Consequences
+   for this suite:
+
+   - `ebc-refresh-starvation-test` is **unchanged** but now compiles against
+     `build/nogate` -- `mutate-drain-gate.py`'s copy of the extraction with the
+     gate removed, verified byte-identical to the pre-gate source.  It is the
+     pinned `quirk:` record of the inherited defect and nothing more.
+   - `ebc-drain-gate-test` (new, waveform-gated) pins the guarantee against the
+     shipping driver: under the same rotating and full-screen supplies a
+     submitted barrier generation is credited **46 and 56 frames** after
+     SUBMIT (bound: 2 x the 38-phase area lifetime), a `kthread_park` lands in
+     45, and -- the anti-regression that matters -- with *no* work item pending
+     a 300-commit supply still runs as ONE continuous partial refresh, so the
+     splice that makes the driver efficient is untouched.
+   - `ebc-drain-gate-test-nogate` is the same source against the ungated
+     driver; `run-tests.sh` requires it to FAIL (12 assertions).  A liveness
+     test that passes with and without the gate proves nothing.
+   - `run_refresh_synth()` in `ebc-refresh-test.c` now models the thread's
+     read-and-clear of `do_one_full_refresh`.  The direct-call tests bypass the
+     thread, and `harness_ebc` leaves the flag set the way `probe` does, so
+     without that they drove a partial refresh from a state the real driver
+     never reaches -- and the gate correctly refused to fold their mid-refresh
+     commits in.  That was the one behavioural surprise of the change.
 
 The rung-7a WBF drive-sequence differential also re-confirmed the
 rastersim finding that **`blit_direct` reads the LUT transposed** from

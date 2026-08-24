@@ -153,6 +153,13 @@ struct ebc_shim_state {
 	bool thread_woken;
 	unsigned long kthread_stop_calls;
 	void (*kthread_stop_hook)(void);
+	/* Called from kthread_parkme().  The real call blocks until the
+	 * thread is unparked; the shim's is a no-op, so a scripted test
+	 * that drives a park to completion installs this to observe the
+	 * park landing and to end the run (otherwise the outer loop spins
+	 * on a still-set park flag with no hook left to clear it). */
+	unsigned long kthread_parkme_calls;
+	void (*parkme_hook)(void);
 	unsigned long schedule_calls;
 	void (*schedule_hook)(void);
 	/* Called from wake_up_process() after the counters move.  A test that
@@ -541,7 +548,12 @@ static struct task_struct ebc_shim_task; /* single-TU shim */
 
 static inline bool kthread_should_stop(void) { return ebc_shim.thread_stop; }
 static inline bool kthread_should_park(void) { return ebc_shim.thread_parked; }
-static inline void kthread_parkme(void) { }
+static inline void kthread_parkme(void)
+{
+	ebc_shim.kthread_parkme_calls++;
+	if (ebc_shim.parkme_hook)
+		ebc_shim.parkme_hook();
+}
 /* Real kthread_park returns int (0, -ENOSYS exiting, -EBUSY double
  * park); the driver's quiesce path consumes it as of 2026-08-01. */
 static inline int kthread_park(struct task_struct *t)
