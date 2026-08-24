@@ -799,7 +799,7 @@ trace enablement, radio/service change, or power-cycle needs a human on UART.
 The recorder opens no output files; save stdout with trusted host-side shell
 redirection. Reports include MAC addresses, selected process command lines,
 and mount information, so keep them outside the repository (normally under
-`/tmp/opencode`) and sanitize them before sharing.
+`/tmp/wilkbook`) and sanitize them before sharing.
 
 ## E-reader suspend contract
 
@@ -1495,9 +1495,9 @@ Hardware command shape (**USB physically disconnected**):
 ```sh
 python3 pinenote/tools/power/reader-energy.py \
   --host root@PINENOTE --identity ~/.ssh/pinenote-root \
-  --manifest /tmp/opencode/testcard/manifest.json \
-  --epub /tmp/opencode/testcard/optics-testcard.epub \
-  --output /tmp/opencode/pinenote-reader-energy-ABBA
+  --manifest /tmp/wilkbook/testcard/manifest.json \
+  --epub /tmp/wilkbook/testcard/optics-testcard.epub \
+  --output /tmp/wilkbook/pinenote-reader-energy-ABBA
 ```
 
 This is the image's trusted key-only `root@HOST` maintenance endpoint, not a

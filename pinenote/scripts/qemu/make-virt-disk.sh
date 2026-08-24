@@ -3,14 +3,14 @@
 # for the initrd's first-boot logic: a 2 MiB partition GPT-named "waveform"
 # (found via /sys/class/block uevent PARTNAME scanning) and a partition
 # carrying the extracted PNGuixRoot rootfs (found by filesystem label).
-# Host-side only; writes nothing outside /tmp/opencode.
+# Host-side only; writes nothing outside /tmp/wilkbook.
 set -eu
 
 usage() {
   printf 'usage: %s ROOTFS_IMAGE DISK_IMAGE [WAVEFORM_FILE] [DATA_IMAGE]\n' "$0" >&2
   printf 'DATA_IMAGE, if given, becomes a third partition GPT-named "data" --\n' >&2
   printf 'the p7 the reader mounts at /data.  Build one with make-data-fixture.sh.\n' >&2
-  printf 'DISK_IMAGE must resolve under /tmp/opencode.\n' >&2
+  printf 'DISK_IMAGE must resolve under /tmp/wilkbook.\n' >&2
   printf 'Without WAVEFORM_FILE the waveform partition is zero-filled,\n' >&2
   printf 'which exercises the initrd copy path but not real waveform data.\n' >&2
 }
@@ -42,14 +42,14 @@ if [ -n "$data" ]; then
   [ -f "$data" ] || fail "data image is not a regular file: $data"
 fi
 
-opencode_root=$(CDPATH= cd -P /tmp/opencode && pwd -P) || \
-  fail "cannot resolve /tmp/opencode"
+artifact_root=$(CDPATH= cd -P /tmp/wilkbook && pwd -P) || \
+  fail "cannot resolve /tmp/wilkbook"
 disk_parent=$(CDPATH= cd -P "$(dirname "$disk")" && pwd -P) || \
   fail "disk image parent does not exist"
 disk=$disk_parent/$(basename "$disk")
 case $disk in
-  "$opencode_root"/*) ;;
-  *) fail "disk image must resolve under $opencode_root" ;;
+  "$artifact_root"/*) ;;
+  *) fail "disk image must resolve under $artifact_root" ;;
 esac
 
 rootfs_bytes=$(wc -c < "$rootfs")

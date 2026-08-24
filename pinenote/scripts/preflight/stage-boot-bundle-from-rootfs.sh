@@ -23,11 +23,11 @@ resolve_directory() {
   (CDPATH= cd -P "$directory" && pwd -P)
 }
 
-require_inside_opencode() {
+require_inside_artifact_root() {
   path=$1
   case $path in
-    "$opencode_root"/*) ;;
-    *) fail "boot bundle directory must resolve under $opencode_root" ;;
+    "$artifact_root"/*) ;;
+    *) fail "boot bundle directory must resolve under $artifact_root" ;;
   esac
 }
 
@@ -106,7 +106,7 @@ if [ ! -f "$rootfs_image" ]; then
   fail "rootfs image is not a regular file: $rootfs_image"
 fi
 
-opencode_root=$(resolve_directory /tmp/opencode) || fail "cannot resolve /tmp/opencode"
+artifact_root=$(resolve_directory /tmp/wilkbook) || fail "cannot resolve /tmp/wilkbook"
 parent=$(dirname "$requested_bundle")
 basename=$(basename "$requested_bundle")
 
@@ -116,7 +116,7 @@ esac
 
 parent_root=$(resolve_directory "$parent") || fail "boot bundle parent does not exist: $parent"
 bundle=$parent_root/$basename
-require_inside_opencode "$bundle"
+require_inside_artifact_root "$bundle"
 
 if [ -e "$bundle" ] || [ -L "$bundle" ]; then
   fail "boot bundle path already exists; refusing to reuse it: $bundle"

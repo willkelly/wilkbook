@@ -22,7 +22,7 @@ from PIL import Image, ImageDraw, ImageFont
 WIDTH = 1404
 HEIGHT = 1872
 EDGE_INSET = 96
-DEFAULT_OUTPUT = Path("/tmp/opencode/pinenote-touch-targets.epub")
+DEFAULT_OUTPUT = Path("/tmp/wilkbook/pinenote-touch-targets.epub")
 
 # Minimal visual system for the calibration sheet.  All generated tones,
 # strokes, and text scales come from these tokens; geometry is panel-space.

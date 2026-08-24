@@ -1,7 +1,7 @@
 # Building PineNote images
 
 All commands run from the repository root on the x86_64 build host. Everything
-here writes only to the Guix store and `/tmp/opencode`; deploying artifacts to
+here writes only to the Guix store and `/tmp/wilkbook`; deploying artifacts to
 the device is covered separately in `doc/hardware-deploy.md`.
 
 The `Makefile` wraps the common invocations; the raw commands are recorded
@@ -166,17 +166,22 @@ Kernel packaging and the forward-port workflow are described in
 
 ## Rootfs extraction and boot bundles
 
-Two things to know about the artifact root before relying on it:
+Three things to know about the artifact root before relying on it:
 
 - **It is volatile.** `/tmp` does not survive a host reboot; rebuild (or
   copy out) any rootfs a later deploy session will reference.
-- **The name is historical** (a previous coding tool) but load-bearing:
-  the preflight/QEMU scripts hard-contain their writes under
-  `/tmp/opencode` and fail loudly on anything outside it. `ARTIFACTS=`
-  overrides where the Makefile puts artifacts, but for the `qemu-virt*`
-  targets the override must still resolve under `/tmp/opencode`.
-  Renaming the root is an open task that has to move those scripts in
-  the same change.
+- **The name is load-bearing**, not just a default: the preflight/QEMU
+  scripts hard-contain their writes under `/tmp/wilkbook` and fail
+  loudly on anything outside it. `ARTIFACTS=` overrides where the
+  Makefile puts artifacts, but for the `qemu-virt*` targets the override
+  must still resolve under `/tmp/wilkbook`.
+- **It was renamed on 2026-08-24** from `/tmp/opencode` (a previous
+  coding tool's name), scripts and containment checks moving in the same
+  change. The cutover is hard: nothing accepts the old root any more.
+  Session records dated before then — `doc/status.md`, `doc/artifacts/`,
+  `doc/archive/`, `doc/reviews/` — still name `/tmp/opencode`, because
+  that is where those runs actually wrote. Read it as this same root
+  under its old name; do not "fix" those entries.
 
 
 The raw image is a build intermediate, never written to the device whole.
@@ -184,14 +189,14 @@ Extract the single ext4 partition into a direct rootfs artifact labelled
 `PNGuixRoot`, validate it, and stage a matched boot bundle from it:
 
 ```sh
-mkdir -p /tmp/opencode/pinenote-rootfs-artifacts
-rootfs=/tmp/opencode/pinenote-rootfs-artifacts/pinenote-$(date +%Y%m%d).ext4
+mkdir -p /tmp/wilkbook/pinenote-rootfs-artifacts
+rootfs=/tmp/wilkbook/pinenote-rootfs-artifacts/pinenote-$(date +%Y%m%d).ext4
 
 pinenote/scripts/preflight/extract-rootfs-from-raw.sh \
   /gnu/store/...-disk-image "$rootfs"
 pinenote/scripts/preflight/inspect-rootfs-image.sh "$rootfs"
 
-bundle=/tmp/opencode/pinenote-boot-bundle-$(date +%Y%m%d)
+bundle=/tmp/wilkbook/pinenote-boot-bundle-$(date +%Y%m%d)
 pinenote/scripts/preflight/stage-boot-bundle-from-rootfs.sh "$rootfs" "$bundle"
 pinenote/scripts/preflight/inspect-boot-bundle.sh "$bundle"
 ```
@@ -227,7 +232,7 @@ PL011 console are built in; see `%pinenote-qemu-virt-config-lines` in
 that would be written to the device can be booted off-device:
 
 ```sh
-make qemu-virt ROOTFS=/tmp/opencode/pinenote-rootfs-artifacts/<artifact>.ext4 \
+make qemu-virt ROOTFS=/tmp/wilkbook/pinenote-rootfs-artifacts/<artifact>.ext4 \
      [WAVEFORM=/path/to/local/waveform.bin]
 ```
 
@@ -270,7 +275,7 @@ assertion; a green run takes a few minutes (TCG, and udev's settle takes
 ~a minute):
 
 ```sh
-make qemu-virt-check ROOTFS=/tmp/opencode/pinenote-rootfs-artifacts/<artifact>.ext4 \
+make qemu-virt-check ROOTFS=/tmp/wilkbook/pinenote-rootfs-artifacts/<artifact>.ext4 \
      [WAVEFORM=/path/to/local/waveform.bin]
 ```
 
@@ -338,7 +343,7 @@ reasoning behind this ordering — and the host tools in rung 0 — is in
 4. Boot-bundle inspection (commands above).
 5. Mock helper tests: `pinenote/scripts/preflight/mock-pinenote-services.sh`
    (inspects hardware-targeted helpers without executing them; fixtures live
-   only under `/tmp/opencode`).
+   only under `/tmp/wilkbook`).
 6. Hardware deployment per `doc/hardware-deploy.md`, with the backup
    checklist in `doc/device-runbook.md` satisfied first.
 

@@ -38,9 +38,9 @@ are explicitly excluded.  Missing files and failed reads are recorded as
 `unavailable`, not treated as collection failures.
 
 ```sh
-./power-snapshot.scm snapshot --phase awake --timestamp 100 --output - > /tmp/opencode/pinenote-power-before.scm
-./power-snapshot.scm snapshot --phase awake --timestamp 110 --output - > /tmp/opencode/pinenote-power-after.scm
-./power-snapshot.scm delta /tmp/opencode/pinenote-power-before.scm /tmp/opencode/pinenote-power-after.scm --output - > /tmp/opencode/pinenote-power-delta.scm
+./power-snapshot.scm snapshot --phase awake --timestamp 100 --output - > /tmp/wilkbook/pinenote-power-before.scm
+./power-snapshot.scm snapshot --phase awake --timestamp 110 --output - > /tmp/wilkbook/pinenote-power-after.scm
+./power-snapshot.scm delta /tmp/wilkbook/pinenote-power-before.scm /tmp/wilkbook/pinenote-power-after.scm --output - > /tmp/wilkbook/pinenote-power-delta.scm
 ```
 
 For a one-shot final4 collection without installing or writing the script on
@@ -49,7 +49,7 @@ placeholder target):
 
 ```sh
 guile -e '(@ (pinenote tools power power-snapshot) command-line-main)' -s /dev/stdin snapshot --phase awake --output - < power-snapshot.scm
-# Over SSH: ssh DEVICE_PLACEHOLDER "/run/current-system/profile/bin/guile -e '(@ (pinenote tools power power-snapshot) command-line-main)' -s /dev/stdin snapshot --phase awake --output -" < power-snapshot.scm > /tmp/opencode/pinenote-power-snapshot.scm
+# Over SSH: ssh DEVICE_PLACEHOLDER "/run/current-system/profile/bin/guile -e '(@ (pinenote tools power power-snapshot) command-line-main)' -s /dev/stdin snapshot --phase awake --output -" < power-snapshot.scm > /tmp/wilkbook/pinenote-power-snapshot.scm
 ```
 
 `make check` builds a fake root and proves deterministic output, malformed-row
@@ -59,7 +59,7 @@ writes stdout, and every pathname is rejected. Use shell redirection on the
 trusted host when a saved report is needed.
 
 Reports contain MAC addresses, selected process command lines, and mount
-information. Keep them under `/tmp/opencode` by default and do not commit or
+information. Keep them under `/tmp/wilkbook` by default and do not commit or
 share them without intentional sanitization.
 
 ## S-expression shape

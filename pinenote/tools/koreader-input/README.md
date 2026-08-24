@@ -6,7 +6,7 @@ fixed at the corrected 1404x1872 portrait coordinate space, with numbered
 crosshair targets, quarter-grid lines, and edge rulers.  The page is a
 full-resolution grayscale PNG in the same fixed-layout XHTML packaging used by
 the hardware-proven optics card (rather than inline SVG).  Its default output
-is `/tmp/opencode/pinenote-touch-targets.epub`; pass another path to override
+is `/tmp/wilkbook/pinenote-touch-targets.epub`; pass another path to override
 it, or use `--check PATH` to validate an existing artifact.
 
 ```sh

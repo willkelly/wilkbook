@@ -183,7 +183,7 @@ make rootfs-reader             # the product: KOReader reader image
 
 Notes that bite:
 
-- Artifacts land under `/tmp/opencode`, which does **not** survive a host
+- Artifacts land under `/tmp/wilkbook`, which does **not** survive a host
   reboot. Rebuild or copy out anything a later deploy session references.
 - A fresh clone builds with KOReader's fallback fonts. The images
   `doc/status.md` validated bundle personally-licensed fonts staged from

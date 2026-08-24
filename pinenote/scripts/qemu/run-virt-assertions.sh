@@ -9,7 +9,7 @@
 #
 # Takes a boot bundle staged by stage-boot-bundle-from-rootfs.sh and a disk
 # built by make-virt-disk.sh (the Makefile's qemu-virt-check target chains
-# all three).  Host-side only; writes nothing outside /tmp/opencode.
+# all three).  Host-side only; writes nothing outside /tmp/wilkbook.
 #
 # WHAT THIS RUNG PROVES:
 #   Power-on through the full service stack: the hardware kernel image
@@ -97,9 +97,9 @@ config=$bundle/extlinux/extlinux.conf
 [ -f "$disk" ]   || fail "disk image is not a regular file: $disk"
 
 if [ -z "$log" ]; then
-  opencode_root=$(CDPATH= cd -P /tmp/opencode 2>/dev/null && pwd -P) || \
-    fail "cannot resolve /tmp/opencode for the default log path"
-  log=$opencode_root/pinenote-virt-assert-$$.log
+  artifact_root=$(CDPATH= cd -P /tmp/wilkbook 2>/dev/null && pwd -P) || \
+    fail "cannot resolve /tmp/wilkbook for the default log path"
+  log=$artifact_root/pinenote-virt-assert-$$.log
 fi
 : > "$log" || fail "cannot write console log: $log"
 

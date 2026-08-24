@@ -43,14 +43,12 @@ else
 guix-shell = guix shell $(1) --
 endif
 # Volatile by design: /tmp does not survive a host reboot, so rebuild
-# (or copy out) anything a later deploy will reference.  The
-# /tmp/opencode root is a historical name (a previous coding tool) that
-# is load-bearing as the write-containment boundary hard-coded in the
-# preflight/qemu scripts, so an ARTIFACTS override must still resolve
-# under /tmp/opencode for the qemu-virt* targets (the scripts fail
-# loudly on anything outside it).  Renaming the root is an open task
-# that must move those scripts in the same change.
-ARTIFACTS ?= /tmp/opencode/pinenote-rootfs-artifacts
+# (or copy out) anything a later deploy will reference.  /tmp/wilkbook
+# is load-bearing beyond being this default: it is the write-containment
+# boundary hard-coded in the preflight/qemu scripts, so an ARTIFACTS
+# override must still resolve under /tmp/wilkbook for the qemu-virt*
+# targets (the scripts fail loudly on anything outside it).
+ARTIFACTS ?= /tmp/wilkbook/pinenote-rootfs-artifacts
 # Which synthetic p7 qemu-data-check boots against:
 #   os1-used     a lived-in Debian home, no library yet (the migrating friend)
 #   with-library an existing /books that must be left alone (author's device)
