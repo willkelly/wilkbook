@@ -27,10 +27,23 @@ guards keep the pen working while fingers interleave:
  * pen BTN_TOUCH is re-routed before the key handler runs, because
    upstream gates it on the CURRENT slot's tool being PEN.
 
-The upstream slot-4-collision wart (pen_slot = main_finger_slot + 4
-collides with a real 5th-finger slot) is unchanged — this only restores
-the routing upstream already assumes.  Worth reporting upstream: the
-src-blind cur_slot bites every wacom_protocol + multitouch device.
+The upstream pen-slot collision (pen_slot = main_finger_slot + 4) is
+unchanged, and deliberately so.  It is not the five-finger hypothetical
+this comment used to call it: cyttsp5 advertises 32 MT slots and does
+NOT allocate them densely — a 120 s capture peaking at three
+simultaneous contacts used slots {0, 1, 2, 5}
+(doc/artifacts/pinenote-input-clocks-20260824/) — so a lone finger can
+be handed slot 4 while the pen hovers, and pen and finger then share one
+ev_slots entry.  This router disambiguates by SOURCE; when the two
+sources agree on the slot NUMBER there is nothing left for it to
+disambiguate.  Fixing it means moving the pen out of the panel's slot
+space, which is a different job from restoring the routing upstream
+already assumes — so it is reported, not patched here.  Reproduced and
+pinned offline at rung 1 (quirk:pen-slot-collision and its slot-3
+control in pinenote/tools/koreader-input/test-mixedrouter.lua); the
+argument and the upstream shape are doc/upstream-register.md item 11.
+Worth reporting either way: the src-blind cur_slot bites every
+wacom_protocol + multitouch device.
 --]]
 
 -- Stable kernel input ABI constants (kept local so the module is
