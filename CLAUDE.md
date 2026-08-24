@@ -90,6 +90,9 @@ code review — before a single reboot. That's the standard.
   and how to audit findings against it (data in `doc/datasets/`).
 - `doc/hrdl-evaluation.md` — the standing evaluation of hrdl's tree:
   cherry-pick decisions and the corruption-hunt strategy.
+- `doc/direct-mode-adoption.md` — the staged plan for adopting hrdl's
+  direct-mode driver, its blockers, and its bail-out criteria. Written
+  because handwriting needs latency the LUT path cannot reach.
 - `doc/driver-findings-report.md` — the community-facing writeup of driver
   bugs the host tools found.
 - `doc/upstream-register.md` — the standing list of what we owe the
