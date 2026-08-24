@@ -785,6 +785,40 @@ if opt.banner_only then
     os.exit(ok and 0 or 1)
 end
 
+-- How long the device has really been idle, given a wall clock that can
+-- STEP under this daemon.
+--
+-- Everything here times idleness with os.time(), i.e. wall time, and a
+-- wall clock can be STEPPED: `date` on the console does it today, and a
+-- time sync (issue #27) reaching a device whose RTC had reset would move
+-- it by YEARS in one write.  Both directions are wrong in a way that
+-- costs:
+--
+--   backwards -- elapsed goes negative, `remaining' exceeds the whole
+--                idle period, and the device stays awake at ~157 mA
+--                until the next input event re-bases last_activity.  On
+--                a device that was just put down, that is exactly the
+--                case auto-suspend exists for, lost.
+--   forwards  -- elapsed reads as "idle for years" and the device
+--                suspends under the reader's fingers.
+--
+-- Neither is a measurement of idleness, so refuse to believe the delta
+-- and re-base instead.  The backwards test needs no threshold at all.
+-- The forward bound is deliberately loose -- twice the idle period,
+-- floored at an hour -- because every legitimate path through the main
+-- loop re-bases last_activity itself, so the only ways to exceed it are
+-- a clock step or a runtime idle= that was just shortened by a lot, and
+-- re-basing is the right answer to both.
+--
+-- Returns the elapsed seconds to use, and whether it had to re-base.
+local function idle_elapsed(now, last_activity, idle)
+    local elapsed = now - last_activity
+    local bound = idle * 2
+    if bound < 3600 then bound = 3600 end
+    if elapsed < 0 or elapsed > bound then return 0, true end
+    return elapsed, false
+end
+
 local tv = ffi.new("struct as_tv")
 local last_activity = os.time()
 -- Suppress press-to-suspend until this time.  Set after every resume, and
@@ -813,7 +847,12 @@ while true do
         log("external power gone -- auto-suspend active again")
         charging_notice = false
     end
-    local remaining = idle_secs() - (os.time() - last_activity)
+    local elapsed, stepped = idle_elapsed(os.time(), last_activity, idle_secs())
+    if stepped then
+        log("wall clock stepped under the idle timer -- re-basing")
+        last_activity = os.time()
+    end
+    local remaining = idle_secs() - elapsed
     if remaining <= 0 and runtime.enabled then
         if opt.dry then
             log("DRY RUN: would suspend now")
