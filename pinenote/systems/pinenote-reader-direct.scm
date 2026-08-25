@@ -72,7 +72,9 @@
 ;;      MODULE_PARM_DESC(split_area_limit, ...) attached to
 ;;      module_param(limit_fb_blits, ...), a copy/paste that puts the name in
 ;;      modinfo's parm lines while registering nothing.  There is no
-;;      parameters/split_area_limit and modprobe would reject it.  Read
+;;      parameters/split_area_limit -- and the kernel warns and IGNORES
+;;      an unknown parameter (kernel/module/main.c:3381), silently
+;;      dropping the intent, which is worse than a refusal.  Read
 ;;      modinfo carefully here; a "parm:" line is not proof of a parameter.
 ;;
 ;;      This is INERT TODAY only because the initrd raw-load ignores
@@ -101,13 +103,15 @@
 ;;      back to a plain full wash, and the params one-shot skips any parameter
 ;;      whose node is absent.  So this is reading quality, not a boot failure.
 ;;
-;;      What should survive: GLOBAL_REFRESH is ABI-identical (DRM_COMMAND_BASE
-;;      + 0x00, the same single-bool struct), so KOReader's page-turn ioctl in
-;;      device.lua is unchanged.  REFRESH_BARRIER does not exist in his driver
-;;      at all, but nothing in pinenote/services, pinenote/systems or the
-;;      plugins uses it -- it costs two host-test subjects, not shipped
-;;      behaviour.
-;;
+;;      The ioctl NUMBER survives: GLOBAL_REFRESH is ABI-identical
+;;      (DRM_COMMAND_BASE + 0x00, same single-bool struct), so KOReader's
+;;      0xC0016440 still reaches the driver.  The single-pass page turn
+;;      does NOT: both mechanisms that produce it are wilkbook-only hunks
+;;      absent here -- publish-on-call, and the defio_delay_ms window.
+;;      hrdl uses stock drm_fbdev_shmem, whose defio delay is hardcoded
+;;      HZ/20 = 50 ms (drm_fbdev_shmem.c:184).  Expect the portrait
+;;      double-refresh class this project spent July killing to be BACK
+;;      on this flavor, by construction.;;
 ;; Delete this file together with linux-pinenote-hrdl-direct and its patch if
 ;; the adoption hits one of doc/direct-mode-adoption.md's bail-out criteria.
 

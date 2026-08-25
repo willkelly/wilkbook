@@ -374,6 +374,64 @@ def mutation_control(script, tmp):
 # structural: who is allowed to instantiate this, and the ordering premise
 # --------------------------------------------------------------------------
 
+def failure_guards(script, tmp):
+    """The three guards review found UNEXECUTED (2026-08-25).
+
+    Each was deleted from a copy of the script and the suite stayed green,
+    so "every branch" was false.  The most important is the mv guard: it
+    prevents exactly the stale-artifact state the checksum design closes.
+    Each case here exercises one guard through the real script.
+    """
+    # 1. The destination's parent is a regular FILE -> `mkdir -p || fail`.
+    fx = Fixture(tmp, "guard-mkdir")
+    blocked = os.path.join(fx.root, "blocked")
+    with open(blocked, "w") as fh:
+        fh.write("i am a file, not a directory")
+    rc, out = run(script, fx.compiler, fx.source,
+                  os.path.join(blocked, "rockchip", "custom_wf.bin"))
+    check("guard: a file where the firmware directory should be is a hard "
+          "failure", rc != 0, out[-300:])
+
+    # 2. The destination directory is a SYMLINK -> the not-a-real-directory
+    # guard (a symlinked firmware dir means we no longer know what we are
+    # overwriting).
+    fx = Fixture(tmp, "guard-symlink")
+    real = os.path.join(fx.root, "elsewhere")
+    os.makedirs(real)
+    link = os.path.join(fx.root, "linkdir")
+    os.symlink(real, link)
+    rc, out = run(script, fx.compiler, fx.source,
+                  os.path.join(link, "custom_wf.bin"))
+    check("guard: a symlinked destination directory is refused",
+          rc != 0, out[-300:])
+
+    # 3. `mv` fails -> `mv -- ... || fail`, and the freshness stamp must NOT
+    # advance.  Subtle: `mv file existing-dir` SUCCEEDS by moving INTO the
+    # directory (the first version of this test got that wrong and the
+    # review's suggested construction shares the mistake).  What genuinely
+    # fails is mv INTO an unwritable directory: the temporary is created in
+    # the writable parent, the compile succeeds, and the install step is
+    # the first thing to fail -- which is exactly the guard under test.
+    fx = Fixture(tmp, "guard-mv")
+    os.makedirs(fx.destination)          # destination IS a directory...
+    os.chmod(fx.destination, 0o555)      # ...that mv cannot write into
+    if os.access(fx.destination, os.W_OK):
+        skip("guard: a failed install is a hard failure",
+             "running as root -- 0555 does not bind")
+        skip("guard: a failed install does not advance the freshness stamp",
+             "running as root")
+        return
+    rc, out = run(script, fx.compiler, fx.source, fx.destination,
+                  stamp=fx.stamp)
+    os.chmod(fx.destination, 0o755)      # let cleanup remove it
+    stamp_after = fx.read(fx.stamp)
+    check("guard: a failed install is a hard failure", rc != 0, out[-300:])
+    check("guard: a failed install does not advance the freshness stamp",
+          stamp_after is None,
+          "a stamp that advances past a failed mv IS the stale-artifact bug: "
+          + repr(stamp_after))
+
+
 def structural(repo, service):
     with open(service) as fh:
         scm = fh.read()
@@ -386,6 +444,16 @@ def structural(repo, service):
     check("service: it is not an activation snippet",
           "activation-service-type" not in scm,
           "activation runs before the filesystems this writes to are ready")
+
+    # The suite executes pinenote/services/ebc-clut-install.sh.  Nothing so
+    # far proved the SERVICE hands shepherd that same file -- review proved
+    # it by pointing the .scm at "ebc-clut-install-NOPE.sh": every check
+    # still passed.  Pin the reference, and pin that the referenced file is
+    # the one this suite ran.
+    check("service: it hands shepherd the script under test",
+          '(local-file "ebc-clut-install.sh"' in scm,
+          "the .scm no longer references the file this suite executes -- "
+          "the suite is testing an orphan")
 
     # Rule 4 of the direct-mode work: nothing here may reach a shipping
     # image.  This fires the day someone adds it to a flavor whose name does
@@ -472,6 +540,7 @@ def main(argv):
     try:
         branch_tests(script, tmp)
         mutation_control(script, tmp)
+        failure_guards(script, tmp)
         structural(repo, service)
         guix_module_loads(repo)
     finally:

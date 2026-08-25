@@ -871,7 +871,10 @@ his module. `split_area_limit` looks shared and is not:
 `MODULE_PARM_DESC(split_area_limit, ...)` in his tree is attached to
 `module_param(limit_fb_blits, ...)`, so the name reaches `modinfo`'s
 `parm:` lines while nothing is registered — there is no
-`parameters/split_area_limit` node and `modprobe` would reject it. A
+`parameters/split_area_limit` node — and the kernel would **warn and
+ignore** it (`unknown_module_param_cb`, 7.1.8
+`kernel/module/main.c:3381`), which is worse than a refusal: the
+intent is silently dropped. A
 `parm:` line is not proof of a parameter.
 
 ### P3 — bring-up on glass, one variable at a time
