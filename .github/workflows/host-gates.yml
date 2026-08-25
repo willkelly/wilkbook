@@ -67,8 +67,23 @@ jobs:
             echo "FATAL: a waveform/derived-waveform/VCOM artifact is tracked. See CLAUDE.md."
             exit 1
           fi
-          if git ls-files | xargs -r file 2>/dev/null | grep -i 'CLUT0002' ; then
-            echo "FATAL: a file with the CLUT0002 magic is tracked."
+          # READ THE BYTES.  This used to pipe tracked files through file(1)
+          # and grep its CLASSIFICATION STRING for CLUT0002 -- but libmagic
+          # does not know that format and reports plain "data", so the check
+          # never fired.  A genuine 229,584-byte custom_wf.bin committed
+          # under any name not containing "custom_wf" passed BOTH halves of
+          # this gate.  Caught in review 2026-08-25, empirically, in a
+          # throwaway repo.  The name check above is a convenience; this is
+          # the one that actually holds.
+          bad=""
+          while IFS= read -r -d '' f; do
+            if [ "$(head -c 8 "$f" 2>/dev/null)" = "CLUT0002" ]; then
+              bad="$bad $f"
+            fi
+          done < <(git ls-files -z)
+          if [ -n "$bad" ]; then
+            echo "FATAL: file(s) carrying the CLUT0002 magic are tracked:$bad"
+            echo "That is derived per-device waveform data. See CLAUDE.md."
             exit 1
           fi
           echo "ok: no .wbf, custom_wf, or vcom file is tracked"

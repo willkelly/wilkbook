@@ -240,8 +240,16 @@ for mutation in drop-suffix-off collision-first-wins axis-swap; do
     # drop-suffix-off can legitimately blow past the 64-cell axis, since
     # the dropped entry is what kept max_len inside it.  A hard error is
     # still a difference from the reference, which is what the control is
-    # for -- but say which happened.
-    pass "quirk: --mutate=$mutation is rejected outright (still a difference)"
+    # for -- but ONLY if the tool understood the flag.  Accepting any
+    # nonzero exit would let a renamed or deleted mutation keep printing
+    # PASS while testing nothing (review, 2026-08-25), which is the same
+    # vacuity these controls exist to prevent.
+    if "$clut_selftest" "--mutate=$mutation" "$WBF" "$out" 2>&1 \
+         | grep -qiE 'unknown|unrecognis|unrecogniz|usage'; then
+      bad "quirk: --mutate=$mutation is not a flag this binary knows -- the control is testing nothing"
+    else
+      pass "quirk: --mutate=$mutation is rejected outright (still a difference)"
+    fi
   fi
 done
 
@@ -268,6 +276,7 @@ if [ -z "$ref" ] && [ -n "$CLUT_REF_BIN" ] && [ -s "$CLUT_REF_BIN" ]; then
   ref_how="pre-generated file $CLUT_REF_BIN"
 fi
 
+differential_ran=0
 if [ -z "$ref" ]; then
   echo 'SKIP: the byte-identical differential -- no runnable reference.'
   echo "      Looked for $CLUT_REF/wbf_to_custom.py (with numpy on PATH)"
@@ -283,6 +292,7 @@ else
   else
     bad "reference is $ref_size bytes, wbf-clut wrote $size"
   fi
+  differential_ran=1
   if [ "$ref_size" -gt 0 ] && cmp -s "$ref" "$ours"; then
     pass "BYTE-IDENTICAL to wbf_to_custom.py"
   else
@@ -291,8 +301,18 @@ else
   fi
 fi
 
+# The summary must not say the same thing whether or not the headline gate
+# ran.  It used to print a bare "ALL TESTS PASSED" three lines under a block
+# explaining that NOTHING had proved fidelity to wbf_to_custom.py.
 if [ "$fail" -eq 0 ]; then
-  echo "ALL TESTS PASSED"
+  if [ "$differential_ran" -eq 1 ]; then
+    echo "ALL TESTS PASSED (including the byte-identical differential)"
+  else
+    echo "ALL TESTS PASSED -- STRUCTURAL ONLY."
+    echo "  The byte-identical differential did NOT run, so nothing here"
+    echo "  proves fidelity to wbf_to_custom.py.  Do not read this green as"
+    echo "  'the C compiler matches the reference'."
+  fi
 else
   echo "TESTS FAILED" >&2
 fi
