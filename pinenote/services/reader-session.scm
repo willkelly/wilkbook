@@ -74,7 +74,26 @@ local function set_wf(v)
   return false
 end
 local deep = (prior ~= nil) and set_wf('4')
-local card = C.open('/dev/dri/card0', 2)
+-- The EBC's DRM card index is not stable across images (on the
+-- direct-mode image the panfrost GPU takes card0, and a wash aimed
+-- there is a malformed GPU job -- 2026-08-25); resolve by driver name
+-- via sysfs, which needs no root and, unlike open()ing candidates,
+-- cannot make this process DRM master of the GPU.
+local ebc_card
+for n = 0, 63 do
+  local u = io.open('/sys/class/drm/card' .. n .. '/device/uevent', 'r')
+  if u then
+    for line in u:lines() do
+      if line == 'DRIVER=rockchip-ebc' then ebc_card = '/dev/dri/card' .. n end
+    end
+    u:close()
+    if ebc_card then break end
+  end
+end
+if ebc_card == nil then
+  io.stderr:write('panel-wash: no DRM card with driver rockchip-ebc\\n')
+end
+local card = ebc_card and C.open(ebc_card, 2) or -1
 if card >= 0 then
   local arg = ffi.new('uint8_t[1]', 1)
   local rc = C.ioctl(card, 0xC0016440, arg)
@@ -83,8 +102,8 @@ if card >= 0 then
   end
   if deep and rc == 0 then C.poll(nil, 0, 3000) end
   C.close(card)
-else
-  io.stderr:write('panel-wash: /dev/dri/card0 open failed errno=' .. ffi.errno() .. '\\n')
+elseif ebc_card then
+  io.stderr:write('panel-wash: ' .. ebc_card .. ' open failed errno=' .. ffi.errno() .. '\\n')
 end
 if deep and not set_wf(prior) then
   io.stderr:write('panel-wash: waveform restore failed\\n')

@@ -101,6 +101,40 @@ end
 -- _IOWR('d', 0x40, struct { bool }) = 0xC0016440
 local DRM_GLOBAL_REFRESH = 0xC0016440
 
+-- The EBC's DRM card index is not stable across images: whichever DRM
+-- driver probes first takes card0, and on the direct-mode image that is
+-- the panfrost GPU -- there every wash this file aimed at card0 became a
+-- malformed GPU job (dmesg JOB_CONFIG_FAULT) and the panel was never
+-- washed (2026-08-25 glass session).  Resolve the node by driver name
+-- instead: /sys/class/drm/cardN/device/uevent carries
+-- DRIVER=rockchip-ebc (both the shipping and the direct-mode driver
+-- register that platform-driver name), it is readable without root, and
+-- reading it is side-effect-free -- probing by open()ing candidate
+-- nodes would make this process DRM master of whatever it touched
+-- first (the first open of a card node is drm_master_open()).  The
+-- match is exact-line, so a hypothetical rockchip-ebc-foo cannot
+-- false-positive.  DRM reserves minors 0..63 for card nodes, hence the
+-- scan bound.
+--
+-- sysfs_base is only ever passed by the koreader-input host harness
+-- (a fake /sys/class/drm tree); on the device it defaults.
+local function findEbcCard(sysfs_base)
+    sysfs_base = sysfs_base or "/sys/class/drm"
+    for n = 0, 63 do
+        local f = io.open(string.format(
+            "%s/card%d/device/uevent", sysfs_base, n), "r")
+        if f then
+            for line in f:lines() do
+                if line == "DRIVER=rockchip-ebc" then
+                    f:close()
+                    return string.format("/dev/dri/card%d", n)
+                end
+            end
+            f:close()
+        end
+    end
+end
+
 local function firstExistingDir(candidates)
     for _, path in ipairs(candidates) do
         local f = io.open(path .. "/uevent", "r")
@@ -249,9 +283,15 @@ function PineNote:init()
     -- Every decision is traced to the session log as one
     -- "[pn-refresh]" line: the capture side of the offline
     -- refresh-policy workbench (doc/testing.md).
-    local drm_fd = C.open("/dev/dri/card0", bit.bor(C.O_RDWR, C.O_CLOEXEC))
-    if drm_fd == -1 then
-        logger.warn("PineNote: cannot open /dev/dri/card0; full refresh disabled")
+    local ebc_card = findEbcCard()
+    local drm_fd = -1
+    if not ebc_card then
+        logger.warn("PineNote: no DRM card with DRIVER=rockchip-ebc; full refresh disabled")
+    else
+        drm_fd = C.open(ebc_card, bit.bor(C.O_RDWR, C.O_CLOEXEC))
+        if drm_fd == -1 then
+            logger.warn("PineNote: cannot open " .. ebc_card .. "; full refresh disabled")
+        end
     end
     local refresh_arg = ffi.new("uint8_t[1]", 1)
     local screen_area = nil -- computed lazily; screen size is known post-init
@@ -611,6 +651,7 @@ PineNote.battery_sysfs = firstExistingDir{
 -- name->slot mapping against a fake sysfs tree, offline); nothing on
 -- the device calls this.
 PineNote._findInputDevices = findInputDevices
+PineNote._findEbcCard = findEbcCard
 PineNote._registerRequiredInputDevices = registerRequiredInputDevices
 PineNote._translateGyroEvent = translateGyroEvent
 PineNote._installGyroHandler = installGyroHandler

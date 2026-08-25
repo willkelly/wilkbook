@@ -83,7 +83,7 @@ FLAVORS = minimal slim networked dev usb-console usb-console-linux-6-6 reader re
         timezone-check kernel-version-check library-check \
         manuals-check ultra-coupling-check timesync-check \
         settings-check koreader-profile-check ebc-modprobe-options-check \
-        ebc-clut-check \
+        ebc-clut-check ebc-card-resolution-check \
         $(FLAVORS) $(addprefix image-,$(FLAVORS)) $(addprefix rootfs-,$(FLAVORS))
 
 help:
@@ -121,6 +121,7 @@ help:
 	@echo "  timesync-check    SNTP client protocol/policy tests plus a loopback round trip"
 	@echo "  settings-check    every knob declared twice still agrees; today's drift is pinned (issue #12)"
 	@echo "  ebc-modprobe-options-check  each rockchip_ebc options set names only parameters its own driver registers"
+	@echo "  ebc-card-resolution-check  no on-device EBC path hardcodes a /dev/dri/cardN index (2026-08-25 wash-to-GPU bug)"
 	@echo
 	@echo "Flags:"
 	@echo "  TIME_MACHINE=1    build through channels.scm (required for releases; BROKEN until the"
@@ -341,7 +342,7 @@ CHECK_HOST_TARGETS = clut-check ebc-logic-check ebc-barrier-check rastersim-chec
         library-check koreader-profile-check manuals-check ultra-coupling-check \
         battery-dtb-check time-machine-check gexp-modules-check \
         timezone-check refresh-trigger-check timesync-check settings-check \
-        ebc-modprobe-options-check ebc-clut-check
+        ebc-modprobe-options-check ebc-clut-check ebc-card-resolution-check
 
 # Parse time, not recipe time: a recipe-level guard would run only AFTER every
 # prerequisite had already completed, so it could not prevent the mistake it
@@ -522,6 +523,13 @@ settings-check:
 # it.  That step SKIPs, loudly, where guix is absent -- CI included.
 ebc-modprobe-options-check:
 	python3 pinenote/scripts/preflight/validate-ebc-modprobe-options.py
+
+# The EBC's DRM card index is not stable across images (panfrost takes
+# card0 on the direct-mode image), so every on-device EBC-ioctl path
+# must resolve the card by DRIVER=rockchip-ebc rather than hardcode an
+# index -- the 2026-08-25 wash-to-GPU ghosting root cause.
+ebc-card-resolution-check:
+	sh pinenote/scripts/preflight/validate-ebc-card-resolution.sh
 
 rockchip-pm-check:
 	$(call guix-shell,dtc gcc-toolchain git python) $(MAKE) -C pinenote/tools/rockchip-pm check

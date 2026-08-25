@@ -149,6 +149,20 @@ One real change to the display driver this cycle, and it has not run on
 a panel yet. Otherwise: a long-suspected defect acquired evidence, a name
 and a bound.
 
+- **Full-screen washes now find the e-ink display instead of assuming
+  it is the first graphics device.** On the direct-mode study image the
+  GPU claims that first slot, so every deghosting wash was silently
+  handed to the GPU as a garbage command and the panel accumulated
+  ghosting unwashed — the 2026-08-25 session's root cause, fixed live
+  with a bind-mount and now fixed properly: every wash path (KOReader,
+  the reader-stop deep clean, the post-resume wash tool, the
+  diagnostics) resolves the EBC's DRM node by driver name via sysfs.
+  On the shipping image the answer is the same node as before, so
+  nothing changes there. A new repo gate
+  (`make ebc-card-resolution-check`) keeps index hardcodes out of every
+  on-device path. Offline-proven only; the resolved-path wash has not
+  itself run on glass.
+
 - **The display can no longer be jammed by something that keeps drawing**
   (#22). Until now, anything producing continuous screen damage — a
   blinking console cursor, and in future continuous pen strokes — could

@@ -15,8 +15,12 @@ end
 local function fake(options)
     options = options or {}
     local calls, id = {}, high_id()
+    -- Deliberately NOT card0: the adapter must use the injected card
+    -- verbatim (the EBC's card index is not stable across images), and
+    -- an injected card0 could not tell "uses the option" from a hidden
+    -- hardcode.
     local ops = {
-        card = "/dev/dri/card0",
+        card = "/dev/dri/card9",
         timeout_ms = options.timeout_ms,
         errno = options.errno or function() return 5 end,
     }
@@ -50,7 +54,7 @@ do
     local adapter = module.new(ops)
     local ok, returned, extra = adapter:submit_and_wait()
     check(ok == true and type(returned) == "cdata" and returned == id and extra == nil
-        and table.concat(calls, ",") == "open:/dev/dri/card0:524290,ioctl:1,ioctl:2,close:17"
+        and table.concat(calls, ",") == "open:/dev/dri/card9:524290,ioctl:1,ioctl:2,close:17"
         and adapter:status().state == "IDLE", "successful transaction returns exact high cdata ID after close")
     check(adapter:submit_and_wait() and #calls == 8, "sequential successful transactions")
 end
@@ -150,10 +154,16 @@ for _, case in ipairs({
 end
 
 for _, value in ipairs({ 0, -1, 1.5, 0x100000000 }) do
-    local ok = pcall(module.new, { timeout_ms = value })
+    -- card is present so the rejection can only come from the timeout.
+    local ok = pcall(module.new, { card = "/dev/dri/card9", timeout_ms = value })
     check(not ok, "invalid timeout " .. tostring(value) .. " rejected")
 end
-check(not pcall(module.new, { unexpected = true }), "unknown option rejected")
+check(not pcall(module.new, { card = "/dev/dri/card9", unexpected = true }),
+    "unknown option rejected")
+-- card has NO default: the EBC's DRM card index is not stable across
+-- images, so the caller must resolve it (device.lua's findEbcCard).
+check(not pcall(module.new, {}), "missing card rejected")
+check(pcall(module.new, { card = "/dev/dri/card9" }), "explicit card accepted")
 
 do
     local source = assert(io.open(path, "r")):read("*a")
