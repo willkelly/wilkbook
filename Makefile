@@ -70,7 +70,7 @@ FIXTURE ?= os1-used
 FLAVORS = minimal slim networked dev usb-console usb-console-linux-6-6 reader reader-debug
 
 .PHONY: help packages kernel kernel-drv reader-system-drv qemu-smoke qemu-virt qemu-virt-check qemu-pageturn-campaign refresh-episodes-check refresh-trigger-check \
-         check-host wbf-check wbf-notice ebc-logic-check ebc-barrier-check rastersim-check koreader-input-check orientation-check optics-check optics-audit-dataset power-check rockchip-pm-check activation-positive-check suspend-check \
+         check-host wbf-check wbf-notice clut-check ebc-logic-check ebc-barrier-check rastersim-check koreader-input-check orientation-check optics-check optics-audit-dataset power-check rockchip-pm-check activation-positive-check suspend-check \
         battery-dtb-check time-machine-check gexp-modules-check \
         timezone-check kernel-version-check library-check \
         manuals-check ultra-coupling-check timesync-check \
@@ -93,6 +93,7 @@ help:
 	@echo "  refresh-trigger-check   self-test of the trigger analyser against the COMMITTED issue-#14 traces"
 	@echo "  check-host        every host suite needing no hardware ([WBF=..] adds wbf-check + waveform-gated tests)"
 	@echo "  wbf-check         waveform parser checks (WBF=..; never committed)"
+	@echo "  clut-check        C CLUT compiler vs hrdl's wbf_to_custom.py, byte-identical ([WBF=..] [CLUT_REF=..])"
 	@echo "  ebc-logic-check   extracted EBC driver logic checks ([WBF=..])"
 	@echo "  ebc-barrier-check supervised EBC sleep-frame command host tests"
 	@echo "  rastersim-check   raster/waveform simulation checks ([WBF=..])"
@@ -184,7 +185,7 @@ kernel:
 packages:
 	$(GUIX) build $(GUIX_FLAGS) pinenote-ebc-test pinenote-ebc-barrier-test pinenote-diagnostics \
 	  pinenote-firmware-support pinenote-broadcom-wifi-firmware \
-	  pinenote-broadcom-bt-firmware
+	  pinenote-broadcom-bt-firmware pinenote-wbf-clut
 
 qemu-smoke:
 	$(GUIX) system vm $(GUIX_FLAGS) pinenote/systems/qemu-aarch64-smoke.scm
@@ -312,7 +313,7 @@ refresh-trigger-check:
 # The rung-1 roster.  Single source of truth: CI shards it with SKIP_CHECKS=
 # rather than restating it, so a suite added here is picked up automatically
 # instead of quietly missing from CI.
-CHECK_HOST_TARGETS = ebc-logic-check ebc-barrier-check rastersim-check \
+CHECK_HOST_TARGETS = clut-check ebc-logic-check ebc-barrier-check rastersim-check \
         koreader-input-check orientation-check optics-check power-check \
         rockchip-pm-check activation-positive-check suspend-check \
         library-check koreader-profile-check manuals-check ultra-coupling-check \
@@ -373,6 +374,18 @@ timezone-check:
 # per-device .wbf (never committed): make wbf-check WBF=/path/to/ebc.wbf
 wbf-check:
 	$(call guix-shell,gcc-toolchain python) $(MAKE) -C pinenote/tools/wbf check WBF=$(WBF)
+
+# The C CLUT compiler (doc/direct-mode-adoption.md P1) differentialled
+# against hrdl's wbf_to_custom.py.  Unlike wbf-check this is a check-host
+# member, because without WBF= it still compiles both binaries out of the
+# forward-port patch -- coverage of the patch that CI can actually run --
+# and then says out loud that the differential did not run.  The gate is
+# byte-identical output, so CLUT_REF must point at a pinenote-dist clone
+# (doc/reference-register.md) and python needs numpy:
+#   make clut-check WBF=/path/to/ebc.wbf CLUT_REF=~/src/reference/pinenote-dist/bin
+clut-check:
+	$(call guix-shell,gcc-toolchain python python-numpy) $(MAKE) -C pinenote/tools/wbf clut-check \
+	  WBF=$(WBF) CLUT_REF=$(CLUT_REF) CLUT_REF_BIN=$(CLUT_REF_BIN) CLUT_PYTHON=$(CLUT_PYTHON)
 
 # EBC driver logic unit tests against the verbatim rockchip_ebc.c from
 # the forward-port patch (offline ladder rung 2). WBF optional; without

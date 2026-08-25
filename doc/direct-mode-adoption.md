@@ -1,8 +1,11 @@
 # Adopting direct mode: the plan
 
-**Status: plan, not a decision record.** Nothing here has been built.
-Written 2026-08-24, after the operator named handwriting as a product
-direction that the current display path cannot support.
+**Status: plan, not a decision record.** Written 2026-08-24, after the
+operator named handwriting as a product direction that the current display
+path cannot support. **The only thing built so far is P1's CLUT compiler**
+(2026-08-25) — a host/device tool with no service, image or kernel change
+behind it. Everything from P2 on is still a plan, and the bail-out
+criteria at the bottom still apply.
 
 Read `doc/hrdl-evaluation.md` first — this document assumes it.
 
@@ -83,7 +86,8 @@ interpreter (`doc/artifacts/pinenote-input-clocks-20260824/`).
 Three options:
 
 1. **Reimplement the CLUT compiler in C, ship it as an on-device binary.**
-   *Recommended.* There is already exactly this precedent:
+   *Recommended — and **done** as of 2026-08-25 (see P1); the "ship it"
+   half is not.* There is already exactly this precedent:
    `pinenote-install-waveform` is a compiled binary run by a one-shot
    shepherd service before the EBC module loads
    (`pinenote/services/ebc.scm`), and `pinenote-ebc-dump` in
@@ -169,7 +173,9 @@ gate; a red gate stops the phase rather than deferring the problem.**
 - **Port hrdl's `Sim`** into the harness as a reference model. It is a
   dataclass at `wbf_to_custom.py:29` (`outer`, `inner`, `i`, `phases`,
   `history`) — small.
-- **Build the CLUT differential.** Our decode versus theirs.
+- ✅ **The CLUT differential is built.** `make clut-check` (2026-08-25):
+  byte-identical to `wbf_to_custom.py`, with three mutation controls that
+  must differ so identity cannot be accidental. See P1.
 
 **D1 is much cheaper than §D1 estimated.** The compiler is **271 lines**
 plus a 334-line `read_file.py` WBF parser — and *we already have the
@@ -205,7 +211,7 @@ same never-bundle rule. Extended to match `custom_wf` and to reject any
 tracked file carrying the `CLUT0002` magic. Done now, while the count of
 such files in existence is still zero.
 
-### P1 — the CLUT compiler (D1)
+### P1 — the CLUT compiler (D1) — ✅ **compiler done, gate met** (2026-08-25)
 
 Write it in C, cross-built like `pinenote-ebc-dump`, run by a one-shot
 before the EBC module loads. Differential-test against `wbf_to_custom.py`
@@ -213,6 +219,31 @@ on the host at rung 1.
 
 **Gate:** byte-identical `custom_wf.bin` from the C compiler and the
 Python one, on a real `ebc.wbf`. Not "equivalent" — identical.
+
+**Met.** `pinenote/tools/wbf/wbf-clut.c` produces a 229,584-byte
+`CLUT0002` file byte-identical to `wbf_to_custom.py`'s on this device's
+own waveform, on x86-64 and — cross-built as `pinenote-wbf-clut` and run
+under `qemu-aarch64` — on aarch64 as well. `make clut-check` is in
+`CHECK_HOST_TARGETS`. No Python, no numpy, no pandas: the decode half is
+the lineage's own verbatim `drm_epd_helper.c`, exactly as the plan
+predicted, and only the run-length + serialisation halves are new.
+
+**The two quirks the plan did not know about.** Byte-identity was not a
+formality. `wbf_to_custom.py`'s "remove suffix" step drops the last run
+*unconditionally* (an `enumerate`-index/tuple mix-up), and its 32→16 cell
+downsample is four-way lossy, order-dependent, and never clears the cell
+before writing. Both are reproduced deliberately, both are written up in
+`doc/driver-findings-report.md`, and a third finding fell out alongside
+them: `drm_epd_helper.c` never applies the `+ 1` to `temp_range_count`,
+so the driver cannot select the file's top temperature range. A
+clean-room compiler written to what the reference *means* is wrong here,
+which is why the gate had to be identity rather than equivalence.
+
+**What P1 did NOT do.** No service, no image, no initrd work — that is
+the next step, and D4 (what a missing or stale `custom_wf.bin` should do
+at first boot) has to be decided before it, along with the checksum the
+`ExecCondition` note above demands. **And nothing has driven a panel:**
+the compiler is proven against the Python and against nothing else.
 
 ### P2 — port the driver onto 7.1.8, behind a flavor
 

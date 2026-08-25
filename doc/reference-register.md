@@ -78,6 +78,18 @@ never-bundle rule as `ebc.wbf`**. The CI safety gate was extended the
 same day to reject a tracked `custom_wf` or any file carrying the
 `CLUT0002` magic, because it previously could not see either.
 
+**It is now a test dependency, and it is optional by construction.**
+`make clut-check` differentials our C CLUT compiler against
+`bin/wbf_to_custom.py` and requires byte-identical output
+(`doc/direct-mode-adoption.md` P1). Point `CLUT_REF=` at the clone's
+`bin/` — that path is the default the harness assumes. Without the clone
+(or without numpy) the suite says SKIP for the differential and runs only
+its structural and `quirk:` controls, loudly; it never silently passes as
+if the comparison had happened. `bin/read_file.py` must be beside
+`wbf_to_custom.py`, which it is in the clone; the script imports it and
+writes `./custom_wf.bin` into the CWD, so the harness runs it in a temp
+dir and never in the repo.
+
 The Arch distribution: mkosi build, custom packages, sway/e-ink
 integration, published signed images. Small (66 commits at 2026-06-23).
 Verified reachable 2026-08-07.

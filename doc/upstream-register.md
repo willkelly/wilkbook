@@ -551,6 +551,60 @@ used to confirm how often a real user's pinch exceeds 900 ms, and we
 should not imply a rate we did not measure.
 **Status:** ready.
 
+### 13. A C CLUT compiler, and the joint differential it makes possible — **needs-work** (the artifact exists; the offer does not)
+
+`pinenote/tools/wbf/wbf-clut.c` compiles a PVI `.wbf` into hrdl's
+`CLUT0002` `custom_wf.bin` **byte-identically** to `wbf_to_custom.py`, in
+C, with no Python/numpy/pandas, reusing the lineage's own verbatim
+`drm_epd_helper.c` to decode the waveform. Cross-built for aarch64 as
+`pinenote-wbf-clut` and confirmed byte-identical there too (under
+`qemu-aarch64`), so it runs on the device that needs it.
+
+**Why it matters to them, not just to us.** `doc/hrdl-evaluation.md` §4.2
+already names a "CLUT-compiler differential" as the natural first joint
+artifact with hrdl, and this is it: two independent implementations of the
+same format, gated against each other on a real waveform. It also removes
+the Python dependency from the direct-mode first-boot recipe, which is a
+real cost for anyone packaging a minimal image — ayakael's recipe pulls
+numpy and pandas onto the device to run one compile once.
+
+**For:** hrdl (`git.sr.ht/~hrdl/pinenote-dist`) primarily; ayakael as the
+packager who would benefit most.
+**Shape:** the tool plus its differential harness, offered as a companion
+to `wbf_to_custom.py` rather than a replacement — the Python is the
+reference and should stay the reference.
+**What has to be true first:** the standing baseline gate, **and** we have
+to have actually booted direct mode. Today this compiler is proven only
+against the Python; **no panel has ever been driven from its output**
+(`doc/direct-mode-adoption.md` P3). Offering a waveform compiler we have
+never watched drive a display would be exactly the "code review from a
+stranger" failure the gate exists to prevent.
+**Status:** needs-work — gated on P3, not on writing.
+
+### 14. Three defects in the direct-mode CLUT compiler — **ready** (as a section of item 1)
+
+Written up in `doc/driver-findings-report.md` (2026-08-25): the
+unconditional `summary[:-1]` in `table_summarise`'s "remove suffix" step
+(an `enumerate`-index/tuple-element mix-up, which also `IndexError`s on a
+single-run summary); the 32→16 downsample's undetected four-way cell
+collision, whose winner depends on loop order and which never clears the
+cell, so a short sequence can leave a previous row's `0x20` end marker
+behind; and `drm_epd_helper.c` not applying the `+ 1` to
+`temp_range_count`, so the driver can never select the file's top
+temperature range (43–48 °C on the PineNote's waveform).
+
+**For:** hrdl for the first two (`pinenote-dist`), the m-weigand/hrdl
+lineage for the third (`drm_epd_helper.c`).
+**Shape:** part of the item-1 report, or its own message if that report is
+sent trimmed — the first two are only interesting to someone running
+direct mode.
+**What has to be true first:** the standing baseline gate. Say plainly
+that all three are **offline** findings from a differential and a file
+read: we have driven no panel with any CLUT, so we cannot say what the
+corrected tables look like on glass, and finding 1's fix is precisely the
+kind of change that needs a display in front of it.
+**Status:** ready.
+
 ## Standing caveats
 
 - **We are ahead of, not aligned with, the lineage.** Line numbers and
