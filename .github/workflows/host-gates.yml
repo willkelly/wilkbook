@@ -54,14 +54,24 @@ jobs:
 
       # The single rule this repo will not bend: per-device calibration never
       # enters the tree.  Cheap to assert, catastrophic to get wrong.
-      - name: No waveform or VCOM blob is tracked
+      - name: No waveform, derived waveform, or VCOM blob is tracked
         run: |
-          set -eu
-          if git ls-files | grep -iE '\.wbf$|vcom' ; then
-            echo "FATAL: a waveform/VCOM artifact is tracked. See CLAUDE.md."
+          # custom_wf.bin is the DERIVED per-device waveform the direct-mode
+          # driver requires (hrdl's CLUT0002 format, compiled from the
+          # device's own ebc.wbf).  It falls under the same never-bundle rule
+          # as ebc.wbf itself -- it IS the calibration data, in another
+          # encoding -- and this gate could not see it.  Added 2026-08-25,
+          # before the direct-mode work starts producing them, because the
+          # cheapest time to close this is while the count is still zero.
+          if git ls-files | grep -iE '\.wbf$|vcom|custom_wf' ; then
+            echo "FATAL: a waveform/derived-waveform/VCOM artifact is tracked. See CLAUDE.md."
             exit 1
           fi
-          echo "ok: no .wbf or vcom file is tracked"
+          if git ls-files | xargs -r file 2>/dev/null | grep -i 'CLUT0002' ; then
+            echo "FATAL: a file with the CLUT0002 magic is tracked."
+            exit 1
+          fi
+          echo "ok: no .wbf, custom_wf, or vcom file is tracked"
 
       - name: WBF is unset, so waveform-gated tests cannot silently run
         run: |
@@ -233,6 +243,12 @@ jobs:
             echo '  the waveform is per-device calibration and is never committed,'
             echo '  so CI structurally cannot run them. Run `make check-host'
             echo '  WBF=/path/to/ebc.wbf` locally before trusting display work.'
+            echo '- **No CLUT differential.** `clut-check` compiled `wbf-clut`'
+            echo '  out of the kernel patch here -- that much is real coverage --'
+            echo '  but its actual gate is byte-identical output against'
+            echo '  `wbf_to_custom.py` on a real `ebc.wbf`, and CI has neither'
+            echo '  the waveform nor the reference clone. Run `make clut-check'
+            echo '  WBF=... CLUT_REF=.../pinenote-dist/bin` locally.'
             echo '- **Nothing was built.** No kernel, no rootfs, no derivation.'
             echo '  This job never proves the patch *applies* or *compiles*.'
             echo '- **Nothing was booted.** Rungs 4-4v (QEMU) and 6 (hardware)'

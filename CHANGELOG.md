@@ -262,6 +262,19 @@ and a bound.
 
 ### Build, CI and gates
 
+- **New rung-1 gate: `make clut-check`, and the tool behind it.** The
+  faster display path we are evaluating for handwriting
+  (`doc/direct-mode-adoption.md`) will not even *start* without a table
+  compiled from your device's own waveform, and the only existing
+  compiler is a Python script needing numpy and pandas — neither of
+  which the reader image has, or should. `wbf-clut` is a C replacement
+  that produces a **byte-identical** file, checked against the original
+  on a real waveform every time the gate runs. Nothing on the device
+  changes: this is not wired into any image, and no panel has been
+  driven from its output. Finding it took reproducing two bugs in the
+  original on purpose (`doc/driver-findings-report.md`) — a "cleaner"
+  compiler would have quietly changed the waveform your screen is
+  driven with.
 - **New rung-1 gate: `make koreader-profile-check`** — KOReader's
   reading defaults now have exactly one writer, and the gate fails if a
   second appears. There were two, and only one of them could ever run:

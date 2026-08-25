@@ -1,4 +1,5 @@
 (define-module (pinenote packages firmware)
+  #:use-module ((gnu packages python) #:select (python))
   #:use-module (guix build-system copy)
   #:use-module (guix build-system gnu)
   #:use-module (guix build-system trivial)
@@ -153,6 +154,86 @@ camera-vs-belief analysis.  Only functional on the linux-pinenote-debug
 kernel; on the primary kernel the ioctl is stubbed and the tool exits
 with a clear message.  Supports quiescence verification by double-dump
 comparison (--verify) and partial dumps (--planes).")
+    (license gpl2)))
+
+;; The CLUT compiler for hrdl's direct-mode driver (doc/direct-mode-adoption.md
+;; D1/P1).  That driver request_firmware()s rockchip/custom_wf.bin and FAILS
+;; PROBE with -EINVAL without it; upstream compiles it on the device with
+;; wbf_to_custom.py, which needs Python + numpy + pandas.  Our reader image has
+;; no interpreter at all beyond KOReader's bundled luajit, so the compiler has
+;; to be a binary -- exactly the shape pinenote-install-waveform already has
+;; (a compiled/one-shot step run before the EBC module loads).
+;;
+;; Built out of pinenote/tools/wbf's own Makefile so the device binary and the
+;; host binary the differential gates (make clut-check) are the same source,
+;; and so the .wbf decode half stays the VERBATIM drm_epd_helper.c extracted
+;; from the forward-port patch rather than a second parser that can drift.
+;; Same extraction shape as pinenote-ebc-barrier-test.
+;;
+;; NOT WIRED INTO ANY SERVICE OR IMAGE YET.  P1 builds and proves the
+;; compiler; deploying it is later work and needs D4's missing-firmware
+;; posture decided first.
+(define-public pinenote-wbf-clut
+  (package
+    (name "pinenote-wbf-clut")
+    (version "0.1.0")
+    (source
+     (file-union "pinenote-wbf-clut-source"
+                 `(("Makefile" ,(local-file "../tools/wbf/Makefile"))
+                   ("wbf-clut.c" ,(local-file "../tools/wbf/wbf-clut.c"))
+                   ("wbf-info.c" ,(local-file "../tools/wbf/wbf-info.c"))
+                   ("shim/kernel-shim.h"
+                    ,(local-file "../tools/wbf/shim/kernel-shim.h"))
+                   ("shim/drm/drm_device.h"
+                    ,(local-file "../tools/wbf/shim/drm/drm_device.h"))
+                   ("shim/drm/drm_managed.h"
+                    ,(local-file "../tools/wbf/shim/drm/drm_managed.h"))
+                   ("shim/drm/drm_print.h"
+                    ,(local-file "../tools/wbf/shim/drm/drm_print.h"))
+                   ("shim/linux/firmware.h"
+                    ,(local-file "../tools/wbf/shim/linux/firmware.h"))
+                   ("shim/linux/module.h"
+                    ,(local-file "../tools/wbf/shim/linux/module.h"))
+                   ("shim/linux/vmalloc.h"
+                    ,(local-file "../tools/wbf/shim/linux/vmalloc.h"))
+                   ("extract-from-patch.py"
+                    ,(local-file "../tools/wbf/extract-from-patch.py"))
+                   ("linux-pinenote-7.0-forward-port.patch"
+                    ,(local-file
+                      "../patches/linux-pinenote-7.0-forward-port.patch")))))
+    (build-system gnu-build-system)
+    (native-inputs (list python))
+    (arguments
+     (list
+      #:tests? #f
+      #:phases
+      #~(modify-phases %standard-phases
+          (delete 'configure)
+          (replace 'build
+            (lambda _
+              (invoke "make"
+                      (string-append "CC=" #$(cc-for-target))
+                      "PATCH=linux-pinenote-7.0-forward-port.patch"
+                      "EXTRACT=extract-from-patch.py"
+                      "build/wbf-clut")))
+          (replace 'install
+            (lambda _
+              (invoke "make" "PREFIX=" (string-append "DESTDIR=" #$output)
+                      "PATCH=linux-pinenote-7.0-forward-port.patch"
+                      "EXTRACT=extract-from-patch.py"
+                      "install"))))))
+    (home-page "https://codeberg.org/wilkbook")
+    (synopsis "PineNote CLUT compiler for hrdl's direct-mode EBC driver")
+    (description
+     "Install wbf-clut, which compiles a PVI @file{.wbf} waveform into the
+@code{CLUT0002} table hrdl's direct-mode @code{rockchip_ebc} requires as
+@file{rockchip/custom_wf.bin}.  It reuses the verbatim @code{drm_epd_helper.c}
+carried in the kernel patch to decode the waveform, and its run-length and
+serialisation halves are gated on producing output byte-identical to upstream's
+@code{wbf_to_custom.py} -- including two reproduced upstream bugs, which are
+written up in @file{doc/driver-findings-report.md} rather than silently fixed.
+The output is per-device calibration data and is never bundled: it is compiled
+from the device's own waveform.")
     (license gpl2)))
 
 (define-public pinenote-firmware-support

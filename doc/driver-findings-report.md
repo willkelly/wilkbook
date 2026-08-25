@@ -1,9 +1,11 @@
 # rockchip_ebc findings — draft report for the PineNote kernel community
 
-Status: living draft, last updated 2026-08-06. First drafted 2026-07-04
+Status: living draft, last updated 2026-08-25. First drafted 2026-07-04
 with the seven host-suite findings; it now also carries four defects in
-the `v6.19_ebc` EXTRACT_FBS reference implementation and dated findings
-from live hardware sessions and code reads through 2026-08-02. Intended
+the `v6.19_ebc` EXTRACT_FBS reference implementation, dated findings from
+live hardware sessions and code reads through 2026-08-02, and three
+defects in the direct-mode CLUT compiler `wbf_to_custom.py` found by
+differential (2026-08-25). Intended
 audience: hrdl
 (git.sr.ht/~hrdl/linux), ayakael (postmarketOS PineNote kernel),
 m-weigand/linux issues, and — for finding 1 — potentially dri-devel if
@@ -1211,3 +1213,132 @@ cannot separate "the fix cured a real stale baseline" from
 the `suspend_was_requested` re-init path carries the same missing seed;
 the fix is one `memcpy` in that branch. As always, re-check the target
 branch before applying — line numbers and surrounding code here are ours.
+
+## Findings (2026-08-25, offline differential): three defects in the direct-mode CLUT compiler `wbf_to_custom.py`
+
+**Context.** hrdl's direct-mode `rockchip_ebc` `request_firmware()`s
+`rockchip/custom_wf.bin` and **fails probe with `-EINVAL` when it is
+absent**, so that file is a hard boot dependency of the direct-mode path.
+It is produced from the panel's own `ebc.wbf` by
+`pinenote-dist/bin/wbf_to_custom.py` (271 lines, on top of m-weigand's
+334-line `read_file.py` parser), which ayakael's first-boot recipe runs on
+the device. We reimplemented that compiler in C
+(`pinenote/tools/wbf/wbf-clut.c`) because our reader image has no Python
+at all, and gated it on producing **byte-identical output**. Writing to
+the reference's *intent* rather than its *behaviour* produces different
+bytes, which is how findings 1 and 2 surfaced.
+
+Method: the C compiler decodes the waveform with the lineage's own
+verbatim `drm_epd_helper.c` and differs only in the run-length and
+serialisation halves. `make clut-check` runs both compilers on the same
+`ebc.wbf` and requires `cmp` to be silent; it also builds three
+deliberately mutated variants — one per behaviour below — and requires
+each to *differ*, so "identical" cannot pass for an implementation whose
+fidelity was accidental. All three findings are **offline**, derived from
+the file and the two implementations. No panel has been driven with a
+direct-mode CLUT here at all.
+
+### 1. `table_summarise`'s "remove suffix" step drops one entry unconditionally
+
+```python
+# This is a remove suffix function
+_last_idx = [x[0] for x in enumerate(reversed(summary)) if x[0] != 0][0]
+summary = summary[:-_last_idx]
+```
+
+`x` is the `(index, (phase, repeat))` pair from `enumerate`, so `x[0]` is
+the **enumerate index**, not the run's phase. The filter therefore keeps
+indices 1, 2, 3, … and never index 0, so `[0]` evaluates to **1 every
+time** and the statement is `summary = summary[:-1]` regardless of what
+the trailing run holds. The intent is legible from the comment and from
+the shape of the data: it was meant to trim a trailing zero-run, which
+would be `if x[1][0] != 0`.
+
+Two consequences:
+
+- When a sequence ends in a zero-run the two forms agree by accident and
+  nothing is lost.
+- When it ends on a **real drive**, the last run is silently discarded —
+  the final polarisation phase of that (src, dst) transition is dropped
+  from the compiled table. On the PineNote's own waveform this fires; it
+  is what makes a faithful-to-intent reimplementation differ.
+
+It also raises `IndexError` on a single-entry summary, because the
+filtered list is then empty. That does not fire on this waveform, but any
+waveform where some transition summarises to one run makes the compiler
+crash instead of producing a CLUT — and a missing `custom_wf.bin` is a
+probe failure, i.e. a device with no display.
+
+**We reproduce the bug rather than fix it**, deliberately, with the reason
+written at the top of `wbf-clut.c`: correcting it changes the compiled
+waveform, and there is no evidence about what the panel does with the
+corrected table. That is a change for whoever owns the driver to make with
+hardware in front of them. If the fix is right, both compilers should
+change together — which is what a shared differential is for.
+
+### 2. The 32→16 downsample is lossy *and* order-dependent
+
+The polarisation table is 32×32 over `(src, dst)` waveform states, but
+cells are addressed `lut_array[src >> 1, dst >> 1, …]` — 16×16. **Four
+(src, dst) pairs land on every cell**, and the write loop neither merges
+them nor detects the collision:
+
+```python
+for ((src, dst), seq) in summary:
+    for (i, (phase, repeat)) in enumerate(seq):
+        self.lut_array[src >> 1, dst >> 1, offset + i] = ...
+    if seq:
+        self.lut_array[src >> 1, dst >> 1, offset + len(seq) - 1] |= 0x20
+```
+
+So the **last writer wins**, and iteration order is load-bearing: it is
+ascending `i` over `itertools.product(range(32), range(32))[:, ::-1]`,
+i.e. `src = i % 32`, `dst = i // 32`, which makes the surviving entry for
+each cell the odd/odd pair `(2S+1, 2D+1)` — unless that row is all-neutral
+and was dropped before the loop, in which case an earlier member of the
+quartet survives instead. Nothing about the format says that; it falls out
+of the loop order.
+
+Worse, a write does **not clear the cell first**. A short sequence landing
+on a cell an earlier row filled with a longer one leaves that row's tail
+bytes in place, `0x20` end-of-sequence marker included — so a cell can
+carry two end markers, and the driver stops at the first. That is a
+data-dependent corruption path, not merely a lossy downsample.
+
+The 5-bit → 4-bit reduction is presumably intended (the panel is driven
+Y4), but if so the surviving pair should be chosen deliberately and
+stated, and the cell should be cleared before it is written.
+
+### 3. `temp_range_count` is off by one, and `drm_epd_helper.c` never applies it
+
+This one is in the **kernel** library, not the Python. The `.wbf` header
+stores `temp_range_count` the way it stores `mode_count`: as count − 1.
+That is not a guess — the same header says `mode_count = 7`, and the
+driver's own mode table reads DU4 from **mode index 7**, which only exists
+if the real count is 8. m-weigand's `read_file.py` applies the `+ 1` to
+both fields and notes it in a comment; the driver applies it to neither,
+and gets away with `mode_count` only because it never bounds-checks modes.
+
+For temperatures it does not get away with it. On the PineNote's waveform:
+
+- header `temp_range_count` = 13; the delimiter table is 15 entries
+  (0, 3, 6, …, 33, 38, 43, 48) = **14 ranges**, the last being 43–48 °C.
+- `pvi_wbf_get_temp_index()` loops `i < header->temp_range_count`, i.e.
+  `i < 13`, so it returns at most **12** — `wbf-info` prints
+  `temp_index_above_last: 12` for 127 °C.
+- Bin 13 is real, distinct data, not padding: all five CLUT modes decode
+  there through checksum-valid pointers, and the compiled sequence offsets
+  differ from bin 12's (`1,3,9,19,27,34` vs `1,3,8,16,24,31`).
+
+So above 43 °C the driver drives the panel with the 38–43 °C waveform and
+says nothing. Every count derived from that field is also one short:
+`wbf-info`'s README said "13 temperature bins" until this was found, and
+the CLUT compiler emits 14 LUTs precisely because the Python applies the
+`+ 1`.
+
+Practical impact is small — 43 °C is a hot car or direct sun, not reading
+weather — and the fix is `+ 1` at the two reads. It is recorded because it
+is cheap to get right, and because the CLUT's LUT count is now a visible,
+gated consequence of it (a `quirk:` assertion in
+`pinenote/tools/wbf/run-clut-tests.sh`). **Not fixed in our tree**: it is
+lineage code and the safety model says report, don't patch.
