@@ -339,6 +339,39 @@ binds, or works, and the build used arm64 `defconfig` plus minimal
 enables rather than our `pinenote_defconfig` alongside our other six
 patches. Those are the next steps, not this one.
 
+**Built in OUR kernel package, 2026-08-25.** The compile above used
+arm64 `defconfig`; this is the real thing — `pinenote_defconfig`, our
+seven patches, his driver, as `linux-pinenote-hrdl-direct` in
+`pinenote/packages/kernel.scm` (the `linux-pinenote-debug` shape: inherit,
+append one patch).
+
+```
+Image                       20,195,840 B
+drm_epd_helper.ko               40,368 B
+rockchip_ebc.ko                217,152 B
+rockchip_ebc_blit_neon.ko       88,184 B
+rk3566-pinenote-v1.{1,2}.dtb    63,713 B each
+EXIT=0, zero errors, one unused-variable warning
+```
+
+**The modules LINK, and modpost resolves the cross-module symbols** —
+`rockchip_ebc.ko` imports `rockchip_ebc_schedule_advance_neon` and
+`drmm_epd_lut_*` from the other two. That is what an object-only build
+cannot show, and it is why his `EXPORT_SYMBOL(pvi_wbf_get_mode_index)`
+exists. `CONFIG_DRM_ROCKCHIP_EBC_3WIN_MODE` lands **off** under
+`olddefconfig`, which is necessary given D6.
+
+The swap is `pinenote/patches/linux-pinenote-7.1-hrdl-direct-mode.patch`:
+**6194 lines, 11 files**, applying after our seven. One hunk is
+hand-merged — his `rockchip/Makefile` context did not match because our
+forward-port already adds `rockchip_ebc.o` there. The merge keeps our line
+and adds his NEON object with its flags: the blitter needs
+`-mgeneral-regs-only` **removed** and `CC_FLAGS_FPU` added, since kernel
+code is otherwise built with no FP registers.
+
+**The shipping kernel's derivation is unchanged** — nothing here reaches
+an image, and no flavor references the variant.
+
 **One gap found while doing it:** his `v6.19_ebc_custom` branch contains
 **no EBC device-tree node** and touches no DTS at all, so it cannot bind
 on its own — he must compose branches. For us that is harmless (we have
