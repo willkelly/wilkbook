@@ -36,6 +36,79 @@ the long-standing "arithmetic only" caveat is retired.
 **Next actions**: (1) the human QC cycle (`doc/alpha-signoff.md`) on a
 post-soak image; (2) the alpha tag.
 
+**2026-08-25 FIRST DIRECT-MODE GLASS: D1–D4 pass, D9 measured, one panic captured, D5 unresolved.** [wilkbook / wkelly + agent]
+The deployed study image booted and ran KOReader through hrdl's
+direct-mode driver, in the optics rig, driven entirely over SSH/UART.
+Videos and frames in the session scratchpad; key artifacts to be
+committed with the writeup.
+
+LADDER RESULTS
+  D1  CLUT compiled ON THE DEVICE by wbf-clut from its own ebc.wbf:
+      229,584 B, 14 bins — but BY HAND: the clut service is not in the
+      image (the flavor never instantiates it; found independently by
+      the release review). Persists on p6, so later boots need no
+      recompile — but see D2.
+  D2  PROBE PASSES only after a per-boot REBIND: the initrd raw-loads
+      rockchip_ebc before the rootfs (and its custom_wf.bin) exists, so
+      first probe fails -EINVAL and `echo fdec0000.ebc > .../bind` must
+      follow. The DT third clock works (no clock error); temp bin 24–27
+      selected via IIO.
+  D3  Panel lights and paints. fb0 is RGB565 1872x1404 and KOReader
+      ADAPTS — the feared XR24 wall does not exist (his rgb565→Y4 blit).
+  D4  Page turns work through GLOBAL_REFRESH (ABI-identical 0xC0016440)
+      — after fixing THE GHOSTING ROOT CAUSE: KOReader's device.lua
+      hardcodes /dev/dri/card0 for the wash ioctl, and on this image
+      card0 is PANFROST (the GPU) — every wash was a malformed GPU job
+      (the dmesg "JOB_CONFIG_FAULT" lines) and the panel had never been
+      washed. Post-fix (bind-mounted card1), ghost-vs-wash SSIM sits at
+      the camera noise floor. OPERATOR VALIDATION on video: quality
+      good; MORE FLASHING/REDRAWING PER TURN than a smooth read wants —
+      the pre-registered two-pass + waveform-class expectation, now the
+      P4 driver (see doc/direct-mode-adoption.md).
+  D9  advance() cost from his own instrumentation: 37 µs idle,
+      ~1.9 ms band, **23.1 ms full-panel peak** vs the 11.7 ms frame
+      budget — over budget IN THE KERNEL, single-threaded on 4 cores
+      (matches the boot RT-throttle event). Residence is not the
+      constraint; parallelism is the lever. This is the §7
+      userspace-TCON feasibility number.
+  D5  ROTATION UNRESOLVED, not failed: four remote mechanisms (injected
+      gyro events, doc sidecar, copt_rotation_mode, the
+      /run/wilkbook-orientation.state file) all produced portrait
+      boots; the rotated render path never executed. Four cold full
+      paints were clean. Next: instrument the rotation chain at rung 4v
+      offline, then one targeted glass pass (or physically rotate the
+      device out-of-box).
+
+THE PANIC, CAPTURED ON CONSOLE (uart-d5.log):
+      Unable to handle kernel NULL pointer dereference at virtual
+      address 0000000000000008 / Oops: 0000000096000044 [#1] SMP /
+      Kernel panic - not syncing. Pattern across both occurrences:
+      a uinput device destroyed WHILE KOReader holds it open, then the
+      reader restart panics; restarts without a preceding device
+      destruction never crashed, and the stop-reader-first ordering
+      survived where the other died. Reproducible; trace partially
+      garbled by console interleaving. To upstream-register.
+
+OPERATIONAL FINDINGS
+  * UART slot selection works end-to-end: scripted DOWN,DOWN,ENTER at
+    the U-Boot menu booted os2 twice, no hands. My earlier "RX dead"
+    was two broken captures of my own (a backgrounding race, then a
+    pkill that matched its own command line). /dev/ttyACM0 is the
+    operator's MOTU M4, not the PineNote.
+  * orientation-bridge ignores SIGTERM — its --cleanup stop hook hangs
+    `herd stop` (shepherd wedged "being stopped" until SIGKILL).
+  * After crash-loop failures, shepherd marks reader-session failing
+    and later constructor starts fail silently; a manual env-matched
+    launch works. Not yet diagnosed.
+  * Two auto-suspends interrupted work before autosuspend was pinned
+    off (p7 enabled=1 + the daemon restarting with the reader). The
+    standing disable-first rule exists for this reason; it now also
+    survives on p7 as enabled=0 — RE-ENABLE AFTER THE DIRECT SESSIONS.
+
+Session-local state (bind-mounts, injectors, manual reader) dies at
+reboot. p6 keeps custom_wf.bin; p7 keeps enabled=0. os1 rescue path
+verified twice tonight, involuntarily.
+
 **2026-08-25 FIRST DIRECT-MODE DEPLOY — written and verified, not yet booted.** [wilkbook / wkelly + agent]
 The `reader-direct` STUDY image (hrdl's direct-mode EBC driver; see
 `doc/direct-mode-adoption.md` and the agenda in
