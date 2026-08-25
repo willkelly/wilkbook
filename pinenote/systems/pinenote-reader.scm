@@ -11,6 +11,7 @@
   #:use-module (pinenote packages koreader)
   #:use-module (pinenote packages orientation)
   #:use-module (pinenote services orientation)
+  #:use-module (pinenote services koreader-profile)
   #:use-module (pinenote services reader-session)
   #:use-module (pinenote services dmc)
   #:use-module (pinenote services library)
@@ -45,54 +46,6 @@ root ALL=(ALL) ALL
                              (if %very-insecure-for-convenience?
                                  "reader ALL=(ALL) NOPASSWD: ALL\n"
                                  ""))))
-
-;; The KOReader profile seeded onto a fresh image.
-;;
-;; Built HOST-SIDE, as a string, so the font block can be CONDITIONAL.  A
-;; fresh clone has no pinenote/fonts/local (gitignored, licensed), so
-;; pinenote-local-fonts is #f and EXT_FONT_DIR is never set on that path --
-;; naming "Equity A" there points the reader at a font that is not in the
-;; image.  reader-session.scm has always got this right; this seed did not.
-;;
-;; And this is the seed that WINS: activation runs before services and both
-;; are gated on the settings file being absent, so on a fresh image this one
-;; writes and reader-session's is a no-op.  Which means the font block here
-;; must be the FULL one from reader-session.scm, not just cre_font -- with
-;; only cre_font, monospace_font and cre_font_family_fonts were silently
-;; dropped from every fonts-present image.  Keep the two in sync.
-(define %pinenote-koreader-seed
-  (string-append
-   "-- seeded by the reader flavor (pinenote-koreader-home-dir)\n"
-   "return {\n"
-   "    [\"closed_rotation_mode\"] = 1,\n"
-   "    [\"copt_b_page_margin\"] = 25,\n"
-   "    [\"copt_font_size\"] = 30,\n"
-   "    [\"copt_h_page_margins\"] = { [1] = 30, [2] = 30 },\n"
-   "    [\"copt_t_page_margin\"] = 15,\n"
-   "    [\"coverbrowser_initial_default_setup_done\"] = true,\n"
-   (if pinenote-local-fonts
-       (string-append
-        "    [\"cre_font\"] = \"Equity A\",\n"
-        "    [\"monospace_font\"] = \"Triplicate A Code\",\n"
-        "    [\"cre_font_family_fonts\"] = {\n"
-        "        [\"serif\"] = \"Equity A\",\n"
-        "        [\"sans-serif\"] = \"Concourse 4\",\n"
-        "        [\"monospace\"] = \"Triplicate A Code\",\n"
-        "    },\n")
-       "")
-   "    [\"cre_header_auto_refresh\"] = 0,\n"
-   "    [\"cre_partial_rerendering\"] = false,\n"
-   "    [\"cre_show_progress\"] = false,\n"
-   "    [\"flash_keyboard\"] = false,\n"
-   "    [\"flash_ui\"] = false,\n"
-   "    [\"full_refresh_count\"] = 0,\n"
-   "    [\"home_dir\"] = \"/data/books\",\n"
-   "    [\"lock_rotation\"] = true,\n"
-   "    [\"quickstart_shown_version\"] = 2021070000,\n"
-   "    [\"refresh_on_pages_with_images\"] = false,\n"
-   "    [\"screensaver_type\"] = \"cover\",\n"
-   "}\n"))
-
 
 ;; Named, because two things now need the SAME list: the profile the device
 ;; installs, and the manuals shelf, which converts the documentation of
@@ -202,52 +155,6 @@ root ALL=(ALL) ALL
                                 #~(when (file-exists? "/var/empty")
                                     (chown "/var/empty" 0 0)
                                     (chmod "/var/empty" #o555)))
-                ;; The user's library lives at /data/books on the persistent
-                ;; data partition (mounted below), so books survive os2
-                ;; reflashes.  /root does NOT survive a reflash, so seed the
-                ;; dogfooding KOReader profile's home_dir on first boot --
-                ;; only when the settings file is absent, never overriding a
-                ;; profile the user has since customized.
-                ;; Comfort defaults beyond home_dir (2026-07-13, first
-                ;; dogfooding session on a bare profile): KOReader's stock
-                ;; refresh_on_pages_with_images=true promotes every
-                ;; image-bearing page to a full flash — the quickstart
-                ;; guide flashed on nearly every turn.  full_refresh_count
-                ;; 0 (= never): the washer owns cadence outright per
-                ;; finding 11's validated configuration — Will's call
-                ;; 2026-07-13 after finding 6/11 evidence (48+ washless
-                ;; turns clean; promotion adds flashes the washer makes
-                ;; redundant). Seeding a DEFAULT — the user's menu
-                ;; changes persist, the seed never overwrites an
-                ;; existing profile.
-                 ;; The SC7A20 bridge owns physical orientation.  Upstream
-                 ;; lock_rotation remains authoritative for document/FM
-                 ;; overrides; input_ignore_gsensor is the sole autorotation
-                 ;; on/off setting and is intentionally not seeded here.
-                 ;;
-                 ;; THIS is the seed that wins.  reader-session.scm carries
-                 ;; the same e-ink refresh keys, but both are gated on the
-                 ;; file being absent and activation runs before services,
-                 ;; so on a fresh image this one writes first and the
-                 ;; service's is a no-op.  Found the hard way on 2026-08-05:
-                 ;; the keys were added only to reader-session and shipped
-                 ;; an image with none of them.  Keep the two in sync, or
-                 ;; better, add refresh defaults HERE.
-                 ;;
-                 ;; The six refresh keys and why, in one line each (full
-                 ;; reasoning in reader-session.scm and doc/refresh-policy.md):
-                 ;;   cre_show_progress    -- progress bar fsyncs the whole
-                 ;;                           page every 500 ms mid-render
-                 ;;   cre_partial_rerendering -- 75x75 status icon costs a
-                 ;;                           full-screen pass (partial cost
-                 ;;                           is per-frame, not per-area)
-                 ;;   flash_ui             -- two forceRePaint() per tap
-                 ;;   flash_keyboard       -- same, per keystroke
-                 ;;   cre_header_auto_refresh -- clock digit redraws the page
-                 ;;                           every 60 s (~48 s/hour)
-                 ;;   coverbrowser_initial_default_setup_done -- stops
-                 ;;                           CoverBrowser seeding itself on;
-                 ;;                           leaves the classic filename list
                 ;; Shadowed fallback for the case where p7 never mounts.
                 ;; pinenote-library (a shepherd one-shot) correctly refuses to
                 ;; create the library when /data is not a mount point -- but
@@ -282,14 +189,29 @@ is normally hidden underneath that mount.
 Check that the partition exists and is healthy from the other OS slot, or
 over the serial console.  See doc/install.md in the wilkbook repository.
 " port))))))
-                (simple-service 'pinenote-koreader-home-dir
-                                activation-service-type
-                                #~(let ((f "/root/.config/koreader/settings.reader.lua"))
-                                    (unless (file-exists? f)
-                                      (mkdir-p "/root/.config/koreader")
-                                      (call-with-output-file f
-                                        (lambda (port)
-                                          (display #$%pinenote-koreader-seed port))))))
+                ;; The KOReader profile seeded onto a fresh image, and the
+                ;; ONLY writer of KOReader's settings file in the tree.  Every
+                ;; default -- the library home_dir, the six e-ink refresh
+                ;; keys, the font aliases -- is declared exactly once, on
+                ;; the record in (pinenote services koreader-profile),
+                ;; which also carries the measurement behind each.  It
+                ;; writes only when the file is ABSENT, so a profile the
+                ;; user has customized is never overwritten; /root comes
+                ;; from the image, so "absent" means a fresh reflash.
+                ;;
+                ;; Override a field rather than editing a string:
+                ;;   (service pinenote-koreader-profile-service-type
+                ;;            (pinenote-koreader-profile-configuration
+                ;;             (font-size 32)))
+                ;;
+                ;; Until 2026-08-24 reader-session.scm carried a SECOND
+                ;; seed of this same file.  It could never run -- activation
+                ;; runs before shepherd services and both were gated on the
+                ;; file being absent -- which is how the 2026-08-05 image
+                ;; shipped with none of the refresh keys: they were added to
+                ;; the dead copy only.  One writer now, pinned by
+                ;; `make koreader-profile-check'.
+                (service pinenote-koreader-profile-service-type)
                 ;; Key-only SSH with NO baked authorized key: root's key
                 ;; is installed at boot from /data/ssh/authorized_keys
                 ;; (ssh-keys.scm), the same out-of-band channel as the

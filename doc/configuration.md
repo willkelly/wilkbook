@@ -41,12 +41,19 @@ who deliberately chose 300 gets moved with it.
 
 ### The trap this exists to avoid, which is live in the tree today
 
-`%pinenote-koreader-seed` (`pinenote/systems/pinenote-reader.scm:61-92`)
-writes ~20 **materialised defaults** — `copt_font_size = 30`,
-`flash_ui = false`, `full_refresh_count = 0` — directly into KOReader's
-settings file. That is harmless today *only by accident*: `/root` is on
-p6, so every reflash wipes it and the seed reasserts. **That volatility
-is the only reason rebuilt defaults currently reach anyone.**
+`pinenote-koreader-profile-service-type`
+(`pinenote/services/koreader-profile.scm`) writes 23 **materialised
+defaults** — `copt_font_size = 30`, `flash_ui = false`,
+`full_refresh_count = 0` — directly into KOReader's settings file. That is
+harmless today *only by accident*: `/root` is on p6, so every reflash
+wipes it and the seed reasserts. **That volatility is the only reason
+rebuilt defaults currently reach anyone.**
+
+The seed became a record on 2026-08-24 (#12 step 2), which fixed a
+different problem — there were *two* writers of that file and the second
+was dead code — and deliberately did **not** touch this one. Every value
+is still materialised; `KO_HOME` did not move. Serializing from a record
+makes the durability question expressible, not answered.
 
 Move that file to p7 for durability and every one of those values
 freezes at whatever shipped when the device first booted. Durability and

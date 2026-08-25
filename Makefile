@@ -73,7 +73,8 @@ FLAVORS = minimal slim networked dev usb-console usb-console-linux-6-6 reader re
          check-host wbf-check wbf-notice ebc-logic-check ebc-barrier-check rastersim-check koreader-input-check orientation-check optics-check optics-audit-dataset power-check rockchip-pm-check activation-positive-check suspend-check \
         battery-dtb-check time-machine-check gexp-modules-check \
         timezone-check kernel-version-check library-check \
-        manuals-check ultra-coupling-check timesync-check settings-check \
+        manuals-check ultra-coupling-check timesync-check \
+        settings-check koreader-profile-check \
         $(FLAVORS) $(addprefix image-,$(FLAVORS)) $(addprefix rootfs-,$(FLAVORS))
 
 help:
@@ -314,7 +315,7 @@ refresh-trigger-check:
 CHECK_HOST_TARGETS = ebc-logic-check ebc-barrier-check rastersim-check \
         koreader-input-check orientation-check optics-check power-check \
         rockchip-pm-check activation-positive-check suspend-check \
-        library-check manuals-check ultra-coupling-check \
+        library-check koreader-profile-check manuals-check ultra-coupling-check \
         battery-dtb-check time-machine-check gexp-modules-check \
         timezone-check refresh-trigger-check timesync-check settings-check
 
@@ -504,6 +505,17 @@ release-manifest:
 # negative-tested against six ways it has to be able to fail.
 library-check:
 	sh pinenote/scripts/preflight/validate-koreader-library.sh
+
+# One writer for KOReader's settings profile, and it is the record.  The
+# tree carried two seeds of that file until 2026-08-24; only the
+# activation one could ever run, so the six e-ink refresh keys added to
+# the other on 2026-08-05 shipped in nothing.  Checks 1-5 are text
+# analysis and need nothing installed; check 6 generates the seed from the
+# record and reads it, which needs `guix' because the record is a Guix
+# service configuration -- it SKIPS loudly without one (CI has guile but
+# no guix), so a green here is weaker in CI than it is locally.
+koreader-profile-check:
+	sh pinenote/scripts/preflight/validate-koreader-profile.sh
 
 # The man/info -> EPUB converter the manuals shelf is built from (issue #17).
 # Python 3 standard library over generated fixtures plus one committed

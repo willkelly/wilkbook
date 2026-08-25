@@ -32,9 +32,13 @@ repo_root=$(cd "$script_dir/../../.." && pwd)
 svc=$repo_root/pinenote/services/library.scm
 rs=$repo_root/pinenote/services/reader-session.scm
 sys=$repo_root/pinenote/systems/pinenote-reader.scm
+# The seeded KOReader profile moved out of pinenote-reader.scm on
+# 2026-08-24: it is a record now, and the record is the one place any of
+# its defaults are declared.  Checks 9 and 10 below read it there.
+prof=$repo_root/pinenote/services/koreader-profile.scm
 
 fail() { echo "FAIL: $1" >&2; exit 1; }
-for f in "$svc" "$rs" "$sys"; do [ -r "$f" ] || fail "cannot read $f"; done
+for f in "$svc" "$rs" "$sys" "$prof"; do [ -r "$f" ] || fail "cannot read $f"; done
 
 # Extract the EMBEDDED SHELL SCRIPT and analyse only that.  The .scm file
 # documents these same hazards in prose, and matching the commentary
@@ -116,9 +120,13 @@ grep -q "pinenote-library-fallback" "$sys" ||
 #    QuickStart:isShown() is false it FORCES start_with="last" and opens the
 #    guide, so the library is not what the user sees.  isShown() is
 #    shown_version >= quickstart_force_show_version (2021070000).
-seeded=$(grep -o 'quickstart_shown_version[^,]*' "$sys" | head -1 || true)
+#     Newlines are folded first: a record field wraps across lines, and a
+#     line-based grep would silently match nothing.
+seeded=$(tr '\n' ' ' < "$prof" |
+           grep -o 'quickstart-shown-version[^)]*(default[^)]*)' |
+           head -1 || true)
 [ -n "$seeded" ] ||
-  fail "the seeded KOReader profile does not set quickstart_shown_version;
+  fail "the seeded KOReader profile does not set quickstart-shown-version;
    without it a fresh device opens the quickstart guide and the seeded
    home_dir is never used (reader.lua:251-255)"
 ver=$(printf '%s' "$seeded" | grep -o '[0-9]\{6,\}' | head -1)
@@ -126,23 +134,21 @@ ver=$(printf '%s' "$seeded" | grep -o '[0-9]\{6,\}' | head -1)
   fail "quickstart_shown_version=$ver is below the 2021070000 threshold, so
    QuickStart:isShown() is still false"
 
-# 10. The seeded font block must be CONDITIONAL and COMPLETE.
-#     Conditional: a fresh clone has no pinenote/fonts/local (gitignored,
+# 10. The seeded font block must be CONDITIONAL on the fonts actually being
+#     staged: a fresh clone has no pinenote/fonts/local (gitignored,
 #     licensed), so pinenote-local-fonts is #f and EXT_FONT_DIR is never
 #     set -- naming "Equity A" there points at a font not in the image.
-#     Complete: this activation seed WINS over reader-session's (activation
-#     runs first and both are gated on the file being absent), so carrying
-#     only cre_font silently drops monospace_font and cre_font_family_fonts
-#     from every fonts-present build.
-grep -q '(if pinenote-local-fonts' "$sys" ||
-  fail "the seeded KOReader profile's font block is not conditional on
+#
+#     "COMPLETE" used to be checked here too (cre_font without
+#     monospace_font / cre_font_family_fonts shipped on every fonts-present
+#     build once).  It is no longer checkable as a property of the text,
+#     because it is no longer expressible: the three keys are emitted from
+#     ONE record field, so there is no state in which one is missing.
+#     validate-koreader-profile.sh proves that by generating both variants.
+grep -q '(and pinenote-local-fonts' "$prof" ||
+  fail "the seeded KOReader profile's font aliases are not conditional on
    pinenote-local-fonts; a fresh clone would seed a font that is not in
-   the image (reader-session.scm has always done this correctly)"
-if grep -q 'cre_font' "$sys" && ! grep -q 'monospace_font' "$sys"; then
-  fail "the activation seed names cre_font without the rest of the font
-   block; this seed wins over reader-session's, so monospace_font and
-   cre_font_family_fonts are silently dropped"
-fi
+   the image"
 
 echo "PASS: library is created on p7 by an ordered one-shot, the pointer is
       relative, os1's home is untouched, and the first boot lands in it"

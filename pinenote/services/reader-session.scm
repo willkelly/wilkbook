@@ -164,95 +164,18 @@ end
          (when (file-exists? "/dev/fb0")
            (system* #$(file-append koreader-bin "/lib/koreader/luajit")
                     "-e" #$%panel-blank-lua))
-         ;; Seed KOReader defaults once, and never overwrite on-device
-         ;; choices -- this only writes when the file is absent, which on
-         ;; this image means a fresh reflash (/root comes from the image).
+         ;; NOTE: this service does NOT seed KOReader's settings file.  It
+         ;; used to, and that copy was DEAD CODE for its whole life: activation
+         ;; runs before shepherd services, both writers were gated on the
+         ;; file being absent, so the flavor's activation seed always won
+         ;; and this one always found the file already there.  On
+         ;; 2026-08-05 the six e-ink refresh keys were added here only,
+         ;; and an image shipped with none of them.
          ;;
-         ;; Two of these are e-ink refresh policy, not taste, and cost real
-         ;; panel time when left at KOReader's defaults (measured on glass
-         ;; 2026-08-04/05; doc/refresh-policy.md):
-         ;;
-         ;;   cre_show_progress=false -- ReaderRolling:showEngineProgress()
-         ;;     paints a progress bar during a crengine re-render and calls
-         ;;     Screen:refreshFast() every 500 ms.  publish() is fsync on
-         ;;     the fbdev fd and deferred-io tracks dirty PAGES, not the
-         ;;     intent's rect, so each tick republishes the whole pending
-         ;;     re-render as a full-screen ~38-frame pass (~0.8 s).  A
-         ;;     progress indicator that costs 0.8 s per 0.5 s tick makes the
-         ;;     operation it reports on slower.  Upstream added this key for
-         ;;     the same reason on SDL-over-SSH.  Rotations without it cost
-         ;;     exactly 1 IRQ (one wash); with it, 76+ frames plus the wash.
-         ;;
-         ;;   cre_partial_rerendering=false -- otherwise crengine
-         ;;     re-renders in the background and cycles a status icon
-         ;;     (cre.render.partial/working/ready/reload) at 75x75, and a
-         ;;     partial refresh costs ~38 frames REGARDLESS of area, so a
-         ;;     corner icon costs a full-screen repaint.  Note this one is
-         ;;     read per-document first (the book's .sdr sidecar) and only
-         ;;     then globally, so this default loses to an existing book's
-         ;;     saved value -- it governs newly opened books.
-         ;;
-         ;;   flash_ui=false -- tap feedback on menu rows, file rows and
-         ;;     dialog buttons calls UIManager:forceRePaint() TWICE per tap
-         ;;     (highlight, then unhighlight; menu.lua ~527-543).  Cost is
-         ;;     per UI tick, not per intent -- within one repaint drain the
-         ;;     first publish() empties the deferred-io pagelist and later
-         ;;     ones are no-ops -- so what makes this expensive is the two
-         ;;     EXTRA ticks, each a full pass.  This was the file-browser
-         ;;     double draw.
-         ;;
-         ;;   flash_keyboard=false -- same mechanism, once per keystroke.
-         ;;
-         ;;   cre_header_auto_refresh=0 -- ReaderCoptListener:updateHeader()
-         ;;     calls document:resetBufferCache() ("be sure next repaint is
-         ;;     a redrawing") and setDirty over the full screen width, and
-         ;;     reschedules itself every 60 s while the top bar shows a
-         ;;     clock.  A whole page redraw plus a full-screen pass, once a
-         ;;     minute, forever: ~48 s of panel time per hour of reading for
-         ;;     a clock digit.  The clock still updates on every page turn.
-         ;;
-         ;;   coverbrowser_initial_default_setup_done=true -- CoverBrowser
-         ;;     seeds ITSELF on at first launch (main.lua ~84-95, mode
-         ;;     "list_image_meta"), then polls every 1 s patching extracted
-         ;;     covers into the file browser.  Pre-setting the "already did
-         ;;     first-run setup" flag leaves filemanager_display_mode unset,
-         ;;     which is the classic filename list.  Note the display modes
-         ;;     themselves live in BookInfoManager's sqlite cache, not here,
-         ;;     so this prevents the mode being set rather than unsetting it.
-         ;;
-         ;; The font keys mirror wilkhome's fontconfig aliases
-         ;; (serif=Equity, sans=Concourse, mono=Triplicate Code); crengine's
-         ;; built-in fallback chain stays in effect below them.
-         (let ((settings "/root/.config/koreader/settings.reader.lua"))
-           (unless (file-exists? settings)
-             (for-each (lambda (dir)
-                         (unless (file-exists? dir)
-                           (mkdir dir #o700)))
-                       '("/root/.config" "/root/.config/koreader"))
-             (call-with-output-file settings
-               (lambda (port)
-                 (display "\
--- seeded by wilkbook reader-session; KOReader rewrites this file
-return {
-    [\"cre_show_progress\"] = false,
-    [\"cre_partial_rerendering\"] = false,
-    [\"flash_ui\"] = false,
-    [\"flash_keyboard\"] = false,
-    [\"cre_header_auto_refresh\"] = 0,
-    [\"coverbrowser_initial_default_setup_done\"] = true,
-" port)
-                 #$@(if pinenote-local-fonts
-                        #~((display "\
-    [\"cre_font\"] = \"Equity A\",
-    [\"monospace_font\"] = \"Triplicate A Code\",
-    [\"cre_font_family_fonts\"] = {
-        [\"serif\"] = \"Equity A\",
-        [\"sans-serif\"] = \"Concourse 4\",
-        [\"monospace\"] = \"Triplicate A Code\",
-    },
-" port))
-                        #~())
-                 (display "}\n" port)))))
+         ;; The one seed, its defaults and the measurement behind each now
+         ;; live on the record in (pinenote services koreader-profile).
+         ;; Do not add a second writer here; `make koreader-profile-check'
+         ;; fails if one appears.
          (apply
           (make-forkexec-constructor
            ;; reader.lua's own shebang is #!./luajit, so run the
