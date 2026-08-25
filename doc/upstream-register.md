@@ -717,3 +717,65 @@ not. Worth reporting to both, in opposite registers of severity.
 
 **Status:** not sent, same reasoning as item 15 — worth more attached to
 a concrete adoption than ahead of one. Both are one-line fixes.
+
+## 17. Kernel NULL-deref panic: destroy a uinput device under a live evdev reader, then restart the reader
+
+**Where it would go:** mainline `input`/`evdev` (likely — the faulting
+frame is not conclusively attributed, see below), as observed on Linux
+7.1.8 (`linux-pinenote-hrdl-direct-7.1.8`, the direct-mode study
+kernel; nothing in our patch stack touches uinput or evdev, so the code
+under suspicion is mainline's).
+
+**What:** destroying a uinput-backed input device **while a consumer
+still holds its evdev node open**, then restarting that consumer, panics
+the kernel. Captured on the UART console during the 2026-08-25
+direct-mode glass session (`uart-d5.log`; excerpt as recorded in
+`doc/status.md`):
+
+```
+Unable to handle kernel NULL pointer dereference at virtual address 0000000000000008
+Oops: 0000000096000044 [#1] SMP
+Kernel panic - not syncing
+```
+
+**Reproduction pattern**, consistent across both occurrences that
+session: (1) a uinput device exists (the orientation bridge's
+`wilkbook-orientation` node, or a D5 gyro injector's); (2) KOReader has
+the evdev node open; (3) the uinput device is destroyed out from under
+it — the provider process killed, or `UI_DEV_DESTROY` on its fd; (4) the
+reader is restarted; (5) NULL deref at offset 8, Oops
+`0000000096000044` (a data-abort **write** through a near-NULL pointer),
+panic. The controls both hold: reader restarts with **no** preceding
+device destruction never crashed, and the **stop-consumer-first**
+ordering — stop KOReader, then tear down the uinput device — survived
+the same session where the other ordering died. That ordering is now the
+standing session discipline, but it is a workaround: hot-unplugging an
+input device under a reader is an ordinary event (any USB keyboard
+yank), not an API misuse.
+
+**How found:** D5 rotation debugging on the first direct-mode glass
+session — injected uinput devices and repeated reader restarts made the
+destroy-while-held ordering common enough to hit twice.
+
+**Why it matters to mainline:** if this is what it looks like, any
+userspace can panic the kernel with unprivileged-shaped operations on
+`/dev/uinput` plus an open evdev client — a crash, possibly a
+use-after-free-adjacent one, in core input hotplug. That is worth a
+report even from a niche tree, *provided* it reproduces on a kernel
+nobody can blame us for.
+
+**What has to be true first:** (1) a minimal reproducer — create uinput
+device, open its evdev node from a second process, destroy the device,
+restart the second process — on a **vanilla** kernel; QEMU is enough,
+no PineNote required, and it doubles as the trace decode the console
+capture cannot give us (both on-glass traces are partially garbled by
+console interleaving, which is why the faulting function is still
+unattributed). (2) Check current mainline `drivers/input/` history for
+an existing fix before reporting — 7.1.8 is not tip. (3) The standing
+baseline gate does **not** apply if the vanilla reproducer works: a
+panic reproducible on stock kernels stands on its own, with no
+credibility dependence on our tree.
+
+**Status:** not sent. Console evidence and reproduction pattern are
+recorded; the offline reproducer is the next step and needs no
+hardware.
