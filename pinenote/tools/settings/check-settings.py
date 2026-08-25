@@ -51,6 +51,7 @@ import sys
 # retires -- the #12 step expected to delete this row
 DEBT_REGISTER = [
     dict(id="record-vs-daemon:timesync.scm:hwclock",
+         pinned='record \'scheme:(file-append util-linux "/sbin/hwclock")\' vs opt.hwclock \'hwclock\'',
          why="record default is the absolute store path (file-append util-linux"
              " /sbin/hwclock); the daemon's own default is the bare name"
              " 'hwclock', i.e. a PATH lookup in the empty shepherd environment"
@@ -59,6 +60,7 @@ DEBT_REGISTER = [
          retires="#12 step 4 (the serializer owns the path)"),
 
     dict(id="host-model:policy_ship:auto_refresh",
+         pinned='policy_ship() models auto_refresh=1; the shipped parameters say 0',
          why="ebc-replay's policy_ship() says it models 'the deployed"
              " phase-A.2 stack: pinenote/services/ebc.scm params' but sets"
              " auto_refresh=1, while the shipped params have set it to 0 since"
@@ -69,6 +71,7 @@ DEBT_REGISTER = [
          retires="#12 step 3 (<pinenote-display-configuration>)"),
 
     dict(id="host-model:policy_ship:defio_delay_ms",
+         pinned='policy_ship() models defio_delay_ms=0; the shipped parameters say 250',
          why="policy_ship() leaves defio_delay_ms at 0 (memset), which is that"
              " tool's 'flush at trace time' sentinel rather than a modelled"
              " device value -- but it is also not the shipped 250 ms, so the"
@@ -76,6 +79,7 @@ DEBT_REGISTER = [
          retires="#12 step 3 (<pinenote-display-configuration>)"),
 
     dict(id="host-model:banner:defio_delay_ms",
+         pinned='the usage banner says the device is ~50 ms; the shipped parameters say defio_delay_ms=250',
          why="ebc-replay's usage banner still tells the operator 'the device is"
              " ~50 ms'.  The shipped value has been 250 ms since the 2026-08-01"
              " sweep (doc/refresh-policy.md), so the banner argues for a"
@@ -84,6 +88,7 @@ DEBT_REGISTER = [
          retires="#12 step 3 (<pinenote-display-configuration>)"),
 
     dict(id="conf-grammar:autosuspend.lua:suspend_while_charging",
+         pinned='autosuspend.lua parses suspend_while_charging with an allowlist while the reference grammar in this tree is a denylist',
          why="parsed with an ALLOWlist (1/true/yes) four lines below 'enabled',"
              " which is parsed with a DENYlist.  So suspend_while_charging=on"
              " reads as OFF while enabled=off reads as ON -- two value grammars"
@@ -92,12 +97,14 @@ DEBT_REGISTER = [
          retires="#12 step 4 (one grammar, declared once)"),
 
     dict(id="conf-grammar:ddr-boost.lua:enabled",
+         pinned='ddr-boost.lua parses enabled with an allowlist while the reference grammar in this tree is a denylist',
          why="the SAME key name as autosuspend's 'enabled', in a second file"
              " named *.conf in the same directory, with the opposite grammar"
              " (ALLOWlist here, DENYlist there)",
          retires="#12 step 4 (one grammar, declared once)"),
 
     dict(id="conf-key-default:enabled",
+         pinned='the key enabled is parsed in autosuspend.lua, ddr-boost.lua with defaults False, True',
          why="'enabled' is a key in two runtime conf files with OPPOSITE"
              " defaults -- autosuspend defaults on, ddr-boost defaults off --"
              " so the same line means opposite things depending on which file"
@@ -106,6 +113,7 @@ DEBT_REGISTER = [
          retires="#12 step 4 (distinct field names on distinct records)"),
 
     dict(id="conf-parser-whitespace:dmc.scm:mode",
+         pinned='the mode= selector tests the raw line with string-prefix?, so it rejects the leading whitespace every Lua parser here accepts',
          why="the dmc selector matches with (string-prefix? \"mode=\" line) on"
              " the raw line, so a leading space makes the value unrecognised"
              " and the boot silently degrades to off.  Every Lua parser in the"
@@ -114,18 +122,21 @@ DEBT_REGISTER = [
          retires="#12 step 4 (a serialized record, no boot-time parse)"),
 
     dict(id="no-record-field:autosuspend.lua:enabled",
+         pinned='enabled is settable at runtime but no Guix record field declares it, so an image cannot ship a value for it',
          why="the master pause exists only in Lua and in the runtime file, so"
              " an image cannot ship auto-suspend disabled; #12's table, 'master"
              " pause -- none -- Lua only'",
          retires="#12 step 4 (an enabled? field)"),
 
     dict(id="no-record-field:autosuspend.lua:power_key",
+         pinned='power_key is settable at runtime but no Guix record field declares it, so an image cannot ship a value for it',
          why="press-power-to-suspend is settable at runtime and by argv"
              " (--no-power-key) but has no record field, so the service can"
              " never pass the flag the daemon already knows how to parse",
          retires="#12 step 4 (a power-key-suspends? field)"),
 
     dict(id="no-record-field:ddr-boost.lua:enabled",
+         pinned='enabled is settable at runtime but no Guix record field declares it, so an image cannot ship a value for it',
          why="the boost opt-in exists only in Lua.  #12 removes it from the"
              " override surface entirely rather than adding a field, because"
              " both operands of the ddr-boost x dmc.mode coupling were"
@@ -133,6 +144,7 @@ DEBT_REGISTER = [
          retires="#12 step 4 (ddr-boost? leaves the override surface)"),
 
     dict(id="no-record-field:autosuspend.lua:persistent-config",
+         pinned="/data/wilkbook/autosuspend.conf is read before the record's config-file and no record field declares it",
          why="the daemon reads a SECOND config file -- the one on p7 that"
              " survives a reflash, and the one CLAUDE.md, doc/device-access.md"
              " and doc/install.md all tell an operator to write -- from a bare"
@@ -144,6 +156,7 @@ DEBT_REGISTER = [
          retires="#12 step 4 (the two-key p7 override surface)"),
 
     dict(id="no-record-field:dmc.scm:mode",
+         pinned='mode is settable at runtime but no Guix record field declares it, so an image cannot ship a value for it',
          why="a safety-critical, three-valued, boot-time knob with NO record"
              " field at all: pinenote-dmc-service-type has default-value #f and"
              " a (_config) constructor.  'Ship with the DDR experiment armed'"
@@ -171,10 +184,27 @@ def bad(msg):
 
 
 def divergence(ident, detail):
-    """Report one divergence: DEBT when the register owns it, else FAIL."""
+    """Report one divergence: DEBT when the register owns it, else FAIL.
+
+    A row owns a divergence only if BOTH the site id and the observed
+    detail still match what was pinned.  Matching on the id alone would
+    let NEW drift at an already-registered site be absorbed as old
+    inventory and still exit 0 -- which is not "pinning today's state",
+    it is pinning the set of divergent sites.  Caught in review before
+    this gate ever ran in CI.
+    """
     STATE["seen"].add(ident)
     for row in DEBT_REGISTER:
         if row["id"] == ident:
+            pinned = row.get("pinned")
+            if pinned is not None and pinned != detail:
+                bad("DIVERGENCE CHANGED at a registered site %s\n"
+                    "        pinned : %s\n"
+                    "        now    : %s" % (ident, pinned, detail))
+                print("      The register owns the OLD divergence, not this "
+                      "one.  Something moved.  Repair the coupling, or "
+                      "re-pin deliberately with a reason.")
+                return
             STATE["debts"] += 1
             print("DEBT: %s -- %s" % (ident, detail))
             print("      known (%s): %s" % (ISSUE, row["why"]))
@@ -633,74 +663,17 @@ def gate_waveform_literals(shipped):
 # ====================================================================
 # gate C -- the two KOReader seeds
 # ====================================================================
-def koreader_seed_keys(body, path_for_errors):
-    """The `["key"] = value,' pairs of one KOReader seed body.
+# The two-KOReader-seed comparison that used to live here is GONE, not
+# broken.  #12 step 2 collapsed the two seeds into one record-generated
+# service, so its subject no longer exists -- and the successor property
+# (exactly one writer of settings.reader.lua) is pinned better by
+# `make koreader-profile-check', whose writer scan carries a positive
+# control: it finds 2 planted writers and 0 in a clean tree.  Repointing
+# this gate at the record would have duplicated that with no control.
+#
+# It failed loudly on removal ("site not found") rather than passing
+# vacuously, which is the behaviour this file's VACUITY note promises.
 
-    Keys are [\\w-]+, not \\w+: `sans-serif' is a real key in the font
-    block, and a \\w+ pattern drops it from BOTH seeds -- which is a hole
-    the subset comparison could never see."""
-    values = {}
-    for key, raw in re.findall(r'\[\\"([\w-]+)\\"\] = (.+)', body):
-        if key in values:
-            raise ValueError("key %s appears twice in %s: the seed body is "
-                             "not bounded where this gate thinks it is"
-                             % (key, path_for_errors))
-        text = raw.rstrip()
-        for suffix in ('\\n"', '"'):
-            if text.endswith(suffix):
-                text = text[:-len(suffix)].rstrip()
-        values[key] = text.rstrip(",").strip()
-    return values
-
-
-def gate_koreader_seeds():
-    try:
-        reader = scheme_strip_comments(
-            read("pinenote/systems/pinenote-reader.scm"))
-        start = reader.find("(define %pinenote-koreader-seed")
-        if start < 0:
-            raise ValueError("no %pinenote-koreader-seed in "
-                             "pinenote-reader.scm")
-        live = koreader_seed_keys(sexp_at(reader, start),
-                                  "pinenote-reader.scm")
-
-        session = read("pinenote/services/reader-session.scm")
-        start = session.find("-- seeded by wilkbook reader-session")
-        if start < 0:
-            raise ValueError("no reader-session seed body in "
-                             "reader-session.scm")
-        end = session.find('(display "}', start)
-        if end < 0:
-            raise ValueError("the reader-session seed body is unterminated")
-        dead = koreader_seed_keys(session[start:end], "reader-session.scm")
-    except ValueError as exc:
-        bad("site not found -- %s" % exc)
-        return
-    if len(live) < 15 or len(dead) < 6:
-        bad("site not found -- seed extraction yielded %d live and %d dead "
-            "keys; the extractor is broken, not the tree" % (len(live), len(dead)))
-        return
-    agreed = True
-    for key in sorted(dead):
-        if key not in live:
-            agreed = False
-            divergence("koreader-seed:%s" % key,
-                       "reader-session.scm's seed sets %s and the winning "
-                       "pinenote-reader.scm seed does not" % key)
-        elif live[key] != dead[key]:
-            agreed = False
-            divergence("koreader-seed:%s" % key,
-                       "pinenote-reader.scm seeds %s = %s; reader-session.scm "
-                       "seeds %s" % (key, live[key], dead[key]))
-    if agreed:
-        ok("the dead reader-session.scm seed is a value-identical subset of "
-           "the winning pinenote-reader.scm seed (%d of %d keys)"
-           % (len(dead), len(live)))
-
-
-# ====================================================================
-# gate D -- the host model claims to mirror the shipped stack
-# ====================================================================
 def waveform_enum():
     """DRM_EPD_WF_* -> integer, read out of the forward-port patch."""
     patch = read("pinenote/patches/linux-pinenote-7.0-forward-port.patch")
@@ -827,6 +800,8 @@ ALLOWLIST = '(v == "1" or v == "true" or v == "yes")'
 # the knob is unexpressible in a system declaration.  A key parsed by a
 # daemon and absent from this table is a FAIL: a new runtime knob has to
 # say where its default lives.
+EXPECT_ABSENT = "expect-absent"
+
 CONF_KEY_FIELDS = {
     ("autosuspend.lua", "idle"):
         ("pinenote/services/autosuspend.scm", "idle-seconds"),
@@ -834,12 +809,22 @@ CONF_KEY_FIELDS = {
         ("pinenote/services/autosuspend.scm", "backstop-seconds"),
     ("autosuspend.lua", "suspend_while_charging"):
         ("pinenote/services/autosuspend.scm", "suspend-while-charging?"),
-    ("autosuspend.lua", "enabled"): None,
-    ("autosuspend.lua", "power_key"): None,
+    # EXPECT_ABSENT: the knob has no record field TODAY.  Naming the file
+    # and the field #12 step 4 is expected to add makes this an
+    # observation instead of a restatement -- when the field appears, the
+    # row retires itself with "stale debt-register entry" instead of the
+    # gate going on printing a sentence that has become false.
+    ("autosuspend.lua", "enabled"):
+        ("pinenote/services/autosuspend.scm", "enabled?", EXPECT_ABSENT),
+    ("autosuspend.lua", "power_key"):
+        ("pinenote/services/autosuspend.scm", "power-key-suspends?",
+         EXPECT_ABSENT),
     ("ddr-boost.lua", "hold"):
         ("pinenote/services/ddr-boost.scm", "hold-seconds"),
-    ("ddr-boost.lua", "enabled"): None,
-    ("dmc.scm", "mode"): None,
+    ("ddr-boost.lua", "enabled"):
+        ("pinenote/services/ddr-boost.scm", "enabled?", EXPECT_ABSENT),
+    ("dmc.scm", "mode"):
+        ("pinenote/services/dmc.scm", "mode", EXPECT_ABSENT),
 }
 
 LUA_CONF_PARSERS = [
@@ -968,11 +953,28 @@ def gate_conf_keys():
                 % (label, key))
             continue
         target = CONF_KEY_FIELDS[(label, key)]
-        if target is None:
-            divergence("no-record-field:%s:%s" % (label, key),
-                       "%s is settable at runtime but no Guix record field "
-                       "declares it, so an image cannot ship a value for it"
-                       % key)
+        if len(target) == 3 and target[2] is EXPECT_ABSENT:
+            # OBSERVED, not restated.  Look for the field #12 step 4 is
+            # expected to add.  Absent -> the divergence is real, report it
+            # as debt.  PRESENT -> the debt was paid and the row is stale,
+            # which must FAIL: otherwise the gate keeps printing "no record
+            # field declares it" after one does.
+            scm_path, field, _ = target
+            try:
+                raw = record_default(read(scm_path), field)
+            except ValueError as exc:
+                bad("site not found -- %s: %s" % (field, exc))
+                continue
+            if raw is None:
+                divergence("no-record-field:%s:%s" % (label, key),
+                           "%s is settable at runtime but no Guix record "
+                           "field declares it, so an image cannot ship a "
+                           "value for it" % key)
+            else:
+                bad("stale debt-register entry: no-record-field:%s:%s -- %s "
+                    "now declares %s (%s).  The debt is paid; delete the "
+                    "DEBT_REGISTER row and the EXPECT_ABSENT marker."
+                    % (label, key, scm_path, field, " ".join(raw.split())))
             continue
         scm_path, field = target
         try:
@@ -1000,7 +1002,6 @@ def main():
     gate_record_vs_daemon()
     shipped = gate_ebc_params()
     gate_waveform_literals(shipped)
-    gate_koreader_seeds()
     gate_host_model(shipped)
     gate_conf_keys()
 

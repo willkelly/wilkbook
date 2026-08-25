@@ -37,7 +37,11 @@ This is a debt register, not an exemption mechanism:
   bug, and adding a row to silence it is the wrong repair;
 * a row that stops matching, because the drift was **paid off**, is also
   a `FAIL` (`stale debt-register entry`) and must be deleted. The
-  register can therefore only shrink;
+  register can therefore only shrink.  A row owns a SPECIFIC divergence,
+  not a site: if the drift at a registered site changes, the gate fails
+  with `DIVERGENCE CHANGED` rather than absorbing it as old inventory.
+  The first version of this gate matched on the site id alone, so new
+  drift at a known-bad site passed silently -- caught in review;
 * each row names the issue-#12 step expected to retire it.
 
 Issue #12 step 1 asks for a check that goes red against today's tree. A

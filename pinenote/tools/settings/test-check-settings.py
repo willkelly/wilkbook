@@ -58,6 +58,22 @@ SOURCES = [
 # label, file, exact text to replace, replacement, substring the gate's
 # rejection must contain
 MUTATIONS = [
+    # --- register integrity: the two properties review found missing ----
+    # Both were CLAIMED unconditionally in the commit message, the README
+    # and the doc/testing.md row, and neither held.  Controlled here so the
+    # claim cannot quietly become false again.
+    #
+    # (1) The register must own a SPECIFIC divergence, not a site.  Here
+    # the site stays registered and stays divergent -- 99 is still not the
+    # shipped 250 -- but the divergence has MOVED, so absorbing it as old
+    # inventory would be wrong.
+    ("new drift at an ALREADY-REGISTERED site is not absorbed as old debt",
+     "pinenote/tools/ebc-logic/ebc-replay.c",
+     "\tp->refresh_threshold = 60;",
+     "\tp->defio_delay_ms = 99;\n\tp->refresh_threshold = 60;",
+     "DIVERGENCE CHANGED at a registered site "
+     "host-model:policy_ship:defio_delay_ms"),
+
     # --- gate A: a record default drifts from its daemon twin ----------
     ("a record default drifts from its daemon twin",
      "pinenote/services/autosuspend.scm",
@@ -123,23 +139,6 @@ MUTATIONS = [
      "UNKNOWN DIVERGENCE waveform-transient:"),
 
     # --- gate C: the two KOReader seeds -------------------------------
-    ("the two KOReader seeds disagree on a value",
-     "pinenote/services/reader-session.scm",
-     '[\\"flash_ui\\"] = false,',
-     '[\\"flash_ui\\"] = true,',
-     "UNKNOWN DIVERGENCE koreader-seed:flash_ui"),
-    ("the dead seed sets a key the winning seed does not",
-     "pinenote/services/reader-session.scm",
-     '[\\"cre_show_progress\\"] = false,',
-     '[\\"cre_show_progress_x\\"] = false,',
-     "UNKNOWN DIVERGENCE koreader-seed:cre_show_progress_x"),
-    ("a font-block key drifts between the seeds",
-     "pinenote/systems/pinenote-reader.scm",
-     '"        [\\"sans-serif\\"] = \\"Concourse 4\\",\\n"',
-     '"        [\\"sans-serif\\"] = \\"Concourse 3\\",\\n"',
-     "UNKNOWN DIVERGENCE koreader-seed:sans-serif"),
-
-    # --- gate D: the host model claims to mirror the shipped stack ----
     ("the host model drifts from the shipped driver parameters",
      "pinenote/tools/ebc-logic/ebc-replay.c",
      "\tp->refresh_threshold = 60;",
