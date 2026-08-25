@@ -59,34 +59,6 @@ DEBT_REGISTER = [
              " ships, so the daemon default is reachable by hand-running only",
          retires="#12 step 4 (the serializer owns the path)"),
 
-    dict(id="host-model:policy_ship:auto_refresh",
-         pinned='policy_ship() models auto_refresh=1; the shipped parameters say 0',
-         why="ebc-replay's policy_ship() says it models 'the deployed"
-             " phase-A.2 stack: pinenote/services/ebc.scm params' but sets"
-             " auto_refresh=1, while the shipped params have set it to 0 since"
-             " 2026-07-12 (optics finding 10: threshold-triggered auto-globals"
-             " corrupt panel state).  Several suites in that file build on the"
-             " auto-refresh-ON baseline and switch it off explicitly, so"
-             " flipping it is a test-semantics change, not a one-line edit",
-         retires="#12 step 3 (<pinenote-display-configuration>)"),
-
-    dict(id="host-model:policy_ship:defio_delay_ms",
-         pinned='policy_ship() models defio_delay_ms=0; the shipped parameters say 250',
-         why="policy_ship() leaves defio_delay_ms at 0 (memset), which is that"
-             " tool's 'flush at trace time' sentinel rather than a modelled"
-             " device value -- but it is also not the shipped 250 ms, so the"
-             " shipped deferred-io window is modelled by nothing",
-         retires="#12 step 3 (<pinenote-display-configuration>)"),
-
-    dict(id="host-model:banner:defio_delay_ms",
-         pinned='the usage banner says the device is ~50 ms; the shipped parameters say defio_delay_ms=250',
-         why="ebc-replay's usage banner still tells the operator 'the device is"
-             " ~50 ms'.  The shipped value has been 250 ms since the 2026-08-01"
-             " sweep (doc/refresh-policy.md), so the banner argues for a"
-             " conclusion -- 'a wash usually starts on stale content' -- from a"
-             " number the device stopped carrying",
-         retires="#12 step 3 (<pinenote-display-configuration>)"),
-
     dict(id="conf-grammar:autosuspend.lua:suspend_while_charging",
          pinned='autosuspend.lua parses suspend_while_charging with an allowlist while the reference grammar in this tree is a denylist',
          why="parsed with an ALLOWlist (1/true/yes) four lines below 'enabled',"
@@ -752,7 +724,11 @@ def gate_host_model(shipped):
     # The same file TELLS the operator what the device does.  A stale
     # number in the usage banner misleads exactly the person reaching for
     # the tool to reason about the device.
-    banner = re.search(r"the device is\s+\*?\s*~(\d+) ms", replay)
+    # The tilde is OPTIONAL: it was right when the banner said "~50 ms"
+    # (an approximation) and is wrong now the value is an exact pinned
+    # figure.  Requiring it made a CORRECTED banner read as a missing
+    # site.
+    banner = re.search(r"the device is\s+\*?\s*~?(\d+) ms", replay)
     if not banner:
         bad("site not found -- ebc-replay.c's usage banner no longer states a "
             "device deferred-io delay")

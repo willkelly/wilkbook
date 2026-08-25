@@ -56,10 +56,17 @@
  *         split-area-limit=N    driver scheduler splits per call (0)
  *         defio=bands|rect      damage granularity model (bands)
  *         defio-delay-ms=N      deferred-io flush delay; the device is
- *                               ~50 ms, so a wash usually starts on
- *                               stale content and a follow-up partial
- *                               drives the new page (0 = flush at
- *                               trace time)
+ *                               250 ms (0 = flush at trace time).  This
+ *                               banner used to say ~50 ms and argue a
+ *                               consequence from it -- that a wash
+ *                               usually starts on stale content and a
+ *                               follow-up partial drives the new page.
+ *                               ea580b8 pinned 250 ms on 2026-07-31 and
+ *                               nobody re-derived that consequence, so
+ *                               it is WITHDRAWN.  The number is stated
+ *                               here because `make settings-check' pins
+ *                               it against ebc.scm; the consequence is
+ *                               not, because nobody has measured it.
  *         temp-c=N              panel temperature in C (25)
  *         verify-decisions=1    compare policy against recorded decisions
  *         pgm-dir=DIR           per-frame PGMs (needs scale small enough
@@ -433,23 +440,35 @@ struct policy {
 	int refresh_threshold;	/* raw, in ONE_SCREEN_AREA units */
 	int split_area_limit;
 	bool defio_bands;	/* model deferred-io page granularity */
-	int defio_delay_ms;	/* deferred-io flush delay (device ~50 ms;
-				 * 0 = flush modeled at trace time) */
+	int defio_delay_ms;	/* deferred-io flush delay; shipped is 250 ms
+				 * (ea580b8), 0 = flush modeled at trace
+				 * time */
 	int temp_c;
 };
 
 static void policy_ship(struct policy *p)
 {
-	/* the deployed phase-A.2 stack: pinenote/services/ebc.scm params +
-	 * the rockchip_ebc.refresh_waveform=6 cmdline + device.lua 0.60 */
+	/* The DEPLOYED stack: pinenote/services/ebc.scm params + the
+	 * rockchip_ebc.refresh_waveform=6 cmdline + device.lua 0.60.
+	 *
+	 * This drifted for seven weeks and nobody noticed, because nothing
+	 * connected it to ebc.scm.  Written 2026-07-05 when it was correct;
+	 * b9bbc0e shipped auto_refresh=0 on 2026-07-11 (threshold-path
+	 * globals corrupt panel state) and ea580b8 pinned defio_delay_ms=250
+	 * on 2026-07-31, and this function was never touched.  The 2026-07-30
+	 * recalibration therefore RE-MEASURED refresh-policy.md's tables
+	 * against a baseline already 19 days stale.  `make settings-check'
+	 * now pins these three values against ebc.scm, so the next drift is
+	 * a build failure rather than a silent reprice. */
 	memset(p, 0, sizeof(*p));
 	p->flash_frac = 0.60;
 	p->default_wf = DRM_EPD_WF_GC16;
 	p->refresh_wf = DRM_EPD_WF_GL16;
-	p->auto_refresh = true;
+	p->auto_refresh = false;	/* shipped since 2026-07-11 (b9bbc0e) */
 	p->refresh_threshold = 60;
 	p->split_area_limit = 0;
 	p->defio_bands = true;
+	p->defio_delay_ms = 250;	/* shipped since 2026-07-31 (ea580b8) */
 	p->temp_c = 25;
 }
 
@@ -1642,6 +1661,9 @@ static void test_replay_auto(const char *fwdir)
 	}
 
 	policy_ship(&pol);
+	pol.auto_refresh = true;	/* THIS suite is the auto-accumulator test:
+				 * it must ask for auto-refresh explicitly now that
+				 * the shipped baseline has it off. */
 	pol.refresh_threshold = 12;
 
 	check(replay_run(fwdir, &tr, &pol, 2, 0, NULL, &r),
