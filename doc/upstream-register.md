@@ -625,3 +625,36 @@ kind of change that needs a display in front of it.
 - **Report, don't patch** (`CLAUDE.md`): driver fixes belong to the
   lineage. This register is how we honor that without dropping findings on
   the floor.
+
+## 15. `rockchip_ebc_blit_neon.c` does not compile with `CONFIG_DRM_ROCKCHIP_EBC_3WIN_MODE=y`
+
+**Where it would go:** hrdl (`~hrdl/linux`, `v6.19_ebc_custom`).
+
+**What:** the 3WIN-mode branch of `rockchip_ebc_schedule_advance_fast_neon`
+has an unbalanced parenthesis and references an identifier that is not
+declared in that translation unit. Both are wholly inside the `#ifdef`:
+
+```c
+#ifdef CONFIG_DRM_ROCKCHIP_EBC_3WIN_MODE
+        if (!direct_mode) {
+            vst1q_u8(phases_line, vshrq_n_u8(q8_inner_new, 6);   /* 2 opens, 1 close */
+        } else
+#endif
+```
+
+`gcc` reports `error: 'direct_mode' undeclared` and
+`error: expected ')' before ';' token` at `:177` and `:178`.
+
+**How found:** cross-compiling his tree against Linux 7.1.8 for arm64
+while sizing a possible adoption (2026-08-25). The direct-mode
+configuration — his default — builds clean; only `3WIN_MODE=y` fails.
+
+**Why it matters to him:** a missing parenthesis cannot ever have
+compiled, so that Kconfig option has never been buildable. Anyone
+selecting it, or any distributor offering it, gets a build failure with
+no hint that the option is unmaintained. Either fix it or drop the
+option.
+
+**Status:** not sent. We are not shipping his driver yet, and sending a
+build-break report is more useful attached to a concrete adoption than
+ahead of one.

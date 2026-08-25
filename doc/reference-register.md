@@ -69,6 +69,12 @@ anything about wake sources under ultra; the tps65185 resume work.
 
 ### `https://git.sr.ht/~hrdl/pinenote-dist`
 
+**`~/src/reference/hrdl-linux` cloned 2026-08-25** — `v6.19_ebc_custom`
+at `819ba1724a6`, `--depth 300 --single-branch`, 2.3 GB. Used to size D5
+of `doc/direct-mode-adoption.md`: the branch is `v6.19-182-g819ba1724a6`,
+touching 12 files of which 7 are new and 4 of the 5 modified ones are
+build glue.
+
 **Cloned locally 2026-08-25** to `~/src/reference/pinenote-dist` (main
 tip `3e228db`, 984 KiB) for the direct-mode work — see
 `doc/direct-mode-adoption.md` P0. Deliberately **outside** the wilkbook

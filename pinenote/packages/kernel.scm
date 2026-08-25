@@ -213,6 +213,38 @@ phase planes) to the ebc-dump-grab tool for camera-vs-belief joins.
 Refresh-machine logic is unchanged; this is a diagnostic artifact
 for the panel-corruption investigations.")))
 
+(define-public linux-pinenote-hrdl-direct
+  ;; STUDY ARTIFACT, not a product.  The primary kernel with our EBC driver
+  ;; SWAPPED OUT for hrdl's direct-mode rework (doc/direct-mode-adoption.md).
+  ;; It exists so the swap can be built and read rather than argued about,
+  ;; and it reaches no image: no flavor references it.
+  ;;
+  ;; Built and linked against 7.1.8 with pinenote_defconfig on 2026-08-25 --
+  ;; Image, three modules and both PineNote DTBs, zero errors.  NOTHING HAS
+  ;; RUN.  It cannot even probe as-is: the driver request_firmware()s
+  ;; rockchip/custom_wf.bin and fails -EINVAL without it (that is what
+  ;; pinenote/tools/wbf/wbf-clut.c produces), and the third clock direct mode
+  ;; wants is on an hrdl branch we have not identified.
+  (package
+    (inherit linux-pinenote)
+    (name "linux-pinenote-hrdl-direct")
+    (source
+     (origin
+       (inherit (package-source %linux-pinenote-base))
+       (patches
+        (append (origin-patches (package-source %linux-pinenote-base))
+                %linux-pinenote-patches
+                (list (local-file
+                       "../patches/linux-pinenote-7.1-hrdl-direct-mode.patch"))))))
+    (synopsis "PineNote kernel with hrdl's direct-mode EBC driver (study)")
+    (description
+     "The linux-pinenote kernel with our EBC driver replaced by hrdl's
+direct-mode rework: per-pixel software TCON, NEON blitters in their own
+module, and an offline-compiled CLUT instead of the hardware LUT walk.
+A study artifact for the adoption decision in doc/direct-mode-adoption.md,
+not a shipping kernel -- it has never been run, and probe fails without a
+per-device custom_wf.bin.")))
+
 (define-public linux-pinenote-6.6.30
   (package
     (inherit linux-libre)

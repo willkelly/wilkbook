@@ -268,8 +268,10 @@ and a bound.
   compiled from your device's own waveform, and the only existing
   compiler is a Python script needing numpy and pandas — neither of
   which the reader image has, or should. `wbf-clut` is a C replacement
-  that produces a **byte-identical** file, checked against the original
-  on a real waveform every time the gate runs. Nothing on the device
+  that produces a **byte-identical** file. That comparison needs both a
+  device waveform and hrdl's Python to hand, so it runs on a developer's
+  machine and **not in CI** — where the gate checks structure only and
+  says so rather than printing an unqualified pass. Nothing on the device
   changes: this is not wired into any image, and no panel has been
   driven from its output. Finding it took reproducing two bugs in the
   original on purpose (`doc/driver-findings-report.md`) — a "cleaner"
