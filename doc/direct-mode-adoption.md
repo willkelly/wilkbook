@@ -272,6 +272,214 @@ Three ways out, none of them written, none tried:
 **Nothing here is decided.** (b) reads cleanest and (c) cheapest; both want
 the same module-database plumbing. What is *not* in doubt is that the CLUT
 installer is needed under all three, which is why it was built first.
+### D7. The EBC node needs a third clock — **RESOLVED 2026-08-25, and it is two lines**
+
+P2 left this open: his `v6.19_ebc_custom` branch touches no DTS at all, so
+the EBC node his driver binds to had to live somewhere we had not found.
+
+**The branch is `v6.19_pn_dts_v2`** (tip `27d6a52da`). `ls-remote --heads`
+on `git.sr.ht/~hrdl/linux` returns **69 branches**, not the four
+`doc/reference-register.md` listed — the tree is one branch per topic, and
+the device tree is its own topic. The register has been given the row, so
+the next person does not repeat this.
+
+**Neither commit `doc/hrdl-evaluation.md` cites leads to a device tree** —
+both are driver commits on `v6.19_ebc_custom`. Worth stating plainly,
+because it is what sent this task looking in the wrong place:
+
+| cited | what it actually changes |
+|---|---|
+| `9444147d35a2` — *"rk3566-pinenote.dtsi: set CPLL_333M to 33.33 MHZ…"* | **`rockchip_ebc.c` only**, +7/−3. The evaluation called this a *DTS commit*; the `dtsi` in its subject is a leftover, and that citation is now corrected in place. |
+| `70cbadbce9ab` — *"add another panel mode"* | `panel-simple.c`. The evaluation labelled this one correctly — it just is not DTS either. |
+
+`9444147d35a2` is half of a commit split across two branches: its twin
+`417dc79cdf8f` carries the DTS half on `v6.19_pn_dts_v2` under the *same
+subject and the same author timestamp* (2025-01-09 01:55:29 +0100), and
+neither half mentions the other. The evaluation's **substance was right**
+— there is a third clock and it is 33.33 MHz — and its **attribution was
+wrong**. The finding that `v6.19_ebc_custom` changes nothing under
+`arch/` really does hold; that half stands.
+
+The commit that actually adds the clock is a third one, `37ae838a4db8`,
+*"rockchip_ebc: adjust cpll_333m and enhance clock management"* — two
+lines in `rk356x-base.dtsi`.
+
+#### What the probe requires — the authoritative list
+
+His DTS is evidence; `rockchip_ebc_probe` is the requirement. Read at
+`819ba1724a6`, this is every device-tree-backed thing it asks for:
+
+| probe call | DT it needs | ours |
+|---|---|---|
+| `devm_platform_ioremap_resource(pdev, 0)` | `reg` | ✓ |
+| `devm_clk_get(dev, "hclk")` | `clock-names` | ✓ |
+| `devm_clk_get(dev, "dclk")` | `clock-names` | ✓ |
+| **`devm_clk_get(dev, "cpll_333m")`** | `clock-names` | **✗ — the gap** |
+| `devm_iio_channel_get(dev, NULL)` | `io-channels` | ✓ `<&ebc_pmic 0>` |
+| `devm_regulator_bulk_get` × 3 | `panel-` / `vcom-` / `vdrive-supply` | ✓ |
+| `platform_get_irq(pdev, 0)` | `interrupts` | ✓ |
+| `devm_drm_of_get_bridge(…, 0, 0)` | `port`/`endpoint` → panel | ✓ |
+| `of_device_id` | `compatible = "rockchip,rk3568-ebc"` | ✓ |
+
+**One gap, and it is fatal.** The `cpll_333m` get is **unconditional** —
+it is not behind `if (direct_mode)` — and fails through `dev_err_probe`.
+A missing clock is therefore a probe failure and no display: D4's failure
+mode arriving from a second direction, and one a `custom_wf.bin` fallback
+would not catch.
+
+Two negative results the same read settles:
+
+- **His driver never touches resets.** No `devm_reset_control_*` anywhere
+  in the file. Our node declares `resets`/`reset-names`; under his driver
+  they are dead properties, which is harmless.
+- **`vposneg` vs `vdrive` is a label difference, not a delta.** His
+  overlay has `vdrive-supply = <&vdrive>`, ours `<&vposneg>`; the *supply
+  name* the driver asks for is `"vdrive"` in both. Nothing to do.
+
+#### The delta
+
+Two lines, and they go in the **direct-mode patch**, not the forward-port:
+
+```dts
+&ebc {
++	clocks = <&cru HCLK_EBC>, <&cru DCLK_EBC>, <&cru CPLL_333M>;
++	clock-names = "hclk", "dclk", "cpll_333m";
+ 	io-channels = <&ebc_pmic 0>;
+ 	panel-supply = <&v3p3>;
+```
+
+hrdl edits the shared `rk356x-base.dtsi` node in place. We should not:
+**our forward-port patch is what creates that node in the first place**
+(mainline has no EBC node at all), so editing it there means editing the
+most rebase-fragile artifact in the repo for a study variant. Re-assigning
+the two properties in the board-level `&ebc` overlay — which our
+forward-port already adds to `rk3566-pinenote.dtsi` — overrides the base
+node's list, keeps the change inside
+`linux-pinenote-7.1-hrdl-direct-mode.patch`, and leaves the shipping
+kernel's DTBs byte-identical. `CPLL_333M` is in scope there: the include
+chain reaches `rk356x-base.dtsi`, which includes
+`<dt-bindings/clock/rk3568-cru.h>`, textually before the overlay.
+
+**This delta is written down, not applied.** Nothing in this commit
+changes a patch, a package or an image.
+
+#### The 250 MHz / 33.33 MHz contradiction is not one
+
+Issue #23 measured `cpll_333m` at **250 MHz** on our device
+(`doc/artifacts/pinenote-dclk-reclock-20260824/`); direct mode wants
+**33.33 MHz**. Both are true of the same clock, because `cpll_333m` is not
+fixed — it is a plain 5-bit divider off `cpll`, and #23's own dump gives
+the numerator:
+
+```
+pll_cpll   1000000000
+  cpll_333m  250000000     <- the CRU divider sits at /4
+```
+
+1000/4 = 250 MHz is the divider our device is *observed* to boot with —
+left by the bootloader, since nothing in our DTS mentions `CPLL_333M` —
+and it is what `dclk_select=1` exploits. 1000/30 = 33.333 MHz is what direct mode programs. hrdl's
+`37ae838a4db8` message says both in one breath: *"diff mode works best
+with dclk 33.33 MHz using cpll_333m 33.33 MHz… Alternatively cpll_333m can
+be used at 250 MHz, resulting in a noticable speedup."* That second
+sentence **is** issue #23, arrived at independently.
+
+Why the driver needs its own handle on the parent, rather than just asking
+`dclk` for a rate: `DCLK_EBC` is `COMPOSITE_NODIV` with flags `0` — a pure
+mux over {`gpll_400m`, `cpll_333m`, `gpll_200m`} with no divider and no
+`CLK_SET_RATE_PARENT`. It can *reparent* to the closest rate at or below
+what you ask, and it can never *re-rate* its parent. So reaching 33 MHz
+requires setting `cpll_333m` first, which is exactly the order
+`rockchip_ebc_set_dclk` uses.
+
+The chain, end to end:
+
+| step | value |
+|---|---|
+| `clk_set_rate(cpll_333m, 33333334)` → divider 30 | 33,333,333 Hz |
+| `clk_set_rate(dclk_ebc, 34000000)` → reparents to `cpll_333m` | 33,333,333 Hz |
+| `EBC_DSP_CTRL_DSP_SDCLK_DIV(0)` → sclk = dclk | 33.333 MHz |
+| `sdck.htotal = 2208/8 = 276`, `vtotal = 1421` | **85.0 Hz** |
+
+That is the panel's authored rate. For scale against what we ship: LUT
+mode at dclk 200 MHz with `SDCLK_DIV=7` gives sclk 25 MHz (63.75 Hz);
+#23's `dclk_select=1` gives 31.25 MHz (79.68 Hz); direct mode gives the
+remaining 6.7 %.
+
+**A consequence worth pinning: `dclk_select` is dead in our direct-mode
+build.** `rockchip_ebc_set_dclk` takes the `if (direct_mode)` branch
+before it ever reads `dclk_select`, and `direct_mode` is a
+`static bool … = true` whose `module_param` is registered only under
+`CONFIG_DRM_ROCKCHIP_EBC_3WIN_MODE` — which we correctly build off. So in
+`linux-pinenote-hrdl-direct` direct mode is unconditional and #23's
+parameter has no effect at all.
+
+#### The 85 Hz panel mode is *not* a second gap
+
+Our direct-mode patch does not carry `panel-simple.c` — it has no `arch/`
+hunks and no `ed103tc2` text — so the built variant keeps our
+forward-port's mode table (`num_modes = 8`) and does **not** have hrdl's
+85 Hz entry from `70cbadbce9ab`.
+
+That turns out not to matter. In direct mode the driver **ignores
+`mode->clock`**: `rockchip_ebc_set_dclk` forces 34 MHz whatever the mode
+says. All eight of our modes carry identical `htotal`, `vtotal`, `hskew`
+and `CLKDIV2` and differ *only* in `.clock`. The panel rate is set by sclk
+and those shared timings, so it is 85 Hz whichever mode DRM picks. The
+85 Hz entry earns its keep only in **LUT** mode, where dclk *is*
+`mode->clock` and `SDCLK_DIV` is 7 — which is why his entry reads
+`.clock = 266680`, i.e. 8 × 33.335 MHz.
+
+So `70cbadbce9ab` is optional for us. Derived from source; nothing has run.
+
+#### One driver defect found in this path, and not filed
+
+`rockchip_ebc_crtc_atomic_check` does `mode->clock = rate / 1000` where
+`rate = rockchip_ebc_set_dclk(…)`, and that function returns
+`clk_set_rate`'s value — **0 on success, not a rate**. So
+`adjusted_mode.clock` is zeroed on every successful mode set, in every
+mode, not just direct. Ours is correct here and his refactor regressed it:
+we call `clk_round_rate`, which does return the rate.
+
+Likely cosmetic on a panel with no meaningful vblank — DRM computes its
+timestamping constants from a zero dotclock and complains — but it is a
+difference we would inherit. **Deliberately not filed** in
+`doc/driver-findings-report.md` or the upstream register: it is read off
+source in a driver no panel has run, and this repo's bar for a finding is
+higher than that. File it when P3 step 1 either shows the log line or does
+not.
+
+#### What we are NOT adopting, and what is still unknown
+
+- **Not adopting his `&cru` block.** His `rk3566-pinenote.dtsi` pins
+  `CPLL_333M` to 33333334 at boot alongside `ACLK_TOP_HIGH/LOW`,
+  `ACLK_RGA_PRE`, `CPLL_250M`, `HCLK_RGA_PRE`, `HCLK_EBC` and
+  `HCLK_JENC`. The driver sets `cpll_333m` on every mode set, so the
+  boot-time pin is redundant for correctness; and a board-level `&cru`
+  override **replaces mainline's whole `assigned-clocks` list** rather
+  than extending it, which is a wider blast radius than a study variant
+  needs. If it is ever adopted, mainline's three entries
+  (`CLK_RTC_32K`, `PLL_GPLL`, `PLL_PPLL`) must be carried across, as
+  hrdl carries them. Directly above a commented-out variant of that block
+  that used 333.4 MHz throughout, he notes *"stronger artifacting, I
+  suspend [sic] instabilities due to too high clock frequencies"* — so
+  these are values tuned against symptoms on his stack that we have never
+  reproduced. Copying them would import a fix for an unknown problem.
+- **Collateral on `cpll_333m` looks confined, but is checked against the
+  wrong tree.** Only two clocks can mux onto it: `DCLK_EBC` and
+  `DCLK_VICAP`. Mainline pins `DCLK_VICAP` to 300 MHz, which selects
+  `gpll_300m`, so dropping `cpll_333m` to 33 MHz should take nothing with
+  it. `HCLK_EBC` is *not* on `cpll_333m` — it is a gate off
+  `hclk_rga_pre`. **All of that was read in his 6.19 tree, not verified
+  in our 7.1.8 base.**
+- **Nothing has run.** No probe, no bind, no frame. Every claim here is
+  derived from source. The delta satisfies the probe *as written*; whether
+  the clock framework grants 33.333 MHz on this SoC at runtime, and
+  whether the panel likes it, are P3 step 1 questions.
+- **dtc has not been run on the override.** Property re-assignment through
+  a label reference is ordinary DTS, but the gate is `make kernel` on the
+  variant, and it has not been done.
+
 
 ## The plan
 
@@ -620,6 +828,14 @@ would).
 
 Nothing here has loaded, probed or bound. It is a configuration derived
 from source, gated offline.
+**One gap found while doing it, and it is worse than it first read:**
+his `v6.19_ebc_custom` branch contains **no EBC device-tree node** and
+touches no DTS at all, so it cannot bind on its own — he must compose
+branches. This was first recorded as "harmless for us, we have the node".
+**That was wrong.** Our node carries two clocks; his probe demands three,
+unconditionally, and fails if the third is missing. Chased down and
+answered in **D7** — the branch is `v6.19_pn_dts_v2`, the delta is two
+lines, and it is not applied.
 
 ### P3 — bring-up on glass, one variable at a time
 

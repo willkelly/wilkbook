@@ -149,8 +149,17 @@ Four files: `rockchip_ebc.c` (~87 KB), `rockchip_ebc_blit_neon.c`
   The driver computes 2-bit drive phases in software into double-buffered
   phase buffers (4 px/byte) and the controller scans them out raw; the
   silicon's LUT and diff engines are unused. The EBC node gains a third
-  clock (`cpll_333m`, set to 33.33 MHz for direct mode — DTS commit
-  9444147d35a2), and an added 85 Hz panel-simple mode (70cbadbce9ab).
+  clock (`cpll_333m`, set to 33.33 MHz for direct mode), and an added
+  85 Hz panel-simple mode.
+  **Attribution corrected 2026-08-25:** this line used to call
+  `9444147d35a2` a *DTS commit*. It is not — it touches only
+  `rockchip_ebc.c`, and its subject line ("rk3566-pinenote.dtsi: …") is a
+  leftover from a commit split across branches. (`70cbadbce9ab` was
+  labelled correctly, as a panel-simple mode; it is a driver commit too.)
+  Neither hash leads to a device tree, because **this branch has none**.
+  The DTS is `v6.19_pn_dts_v2`, where `37ae838a4db8` adds the clock to the
+  node and `417dc79cdf8f` is the DTS half of `9444147d35a2`. The substance
+  above is unaffected. See `doc/direct-mode-adoption.md` D7.
 - **Offline-compiled waveform (`CLUT0002`).** The kernel no longer walks
   the PVI tables at refresh time. Userspace (`wbf_to_custom.py` in
   pinenote-dist) decodes the device's own `ebc.wbf` and compiles a

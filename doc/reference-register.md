@@ -42,12 +42,27 @@ direction, and the only known-working ultra-suspend configuration.
 Kernel tree. Branch names matter; there is no single "main" to follow.
 Verified reachable 2026-08-07.
 
+**The tree is one branch per topic, and there are 69 of them** (heads
+listed 2026-08-25). The table below is the subset we have had a reason to
+read — it is *not* the branch list. A topic you expect to find inside a
+branch is usually its own branch instead: the display work carries **no
+device tree at all**, because the DTS is `v6.19_pn_dts_v2`. List the heads
+before concluding something is missing.
+
 | branch | what it holds |
 |---|---|
 | `v6.19_ultra_suspend` | the ultra config (tip `ee2c553f78`) |
 | `v6.19_rk_suspend_driver` | the suspend driver the ultra branch sits on |
-| `v6.19_ebc_custom` | the custom-waveform display work (tip `819ba1724a6f`, **unchanged** at 2026-08-25 — the same commit `doc/hrdl-evaluation.md` pins, so that evaluation is current) |
+| `v6.19_ebc_custom` | the custom-waveform display work (tip `819ba1724a6f`, **unchanged** at 2026-08-25 — the same commit `doc/hrdl-evaluation.md` pins, so that evaluation is current). Changes nothing under `arch/`. |
+| `v6.19_pn_dts_v2` | **the PineNote device tree** (tip `27d6a52da`) — the EBC node, its third clock `cpll_333m`, and the `&cru` rate pinning. Authoritative for what his driver actually binds to; `doc/direct-mode-adoption.md` D7 reads the delta off it. |
 | `v6.19_iio_accel` | accelerometer; visibly unfinished |
+
+**Commit subjects lie about their own file lists here.** Because topics are
+split across branches, a commit can be *split* too and keep the original
+subject on both halves. `9444147d35a2` on `v6.19_ebc_custom` is titled
+"rk3566-pinenote.dtsi: set CPLL_333M …" and touches only
+`rockchip_ebc.c`; its DTS half is `417dc79cdf8f` on `v6.19_pn_dts_v2`,
+same subject, same author timestamp. Read the diffstat, never the subject.
 
 **Authoritative for:** ultra suspend, the rockchip suspend driver, the
 custom-waveform (`custom_wf.bin`) display pipeline.
