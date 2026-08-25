@@ -17,7 +17,14 @@ guix time-machine -C channels.scm -- \
 ```
 
 `channels.scm` pins Guix itself plus every extra channel by commit, with
-channel introductions. That is the whole reproducibility claim, and it is
+channel introductions. That is the whole reproducibility claim — and note
+that it is a claim about a *tag and its committed pin*, not about any
+tree between pins. As of 2026-08-25 it does **not** hold for current
+`main`: the kernel moved to the `nongnu:linux-7.1` series pin while the
+committed `channels.scm` still pins a nonguix commit that predates
+`linux-7.1`, so the command above fails at module evaluation until the
+pin bump lands (a reviewed change of its own; `doc/building.md`). It
+remains true of `v0.1.0-prealpha` with its pin. It is
 the one thing a rolling binary distribution structurally cannot offer:
 hrdl's Arch images are built against moving mirrors with a `-git` kernel
 whose `sha256sums=('SKIP')`, so "the same tarball" is not reconstructible
@@ -39,7 +46,13 @@ tested. `README.md` says so at the top and means it.
    is not optional here — it is what routes the build through
    `channels.scm`, and without it this step builds against your ambient
    `guix` and quietly forfeits the byte-identical-rebuild claim made
-   three paragraphs above.
+   three paragraphs above. **Caveat (2026-08-25): this only works if
+   step 2 actually happened.** The pin committed today predates the
+   kernel's `nongnu:linux-7.1` series pin, so `TIME_MACHINE=1` against
+   it fails outright (`Unbound variable: nongnu:linux-7.1`). A fresh
+   `make channels-pin` in step 2 is what repairs that; do not skip it
+   and do not "work around" a time-machine failure by dropping the flag
+   here — a release built ambient is a release nobody can rebuild.
 4. **Write the manifest**: `make release-manifest ROOTFS=<the .ext4>`,
    which writes `SHA256SUMS` carrying the hash, the git description, and a
    pointer to `channels.scm`. Commit it.
