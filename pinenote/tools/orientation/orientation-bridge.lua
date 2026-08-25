@@ -53,15 +53,20 @@ local SIG_DFL = ffi.cast("sighandler_t", 0)
 -- mode of this script dies on SIGTERM again.  (A D-state hang would still
 -- be immune; nothing in userspace can fix that.)
 local function restore_termination_signals()
+    -- Order matters: re-default the dispositions BEFORE unblocking.  A
+    -- signal already pending under an inherited block is delivered at the
+    -- unblock using the disposition current at that moment -- unblocking
+    -- first would deliver it while still SIG_IGN and silently discard it
+    -- (the signal-self-test pins this ordering).
+    C.signal(SIGTERM, SIG_DFL)
+    C.signal(SIGINT, SIG_DFL)
+    C.signal(SIGALRM, SIG_DFL)
     local set = ffi.new("sigset_t")
     C.sigemptyset(set)
     C.sigaddset(set, SIGTERM)
     C.sigaddset(set, SIGINT)
     C.sigaddset(set, SIGALRM)
     C.sigprocmask(SIG_UNBLOCK, set, nil)
-    C.signal(SIGTERM, SIG_DFL)
-    C.signal(SIGINT, SIG_DFL)
-    C.signal(SIGALRM, SIG_DFL)
 end
 restore_termination_signals()
 
@@ -290,27 +295,40 @@ local function signal_self_test()
     C.sigaddset(set, SIGTERM)
     assert(C.sigprocmask(SIG_BLOCK, set, nil) == 0,
            "signal-self-test: cannot block SIGTERM")
+    -- Arm BOTH inheritance channels the fix's comment names: the blocked
+    -- mask (above) and an ignored disposition.  With both armed, the
+    -- restored child below dies only if restore_termination_signals()
+    -- undoes both -- a mask-only or disposition-only mutant leaves it
+    -- alive and fails the assertion.  Arming SIG_IGN alongside the block
+    -- (rather than as a separate pair) also avoids a race: a SIGTERM sent
+    -- while merely ignored is discarded, but one pending under the block
+    -- is delivered at unblock using the disposition current THEN.
+    local SIG_IGN = ffi.cast("sighandler_t", 1)
+    C.signal(SIGTERM, SIG_IGN)
 
-    -- Positive control first: WITHOUT the restore, the inherited blocked
-    -- mask must make the child shrug off SIGTERM.  If this control fails,
-    -- the harness does not actually produce the shepherd-like state and a
+    -- Positive control first: WITHOUT the restore, the inherited state
+    -- must make the child shrug off SIGTERM.  If this control fails, the
+    -- harness does not actually produce the shepherd-like state and a
     -- pass below would be vacuous.
     local pid = spawn_and_term(false)
     assert(reap(pid, 600) == nil,
-           "signal-self-test: control child died despite inherited blocked SIGTERM")
+           "signal-self-test: control child died despite inherited blocked+ignored SIGTERM")
     C.kill(pid, SIGKILL)
     assert(reap(pid, 2000), "signal-self-test: control child survived SIGKILL")
-    print("PASS: signal-self-test: inherited blocked mask makes SIGTERM inert (control)")
+    print("PASS: signal-self-test: inherited blocked mask + SIG_IGN make SIGTERM inert (control)")
 
-    -- The fix: the same child, same blocked inheritance, same SIGTERM --
-    -- but restore_termination_signals() runs first, so it must die, and
-    -- die BY SIGTERM rather than by falling off the 30 s sleep.
+    -- The fix: the same child, same blocked+ignored inheritance, same
+    -- SIGTERM -- but restore_termination_signals() runs first, so it must
+    -- die, and die BY SIGTERM rather than by falling off the 30 s sleep.
+    -- This requires BOTH the unblock and the re-default to have happened.
     pid = spawn_and_term(true)
     local status = reap(pid, 2000)
     assert(status, "signal-self-test: restored child ignored SIGTERM")
     assert(bit.band(status, 0x7f) == SIGTERM,
            "signal-self-test: restored child died, but not by SIGTERM (status "
            .. tostring(status) .. ")")
+    C.signal(SIGTERM, SIG_DFL)
+    C.sigprocmask(SIG_UNBLOCK, set, nil)
     print("PASS: signal-self-test: restore_termination_signals makes SIGTERM lethal again")
 end
 

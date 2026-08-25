@@ -65,10 +65,22 @@ says otherwise.
   just been put down, and a forwards step could suspend it under your
   fingers. The daemon now re-bases instead of believing either. Tested
   on the host by extracting the guard verbatim; **no device has stepped
-  its clock with this in place** — arithmetic, not hardware truth.
+  its clock with this in place** — host-proven, not hardware truth.
 
 ### Setup and first boot
 
+- **Stopping the rotation service no longer hangs the service manager.**
+  The orientation bridge inherited a SIGTERM-proof signal state from
+  its parent, so `herd stop` waited forever on a process that could not
+  hear it — the 2026-08-25 session hit this live and had to SIGKILL.
+  The bridge now restores default signal handling at startup and bounds
+  its cleanup with a 15-second watchdog, so a wedged teardown ends
+  instead of wedging the stop. Host-proven with a positive control
+  (an unrestored copy provably survives SIGTERM); the real test is the
+  next session's `herd stop orientation-bridge`. This changes the
+  shipping reader image — the bridge script rides in it — and is the
+  cycle's one deliberate change to shipping behavior outside the
+  display work.
 - **The reader now suspends out of the box.** The first install by
   someone other than the author produced a device that never slept: our
   own install page recommended creating an `autosuspend.conf` with
@@ -146,8 +158,9 @@ says otherwise.
 ### Display and page turns
 
 One real change to the display driver this cycle, and it has not run on
-a panel yet. Otherwise: a long-suspected defect acquired evidence, a name
-and a bound.
+a panel yet; one real change to how userspace finds the display, proven
+offline only. Otherwise: a long-suspected defect acquired evidence, a
+name and a bound.
 
 - **Full-screen washes now find the e-ink display instead of assuming
   it is the first graphics device.** On the direct-mode study image the
@@ -280,8 +293,9 @@ and a bound.
   ratios and A/Bs, re-checked.
 - **KOReader's pen-slot collision stopped being hypothetical.** The
   router that keeps pen and finger apart assumed the touchscreen hands
-  out contact slots densely; a device capture showed it does not (three
-  fingers landed in slots {0, 1, 2, 5}), so a lone finger can be
+  out contact slots densely; a device capture showed it does not (a
+  120 s capture peaking at three simultaneous contacts used slots
+  {0, 1, 2, 5}), so a lone finger can be
   assigned the very slot KOReader reserves for the pen — its swipe then
   gets the pen's coordinates written onto it. Reproduced offline as a
   one-variable A/B and **pinned as a `quirk:` test, not fixed** — the
@@ -329,13 +343,15 @@ is **embrace-or-reject, after which one image ships either way**
   lights, and page turns reach glass through the identical
   `GLOBAL_REFRESH` ioctl. The feared framebuffer-format wall does not
   exist: KOReader adapts to the driver's RGB565 fbdev on its own.
-- **The ghosting root cause of the session was ours to find and is
-  KOReader's to own**: its device code hardcodes `/dev/dri/card0` for
+- **The ghosting root cause of the session was ours to find — and ours
+  to fix**: our KOReader device shim hardcodes `/dev/dri/card0` for
   the full-refresh wash, and on the direct image card0 is the **GPU** —
   so every wash was a malformed GPU job (a dmesg fault line each time)
   and the panel was never washed at all. Redirecting it to the real
   display node live on the device fixed it; ghost-vs-wash then sat at
-  the camera noise floor (measured, optics rig).
+  the camera noise floor (measured, optics rig). The proper fix —
+  resolve the display by driver name in every wash path — has since
+  landed; see "Display and page turns".
 - **The operator's verdict on video: quality good, but more
   flashing and redrawing per page turn than a smooth read wants.** That
   is the pre-registered two-pass expectation confirmed on glass, and it
@@ -357,15 +373,18 @@ is **embrace-or-reject, after which one image ships either way**
   NULL dereference, the same pattern both times it was provoked, while
   restarts without the destruction never crashed. To the upstream
   register. Also found live: the orientation bridge ignores SIGTERM,
-  which wedges service stop.
+  which wedges service stop — that one is our own bug, and its fix is
+  under "Setup and first boot".
 - **Two wiring gaps stand between the session and a hands-off boot,
   and both are known tag-blockers**: the flavor never instantiates the
   CLUT one-shot or the direct-mode modprobe options (D1 was compiled by
   hand), and the initrd raw-loads the display module before the root
   filesystem — and thus the CLUT — exists, so the first probe fails on
   every boot and a rebind must follow. Found independently by the
-  release review and by the session; the fix is its own work, not this
-  entry.
+  release review and by the session. Both fixes have since landed in
+  the tree — the flavor wiring under "Build, CI and gates", the
+  wash-path resolution under "Display and page turns" — but **no image
+  containing them has booted**; that is the next session's first check.
 
 ### Kernel
 
@@ -377,9 +396,12 @@ is **embrace-or-reject, after which one image ships either way**
 - **The tree now targets the 7.1 series and the reader image builds
   again.** Two device-tree hunks were deleted because mainline absorbed
   them verbatim, shrinking the forward-port patch from 31 hunks to 29 —
-  the good direction for a forward port. **Nothing on 7.1 has run on
-  glass.** The hardware-proven kernel remains 7.0.11, which is what the
-  deployed image runs (`doc/kernel-forward-port.md`).
+  the good direction for a forward port. When this entry landed nothing
+  on 7.1 had run on glass; since 2026-08-25 a 7.1.8 build **has** — but
+  only the direct-mode *study* configuration (hrdl's display driver
+  swapped in), never the shipping driver. The hardware-proven kernel
+  for the image you flash remains 7.0.11, which is what the deployed
+  reader runs (`doc/kernel-forward-port.md`).
 - Two upstream Guix cross-compilation defects are repaired in
   `pinenote/packages/cross-fixes.scm` — alsa-lib declaring its build
   tools as `inputs`, and groff-minimal typesetting PDFs through a
@@ -412,18 +434,21 @@ is **embrace-or-reject, after which one image ships either way**
   the image built from this wiring has **not** yet booted on a device —
   the session proved the same sequence by hand. The shipping reader's
   system derivation is unchanged, re-checked at the same store path.
-  `make reader-direct` builds the reader image on the faster display
-  driver we are evaluating for handwriting
+- **There is a second reader flavor now, and it is not for you to
+  flash.** `make reader-direct` builds the reader image on the faster
+  display driver we are evaluating for handwriting
   (`doc/direct-mode-adoption.md`). It is a study artifact, and when this
   entry first landed nothing in it had ever run. **That changed on
   2026-08-25**: it was deployed to the author's os2 and drove the panel
   through a full session — see "The direct-mode display experiment"
-  above. It still does *not* reach a working reader hands-off, for the
-  two wiring gaps that section names. The
-  image you are actually running is unaffected, and that is checked
-  rather than asserted: the shipping reader's system derivation is the
-  same store path before and after the change, and its build closure
-  contains none of the new driver. `doc/pinenote-flavors.md` has the row.
+  above. It still does *not* reach a working reader hands-off: the
+  session's two wiring gaps are fixed in the tree (the entry above,
+  and the wash-path resolution under "Display and page turns"), but no
+  image containing those fixes has booted. The image you are actually
+  running was unaffected by the flavor itself — checked rather than
+  asserted: adding the flavor left the shipping reader's system
+  derivation at the same store path, and its build closure contains
+  none of the new driver. `doc/pinenote-flavors.md` has the row.
 - **New rung-1 gate: `make clut-check`, and the tool behind it.** The
   faster display path we are evaluating for handwriting
   (`doc/direct-mode-adoption.md`) will not even *start* without a table
@@ -439,8 +464,9 @@ is **embrace-or-reject, after which one image ships either way**
   compiler would have quietly changed the waveform your screen is
   driven with. Since 2026-08-25 the compiler has run **on the device**,
   in the study image, and the panel has been driven from its output —
-  invoked by hand, because no image wires it into boot yet (see the
-  direct-mode section).
+  invoked by hand on that session's image, which predated the wiring;
+  the study flavor now runs it at boot (two entries up), though the
+  wired image has not itself booted yet.
 - **A follow-up fixed the compiler's safety gate, which had shipped
   inoperative** — and the fixes had been *described as merged* while
   sitting uncommitted in a working tree (a `git commit --amend` with
@@ -463,15 +489,16 @@ is **embrace-or-reject, after which one image ships either way**
   have left a wrong table in place silently. If it cannot build the
   table it says so loudly and fails, because the alternative on this
   driver is a device that boots to a blank screen with no explanation.
-  Still true as of 2026-08-25: **the one-shot itself is wired into no
-  image** — the study image shipped without it, which is why the session
-  compiled the table by hand, and wiring it (plus the rebind the initrd
-  ordering forces) is the top tag-blocking item on the fix list.
-  Along the way the plan's claim that our boot
-  needed no initramfs work turned out to be **wrong** — the display
-  module is loaded from the initrd, before any of this can run — which
-  is now written down as its own open blocker rather than assumed away
-  (`doc/direct-mode-adoption.md` D7).
+  When this entry first landed the one-shot was wired into no image —
+  the study image shipped without it, which is why the 2026-08-25
+  session compiled the table by hand. **The study flavor now runs it at
+  boot** (the top entry of this section), together with the rebind
+  below. Along the way the plan's claim that our boot needed no
+  initramfs work turned out to be **wrong** — the display module is
+  loaded from the initrd, before any of this can run, so the first
+  probe fails on *every* boot — which was written down as its own
+  blocker (`doc/direct-mode-adoption.md` D7) and is now resolved by
+  the one-shot's closing re-probe.
 - **New rung-1 gate: `make koreader-profile-check`** — KOReader's
   reading defaults now have exactly one writer, and the gate fails if a
   second appears. There were two, and only one of them could ever run:
@@ -500,7 +527,7 @@ is **embrace-or-reject, after which one image ships either way**
   divergence rather than merely the site, so new drift at a
   known-divergent site cannot hide as old inventory (issue #12 step 1).
   Nothing here changes the device; the gate proves declarations agree,
-  not that the device behaves — and days later three of its debt rows
+  not that the device behaves — and the same evening three of its debt rows
   retired themselves when the issue-#30 fix landed, which is the
   can-only-shrink property working in anger.
 - **The artifact root is `/tmp/wilkbook` now, not `/tmp/opencode`** —

@@ -54,7 +54,7 @@ before concluding something is missing.
 | `v6.19_ultra_suspend` | the ultra config (tip `ee2c553f78`) |
 | `v6.19_rk_suspend_driver` | the suspend driver the ultra branch sits on |
 | `v6.19_ebc_custom` | the custom-waveform display work (tip `819ba1724a6f`, **unchanged** at 2026-08-25 — the same commit `doc/hrdl-evaluation.md` pins, so that evaluation is current). Changes nothing under `arch/`. |
-| `v6.19_pn_dts_v2` | **the PineNote device tree** (tip `27d6a52da`) — the EBC node, its third clock `cpll_333m`, and the `&cru` rate pinning. Authoritative for what his driver actually binds to; `doc/direct-mode-adoption.md` D7 reads the delta off it. |
+| `v6.19_pn_dts_v2` | **the PineNote device tree** (tip `27d6a52da`) — the EBC node, its third clock `cpll_333m`, and the `&cru` rate pinning. Authoritative for what his driver actually binds to; `doc/direct-mode-adoption.md` D8 (the third-clock section) reads the delta off it. |
 | `v6.19_iio_accel` | accelerometer; visibly unfinished |
 
 **Commit subjects lie about their own file lists here.** Because topics are

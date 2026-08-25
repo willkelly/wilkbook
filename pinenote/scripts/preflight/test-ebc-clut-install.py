@@ -540,6 +540,17 @@ def rebind_tests(script, tmp):
     check("rebind: DRIVER_DIR without DEVICE is refused",
           proc.returncode != 0 and "usage" in out, out)
 
+    #    ... and the mirror half.  The script guards both orders; a suite
+    #    that pins only one is the exact "every branch" gap class this
+    #    file's failure_guards docstring records.
+    fx6b = Fixture(tmp, "rb-half-b")
+    proc = subprocess.run(["sh", script, fx6b.compiler, fx6b.source,
+                           fx6b.destination, "", "", "fdec0000.ebc"],
+                          capture_output=True)
+    out = (proc.stdout + proc.stderr).decode("utf-8", "replace")
+    check("rebind: DEVICE without DRIVER_DIR is refused",
+          proc.returncode != 0 and "usage" in out, out)
+
 
 # --------------------------------------------------------------------------
 # structural: who is allowed to instantiate this, and the ordering premise

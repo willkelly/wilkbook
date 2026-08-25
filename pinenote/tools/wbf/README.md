@@ -82,8 +82,10 @@ hrdl's direct-mode `rockchip_ebc` `request_firmware()`s
 device with `wbf_to_custom.py`, which needs Python + numpy + pandas; our
 reader image has no interpreter at all beyond KOReader's bundled luajit,
 so `wbf-clut` is the C replacement. It is cross-built for the device as
-the `pinenote-wbf-clut` Guix package and is **not wired into any service
-or image yet**.
+the `pinenote-wbf-clut` Guix package and, since 2026-08-25, is **wired
+into exactly one flavor** — `pinenote-reader-direct`, both as the
+compiler behind `pinenote-ebc-clut-service-type`'s boot one-shot and as
+an on-device console fallback. No shipping flavor references it.
 
 ```
 wbf-clut [-v] INPUT.wbf OUTPUT.bin

@@ -518,9 +518,11 @@ settings-check:
 # and a check over an empty set proves nothing on its own; the positive
 # control is that the SHIPPING string must be rejected against hrdl's
 # driver.  python3 stdlib, no device.  One step is not text analysis: it
-# runs `guix repl' to LOAD (pinenote services ebc-direct), because nothing
-# in the tree imports that module yet and so no build would ever compile
-# it.  That step SKIPs, loudly, where guix is absent -- CI included.
+# runs `guix repl' to LOAD (pinenote services ebc-direct): when the check
+# was written nothing imported that module, and even now only the
+# reader-direct study flavor does, so an ordinary reader build would
+# never compile it.  That step SKIPs, loudly, where guix is absent --
+# CI included.
 ebc-modprobe-options-check:
 	python3 pinenote/scripts/preflight/validate-ebc-modprobe-options.py
 

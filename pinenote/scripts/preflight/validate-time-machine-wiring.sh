@@ -6,11 +6,13 @@
 # doc/release.md -- `guix time-machine -C channels.scm' rebuilds the identical
 # closure -- but for a long time NO build target consumed it. Builds tracked
 # whatever the developer last pulled, and the drift was invisible until the
-# kernel stopped compiling entirely (issue #13: %linux-pinenote-base is bound
-# to nongnu:linux, a floating alias that moved 7.0 -> 7.1, where the
-# forward-port patch collides with mainline's PineNote DTSI). TIME_MACHINE=1
-# fixed the mechanism; this gate stops a new recipe from silently opting out
-# of it again.
+# kernel stopped compiling entirely (issue #13: %linux-pinenote-base was, at
+# the time, bound to nongnu:linux, a floating alias that moved 7.0 -> 7.1,
+# where the forward-port patch then collided with mainline's PineNote DTSI;
+# the base is series-pinned now). TIME_MACHINE=1 fixed the mechanism; this
+# gate stops a new recipe from silently opting out of it again.  (The flag
+# itself is currently broken for a different reason: channels.scm pins a
+# nonguix that predates linux-7.1 -- doc/building.md.)
 #
 # MATCHING RULE, and it matters: do NOT flag every recipe line containing the
 # word "guix". The per-target toolchain prefix is `$(call guix-shell,PKGS)',

@@ -369,7 +369,8 @@ a claim that dynamic EBC removal is safe or supported.
 ## Upgrading the kernel: the base is pinned to a SERIES
 
 `%linux-pinenote-base` (`pinenote/packages/kernel.scm`) is bound to
-**`nongnu:linux-7.0`**, not to `nongnu:linux`.
+**`nongnu:linux-7.1`** (since the 2026-08-15 series bump), not to
+`nongnu:linux`.
 
 It used to be the floating alias, and that meant the kernel this repo
 built was chosen by *when the developer last ran `guix pull`* rather
@@ -380,15 +381,21 @@ carries, and dtc rejected the duplicate nodes (issue #13).
 
 Two consequences, and the distinction between them is the whole policy:
 
-- **A point release inside 7.0.x arrives on its own.** Security fixes
+- **A point release inside 7.1.x arrives on its own.** Security fixes
   should not need a commit here, and mainline does not touch arch DTS in
   a point release.
-- **Leaving 7.0.x is a project, not a bump**, and cannot happen by
+- **Leaving 7.1.x is a project, not a bump**, and cannot happen by
   accident. `make kernel-version-check` asserts the series in ~0.6 s
-  without building anything.
+  without building anything — in its *ambient* form; under
+  `TIME_MACHINE=1` it currently fails, because `channels.scm` still
+  pins a nonguix that predates `linux-7.1` (bumping that pin is its own
+  reviewed change — `doc/building.md`).
 
-**The hardware-proven version is 7.0.11** (`doc/status.md`). Anything
-else in 7.0.x is *accepted* but not *proven*.
+**The hardware-proven version for the shipping driver is 7.0.11**
+(`doc/status.md`), and that is what the deployed reader image runs.
+7.1.8 has run on glass only in the direct-mode *study* configuration
+(2026-08-25: hrdl's EBC driver swapped in, our other patches intact);
+the shipping-driver 7.1 build has never driven a panel.
 
 ### Accepting a point release (cheap, offline)
 

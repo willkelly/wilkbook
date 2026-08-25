@@ -64,9 +64,13 @@
 ;;      derivation -- the one thing this flavor must never do.  KOReader
 ;;      has respawn? #t, so the expected first-boot behaviour is a few
 ;;      failed starts until the rebind lands; whether shepherd's
-;;      crash-loop backoff copes (the 2026-08-25 session saw it wedge
-;;      after repeated failures) is a bring-up observation for the next
+;;      crash-loop backoff copes is a bring-up observation for the next
 ;;      glass session, not something to engineer around unobserved.
+;;      (Precision about 2026-08-25, doc/status.md: after crash-loops
+;;      shepherd marked reader-session failing and later starts failed
+;;      SILENTLY -- undiagnosed.  The herd-stop WEDGE that session was a
+;;      different bug: orientation-bridge ignoring SIGTERM, since fixed
+;;      in the bridge itself.)
 ;;
 ;;      wbf-clut stays in the profile below as the CONSOLE FALLBACK: if the
 ;;      service path breaks, an operator can still run

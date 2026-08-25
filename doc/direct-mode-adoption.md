@@ -294,7 +294,11 @@ new branches by `make ebc-clut-check`). The service-driven rebind has
 not itself run on glass; the session ran the same steps by hand. One
 prediction above stands: the CLUT installer was needed under every
 option, which is why it was built first.
-### D7. The EBC node needs a third clock — **RESOLVED 2026-08-25, and it is two lines**
+### D8. The EBC node needs a third clock — **RESOLVED 2026-08-25, and it is two lines**
+
+(Numbered D7 until 2026-08-25, when the initrd-probe finding took a
+section of its own; every bare "D7" cross-reference in the tree means
+the initrd section above.)
 
 P2 left this open: his `v6.19_ebc_custom` branch touches no DTS at all, so
 the EBC node his driver binds to had to live somewhere we had not found.
@@ -959,14 +963,19 @@ policy is. Three separable causes, each with its own fix surface:
    (2026-08-01, `doc/refresh-policy.md`); direct mode currently has
    neither. Both mechanisms are ours, small, and port.
 
-2. **Per-turn damage rides a flashy waveform class.** Under direct mode
-   the waveform class is the per-pixel hint bit depth (D2: Y1→DU,
-   Y2→DU4, Y4→GL16), and every pixel no `RECT_HINTS` rect covers takes
-   `default_hint` = `Y4 | THRESHOLD | REDRAW` (the parameter's driver
-   default). With no intent mapping written yet, ALL page-turn damage
-   goes through the 16-level class — nothing routes text damage to a
-   lighter class, and nothing reproduces the tuned per-intent choices
-   `doc/refresh-policy.md` bought with hardware sessions.
+2. **The waveform class is untuned, and its per-turn contribution is
+   unmeasured.** Under direct mode the waveform class is the per-pixel
+   hint bit depth (D2: Y1→DU, Y2→DU4, Y4→GL16), and every pixel no
+   `RECT_HINTS` rect covers takes `default_hint` =
+   `Y4 | THRESHOLD | REDRAW` (the parameter's driver default). No
+   intent mapping exists yet, so nothing reproduces the tuned
+   per-intent choices `doc/refresh-policy.md` bought with hardware
+   sessions (the wash-promotion threshold, the GL16 global class). The
+   shipping record cuts both ways here: shipping's own partials stay
+   on the 16-level class *deliberately* (refresh-policy decision 3 —
+   DU would corrupt antialiased text) and measured essentially
+   flash-free, so the untuned default is a tuning unknown to measure,
+   not a proven flashing source.
 
 3. **Washes are hard-coded GC16** — the white-flash class. The shipping
    GL16 wash (no white flash; a policy decision proven on glass) has no
@@ -982,7 +991,7 @@ not from scratch:
 |---|---|
 | `default_hint` (module param, mode 0644 → runtime-writable in sysfs) | waveform class + threshold/dither choice + redraw participation for every pixel not covered by a rect |
 | `DRM_IOCTL_ROCKCHIP_EBC_RECT_HINTS` | per-rectangle hints, plus `set_default_hint` — the per-region policy instrument, and the successor of our per-refresh waveform choice |
-| `DRM_IOCTL_ROCKCHIP_EBC_MODE` | driver mode (NORMAL/FAST/…) and `set_redraw_delay` at runtime — the lever KOReader wraps around pen-down/pen-up |
+| `DRM_IOCTL_ROCKCHIP_EBC_MODE` | driver mode (NORMAL/FAST/…) and `set_redraw_delay` at runtime — the lever P5 would have KOReader wrap around pen-down/pen-up |
 | `redraw_delay` (module param; also via the MODE ioctl) | periodic top-up drive of REDRAW-hinted pixels; ships 0 = off (P2a) |
 
 What has NO knob, and therefore needs code: the defio flush window
@@ -1021,8 +1030,9 @@ reader before any ink work.
    ours and port.
 2. Untuned waveform class: all damage takes `default_hint`
    (`Y4 | THRESHOLD | REDRAW`) because no intent mapping exists yet —
-   nothing routes text damage to a lighter class per
-   `doc/refresh-policy.md`'s decisions.
+   nothing reproduces `doc/refresh-policy.md`'s tuned per-intent
+   choices. Shipping's own 16-level partials measured flash-free, so
+   this cause's per-turn contribution is unmeasured, not established.
 3. Washes are hard-coded GC16 (the white-flash class); the shipping
    GL16 wash has no parameter successor — a driver or CLUT change.
 
