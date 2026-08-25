@@ -134,13 +134,57 @@ installing on their own device (`doc/install.md`) that is
 indistinguishable from a brick. Needs either a fallback path, or a
 loud pre-flight check, or both — decide deliberately.
 
-### D5. Kernel base
+### D5. Kernel base — **SIZED 2026-08-25, and it is small**
 
 His tree is `v6.19_ebc_custom`; ours builds 7.1.8. **Port his driver onto
 our kernel — do not adopt his kernel.** Our seven-patch stack, ultra
 suspend matched pair, and the whole gate apparatus are built around our
-base. This is the larger of the two rebase surfaces and should be sized
-before committing.
+base.
+
+The plan called this "the larger of the two rebase surfaces and should be
+sized before committing." Sized, from a `--depth 300 --single-branch`
+clone at `~/src/reference/hrdl-linux` (2.3 GB; HEAD `819ba1724a6`, which
+`git describe` puts at **`v6.19-182-g819ba1724a6`**):
+
+| | |
+|---|---|
+| commits above `v6.19` | **182** |
+| files touched | 12 — **7 of them new** |
+| files *modified* | **5**: `drm/Kconfig` (+6), `drm/Makefile` (+8/−2), `rockchip/Kconfig` (+22), `rockchip/Makefile` (+8/−2), `panel-simple.c` (+251, a mode table) |
+| total insertions | 5377 |
+| his `rockchip_ebc.c` | 2527 (ours is 3481 — his is *smaller*, the pixel work having moved out) |
+| new alongside it | `rockchip_ebc_blit_neon.c` 1253, `rockchip_ebc.h` 252, `..._neon.h` 62 |
+
+**Four of the five modified files are build glue.** The textual rebase
+surface is therefore close to nothing; the real surface is ~4000 lines of
+*new* code compiling against 7.1's DRM.
+
+**Two measurements say that surface is clean.**
+
+1. **`drm_epd_helper.c`: our 7.1-forward-ported copy and his 6.19 copy
+   differ by ONE change** — he makes `pvi_wbf_get_mode_index` non-static
+   and adds `EXPORT_SYMBOL` so the separate blit module can call it. That
+   file needed *zero* API adaptation across 6.19 → 7.1, and our
+   forward-port work on it transfers wholesale.
+2. **Nine kernel APIs appear in his driver and not in ours** — and ours is
+   *proven* to compile on 7.1, so those nine are the entire risk set:
+   `drm_client_setup_with_fourcc`, `drm_rect_height`, `drm_rect_width`,
+   `drmm_kmalloc`, `drmm_kzalloc`, `kmalloc_array`, `ktime_us_delta`,
+   `msleep_interruptible`, `pm_runtime_resume_and_get`.
+   **All nine exist in 7.1.8**, checked against the extracted source.
+   `drm_client_setup_with_fourcc` — the one that looked risky, being
+   recent fbdev-client API — is at `include/drm/clients/drm_client_setup.h`
+   in *both* 6.19 and 7.1.8, and he already includes it from that path.
+   His tip commit switches to **`scoped_ksimd()`**, which sounds new and
+   is: it is in 7.1.8's `arch/arm64/include/asm/simd.h`. He is tracking
+   *toward* what 7.1 has.
+
+**What this does NOT establish.** It is a static name-existence check, not
+a compile. A name can survive while its signature, its struct layout or
+its semantics change, and none of that is covered — nor are macros. The
+honest reading is that **no obvious blocker exists**, which is a much
+weaker claim than "it will build". The real test is P2, and it is cheap:
+graft his files into our 7.1 tree and run `make kernel`.
 
 ### D6. Keep 3WIN as a bail-out?
 
