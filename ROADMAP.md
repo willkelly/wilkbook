@@ -309,12 +309,52 @@ the start of this track — no panel required. Policy background in
       partition config, wpa_supplicant + dhcpcd, and key-only root SSH/scp are
       hardware-proven (2026-07-24). On-device network selection and persistent
       SSH identity across reflashes remain follow-ups in `doc/networking.md`.
-- [ ] Later: wlroots session (sway or cage/KOReader-kiosk, following
-      hrdl's `pinenote-dist` architecture; `pinenote-nixos` is the
-      structural checklist for a Guix port); per-`app_id` refresh-mode
-      policy (the Onyx pattern); pen fast path via driver hints;
+- [ ] Later: wlroots session (sway, following hrdl's `pinenote-dist`
+      architecture; `pinenote-nixos` is the structural checklist for a
+      Guix port — NOT cage/KOReader-kiosk, which `doc/koreader-spike.md`
+      §3 records as a dead end and whose module was deleted 2026-08-24);
+      per-`app_id` refresh-mode policy (the Onyx pattern);
       `gud-gadget` (PineNote as USB e-ink monitor) as a display-debug
       path and party trick.
+
+## 5. Interaction: the pen, and documents that do things
+
+The direction the display work now serves, settled 2026-08-24/25 and
+recorded across `doc/direct-mode-adoption.md` and `doc/configuration.md`;
+gathered here because ROADMAP is where direction lives.
+
+**Handwriting is a product direction, not a feature**: continuous
+note-taking, then drawn UIs inside books, then handwritten code that
+executes. That ordering matters because each stage needs the previous
+one's latency. The current LUT-path floor is ~290 ms nib-to-ink
+(132–140 ms software + A2's 157 ms); handwriting needs the ~11.7 ms
+class, which only hrdl's direct-mode rework reaches (`DRIVER_MODE_FAST`).
+
+- [ ] **The direct-mode experiment** (`doc/direct-mode-adoption.md`).
+      Status: compiles and links in our kernel package with
+      `pinenote_defconfig`; CLUT compiler byte-identical in C
+      (`wbf-clut`); nothing has ever run. Carried by a temporary
+      `reader-direct` flavor that is SCAFFOLDING, not a product line:
+      **we ship one image.** The gate is embrace-or-reject on glass —
+      embrace means the reader flavor moves to the direct kernel and the
+      scaffolding is deleted; reject means the same deletion and the
+      shipping driver stays. Either way the next tag is `reader`, singular.
+- [ ] **Stroke capture** (#20): capture, storage, vectorization —
+      independent of the panel path, rung-1 testable, can start any time.
+      The digitizer is proven capable: 12-bit pressure, ±90° tilt, hover,
+      at 11.2× panel resolution, all confirmed emitted on glass
+      (2026-08-24).
+- [ ] **The settings book** (`doc/configuration.md` §5): settings as a
+      real document with plugin-supplied live regions — the first
+      instance of the drawn-UIs-in-books machinery, arriving early
+      because configuration needs it first. Its index requires the
+      schema-declared config system (#12), which is why that work is on
+      the critical path of the vision and not a chore.
+- [ ] **Capabilities and sharing** (1.0, deliberately under-specified):
+      shareable interactive books mean sandbox-by-default, per-book
+      capability grants, image signatures. Recorded so nearer work does
+      not foreclose it; the config API's filterable read path is the
+      part that must be designed in from the start.
 - [ ] **1.x — audio, deferred with intent (2026-08-24, #18).** The
       hardware and kernel are ready and were verified on glass: ALSA card
       0 `simple-card` registers at boot with every codec module loaded.

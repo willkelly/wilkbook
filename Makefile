@@ -67,14 +67,20 @@ FIXTURE ?= os1-used
 
 # reader-debug = reader with the EXTRACT_FBS diagnostic kernel
 # (linux-pinenote-debug); remove with the debug patch when done.
-FLAVORS = minimal slim networked dev usb-console usb-console-linux-6-6 reader reader-debug
+# reader-direct = reader with hrdl's direct-mode EBC driver
+# (linux-pinenote-hrdl-direct).  A STUDY flavor: it builds, it has never
+# run, and it is expected NOT to reach a working reader on a first boot
+# (doc/pinenote-flavors.md says why).  Never a deploy candidate; remove
+# with the direct-mode patch if the adoption bails out.
+FLAVORS = minimal slim networked dev usb-console usb-console-linux-6-6 reader reader-debug reader-direct
 
 .PHONY: help packages kernel kernel-drv reader-system-drv qemu-smoke qemu-virt qemu-virt-check qemu-pageturn-campaign refresh-episodes-check refresh-trigger-check \
          check-host wbf-check wbf-notice clut-check ebc-logic-check ebc-barrier-check rastersim-check koreader-input-check orientation-check optics-check optics-audit-dataset power-check rockchip-pm-check activation-positive-check suspend-check \
         battery-dtb-check time-machine-check gexp-modules-check \
         timezone-check kernel-version-check library-check \
         manuals-check ultra-coupling-check timesync-check \
-        settings-check koreader-profile-check \
+        settings-check koreader-profile-check ebc-modprobe-options-check \
+        ebc-clut-check \
         $(FLAVORS) $(addprefix image-,$(FLAVORS)) $(addprefix rootfs-,$(FLAVORS))
 
 help:
@@ -94,6 +100,7 @@ help:
 	@echo "  check-host        every host suite needing no hardware ([WBF=..] adds wbf-check + waveform-gated tests)"
 	@echo "  wbf-check         waveform parser checks (WBF=..; never committed)"
 	@echo "  clut-check        C CLUT compiler vs hrdl's wbf_to_custom.py, byte-identical ([WBF=..] [CLUT_REF=..])"
+	@echo "  ebc-clut-check    the direct-mode CLUT installer one-shot, driven through every branch"
 	@echo "  ebc-logic-check   extracted EBC driver logic checks ([WBF=..])"
 	@echo "  ebc-barrier-check supervised EBC sleep-frame command host tests"
 	@echo "  rastersim-check   raster/waveform simulation checks ([WBF=..])"
@@ -110,6 +117,7 @@ help:
 	@echo "  timezone-check    the build-time timezone knob resolves, and refuses an unusable name"
 	@echo "  timesync-check    SNTP client protocol/policy tests plus a loopback round trip"
 	@echo "  settings-check    every knob declared twice still agrees; today's drift is pinned (issue #12)"
+	@echo "  ebc-modprobe-options-check  each rockchip_ebc options set names only parameters its own driver registers"
 	@echo
 	@echo "Flags:"
 	@echo "  TIME_MACHINE=1    build through channels.scm (pinned/reproducible; required for releases)"
@@ -318,7 +326,8 @@ CHECK_HOST_TARGETS = clut-check ebc-logic-check ebc-barrier-check rastersim-chec
         rockchip-pm-check activation-positive-check suspend-check \
         library-check koreader-profile-check manuals-check ultra-coupling-check \
         battery-dtb-check time-machine-check gexp-modules-check \
-        timezone-check refresh-trigger-check timesync-check settings-check
+        timezone-check refresh-trigger-check timesync-check settings-check \
+        ebc-modprobe-options-check ebc-clut-check
 
 # Parse time, not recipe time: a recipe-level guard would run only AFTER every
 # prerequisite had already completed, so it could not prevent the mistake it
@@ -386,6 +395,18 @@ wbf-check:
 clut-check:
 	$(call guix-shell,gcc-toolchain python python-numpy) $(MAKE) -C pinenote/tools/wbf clut-check \
 	  WBF=$(WBF) CLUT_REF=$(CLUT_REF) CLUT_REF_BIN=$(CLUT_REF_BIN) CLUT_PYTHON=$(CLUT_PYTHON)
+
+# The other half of D1: the compiler exists, and this is the one-shot that
+# would put its output where hrdl's driver looks (doc/direct-mode-adoption.md
+# D1/D7).  EXECUTES pinenote/services/ebc-clut-install.sh -- the exact file
+# the service hands to shepherd -- through every branch against a fake
+# firmware tree and a stub compiler, plus a mutation control that replaces
+# the checksum with upstream's compile-once-if-absent ExecCondition and
+# requires the freshness branches to go red for it.  stdlib python3 only; no
+# waveform, no store, no device.  `guix repl' compiles the service module
+# when guix is on PATH and says SKIP when it is not.
+ebc-clut-check:
+	python3 pinenote/scripts/preflight/test-ebc-clut-install.py
 
 # EBC driver logic unit tests against the verbatim rockchip_ebc.c from
 # the forward-port patch (offline ladder rung 2). WBF optional; without
@@ -469,6 +490,24 @@ timesync-check:
 settings-check:
 	python3 pinenote/tools/settings/check-settings.py
 	python3 pinenote/tools/settings/test-check-settings.py
+
+# We now carry TWO rockchip_ebc drivers with almost disjoint module
+# parameters, and the kernel does not protect you from mixing them up:
+# unknown_module_param_cb() warns and IGNORES, so an options line aimed at
+# the wrong driver loads fine with its intents silently discarded.  This
+# gate derives each driver's real parameter set from the module_param()
+# registrations in its own patch -- resolving #ifdef guards, and refusing
+# rather than guessing when it meets a guard it does not know -- and checks
+# each options string against the driver it is for.  It also pins the
+# shipping options text, because the direct-mode set is deliberately empty
+# and a check over an empty set proves nothing on its own; the positive
+# control is that the SHIPPING string must be rejected against hrdl's
+# driver.  python3 stdlib, no device.  One step is not text analysis: it
+# runs `guix repl' to LOAD (pinenote services ebc-direct), because nothing
+# in the tree imports that module yet and so no build would ever compile
+# it.  That step SKIPs, loudly, where guix is absent -- CI included.
+ebc-modprobe-options-check:
+	python3 pinenote/scripts/preflight/validate-ebc-modprobe-options.py
 
 rockchip-pm-check:
 	$(call guix-shell,dtc gcc-toolchain git python) $(MAKE) -C pinenote/tools/rockchip-pm check

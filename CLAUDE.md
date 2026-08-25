@@ -91,6 +91,9 @@ code review — before a single reboot. That's the standard.
   and how to audit findings against it (data in `doc/datasets/`).
 - `doc/hrdl-evaluation.md` — the standing evaluation of hrdl's tree:
   cherry-pick decisions and the corruption-hunt strategy.
+- `doc/glass-plan-2026-08.md` — the standing agenda for attended glass
+  sessions: the direct-mode embrace-or-reject ladder and the
+  shipping-reader validation list.
 - `doc/configuration.md` — how configuration is meant to work: sparse
   overrides, schema-declared validation and migration, everything
   surviving a reflash, the settings book, and what alpha actually ships.

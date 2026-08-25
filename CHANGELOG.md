@@ -262,6 +262,18 @@ and a bound.
 
 ### Build, CI and gates
 
+- **There is a second reader flavor now, and it is not for you to flash.**
+  `make reader-direct` builds the reader image on the faster display
+  driver we are evaluating for handwriting
+  (`doc/direct-mode-adoption.md`). It is a study artifact: it evaluates,
+  **nothing in it has ever run** — no module loaded, no panel driven —
+  and it is expected *not* to reach a working reader on a first boot,
+  because that driver refuses to probe without a table compiled from your
+  device's own waveform and nothing compiles that table at boot yet. The
+  image you are actually running is unaffected, and that is checked
+  rather than asserted: the shipping reader's system derivation is the
+  same store path before and after the change, and its build closure
+  contains none of the new driver. `doc/pinenote-flavors.md` has the row.
 - **New rung-1 gate: `make clut-check`, and the tool behind it.** The
   faster display path we are evaluating for handwriting
   (`doc/direct-mode-adoption.md`) will not even *start* without a table
@@ -277,6 +289,23 @@ and a bound.
   original on purpose (`doc/driver-findings-report.md`) — a "cleaner"
   compiler would have quietly changed the waveform your screen is
   driven with.
+- **New rung-1 gate: `make ebc-clut-check`**, and the boot-time step it
+  covers. The table above has to reach the driver, and on this device
+  that means compiling it **from your own device's waveform, on the
+  device, at boot** — it is calibration data and is never shipped with
+  the image. The one-shot that does it now exists and is driven through
+  every branch offline, including the one that matters most: it
+  **rebuilds the table whenever your waveform changes**, rather than the
+  upstream shape of "build it once and never look again", which would
+  have left a wrong table in place silently. If it cannot build the
+  table it says so loudly and fails, because the alternative on this
+  driver is a device that boots to a blank screen with no explanation.
+  Still true: none of this is in any image, nothing loads the driver,
+  and no panel has run it. Along the way the plan's claim that our boot
+  needed no initramfs work turned out to be **wrong** — the display
+  module is loaded from the initrd, before any of this can run — which
+  is now written down as its own open blocker rather than assumed away
+  (`doc/direct-mode-adoption.md` D7).
 - **New rung-1 gate: `make koreader-profile-check`** — KOReader's
   reading defaults now have exactly one writer, and the gate fails if a
   second appears. There were two, and only one of them could ever run:

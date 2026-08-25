@@ -2,10 +2,14 @@
   #:use-module (gnu services)
   #:use-module (gnu services shepherd)
   #:use-module (guix gexp)
+  #:use-module (guix records)
   #:use-module (pinenote packages ebc-test)
   #:use-module (pinenote packages firmware)
   #:export (pinenote-waveform-service-type
             pinenote-ebc-modprobe-service-type
+            pinenote-ebc-modprobe-configuration
+            pinenote-ebc-modprobe-configuration?
+            pinenote-ebc-modprobe-configuration-options
             pinenote-ebc-params-service-type
             pinenote-ebc-test-service-type
             pinenote-ebc-modprobe-options))
@@ -23,6 +27,31 @@
 (define pinenote-ebc-modprobe-options
   "options rockchip_ebc direct_mode=0 auto_refresh=0 refresh_threshold=60 split_area_limit=0 panel_reflection=1 prepare_prev_before_a2=0 dclk_select=0 refresh_waveform=6 defio_delay_ms=250
 softdep panfrost pre: rockchip_ebc\n")
+
+;; This string is DRIVER-SPECIFIC, and the kernel will not tell you when it
+;; is wrong: `unknown_module_param_cb' warns and ignores, so an options line
+;; aimed at the wrong rockchip_ebc loads fine with its intents discarded.
+;; The service type therefore takes the text as configuration -- one service
+;; type, one /etc/modprobe.d/rockchip_ebc.conf, no possibility of two
+;; instances colliding on that file.
+;;
+;; The other set lives in (pinenote services ebc-direct), NOT here: of the
+;; nine parameters named above, exactly ONE (`dclk_select') is registered by
+;; hrdl's direct-mode driver at all, and it is dead code there.  It is a
+;; different configuration for a different driver, and `make settings-check'
+;; requires exactly one
+;; `options rockchip_ebc' line in this file because that one string has three
+;; build-time copies it holds in agreement.  `make ebc-modprobe-options-check'
+;; gates both sets against the module_param registrations of their own driver.
+;;
+;; NOT issue #12 step 3: there is no schema, no validation, and no p7
+;; override path here -- this is a Guix-level field so a flavor can choose,
+;; which is strictly more than the `(_config)' that ignored its argument.
+(define-record-type* <pinenote-ebc-modprobe-configuration>
+  pinenote-ebc-modprobe-configuration make-pinenote-ebc-modprobe-configuration
+  pinenote-ebc-modprobe-configuration?
+  (options pinenote-ebc-modprobe-configuration-options
+           (default pinenote-ebc-modprobe-options)))
 
 (define (pinenote-waveform-shepherd-service _config)
   (list
@@ -49,9 +78,10 @@ softdep panfrost pre: rockchip_ebc\n")
    (default-value #f)
    (description "Copy a locally supplied PineNote waveform into the rockchip_ebc firmware path.")))
 
-(define (pinenote-ebc-modprobe-etc-files _config)
+(define (pinenote-ebc-modprobe-etc-files config)
   (list `("modprobe.d/rockchip_ebc.conf"
-          ,(plain-file "rockchip_ebc.conf" pinenote-ebc-modprobe-options))))
+          ,(plain-file "rockchip_ebc.conf"
+                       (pinenote-ebc-modprobe-configuration-options config)))))
 
 (define pinenote-ebc-modprobe-service-type
   (service-type
@@ -59,7 +89,10 @@ softdep panfrost pre: rockchip_ebc\n")
    (extensions
     (list (service-extension etc-service-type
                              pinenote-ebc-modprobe-etc-files)))
-   (default-value #f)
+   ;; The default is the shipping text, so `(service
+   ;; pinenote-ebc-modprobe-service-type)' in base.scm is unchanged and
+   ;; produces a byte-identical /etc/modprobe.d/rockchip_ebc.conf.
+   (default-value (pinenote-ebc-modprobe-configuration))
    (description "Install PineNote rockchip_ebc module options into /etc/modprobe.d.")))
 
 (define (pinenote-ebc-params-shepherd-service _config)

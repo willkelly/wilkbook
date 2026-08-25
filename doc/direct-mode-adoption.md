@@ -2,12 +2,30 @@
 
 **Status: plan, not a decision record.** Written 2026-08-24, after the
 operator named handwriting as a product direction that the current display
-path cannot support. **The only thing built so far is P1's CLUT compiler**
-(2026-08-25) — a host/device tool with no service, image or kernel change
-behind it. Everything from P2 on is still a plan, and the bail-out
+path cannot support. Built so far (all 2026-08-25): P1's CLUT compiler,
+P2's `linux-pinenote-hrdl-direct` kernel package, and P2a's modprobe
+options. **Nothing has ever run** — not loaded, not probed, not bound, no
+frame on any panel — and P3 onwards is still a plan. The bail-out
 criteria at the bottom still apply.
+path cannot support. What exists so far: **P1's CLUT compiler and its
+installer one-shot**, and **P2's kernel variant** — none of them reachable
+from any flavor, image or running system, and **nothing has ever probed,
+bound or drawn a frame.** P3 on is still a plan, and the bail-out criteria
+at the bottom still apply.
 
 Read `doc/hrdl-evaluation.md` first — this document assumes it.
+
+**Decision (operator, 2026-08-25): we ship ONE image.** The
+`reader-direct` flavor is **scaffolding for the experiment, not a product
+line**. The gate is embrace-or-reject, decided on glass: *embrace* means
+the `reader` flavor itself moves to the direct-mode kernel and the
+scaffolding is deleted; *reject* means the same deletion with the
+shipping driver unchanged. Either way, the next prealpha tag ships
+`reader`, singular — never a direct/non-direct pair. Nothing
+direct-mode-related may therefore grow roots the deletion would tear:
+no doc may tell a user to choose between flavors, and no service may
+exist only in the direct flavor without a note that it dies or graduates
+with the decision.
 
 ## Why now
 
@@ -86,11 +104,13 @@ interpreter (`doc/artifacts/pinenote-input-clocks-20260824/`).
 Three options:
 
 1. **Reimplement the CLUT compiler in C, ship it as an on-device binary.**
-   *Recommended — and **done** as of 2026-08-25 (see P1); the "ship it"
-   half is not.* There is already exactly this precedent:
-   `pinenote-install-waveform` is a compiled binary run by a one-shot
-   shepherd service before the EBC module loads
-   (`pinenote/services/ebc.scm`), and `pinenote-ebc-dump` in
+   *Recommended — and **done** as of 2026-08-25 (see P1), compiler and
+   installing one-shot both; what is not done is any flavor that
+   instantiates it, and **D7** says the one-shot alone cannot be early
+   enough.* There is a near-precedent: `pinenote-install-waveform` is a
+   generated script run by a one-shot shepherd service
+   (`pinenote/services/ebc.scm`) — though note it is **not** "before the
+   EBC module loads", which is D7's whole subject — and `pinenote-ebc-dump` in
    `pinenote/packages/firmware.scm` is an on-device C tool we already
    cross-build. Adding a sibling is the smallest change to a shape we
    already have. It keeps Python off the device, preserves never-bundle
@@ -213,6 +233,254 @@ So the retreat 3WIN was supposed to provide costs a repair, not nothing.
 shipping one — a strictly better retreat than a config of his we would
 have to fix first. Reported upstream rather than patched.
 
+### D7. Probe happens in the INITRD, so nothing in userspace is "before the module loads" — **found 2026-08-25**
+
+This is the blocker P0's item 1 (below, under **The plan**) talked itself
+out of. Measured in the tree, not assumed:
+
+- **`pinenote-ebc-modprobe-service-type` loads nothing.** It extends
+  `etc-service-type` and writes `/etc/modprobe.d/rockchip_ebc.conf`. That
+  is its whole body. Nothing in `pinenote/services/` or
+  `pinenote/systems/` ever runs `modprobe rockchip_ebc`.
+- **The initrd raw-loads it.** `rockchip_ebc` is in
+  `%pinenote-display-initrd-modules`, and `pinenote-initrd*`'s
+  `#:pre-mount` hook calls `load-linux-modules-from-directory` on that
+  list — straight after copying the waveform partition into the
+  *initramfs's own* `/lib/firmware/rockchip/ebc.wbf`.
+  `pinenote/images/pinenote-initramfs.scm` says so in its own words at the
+  bottom of the file ("the initrd raw-loads `rockchip_ebc` … which passes
+  no parameters at all"), hardware-confirmed 2026-07-05 by an image whose
+  cmdline `refresh_waveform=6` was simply ignored.
+
+So probe — and with it `request_firmware("rockchip/custom_wf.bin")` and
+hrdl's `-EINVAL` — happens **inside the initramfs**, before the root
+filesystem a shepherd one-shot writes to has been mounted. A one-shot
+cannot be ordered before that, which is exactly why hrdl's unit runs
+`mkinitcpio -P` and then `modprobe -r rockchip_ebc; modprobe
+rockchip_ebc`. On our stack the same load happens **every boot**, not only
+the first: the initramfs is discarded, so its firmware directory never
+carries anything forward.
+
+Three ways out, none of them written, none tried:
+
+| | cost | risk |
+|---|---|---|
+| (a) compile the CLUT in the initrd, beside the waveform copy | `wbf-clut` and its closure inside the initramfs, and a `system*` in the pre-mount gexp | biggest initrd change; a failure there is pre-console |
+| (b) drop `rockchip_ebc` from the *direct flavor's* initrd module list and modprobe it from a one-shot after the CLUT service | a second initrd variant, a load one-shot, and a working module database at `/run/booted-system/kernel` (the `modprobe -d` shape `usb-gadget.scm` already uses) | display arrives later in boot; the reader flavor drops `console=tty0` anyway, so the U-Boot logo simply stays |
+| (c) install, then reload — `modprobe -r rockchip_ebc; modprobe rockchip_ebc` — as hrdl does | smallest; no initrd work | a reload while something holds the DRM/fb device fails, and every boot pays a failed probe first |
+
+**Nothing here is decided.** (b) reads cleanest and (c) cheapest; both want
+the same module-database plumbing. What is *not* in doubt is that the CLUT
+installer is needed under all three, which is why it was built first.
+### D7. The EBC node needs a third clock — **RESOLVED 2026-08-25, and it is two lines**
+
+P2 left this open: his `v6.19_ebc_custom` branch touches no DTS at all, so
+the EBC node his driver binds to had to live somewhere we had not found.
+
+**The branch is `v6.19_pn_dts_v2`** (tip `27d6a52da`). `ls-remote --heads`
+on `git.sr.ht/~hrdl/linux` returns **69 branches**, not the four
+`doc/reference-register.md` listed — the tree is one branch per topic, and
+the device tree is its own topic. The register has been given the row, so
+the next person does not repeat this.
+
+**Neither commit `doc/hrdl-evaluation.md` cites leads to a device tree** —
+both are driver commits on `v6.19_ebc_custom`. Worth stating plainly,
+because it is what sent this task looking in the wrong place:
+
+| cited | what it actually changes |
+|---|---|
+| `9444147d35a2` — *"rk3566-pinenote.dtsi: set CPLL_333M to 33.33 MHZ…"* | **`rockchip_ebc.c` only**, +7/−3. The evaluation called this a *DTS commit*; the `dtsi` in its subject is a leftover, and that citation is now corrected in place. |
+| `70cbadbce9ab` — *"add another panel mode"* | `panel-simple.c`. The evaluation labelled this one correctly — it just is not DTS either. |
+
+`9444147d35a2` is half of a commit split across two branches: its twin
+`417dc79cdf8f` carries the DTS half on `v6.19_pn_dts_v2` under the *same
+subject and the same author timestamp* (2025-01-09 01:55:29 +0100), and
+neither half mentions the other. The evaluation's **substance was right**
+— there is a third clock and it is 33.33 MHz — and its **attribution was
+wrong**. The finding that `v6.19_ebc_custom` changes nothing under
+`arch/` really does hold; that half stands.
+
+The commit that actually adds the clock is a third one, `37ae838a4db8`,
+*"rockchip_ebc: adjust cpll_333m and enhance clock management"* — two
+lines in `rk356x-base.dtsi`.
+
+#### What the probe requires — the authoritative list
+
+His DTS is evidence; `rockchip_ebc_probe` is the requirement. Read at
+`819ba1724a6`, this is every device-tree-backed thing it asks for:
+
+| probe call | DT it needs | ours |
+|---|---|---|
+| `devm_platform_ioremap_resource(pdev, 0)` | `reg` | ✓ |
+| `devm_clk_get(dev, "hclk")` | `clock-names` | ✓ |
+| `devm_clk_get(dev, "dclk")` | `clock-names` | ✓ |
+| **`devm_clk_get(dev, "cpll_333m")`** | `clock-names` | **✗ — the gap** |
+| `devm_iio_channel_get(dev, NULL)` | `io-channels` | ✓ `<&ebc_pmic 0>` |
+| `devm_regulator_bulk_get` × 3 | `panel-` / `vcom-` / `vdrive-supply` | ✓ |
+| `platform_get_irq(pdev, 0)` | `interrupts` | ✓ |
+| `devm_drm_of_get_bridge(…, 0, 0)` | `port`/`endpoint` → panel | ✓ |
+| `of_device_id` | `compatible = "rockchip,rk3568-ebc"` | ✓ |
+
+**One gap, and it is fatal.** The `cpll_333m` get is **unconditional** —
+it is not behind `if (direct_mode)` — and fails through `dev_err_probe`.
+A missing clock is therefore a probe failure and no display: D4's failure
+mode arriving from a second direction, and one a `custom_wf.bin` fallback
+would not catch.
+
+Two negative results the same read settles:
+
+- **His driver never touches resets.** No `devm_reset_control_*` anywhere
+  in the file. Our node declares `resets`/`reset-names`; under his driver
+  they are dead properties, which is harmless.
+- **`vposneg` vs `vdrive` is a label difference, not a delta.** His
+  overlay has `vdrive-supply = <&vdrive>`, ours `<&vposneg>`; the *supply
+  name* the driver asks for is `"vdrive"` in both. Nothing to do.
+
+#### The delta
+
+Two lines, and they go in the **direct-mode patch**, not the forward-port:
+
+```dts
+&ebc {
++	clocks = <&cru HCLK_EBC>, <&cru DCLK_EBC>, <&cru CPLL_333M>;
++	clock-names = "hclk", "dclk", "cpll_333m";
+ 	io-channels = <&ebc_pmic 0>;
+ 	panel-supply = <&v3p3>;
+```
+
+hrdl edits the shared `rk356x-base.dtsi` node in place. We should not:
+**our forward-port patch is what creates that node in the first place**
+(mainline has no EBC node at all), so editing it there means editing the
+most rebase-fragile artifact in the repo for a study variant. Re-assigning
+the two properties in the board-level `&ebc` overlay — which our
+forward-port already adds to `rk3566-pinenote.dtsi` — overrides the base
+node's list, keeps the change inside
+`linux-pinenote-7.1-hrdl-direct-mode.patch`, and leaves the shipping
+kernel's DTBs byte-identical. `CPLL_333M` is in scope there: the include
+chain reaches `rk356x-base.dtsi`, which includes
+`<dt-bindings/clock/rk3568-cru.h>`, textually before the overlay.
+
+**This delta is written down, not applied.** Nothing in this commit
+changes a patch, a package or an image.
+
+#### The 250 MHz / 33.33 MHz contradiction is not one
+
+Issue #23 measured `cpll_333m` at **250 MHz** on our device
+(`doc/artifacts/pinenote-dclk-reclock-20260824/`); direct mode wants
+**33.33 MHz**. Both are true of the same clock, because `cpll_333m` is not
+fixed — it is a plain 5-bit divider off `cpll`, and #23's own dump gives
+the numerator:
+
+```
+pll_cpll   1000000000
+  cpll_333m  250000000     <- the CRU divider sits at /4
+```
+
+1000/4 = 250 MHz is the divider our device is *observed* to boot with —
+left by the bootloader, since nothing in our DTS mentions `CPLL_333M` —
+and it is what `dclk_select=1` exploits. 1000/30 = 33.333 MHz is what direct mode programs. hrdl's
+`37ae838a4db8` message says both in one breath: *"diff mode works best
+with dclk 33.33 MHz using cpll_333m 33.33 MHz… Alternatively cpll_333m can
+be used at 250 MHz, resulting in a noticable speedup."* That second
+sentence **is** issue #23, arrived at independently.
+
+Why the driver needs its own handle on the parent, rather than just asking
+`dclk` for a rate: `DCLK_EBC` is `COMPOSITE_NODIV` with flags `0` — a pure
+mux over {`gpll_400m`, `cpll_333m`, `gpll_200m`} with no divider and no
+`CLK_SET_RATE_PARENT`. It can *reparent* to the closest rate at or below
+what you ask, and it can never *re-rate* its parent. So reaching 33 MHz
+requires setting `cpll_333m` first, which is exactly the order
+`rockchip_ebc_set_dclk` uses.
+
+The chain, end to end:
+
+| step | value |
+|---|---|
+| `clk_set_rate(cpll_333m, 33333334)` → divider 30 | 33,333,333 Hz |
+| `clk_set_rate(dclk_ebc, 34000000)` → reparents to `cpll_333m` | 33,333,333 Hz |
+| `EBC_DSP_CTRL_DSP_SDCLK_DIV(0)` → sclk = dclk | 33.333 MHz |
+| `sdck.htotal = 2208/8 = 276`, `vtotal = 1421` | **85.0 Hz** |
+
+That is the panel's authored rate. For scale against what we ship: LUT
+mode at dclk 200 MHz with `SDCLK_DIV=7` gives sclk 25 MHz (63.75 Hz);
+#23's `dclk_select=1` gives 31.25 MHz (79.68 Hz); direct mode gives the
+remaining 6.7 %.
+
+**A consequence worth pinning: `dclk_select` is dead in our direct-mode
+build.** `rockchip_ebc_set_dclk` takes the `if (direct_mode)` branch
+before it ever reads `dclk_select`, and `direct_mode` is a
+`static bool … = true` whose `module_param` is registered only under
+`CONFIG_DRM_ROCKCHIP_EBC_3WIN_MODE` — which we correctly build off. So in
+`linux-pinenote-hrdl-direct` direct mode is unconditional and #23's
+parameter has no effect at all.
+
+#### The 85 Hz panel mode is *not* a second gap
+
+Our direct-mode patch does not carry `panel-simple.c` — it has no `arch/`
+hunks and no `ed103tc2` text — so the built variant keeps our
+forward-port's mode table (`num_modes = 8`) and does **not** have hrdl's
+85 Hz entry from `70cbadbce9ab`.
+
+That turns out not to matter. In direct mode the driver **ignores
+`mode->clock`**: `rockchip_ebc_set_dclk` forces 34 MHz whatever the mode
+says. All eight of our modes carry identical `htotal`, `vtotal`, `hskew`
+and `CLKDIV2` and differ *only* in `.clock`. The panel rate is set by sclk
+and those shared timings, so it is 85 Hz whichever mode DRM picks. The
+85 Hz entry earns its keep only in **LUT** mode, where dclk *is*
+`mode->clock` and `SDCLK_DIV` is 7 — which is why his entry reads
+`.clock = 266680`, i.e. 8 × 33.335 MHz.
+
+So `70cbadbce9ab` is optional for us. Derived from source; nothing has run.
+
+#### One driver defect found in this path, and not filed
+
+`rockchip_ebc_crtc_atomic_check` does `mode->clock = rate / 1000` where
+`rate = rockchip_ebc_set_dclk(…)`, and that function returns
+`clk_set_rate`'s value — **0 on success, not a rate**. So
+`adjusted_mode.clock` is zeroed on every successful mode set, in every
+mode, not just direct. Ours is correct here and his refactor regressed it:
+we call `clk_round_rate`, which does return the rate.
+
+Likely cosmetic on a panel with no meaningful vblank — DRM computes its
+timestamping constants from a zero dotclock and complains — but it is a
+difference we would inherit. **Deliberately not filed** in
+`doc/driver-findings-report.md` or the upstream register: it is read off
+source in a driver no panel has run, and this repo's bar for a finding is
+higher than that. File it when P3 step 1 either shows the log line or does
+not.
+
+#### What we are NOT adopting, and what is still unknown
+
+- **Not adopting his `&cru` block.** His `rk3566-pinenote.dtsi` pins
+  `CPLL_333M` to 33333334 at boot alongside `ACLK_TOP_HIGH/LOW`,
+  `ACLK_RGA_PRE`, `CPLL_250M`, `HCLK_RGA_PRE`, `HCLK_EBC` and
+  `HCLK_JENC`. The driver sets `cpll_333m` on every mode set, so the
+  boot-time pin is redundant for correctness; and a board-level `&cru`
+  override **replaces mainline's whole `assigned-clocks` list** rather
+  than extending it, which is a wider blast radius than a study variant
+  needs. If it is ever adopted, mainline's three entries
+  (`CLK_RTC_32K`, `PLL_GPLL`, `PLL_PPLL`) must be carried across, as
+  hrdl carries them. Directly above a commented-out variant of that block
+  that used 333.4 MHz throughout, he notes *"stronger artifacting, I
+  suspend [sic] instabilities due to too high clock frequencies"* — so
+  these are values tuned against symptoms on his stack that we have never
+  reproduced. Copying them would import a fix for an unknown problem.
+- **Collateral on `cpll_333m` looks confined, but is checked against the
+  wrong tree.** Only two clocks can mux onto it: `DCLK_EBC` and
+  `DCLK_VICAP`. Mainline pins `DCLK_VICAP` to 300 MHz, which selects
+  `gpll_300m`, so dropping `cpll_333m` to 33 MHz should take nothing with
+  it. `HCLK_EBC` is *not* on `cpll_333m` — it is a gate off
+  `hclk_rga_pre`. **All of that was read in his 6.19 tree, not verified
+  in our 7.1.8 base.**
+- **Nothing has run.** No probe, no bind, no frame. Every claim here is
+  derived from source. The delta satisfies the probe *as written*; whether
+  the clock framework grants 33.333 MHz on this SoC at runtime, and
+  whether the panel likes it, are P3 step 1 questions.
+- **dtc has not been run on the override.** Property re-assignment through
+  a label reference is ordinary DTS, but the gate is `make kernel` on the
+  variant, and it has not been done.
+
+
 ## The plan
 
 Cheapest decisive things first, in the ladder's order. **Each phase has a
@@ -257,17 +525,19 @@ neither.
 rockchip_ebc`.
 
 1. The `mkinitcpio` step is because *their* driver needs the firmware in
-   the initramfs. **Ours may not**: `pinenote-ebc-modprobe-service-type`
-   loads the module from a shepherd one-shot ordered after
-   `pinenote-waveform`, so the firmware path is already populated before
-   modprobe. Our existing ordering probably accommodates the CLUT compile
-   with no initrd work — worth confirming, but it makes D1 smaller again.
+   the initramfs. This plan said **"ours may not"**, on the grounds that
+   `pinenote-ebc-modprobe-service-type` "loads the module from a shepherd
+   one-shot ordered after `pinenote-waveform`". **That is false, and it
+   was checked on 2026-08-25 rather than assumed** — see **D7**, which is
+   now the blocker this paragraph used to argue away.
 2. Their `ExecCondition` is *compile-once-if-absent*, the same shape as
    our waveform installer's "destination exists → exit 0" — which
    `doc/configuration.md`'s neighbour issue #12 §7 already flags as a
    hazard, because a stale artifact then wins forever with no checksum.
    Adding a second derived artifact under the same pattern **compounds an
-   existing bug**. Whatever we build should checksum.
+   existing bug**. Whatever we build should checksum. **Done** — the
+   installer keeps a three-line freshness record and rebuilds when any
+   line moves (P1, below).
 
 **A safety gap was closed before it could bite** (2026-08-25). The CI
 gate grepped `\.wbf$|vcom` and **could not see `custom_wf.bin`** — which
@@ -304,11 +574,41 @@ so the driver cannot select the file's top temperature range. A
 clean-room compiler written to what the reference *means* is wrong here,
 which is why the gate had to be identity rather than equivalence.
 
-**What P1 did NOT do.** No service, no image, no initrd work — that is
-the next step, and D4 (what a missing or stale `custom_wf.bin` should do
-at first boot) has to be decided before it, along with the checksum the
-`ExecCondition` note above demands. **And nothing has driven a panel:**
-the compiler is proven against the Python and against nothing else.
+**The installer one-shot exists too, 2026-08-25 — and it is wired into
+nothing.** `pinenote/services/ebc-direct.scm` defines
+`pinenote-ebc-clut-service-type`: a shepherd one-shot, ordered after
+`pinenote-waveform`, that runs `pinenote/services/ebc-clut-install.sh`
+with the compiler, the waveform and the destination as arguments. It is
+the analogue of `pinenote-waveform` for the derived file, and it differs
+from hrdl's unit in the two places that matter:
+
+- **It checksums instead of gating on `test ! -e`.** The stamp beside the
+  file records the source waveform's sha256, the compiler's store path,
+  and the installed file's own sha256; any of the three moving forces a
+  recompile. That closes the stale-derived-artifact hazard issue #12 §7
+  names, rather than adding a second instance of it.
+- **Its failure paths exit non-zero and say why.** `manuals-stage.sh`
+  exits 0 on every failure because a reader without manuals is still a
+  reader; a device without a CLUT has no display at all (D4), so this one
+  is built to be loud in the boot log.
+
+`make ebc-clut-check` runs it — the real file, not a copy — through every
+branch against a fake firmware tree and a stub compiler: first run, no-op
+when current, recompile on a changed waveform / changed compiler /
+corrupted or deleted output, missing waveform, missing compiler, failing
+compiler, empty output, unwritable and symlinked destinations, and a host
+with no `sha256sum` (which recompiles rather than trusts). It carries its
+own **mutation control**: a copy of the script with the checksum replaced
+by upstream's compile-once-if-absent condition, which the freshness
+branches must reject.
+
+**What is still NOT done.** No image, no flavor, no initrd work, and
+**D7** — which says a userspace one-shot cannot be "before the module
+loads" on our boot at all — is unresolved, so this service **does not on
+its own make the direct-mode driver probe.** D4 (what a missing or stale
+`custom_wf.bin` should do at first boot) is still undecided. **And
+nothing has driven a panel:** the compiler is proven against the Python
+and against nothing else, and the installer against a stub.
 
 ### P2 — port the driver onto 7.1.8, behind a flavor
 
@@ -374,10 +674,208 @@ an image, and no flavor references the variant.
 
 **One gap found while doing it:** his `v6.19_ebc_custom` branch contains
 **no EBC device-tree node** and touches no DTS at all, so it cannot bind
-on its own — he must compose branches. For us that is harmless (we have
-the node), but it means the third clock the evaluation cites (`cpll_333m`
-for direct mode, DTS commit `9444147d35a2`) is on a branch we have not
-identified yet. Find it before P3.
+on its own — he must compose branches. It means the third clock the
+evaluation cites (`cpll_333m` for direct mode, DTS commit `9444147d35a2`)
+is on a branch we have not identified yet.
+
+**That gap is not harmless, corrected 2026-08-25.** The note above said
+"for us that is harmless (we have the node)". We have *a* node, and it is
+the wrong one: our forward-port's `ebc@fdec0000` declares
+`clock-names = "hclk", "dclk"` and nothing else, while his probe does a
+hard `devm_clk_get(dev, "cpll_333m")` and `dev_err_probe`s on failure
+(`rockchip_ebc.c:2391`). **The module cannot probe on our device tree.**
+It is a small DT change, but it is a blocker that has to be named before
+P3 step 1, and it is a second reason — alongside `custom_wf.bin` — that
+nothing here has been near a panel.
+
+### P2a — module parameters (blocker 1) — **decided 2026-08-25**
+
+A kernel that builds still needs to be *told* something, and our nine
+shipped `rockchip_ebc` parameters are aimed at a different driver.
+
+**First, a correction to the premise.** The working assumption was that
+our options "would fail the module load". They would not.
+`unknown_module_param_cb()` (7.1.8, `kernel/module/main.c:3366`)
+`pr_warn`s `unknown parameter '%s' ignored` and **returns 0**. So the
+module would load *successfully* with eight of nine intents discarded and
+the ninth accepted into dead code. That is strictly worse than a refusal,
+and it is the reason this needed a gate rather than a comment.
+
+**The real parameter sets**, derived from `module_param*()` registrations
+rather than `modinfo -p` (see below for why that distinction matters):
+ours registers **26**, his registers **16** in the configuration we
+build. Seven names appear in both (`bw_threshold`, `dclk_select`,
+`delay_a`, `hskew_override`, `limit_fb_blits`, `no_off_screen`,
+`temp_override`) — but of the **nine we actually ship**, exactly one is
+in his set, and it is dead code there.
+
+| our option | fate under his driver |
+|---|---|
+| `direct_mode=0` | registered only under `CONFIG_DRM_ROCKCHIP_EBC_3WIN_MODE`, which does not compile (D6) — and inverted in meaning |
+| `auto_refresh=0`, `refresh_threshold=60` | gone; he has no threshold-fired auto-global at all |
+| `panel_reflection=1` | gone |
+| `prepare_prev_before_a2=0` | gone with A2 (D2) |
+| `refresh_waveform=6` | gone — his `GLOBAL_REFRESH` is **hard-coded GC16** |
+| `defio_delay_ms=250` | gone — no knob; `drm_fbdev_shmem`'s `HZ/20` stands |
+| `split_area_limit=0` | **a mirage** — see below |
+| `dclk_select=0` | accepted, and never read in direct mode |
+
+**`split_area_limit` is not shared, it only looks it.** `modinfo -p`
+prints `parm` modinfo tags, which come from `MODULE_PARM_DESC` — and his
+driver carries `MODULE_PARM_DESC(split_area_limit, ...)` on top of
+`module_param(limit_fb_blits, ...)`, a description left behind by a
+rename. So `modinfo -p` advertises a parameter the module will not accept
+and hides the one it will. Transliterating our value into the "renamed"
+parameter would be worse than dropping it: `limit_fb_blits=0` means
+*allow zero framebuffer blits*, i.e. a panel nothing ever reaches
+(`rockchip_ebc.c:1846`). Logged as `doc/upstream-register.md` item 16 and
+pinned as `quirk:stale-parm-desc`.
+
+**`dclk_select` is the trap worth reading twice.** It is a real parameter
+of his driver, it accepts our value, it appears in sysfs — and
+`rockchip_ebc_set_dclk()` returns **before** the `switch (dclk_select)`
+whenever `direct_mode` is true, which for us is always. #23's glass
+measurement (`dclk_select=1` → `cpll_333m` at 250 MHz → 79.68 Hz) does
+not carry over, and the reason is structural rather than a matter of
+degree:
+
+| | 3WIN / LUT mode | direct mode |
+|---|---|---|
+| `SDCLK_DIV` | `pixels_per_sdck - 1` = 7 | **0** |
+| `dclk` | 200 MHz (or 250 at `dclk_select=1`) | **34 MHz**, hard-coded |
+| panel SDCK | dclk ÷ 8 = 25 MHz (31.25 at 250) | = dclk = **34 MHz** |
+| frame rate | 63.7 Hz (79.68 at 250) | **~85 Hz** |
+
+The 33.33 MHz `cpll_333m` in his DTS is not a mistake by a factor of
+eight; it is the parent rate for a dclk that has become the source-driver
+clock itself. The ~85 Hz the whole swap is for arrives from that line of
+`rockchip_ebc_set_dclk()`, with no module parameter involved.
+
+**The decision: the direct-mode options set no parameters at all.** They
+carry the `softdep panfrost pre: rockchip_ebc` guard and nothing else.
+Every one of his sixteen keeps its driver default, each for a stated
+reason recorded in `pinenote/services/ebc-direct.scm`. The two that took
+actual argument:
+
+- **`redraw_delay`** — ayakael's `pinenote-dist` ships `redraw_delay=200`
+  against a driver default of 0, and that is the *only* one of his four
+  shipped options that changes anything (the other three are the
+  defaults written out). It schedules a periodic top-up drive of every
+  `REDRAW`-hinted pixel, ~2.35 s apart at 85 Hz. We keep 0, because our
+  display policy is that **userspace owns every drive** — the same
+  2026-07-12 optics finding 10 that makes us ship `auto_refresh=0` —
+  and because its power and DDR-fetch cost is unmeasured on the one axis
+  with a known silent failure mode.
+- **`shrink_virtual_window`** — off, as hrdl ships it. Recorded as the
+  *first* thing to try if direct mode shows corruption, since it cuts
+  DDR fetch with damage area, but a bring-up default is not where an
+  experiment belongs.
+
+**Where it lives, and why not next to the shipping options.** The
+service type `pinenote-ebc-modprobe-service-type` gained a real
+configuration record with an `options` field, defaulting to the shipping
+text — so `base.scm` is unchanged and the reader system derivation is
+byte-identical (verified: `f849a8rc…-system.drv` before and after). The
+direct-mode value lives in a new `(pinenote services ebc-direct)`, not in
+`ebc.scm`, because `make settings-check` requires **exactly one**
+`options rockchip_ebc` line in `ebc.scm` — that string has three
+build-time copies it holds in agreement, and a second unrelated string
+there would break a gate that is right to be strict. Two *service types*
+were rejected outright: both would extend `etc-service-type` with the
+same `modprobe.d/rockchip_ebc.conf`, so instantiating both collides by
+construction. **This is not issue #12 step 3** — no schema, no
+validation, no p7 override; it is a Guix-level field where there was a
+constructor that ignored its argument.
+
+**Gate:** `make ebc-modprobe-options-check` (in `CHECK_HOST_TARGETS`).
+It reconstructs each driver's `rockchip_ebc.c` from its own patch —
+verified byte-identical to hrdl's real file, 87,016 bytes — reads the
+`module_param*()` registrations with `#ifdef` resolution that **refuses**
+rather than guesses at an unknown guard, and checks each options string
+against the driver it is for. Since the direct set is deliberately
+empty, the load-bearing assertion is the **positive control**: the
+*shipping* string, checked against his driver, must be rejected, and it
+is — 8 of 9 names unknown. Plus the `quirk:stale-parm-desc` membership
+pin, a 3WIN-forced-on control proving the `#ifdef` logic is real, a
+sha256 tripwire on the shipping text, and a `guix repl` step that
+actually loads the new module (nothing else imports it, so no build
+would).
+
+**What this does NOT solve.** Three things, all found while doing it:
+
+1. **On our boot path `/etc/modprobe.d` is nearly inert.** The initrd
+   raw-loads `rockchip_ebc`, so parameters land through
+   `pinenote-apply-ebc-params` writing sysfs. That one-shot hard-codes
+   our nine names and **silently skips** a name whose sysfs file is
+   absent, then exits 0. Against his driver it would apply nothing and
+   report success. A direct-mode flavor needs its own params one-shot, or
+   none — it must not inherit that one unexamined.
+2. **`refresh_waveform=6` has no successor.** Global refresh is
+   hard-coded `GC16` in his loop. The GL16 wash — no white flash, bought
+   with hardware sessions — is a driver change or a CLUT change under
+   direct mode, not a parameter. This is D2 becoming concrete.
+3. **His fbdev client is forced to `RGB565`.** He calls
+   `drm_client_setup_with_fourcc(drm, DRM_FORMAT_RGB565)`; we call
+   `drm_client_setup(drm, NULL)`, which takes the plane's preferred
+   format — `DRM_FORMAT_XRGB8888`, and KOReader runs
+   `framebuffer_linux` on a **32bpp XR24** `/dev/fb0`
+   (`doc/koreader-spike.md`). A 16bpp `/dev/fb0` is a different
+   framebuffer for every consumer we have. Alongside it, his off-screen
+   firmware is `rockchip_ebc_default_screen_x4y4.bin` at one byte per
+   pixel where we install a 4bpp `rockchip_ebc_default_screen.bin`, so
+   his request misses and he memsets white. Neither is fatal, and
+   neither is a parameter.
+
+Nothing here has loaded, probed or bound. It is a configuration derived
+from source, gated offline.
+**One gap found while doing it, and it is worse than it first read:**
+his `v6.19_ebc_custom` branch contains **no EBC device-tree node** and
+touches no DTS at all, so it cannot bind on its own — he must compose
+branches. This was first recorded as "harmless for us, we have the node".
+**That was wrong.** Our node carries two clocks; his probe demands three,
+unconditionally, and fails if the third is missing. Chased down and
+answered in **D7** — the branch is `v6.19_pn_dts_v2`, the delta is two
+lines, and it is not applied.
+
+**The flavor exists, 2026-08-25.** `reader-direct`
+(`pinenote/systems/pinenote-reader-direct.scm`, listed in the Makefile's
+`FLAVORS`) is the reader image on `linux-pinenote-hrdl-direct`, in
+`reader-debug`'s shape: inherit the reader, swap the kernel, rename the
+host, add one tool — `wbf-clut`, so the CLUT can at least be compiled by
+hand from the console. The shipping reader is untouched and measured to
+be: its system derivation is the same store path before and after
+(`f849a8rcnwncxpvk4y56p0zlkrjp58ml-system.drv`), and its derivation
+closure contains no `hrdl` derivation at all, while `reader-direct`'s
+contains `linux-pinenote-hrdl-direct-7.1.8-pinenote.drv`. **It evaluates;
+it has not been built, and nothing in it has run.**
+
+**Wiring it turned up an ordering problem P0 got wrong.** P0 guessed our
+shepherd ordering "probably accommodates the CLUT compile with no initrd
+work", reading `pinenote-ebc-modprobe-service-type` as the thing that
+loads the module. It is not — that service only writes
+`/etc/modprobe.d`. The module is **raw-loaded by the initrd's pre-mount
+hook** (`%pinenote-display-initrd-modules` in
+`pinenote/images/pinenote-initramfs.scm`), before the root filesystem is
+mounted, and that hook stages `ebc.wbf` and nothing else. So under direct
+mode the probe runs, and fails `-EINVAL`, **inside the initrd**, and a
+root-filesystem one-shot that writes `custom_wf.bin` afterwards cannot
+fix that by itself: something must also reload the module, or the compile
+must move into the initrd, or `rockchip_ebc` must come out of the initrd
+list for this flavor and be loaded later. Upstream's `mkinitcpio -P` step
+followed by `modprobe -r rockchip_ebc; modprobe rockchip_ebc` was not an
+Arch quirk — it was this problem, solved twice over. Decide it with D4.
+
+**A smaller correction, to the parameter inventory.** Of the nine options
+in `pinenote/services/ebc.scm`, only `dclk_select` is a real parameter of
+his module. `split_area_limit` looks shared and is not:
+`MODULE_PARM_DESC(split_area_limit, ...)` in his tree is attached to
+`module_param(limit_fb_blits, ...)`, so the name reaches `modinfo`'s
+`parm:` lines while nothing is registered — there is no
+`parameters/split_area_limit` node — and the kernel would **warn and
+ignore** it (`unknown_module_param_cb`, 7.1.8
+`kernel/module/main.c:3381`), which is worse than a refusal: the
+intent is silently dropped. A
+`parm:` line is not proof of a parameter.
 
 ### P3 — bring-up on glass, one variable at a time
 

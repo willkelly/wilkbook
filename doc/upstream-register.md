@@ -658,3 +658,62 @@ option.
 **Status:** not sent. We are not shipping his driver yet, and sending a
 build-break report is more useful attached to a concrete adoption than
 ahead of one.
+
+## 16. Two module parameters in `rockchip_ebc` that do not mean what they say
+
+**Where it would go:** hrdl (`~hrdl/linux`, `v6.19_ebc_custom`), with a
+cosmetic sibling in the m-weigand lineage this descends from (and so in
+our own forward-port patch).
+
+**What:** two independent defects in the direct-mode driver's parameter
+block, both of which mislead a distributor writing a `modprobe.d` file.
+
+1. **`MODULE_PARM_DESC(split_area_limit, ...)` sits on top of
+   `module_param(limit_fb_blits, ...)`** (`rockchip_ebc.c:266-268`) — a
+   description left behind by a rename:
+
+   ```c
+   static int limit_fb_blits = -1;
+   module_param(limit_fb_blits, int, S_IRUGO|S_IWUSR);
+   MODULE_PARM_DESC(split_area_limit, "how many fb blits to allow. -1 does not limit");
+   ```
+
+   `MODULE_PARM_DESC` only emits a modinfo string; it registers nothing.
+   So the built module advertises `parm: split_area_limit:...` while
+   there is no `/sys/module/rockchip_ebc/parameters/split_area_limit`,
+   and `limit_fb_blits` — the parameter that does exist — has no
+   description at all. Two of our own passes over this driver counted
+   `split_area_limit` as "shared with our driver" purely on the strength
+   of that modinfo line; the source says otherwise, and **`dclk_select`
+   is the only one of our nine shipped options that is real in his
+   module.**
+
+2. **`delay_a` is declared, registered and never read.** The comment
+   above it points at `plane_atomic_update` "for specific usage"; there
+   is no use of the identifier anywhere else in the tree.
+
+**How found:** twice, independently, on 2026-08-25 — once deriving the
+real parameter set from `module_param*()` registrations for the
+direct-mode modprobe options, once checking our nine shipped options
+while wiring the `reader-direct` study flavor. Pinned as
+`quirk:stale-parm-desc` in `make ebc-modprobe-options-check`, which
+fails if a future extractor starts believing `modinfo -p`.
+
+**Why it matters to him:** the kernel does **not** refuse an unknown
+module parameter — `unknown_module_param_cb()` (`kernel/module/main.c`,
+7.1.8 at `:3381`) `pr_warn`s "unknown parameter ignored" and returns 0 —
+so a configuration written against the wrong name **loads successfully
+with that intent silently dropped**. `modinfo` is the only parameter
+inventory most integrators consult, which makes a wrong description a
+defect whose whole cost lands on the user, quietly. That is worse than a
+refusal, not better.
+
+**The same typo is in our tree, harmlessly**, inherited verbatim through
+m-weigand into `linux-pinenote-7.0-forward-port.patch`: we still declare
+a real `split_area_limit`, so the stale desc merely duplicates a `parm:`
+line and leaves `limit_fb_blits` undocumented. It becomes a real bug in
+his tree only because the variable was deleted and the description was
+not. Worth reporting to both, in opposite registers of severity.
+
+**Status:** not sent, same reasoning as item 15 — worth more attached to
+a concrete adoption than ahead of one. Both are one-line fixes.
