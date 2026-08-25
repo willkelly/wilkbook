@@ -262,6 +262,18 @@ and a bound.
 
 ### Build, CI and gates
 
+- **There is a second reader flavor now, and it is not for you to flash.**
+  `make reader-direct` builds the reader image on the faster display
+  driver we are evaluating for handwriting
+  (`doc/direct-mode-adoption.md`). It is a study artifact: it evaluates,
+  **nothing in it has ever run** — no module loaded, no panel driven —
+  and it is expected *not* to reach a working reader on a first boot,
+  because that driver refuses to probe without a table compiled from your
+  device's own waveform and nothing compiles that table at boot yet. The
+  image you are actually running is unaffected, and that is checked
+  rather than asserted: the shipping reader's system derivation is the
+  same store path before and after the change, and its build closure
+  contains none of the new driver. `doc/pinenote-flavors.md` has the row.
 - **New rung-1 gate: `make clut-check`, and the tool behind it.** The
   faster display path we are evaluating for handwriting
   (`doc/direct-mode-adoption.md`) will not even *start* without a table

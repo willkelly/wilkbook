@@ -837,6 +837,43 @@ unconditionally, and fails if the third is missing. Chased down and
 answered in **D7** — the branch is `v6.19_pn_dts_v2`, the delta is two
 lines, and it is not applied.
 
+**The flavor exists, 2026-08-25.** `reader-direct`
+(`pinenote/systems/pinenote-reader-direct.scm`, listed in the Makefile's
+`FLAVORS`) is the reader image on `linux-pinenote-hrdl-direct`, in
+`reader-debug`'s shape: inherit the reader, swap the kernel, rename the
+host, add one tool — `wbf-clut`, so the CLUT can at least be compiled by
+hand from the console. The shipping reader is untouched and measured to
+be: its system derivation is the same store path before and after
+(`f849a8rcnwncxpvk4y56p0zlkrjp58ml-system.drv`), and its derivation
+closure contains no `hrdl` derivation at all, while `reader-direct`'s
+contains `linux-pinenote-hrdl-direct-7.1.8-pinenote.drv`. **It evaluates;
+it has not been built, and nothing in it has run.**
+
+**Wiring it turned up an ordering problem P0 got wrong.** P0 guessed our
+shepherd ordering "probably accommodates the CLUT compile with no initrd
+work", reading `pinenote-ebc-modprobe-service-type` as the thing that
+loads the module. It is not — that service only writes
+`/etc/modprobe.d`. The module is **raw-loaded by the initrd's pre-mount
+hook** (`%pinenote-display-initrd-modules` in
+`pinenote/images/pinenote-initramfs.scm`), before the root filesystem is
+mounted, and that hook stages `ebc.wbf` and nothing else. So under direct
+mode the probe runs, and fails `-EINVAL`, **inside the initrd**, and a
+root-filesystem one-shot that writes `custom_wf.bin` afterwards cannot
+fix that by itself: something must also reload the module, or the compile
+must move into the initrd, or `rockchip_ebc` must come out of the initrd
+list for this flavor and be loaded later. Upstream's `mkinitcpio -P` step
+followed by `modprobe -r rockchip_ebc; modprobe rockchip_ebc` was not an
+Arch quirk — it was this problem, solved twice over. Decide it with D4.
+
+**A smaller correction, to the parameter inventory.** Of the nine options
+in `pinenote/services/ebc.scm`, only `dclk_select` is a real parameter of
+his module. `split_area_limit` looks shared and is not:
+`MODULE_PARM_DESC(split_area_limit, ...)` in his tree is attached to
+`module_param(limit_fb_blits, ...)`, so the name reaches `modinfo`'s
+`parm:` lines while nothing is registered — there is no
+`parameters/split_area_limit` node and `modprobe` would reject it. A
+`parm:` line is not proof of a parameter.
+
 ### P3 — bring-up on glass, one variable at a time
 
 Order matters; each step is a separate session with the 2026-08-07

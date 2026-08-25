@@ -67,7 +67,12 @@ FIXTURE ?= os1-used
 
 # reader-debug = reader with the EXTRACT_FBS diagnostic kernel
 # (linux-pinenote-debug); remove with the debug patch when done.
-FLAVORS = minimal slim networked dev usb-console usb-console-linux-6-6 reader reader-debug
+# reader-direct = reader with hrdl's direct-mode EBC driver
+# (linux-pinenote-hrdl-direct).  A STUDY flavor: it builds, it has never
+# run, and it is expected NOT to reach a working reader on a first boot
+# (doc/pinenote-flavors.md says why).  Never a deploy candidate; remove
+# with the direct-mode patch if the adoption bails out.
+FLAVORS = minimal slim networked dev usb-console usb-console-linux-6-6 reader reader-debug reader-direct
 
 .PHONY: help packages kernel kernel-drv reader-system-drv qemu-smoke qemu-virt qemu-virt-check qemu-pageturn-campaign refresh-episodes-check refresh-trigger-check \
          check-host wbf-check wbf-notice clut-check ebc-logic-check ebc-barrier-check rastersim-check koreader-input-check orientation-check optics-check optics-audit-dataset power-check rockchip-pm-check activation-positive-check suspend-check \
