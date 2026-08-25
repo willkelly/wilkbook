@@ -146,7 +146,56 @@ static int tty_open(void *context)
 }
 
 static int fb_open(void *context) { (void)context; int fd = open("/dev/fb0", O_RDWR | O_CLOEXEC); return fd < 0 ? negative_errno() : fd; }
-static int card_open(void *context) { (void)context; int fd = open("/dev/dri/card0", O_RDWR | O_CLOEXEC); return fd < 0 ? negative_errno() : fd; }
+
+/* The EBC's DRM card index is not stable across images: on the
+ * direct-mode image the panfrost GPU takes card0 and an ioctl aimed
+ * there is a malformed GPU job (2026-08-25 glass session).  Resolve
+ * the node by driver name via sysfs -- readable without root and
+ * side-effect-free, where probing by open() would take DRM master of
+ * whatever answered first.  DRM reserves minors 0..63 for card nodes,
+ * hence the scan bound. */
+static int find_ebc_card(char *path, size_t path_size)
+{
+    int n;
+
+    for (n = 0; n <= 63; n++) {
+        char uevent[64];
+        char line[128];
+        FILE *f;
+        int found = 0;
+
+        snprintf(uevent, sizeof(uevent),
+                 "/sys/class/drm/card%d/device/uevent", n);
+        f = fopen(uevent, "r");
+        if (f == NULL)
+            continue;
+        while (fgets(line, sizeof(line), f) != NULL) {
+            if (strcmp(line, "DRIVER=rockchip-ebc\n") == 0 ||
+                strcmp(line, "DRIVER=rockchip-ebc") == 0) {
+                found = 1;
+                break;
+            }
+        }
+        fclose(f);
+        if (found) {
+            snprintf(path, path_size, "/dev/dri/card%d", n);
+            return 0;
+        }
+    }
+    return -ENODEV;
+}
+
+static int card_open(void *context)
+{
+    char path[32];
+    int fd;
+
+    (void)context;
+    if (find_ebc_card(path, sizeof(path)) != 0)
+        return -ENODEV;
+    fd = open(path, O_RDWR | O_CLOEXEC);
+    return fd < 0 ? negative_errno() : fd;
+}
 static int close_fd(void *context, int fd) { (void)context; return close(fd) == 0 ? 0 : negative_errno(); }
 
 static int fb_info(void *context, int fd, struct ebc_barrier_fb_info *info)

@@ -17,6 +17,12 @@ depends on (pinenote/tools/optics/PLAN.md task 1):
     on hardware), where the injector's frames must neither perturb slot
     routing nor emit spurious gestures.
 
+Riding on the same dofile'd device.lua and fake-sysfs idiom: the EBC
+DRM-card probe (findEbcCard) that the wash ioctl path depends on --
+the 2026-08-25 glass root cause was device.lua hardcoding card0 while
+the direct-mode image's panfrost GPU held it, so every wash was a
+malformed GPU job and the panel went unwashed.
+
 NOT covered here (the residual gap, stated precisely): device.lua's
 init() glue -- the `self.input:open(devs.optics_inject, ...)` line and
 evdev delivery itself (ffi/input_evdev is not run) -- and the live
@@ -226,6 +232,63 @@ report(#required == 2 and required[1] == found.optics_inject
        and required[2] == found.gsensor,
        "production init registers optics and orientation as required",
        table.concat(required, ","))
+
+------------------------------------------------------------------------
+-- 1b. findEbcCard: the wash ioctl's DRM card is resolved by driver
+--     name, never by index (real code, fake /sys/class/drm tree).
+--     Each case is a separate tree; realistic multi-line uevents prove
+--     exact-line matching.
+------------------------------------------------------------------------
+
+report(type(PineNote._findEbcCard) == "function",
+       "device.lua exports _findEbcCard for this harness",
+       tostring(type(PineNote._findEbcCard)))
+
+local function drm_tree(cards)
+    local root = os.tmpname()
+    os.remove(root)
+    for n, driver in pairs(cards) do
+        os.execute(string.format("mkdir -p '%s/card%d/device'", root, n))
+        local f = assert(io.open(
+            string.format("%s/card%d/device/uevent", root, n), "w"))
+        f:write("DRIVER=", driver, "\n",
+                "OF_NAME=fake\n",
+                "MODALIAS=of:Nfake\n")
+        f:close()
+    end
+    return root
+end
+
+-- Fixed case order (run-tests.sh diffs two runs' output).
+local ebc_cases = {
+    -- The direct-mode arrangement -- THE 2026-08-25 regression: the
+    -- panfrost GPU probed first and holds card0.
+    { "direct-mode image: EBC behind panfrost resolves to card1",
+      { [0] = "panfrost", [1] = "rockchip-ebc" }, "/dev/dri/card1" },
+    -- The shipping arrangement.
+    { "shipping image: EBC on card0 resolves to card0",
+      { [0] = "rockchip-ebc" }, "/dev/dri/card0" },
+    -- Positive control: a probe that just returns card0 (or the first
+    -- card present) must fail here, not merely on the cases above.
+    { "no EBC card resolves to nil (wash disabled, not misdirected)",
+      { [0] = "panfrost" }, nil },
+    { "empty tree resolves to nil", {}, nil },
+    -- Exact-line matching: a prefix collision must not count.
+    { "driver-name prefix collision does not match",
+      { [0] = "rockchip-ebcx" }, nil },
+    -- A rebind can leave a gap in the numbering; the scan must not
+    -- stop at the first missing card.
+    { "sparse numbering: EBC on card2 with card1 absent is found",
+      { [0] = "panfrost", [2] = "rockchip-ebc" }, "/dev/dri/card2" },
+}
+for _, case in ipairs(ebc_cases) do
+    local label, cards, want = case[1], case[2], case[3]
+    local root = drm_tree(cards)
+    local got = PineNote._findEbcCard(root)
+    os.execute(string.format("rm -rf '%s'", root))
+    report(got == want, "findEbcCard: " .. label,
+           string.format("%s (want %s)", tostring(got), tostring(want)))
+end
 
 local gyro = { type = 4, code = 3, value = 2, src = "/dev/input/event7" }
 report(PineNote._translateGyroEvent(gyro, "/dev/input/event7")

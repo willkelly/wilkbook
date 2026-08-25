@@ -31,6 +31,10 @@ end
 local function actual_adapter(trace)
     local id = high_id()
     return barrier_module.new({
+        -- card is required (no default): the EBC's DRM card index is not
+        -- stable across images, so production must resolve it.  Not card0,
+        -- so a reintroduced hardcode could not pass unnoticed.
+        card = "/dev/dri/card9",
         open = function() trace[#trace + 1] = "open"; return 12 end,
         ioctl = function(_, _, arg)
             if arg[0].op == 1 then

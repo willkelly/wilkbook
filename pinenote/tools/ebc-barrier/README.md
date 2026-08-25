@@ -20,8 +20,11 @@ mutation.  This remains defense in depth rather than mutual exclusion: run
 `/dev/tty`.  It snapshots exactly `line_length * yres_virtual` bytes from
 `/dev/fb0`, including stride padding and off-screen storage, validates the
 visible virtual-offset rectangle, paints a deterministic XRGB8888 card in that
-rectangle, calls `fsync`, and does a strict SUBMIT/WAIT pair
-on `/dev/dri/card0`.  Only after that succeeds does it accept Enter from the
+rectangle, calls `fsync`, and does a strict SUBMIT/WAIT pair on the EBC's DRM
+card node (resolved by `DRIVER=rockchip-ebc` in
+`/sys/class/drm/cardN/device/uevent` — the index is not stable across images:
+panfrost takes card0 on the direct-mode image).  Only after that succeeds does
+it accept Enter from the
 tty; it then clears its cleanup arm, restores the exact snapshot, fsyncs, and
 performs one final strict barrier.  SIGINT, SIGTERM, and SIGHUP only interrupt
 the acknowledgement: they remain blocked during setup and restoration, while
@@ -33,8 +36,8 @@ signal and one delivered while the wait is blocked.
 There are no retries.  A failure before the first completed barrier does not
 attempt restoration or a further hardware start; a restore failure is reported
 as reboot-terminal uncertainty.  It records the first cleanup failure without
-masking an earlier acknowledgement or restore failure.  The command opens only `fb0`, `card0`, and
-`tty` (plus read-only proc inspection); it never requests suspend or writes
+masking an earlier acknowledgement or restore failure.  The command opens only `fb0`, the EBC card
+node, and `tty` (plus read-only proc and sysfs inspection); it never requests suspend or writes
 power state, firmware, partitions, boot configuration, input, frontlight, or
 network state.  It is packaged in the reader image but has no service,
 autostart, import, or production suspend wiring.

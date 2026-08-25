@@ -137,6 +137,21 @@ no_publish_between('trace%("full", "global"(.-)global_refresh%(%)',
 check(src:find('trace%(intent, "partial"[^\n]*\n%s*publish%(%)') ~= nil,
     "flash_policy partial branch is trace/publish")
 
+-- 6. The wash fd must come from the RESOLVED EBC card, never from a
+-- hardcoded index.  On the direct-mode image card0 is the panfrost GPU,
+-- and a wash ioctl aimed there is a malformed GPU job -- the 2026-08-25
+-- glass session's ghosting root cause: the panel was never washed.
+-- findEbcCard resolves the node by DRIVER=rockchip-ebc in sysfs
+-- (functionally covered in test-optics-inject.lua); here, pin the file
+-- to it.  Positive control: the pre-fix device.lua ("/dev/dri/card0")
+-- fails the first check.
+check(src:find("/dev/dri/card%d") == nil,
+    "no hardcoded /dev/dri/cardN literal anywhere in device.lua")
+check(src:find("local ebc_card = findEbcCard%(%)") ~= nil,
+    "init resolves the EBC card via findEbcCard")
+check(src:find("C%.open%(ebc_card") ~= nil,
+    "the wash fd is opened on the resolved card, not a literal")
+
 if fail then
     print("RESULT: failed")
     os.exit(1)

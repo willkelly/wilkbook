@@ -274,8 +274,8 @@ build time, never hand-copied — so they cannot drift from the driver.
   LuaJIT; its build snippets hardcode Guix store paths you would replace.
 - `pinenote/tools/power/fb-damage-gates.sh` — a read-only dump of the
   four silent gates between a userspace framebuffer write and an EBC
-  frame. It deliberately opens no device node (the first opener of
-  `/dev/dri/card0` becomes DRM master).
+  frame. It deliberately opens no device node (the first opener of a
+  `/dev/dri/cardN` node becomes DRM master).
 
 **Kernel work.**
 

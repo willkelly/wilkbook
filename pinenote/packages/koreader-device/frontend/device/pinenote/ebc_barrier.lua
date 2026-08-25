@@ -208,7 +208,11 @@ local function new(options)
         ioctl = options.ioctl ~= nil and options.ioctl or C.ioctl,
         close = options.close ~= nil and options.close or C.close,
         errno = options.errno ~= nil and options.errno or ffi.errno,
-        card = options.card ~= nil and options.card or "/dev/dri/card0",
+        -- No default: the EBC's DRM card index is not stable across
+        -- images (panfrost takes card0 on the direct-mode image), so a
+        -- literal default here is a landmine.  The caller must resolve
+        -- the node -- device.lua's findEbcCard is the reference probe.
+        card = options.card,
         timeout_ms = options.timeout_ms ~= nil and options.timeout_ms or DEFAULT_TIMEOUT_MS,
         state = "IDLE",
     }
