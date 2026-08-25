@@ -25,7 +25,7 @@ falls back to the reader image.
 | D2 | the module **probes** | `dmesg`: no `-EINVAL`, no missing-firmware, no unknown-parameter refusal | blockers 1+2 were actually fixed |
 | D3 | the panel **lights at all** | any visible frame — even garbage counts as data | clocks + DT are close enough to drive glass |
 | D4 | a page turn reaches glass | KOReader up; `GLOBAL_REFRESH` (ABI-identical `0xC0016440`) produces a visible wash | the KOReader path survives the swap |
-| D5 | **rotation, all four orientations** | rotate through all four; look for the portrait wedge class | the single highest-risk item — nobody has ever rotated via fbdev on his stack |
+| D5 | **rotation, all four orientations** | rotate through all four; look for the portrait wedge class | the single highest-risk item — nobody has ever rotated via fbdev on his stack. **2026-08-25: UNRESOLVED, not failed** — do not respend glass on it until the queued rung-4v investigation in §3 finds the real lever |
 | D6 | suspend/resume with the ultra pair | one cover-close/open cycle, then one backstop-length sleep | his driver coexists with our rails-off configuration |
 | D7 | visual quality vs the shipping driver | the webcam A/B protocol from `doc/artifacts/pinenote-dclk-reclock-20260824/` at minimum; optics rig if available | whether quality regressed enough to matter |
 | D8 | **FAST mode reaches pen-class latency** | drive `DRM_IOCTL_ROCKCHIP_EBC_MODE` into FAST; measure nib-to-ink however crudely (240 fps phone camera works) | the entire reason for the experiment |
@@ -65,6 +65,25 @@ device. Any order; each is independent.
   direct mode is *rejected*; it only matters to the LUT path.
 - **Pen wake (#9)** — needs a DT change through branch-and-review first.
 - **Anything destructive to os1.** Per the safety model, always.
+- **D5's rotation lever — queued as OFFLINE work first (rung 4v), added
+  2026-08-25.** The session left rotation *unresolved, not failed*:
+  four remote mechanisms — injected MSC gyro events, the KOReader doc
+  sidecar, `copt_rotation_mode`, and the
+  `/run/wilkbook-orientation.state` file — all produced portrait boots,
+  so the rotated render path never executed and we do not actually
+  know what decides orientation (the enumeration is in the
+  `doc/status.md` session entry). Spending more glass guessing would
+  invert the ladder. The work item: boot the same stack under
+  `make qemu-virt-visual ROOTFS=…` and instrument KOReader's
+  rotation-decision chain end to end — from each candidate input
+  (gyro/accelerometer events, the sidecar's `rotation_mode`, defaults,
+  the orientation bridge) through `device.lua`/`screen` to the actual
+  framebuffer rotation call — until the mechanism that *does* flip the
+  virt framebuffer is identified and the four failures are each
+  attributed (never read, read-then-overridden, or read-too-late).
+  Exit criterion: one named lever that rotates the qemu boot
+  deterministically. Only then one targeted glass pass — or physically
+  rotate the device out of the box and watch the chain react.
 
 ## 4. Session hygiene
 
