@@ -892,11 +892,127 @@ one-variable protocol:
 Ink is the *reason*, but a reader that regresses reading to gain writing
 is not a trade this project should make.
 
-### P4 — policy rewrite (D2)
+### P4 — policy rewrite (D2) — **driven by an on-glass verdict since 2026-08-25**
 
 Re-derive `doc/refresh-policy.md`'s decisions against hints. Rewrite
 `device.lua`'s intent mapping. Re-establish the idle washer and
 publish-on-call equivalents.
+
+**The P4 driver.** The operator's verdict on the first direct-mode
+glass session, watching page turns on video (D4, `doc/status.md`
+2026-08-25): **"quality good; more flashing/redrawing per page turn
+than a smooth read wants."** That is the pre-registered two-pass +
+waveform-class expectation confirmed on glass, and it makes P4 the work
+that decides *embrace*: rendering quality is not the problem, drive
+policy is. Three separable causes, each with its own fix surface:
+
+1. **Every turn is two passes.** No publish-on-call, and no defio knob:
+   his driver has zero references to `defio`
+   (`doc/upstream-register.md` item 3), so `drm_fbdev_shmem`'s
+   hard-coded `HZ/20` = 50 ms flush window stands, and a page turn's
+   damage is split across at least two flushes — two visible drive
+   passes per turn, by construction (pre-registered in the deploy
+   entry). The shipping driver needed BOTH publish-on-call and
+   `defio_delay_ms=250` to reach 8/8 single-pass turns on glass
+   (2026-08-01, `doc/refresh-policy.md`); direct mode currently has
+   neither. Both mechanisms are ours, small, and port.
+
+2. **Per-turn damage rides a flashy waveform class.** Under direct mode
+   the waveform class is the per-pixel hint bit depth (D2: Y1→DU,
+   Y2→DU4, Y4→GL16), and every pixel no `RECT_HINTS` rect covers takes
+   `default_hint` = `Y4 | THRESHOLD | REDRAW` (the parameter's driver
+   default). With no intent mapping written yet, ALL page-turn damage
+   goes through the 16-level class — nothing routes text damage to a
+   lighter class, and nothing reproduces the tuned per-intent choices
+   `doc/refresh-policy.md` bought with hardware sessions.
+
+3. **Washes are hard-coded GC16** — the white-flash class. The shipping
+   GL16 wash (no white flash; a policy decision proven on glass) has no
+   parameter successor: his `GLOBAL_REFRESH` work item drives
+   `ROCKCHIP_EBC_CUSTOM_WF_GC16` unconditionally (P2a gap 2). Under
+   direct mode a non-flashing wash is a driver or CLUT change, not
+   configuration.
+
+**The tuning surface his driver exposes** — P4 starts from this map,
+not from scratch:
+
+| lever | what it moves |
+|---|---|
+| `default_hint` (module param, mode 0644 → runtime-writable in sysfs) | waveform class + threshold/dither choice + redraw participation for every pixel not covered by a rect |
+| `DRM_IOCTL_ROCKCHIP_EBC_RECT_HINTS` | per-rectangle hints, plus `set_default_hint` — the per-region policy instrument, and the successor of our per-refresh waveform choice |
+| `DRM_IOCTL_ROCKCHIP_EBC_MODE` | driver mode (NORMAL/FAST/…) and `set_redraw_delay` at runtime — the lever KOReader wraps around pen-down/pen-up |
+| `redraw_delay` (module param; also via the MODE ioctl) | periodic top-up drive of REDRAW-hinted pixels; ships 0 = off (P2a) |
+
+What has NO knob, and therefore needs code: the defio flush window
+(cause 1 — port our `defio_delay_ms` `.fbdev_probe` wrapper and a
+publish-on-call equivalent) and the wash class (cause 3 — a driver or
+CLUT change, reported upstream per the register either way).
+
+#### File-ready issue text: the two-pass/flashing work item
+
+Written 2026-08-25 so the operator can open it once the session writeup
+is reviewed. **Do not open it before then.** Everything between the
+rules is the issue body, verbatim; suggested title: *direct mode: page
+turns flash and redraw more than the shipping reader (two-pass +
+waveform-class policy)*.
+
+---
+
+**Symptom (on glass, 2026-08-25).** First direct-mode session, KOReader
+page turns on video: rendering quality is good, but each turn flashes
+and redraws more than the shipping reader — the operator's verdict was
+"quality good; more flashing/redrawing per page turn than a smooth read
+wants" (`doc/status.md`, D4). This was the pre-registered expectation
+for an untuned direct-mode image, now confirmed on glass. It is the P4
+driver in `doc/direct-mode-adoption.md`, and it gates *embrace*:
+reading is the product, and P3's gate is parity with the shipping
+reader before any ink work.
+
+**Three separable causes** (source references in
+`doc/direct-mode-adoption.md` P4):
+
+1. Two passes per turn: no publish-on-call and no defio knob in the
+   direct-mode driver, so `drm_fbdev_shmem`'s hard-coded `HZ/20`
+   (50 ms) deferred-io window splits every turn's damage into ≥2
+   flushes. The shipping driver needed publish-on-call +
+   `defio_delay_ms=250` for 8/8 single-pass turns; both mechanisms are
+   ours and port.
+2. Untuned waveform class: all damage takes `default_hint`
+   (`Y4 | THRESHOLD | REDRAW`) because no intent mapping exists yet —
+   nothing routes text damage to a lighter class per
+   `doc/refresh-policy.md`'s decisions.
+3. Washes are hard-coded GC16 (the white-flash class); the shipping
+   GL16 wash has no parameter successor — a driver or CLUT change.
+
+**Work items**, in offline-first ladder order:
+
+- [ ] Port the `defio_delay_ms` `.fbdev_probe` wrapper onto the
+      direct-mode driver; pin it behind the host suites like the
+      original (rung 1).
+- [ ] Port publish-on-call (fsync-triggered flush) or prove an
+      equivalent exists; keep the flush/EBC-idle semantics honest
+      (rung 1, then 4v).
+- [ ] Write the intent mapping: KOReader intents →
+      `RECT_HINTS`/`default_hint`, re-deriving — not transliterating —
+      the `doc/refresh-policy.md` decisions (rung 1; the re-derived
+      choices get proven on glass later).
+- [ ] Decide the wash: a GL16-class global refresh as a driver change
+      vs a CLUT change; either way report upstream per
+      `doc/upstream-register.md` rather than quietly forking.
+- [ ] Idle-washer equivalent on top of whichever wash lands.
+- [ ] One glass session: single-pass turn count (target 8/8, the
+      shipping figure), wash behaviour, and the operator's felt verdict
+      on video — the 2026-08-25 protocol.
+
+**Acceptance:** page turns on the direct image are single-pass and read
+as calm as the shipping reader's to the operator on video, with washes
+no flashier than today's GL16 policy — or a recorded decision that a
+specific residual is acceptable, and why.
+
+**Non-goals here:** FAST-mode ink (P5), rotation (the D5 chain has its
+own item), and anything that changes the shipping reader.
+
+---
 
 ### P5 — FAST mode and ink
 
