@@ -52,8 +52,15 @@ immediately before the write.
   kernel    linux-pinenote-hrdl-direct-7.1.8 (three EBC modules; DTB
             carries the third clock, CPLL_333M, verified in the compiled
             blob before deploy)
-  contains  wbf-clut (on-device CLUT compiler) + the checksummed
-            ebc-clut-install one-shot; zero-parameter modprobe options
+  contains  wbf-clut (on-device CLUT compiler; verified present and USED
+            in the session below). CORRECTION, same day: this entry
+            originally also claimed the checksummed ebc-clut-install
+            one-shot and the zero-parameter modprobe options. The image
+            contains NEITHER — the flavor on main never instantiates
+            them (found independently by the release review and by the
+            live session, where `herd` showed no clut service and D1
+            needed a hand-compile). The wiring gap is the top
+            tag-blocking item in the release-review fix-list.
 
 This replaces the promoted reader image `9a08803e…` on os2 FOR THE STUDY
 SESSION; the shipping reader remains the deploy candidate for the next
