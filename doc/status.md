@@ -1,6 +1,6 @@
 # Hardware status
 
-Last updated: 2026-08-15. Update protocol: add a dated entry at the top
+Last updated: 2026-08-25. Update protocol: add a dated entry at the top
 after every hardware session; entries are per-device/per-operator.
 
 ## Current state (2026-08-15)
@@ -35,6 +35,33 @@ the long-standing "arithmetic only" caveat is retired.
 
 **Next actions**: (1) the human QC cycle (`doc/alpha-signoff.md`) on a
 post-soak image; (2) the alpha tag.
+
+**2026-08-25 FIRST DIRECT-MODE DEPLOY — written and verified, not yet booted.** [wilkbook / wkelly + agent]
+The `reader-direct` STUDY image (hrdl's direct-mode EBC driver; see
+`doc/direct-mode-adoption.md` and the agenda in
+`doc/glass-plan-2026-08.md`) was written to os2 per the
+`doc/hardware-deploy.md` protocol. os1 booted and confirmed as running
+root (`/dev/mmcblk0p5`), p6 unmounted, preconditions re-checked
+immediately before the write.
+
+  artifact  pinenote-reader-direct-PNGuixRoot-20260825.ext4 (1,824,632,832 B)
+  sha256    f0e9b4ad2d4fa39efe465895c7ba4f90ad67b5bb092d9bad0a1f0cba276ad0c4
+            (host == staged-on-p7 == readback-from-p6, all three identical;
+             readback with iflag=direct over exactly the written 445,467
+             4 KiB blocks)
+  kernel    linux-pinenote-hrdl-direct-7.1.8 (three EBC modules; DTB
+            carries the third clock, CPLL_333M, verified in the compiled
+            blob before deploy)
+  contains  wbf-clut (on-device CLUT compiler) + the checksummed
+            ebc-clut-install one-shot; zero-parameter modprobe options
+
+This replaces the promoted reader image `9a08803e…` on os2 FOR THE STUDY
+SESSION; the shipping reader remains the deploy candidate for the next
+tag and its rootfs is unchanged in the store. os1 untouched throughout.
+Boot and D1–D9 results get their own entry when they happen. Expectations
+going in are pre-registered in the glass plan: A2 absent from the CLUT,
+`refresh_waveform` writes inert, two-pass page turns by construction,
+RGB565-vs-XR24 the likely first wall after probe.
 
 **2026-08-15 THE SOAK CONCLUDED — standby measured.** [wilkbook / wkelly]
 Harvested read-only over SSH from os2 while the device was still running;
