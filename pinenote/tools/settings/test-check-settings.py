@@ -68,11 +68,11 @@ MUTATIONS = [
     # shipped 250 -- but the divergence has MOVED, so absorbing it as old
     # inventory would be wrong.
     ("new drift at an ALREADY-REGISTERED site is not absorbed as old debt",
-     "pinenote/tools/ebc-logic/ebc-replay.c",
-     "\tp->refresh_threshold = 60;",
-     "\tp->defio_delay_ms = 99;\n\tp->refresh_threshold = 60;",
+     "pinenote/tools/timesync/timesync.lua",
+     '    hwclock = "hwclock",',
+     '    hwclock = "hwclock-somewhere-else",',
      "DIVERGENCE CHANGED at a registered site "
-     "host-model:policy_ship:defio_delay_ms"),
+     "record-vs-daemon:timesync.scm:hwclock"),
 
     # --- gate A: a record default drifts from its daemon twin ----------
     ("a record default drifts from its daemon twin",
@@ -218,11 +218,21 @@ MUTATIONS = [
      '(default (file-append util-linux "/sbin/hwclock")))',
      '(default "hwclock"))',
      "stale debt-register entry record-vs-daemon:timesync.scm:hwclock"),
-    ("paying off the host-model row makes that row stale",
+    # The host-model debt was PAID on 2026-08-24 (policy_ship now models the
+    # shipped auto_refresh=0 / defio_delay_ms=250) and its rows are deleted,
+    # so the old "pay it off" mutation had nothing left to pay.  The live
+    # property is now the opposite one: RE-INTRODUCING the drift must be
+    # caught as new drift, not silently absorbed.
+    ("re-introducing the host-model drift is caught as NEW drift",
      "pinenote/tools/ebc-logic/ebc-replay.c",
+     "\tp->auto_refresh = false;\t/* shipped since 2026-07-11 (b9bbc0e) */",
      "\tp->auto_refresh = true;",
-     "\tp->auto_refresh = false;",
-     "stale debt-register entry host-model:policy_ship:auto_refresh"),
+     "UNKNOWN DIVERGENCE host-model:policy_ship:auto_refresh"),
+    ("re-introducing the deferred-io drift is caught as NEW drift",
+     "pinenote/tools/ebc-logic/ebc-replay.c",
+     "\tp->defio_delay_ms = 250;\t/* shipped since 2026-07-31 (ea580b8) */",
+     "\tp->defio_delay_ms = 0;",
+     "UNKNOWN DIVERGENCE host-model:policy_ship:defio_delay_ms"),
 ]
 
 STATE = dict(passed=0, failed=0)

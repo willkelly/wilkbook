@@ -49,6 +49,23 @@ Notation: per-phase drive — `D` darken, `L` lighten, `.` neutral.
 > lever" idea in `doc/pageturn-program.md`; reaching 79.68 Hz would need CRU/DT
 > work, not a boot parameter.
 >
+> **[RETRACTED 2026-08-24 — measured false on glass.]** The mechanism above
+> is right and one number in it is wrong, and that number flipped the
+> conclusion. The mux is over `{gpll_400m, cpll_333m, gpll_200m}` and Linux
+> picks the fastest parent ≤ the request — but **`cpll_333m` does not run at
+> 333 MHz. It runs at 250**, because `cpll` is 1000 MHz and the CRU divider
+> sits at ÷4, not ÷3. So a 250 MHz request finds an *exact* parent and the
+> same rule selects it. Measured, both directions, three transitions:
+> `dclk_select=0` → `dclk_ebc=200000000 parent=gpll_200m`; `dclk_select=1` →
+> `dclk_ebc=250000000 parent=cpll_333m`
+> (`doc/artifacts/pinenote-dclk-reclock-20260824/`, issue #23).
+>
+> So the ×1.25 lever is **not** retired and needs no CRU/DT work — it is one
+> already-runtime-writable module parameter. It is still **not cleared to
+> ship**: the failure mode is silent display corruption with no underrun
+> interrupt, and only a webcam-grade check has been done. But it must stop
+> being described as unreachable.
+>
 > The waveform's authored 85 Hz is not meaningless, though: E Ink's published
 > mode timings reproduce `phases / 85 Hz`, which independently corroborates
 > that design point. We play those LUTs at 75 % of the rate they were
@@ -194,6 +211,33 @@ runs are deterministic and take seconds at `scale=2`.
 Ship policy unless noted (flash-frac 0.60, GC16 partials, auto_refresh=1
 threshold=60, defio bands, flush delay 0, 25 °C).  Traces differ only
 where stated.
+
+> **[Baseline correction, 2026-08-24.]** Those parameters were the shipped
+> stack **on 2026-07-05, when this study ran** — the label was true then.
+> They are not now, and the table has not been re-run against the current
+> one. `b9bbc0e` shipped **`auto_refresh=0`** on 2026-07-11 (threshold-path
+> globals corrupt panel state) and `ea580b8` pinned **`defio_delay_ms=250`**
+> on 2026-07-31, and `ebc-replay.c`'s `policy_ship()` — which called itself
+> "the deployed phase-A.2 stack" — was **never updated**. So the
+> **2026-07-30 recalibration below re-measured these tables against a
+> baseline already 19 days stale.**
+>
+> The concrete consequence is the `washes (ioctl+auto)` column: the `+auto`
+> term is entirely the driver's accumulator, and **on the shipped device it
+> is zero in every row.** Read `26+1`, `16+3`, `6+4`, `6+12` as a device we
+> stopped shipping in July.
+>
+> What survives: the recalibration's own caveat that "ratios and A/B
+> comparisons were unaffected throughout" still holds — a shared baseline
+> offset cancels in an A/B — and the policy decisions this document reaches
+> were made on those comparisons, not on the absolute counts. What does not
+> survive is reading any single row as *what the reader does today*.
+>
+> `policy_ship()` is corrected as of 2026-08-24 and `make settings-check`
+> now pins all three values against `ebc.scm`, so the next drift is a build
+> failure rather than a silent reprice. **The tables are left un-re-run on
+> purpose** — re-running them is a measurement, and it should be done
+> deliberately with its own record, not folded into a correction. Issue #30.
 
 | run | washes (ioctl+auto) | white px driven dark | wash px-phases | staleness p50/p90 |
 | --- | --- | --- | --- | --- |
