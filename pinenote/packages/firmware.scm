@@ -170,9 +170,11 @@ comparison (--verify) and partial dumps (--planes).")
 ;; from the forward-port patch rather than a second parser that can drift.
 ;; Same extraction shape as pinenote-ebc-barrier-test.
 ;;
-;; NOT WIRED INTO ANY SERVICE OR IMAGE YET.  P1 builds and proves the
-;; compiler; deploying it is later work and needs D4's missing-firmware
-;; posture decided first.
+;; WIRED INTO EXACTLY ONE FLAVOR (2026-08-25): pinenote-reader-direct, both
+;; as the compiler behind pinenote-ebc-clut-service-type's boot one-shot
+;; (pinenote/services/ebc-direct.scm) and as an on-device CLI fallback in
+;; that flavor's profile.  No shipping flavor references it;
+;; test-ebc-clut-install.py pins the consumer set.
 (define-public pinenote-wbf-clut
   (package
     (name "pinenote-wbf-clut")

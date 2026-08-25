@@ -12,20 +12,24 @@
             pinenote-ebc-clut-configuration?
             pinenote-ebc-clut-compiler
             pinenote-ebc-clut-source
-            pinenote-ebc-clut-destination))
+            pinenote-ebc-clut-destination
+            pinenote-ebc-clut-driver-directory
+            pinenote-ebc-clut-device))
 
 ;; Services for hrdl's DIRECT-MODE rockchip_ebc (doc/direct-mode-adoption.md).
 ;;
-;; NOTHING IN THIS FILE IS INSTANTIATED BY ANY FLAVOR, and the shipping
-;; reader must never gain it: direct mode is a study artifact until P3 puts
-;; it on glass.  It lives in its own module, rather than beside the shipping
-;; EBC services in (pinenote services ebc), so that adding to it cannot move
-;; the reader's derivation even by accident.  Same posture as
-;; pinenote-wbf-clut in (pinenote packages firmware), which says out loud
-;; that it is wired into nothing.
+;; EXACTLY ONE FLAVOR INSTANTIATES THIS FILE: pinenote-reader-direct, the
+;; study flavor (since 2026-08-25; test-ebc-clut-install.py pins the set).
+;; The shipping reader must never gain it: direct mode is a study artifact
+;; until the embrace-or-reject decision, and everything here dies with a
+;; reject or graduates with an embrace (the adoption doc's no-roots rule).
+;; It lives in its own module, rather than beside the shipping EBC services
+;; in (pinenote services ebc), so that adding to it cannot move the
+;; reader's derivation even by accident.  Same posture as pinenote-wbf-clut
+;; in (pinenote packages firmware).
 ;;
 ;; ---------------------------------------------------------------------
-;; THE ORDERING THIS SERVICE CANNOT SATISFY ON ITS OWN -- read before use
+;; THE ORDERING PROBLEM, AND THE REBIND THAT SOLVES IT -- read before use
 ;; ---------------------------------------------------------------------
 ;;
 ;; doc/direct-mode-adoption.md P0 asserted, until this was checked on
@@ -56,18 +60,28 @@
 ;; cannot be "before the module loads"; that is exactly why hrdl's unit runs
 ;; `mkinitcpio -P' and then `modprobe -r rockchip_ebc; modprobe rockchip_ebc'.
 ;;
-;; The CLUT installer below is still the right and necessary artifact -- it
-;; is needed under every option -- but ON ITS OWN IT DOES NOT MAKE THE
-;; DIRECT-MODE DRIVER PROBE.  One of these has to land with it, and none of
-;; them is written yet -- the three are priced in doc/direct-mode-adoption.md D7:
+;; RESOLVED ON GLASS, 2026-08-25 (doc/status.md D2): the answer is none of
+;; the three options D7 priced (initrd compile / deferred modprobe / module
+;; reload) but a fourth with a smaller blast radius -- a SYSFS REBIND.  The
+;; initrd's failed probe leaves the module registered and the device
+;; unbound, so after the CLUT is installed and verified,
 ;;
-;;   (a) compile the CLUT in the initrd, beside the waveform copy, which
-;;       means wbf-clut and its closure inside the initramfs; or
-;;   (b) drop rockchip_ebc from the direct flavor's initrd module list and
-;;       load it from a shepherd one-shot ordered after this service; or
-;;   (c) reload the module after installing, as hrdl does.
+;;     echo fdec0000.ebc > /sys/bus/platform/drivers/rockchip-ebc/bind
 ;;
-;; NONE OF THE THREE HAS BEEN TRIED, AND NOTHING HAS PROBED ON ANY PANEL.
+;; re-runs the probe against the CLUT and it passes.  The session proved
+;; that by hand; the one-shot below now DOES IT ITSELF, every boot, as the
+;; final stage of ebc-clut-install.sh -- unbind if bound, bind, then check
+;; the end state (device bound AND a DRM card* minor under it), failing
+;; LOUDLY if the probe still refuses.  No initrd change, no modprobe, no
+;; modprobe.d exposure (the rebind re-probes the already-loaded module, so
+;; module parameters never re-enter the picture).
+;;
+;; What this means for reading the boot log: under this flavor the initrd's
+;; rockchip_ebc -EINVAL probe failure is EXPECTED ON EVERY BOOT and is not
+;; the bug; the display's fate is decided by this service's rebind lines
+;; that follow.  The wired-together path (this service doing the rebind)
+;; has passed the host suite but has NOT itself booted on glass -- the
+;; session ran the same steps by hand.
 
 (define-record-type* <pinenote-ebc-clut-configuration>
   pinenote-ebc-clut-configuration make-pinenote-ebc-clut-configuration
@@ -83,7 +97,16 @@
                (default "/lib/firmware/rockchip/ebc.wbf"))
   ;; Where hrdl's driver looks: request_firmware("rockchip/custom_wf.bin").
   (destination pinenote-ebc-clut-destination
-               (default "/lib/firmware/rockchip/custom_wf.bin")))
+               (default "/lib/firmware/rockchip/custom_wf.bin"))
+  ;; The rebind target: the driver's sysfs directory and the platform
+  ;; device whose initrd-time probe failed -EINVAL.  Handed to the
+  ;; installer as its two trailing arguments; the install without the
+  ;; rebind is a file nobody reads (see the ordering note above), so
+  ;; these have no "off" value.
+  (driver-directory pinenote-ebc-clut-driver-directory
+                    (default "/sys/bus/platform/drivers/rockchip-ebc"))
+  (device pinenote-ebc-clut-device
+          (default "fdec0000.ebc")))
 
 (define %pinenote-ebc-clut-install
   ;; A real file, not a string inside this module, for manuals-stage.sh's
@@ -102,7 +125,7 @@
     ;; this edge shepherd would start the two concurrently and the compile
     ;; would race its own input.
     (requirement '(pinenote-waveform))
-    (documentation "Compile this device's waveform into the CLUT hrdl's direct-mode rockchip_ebc requires; recompiles whenever the waveform or the compiler changes.  Does NOT make the driver probe on its own -- see the ordering note in this file.")
+    (documentation "Compile this device's waveform into the CLUT hrdl's direct-mode rockchip_ebc requires (recompiling whenever the waveform or the compiler changes), then rebind the driver so the probe the initrd already failed runs again against it.  A failed rebind fails this service -- see the ordering note in this file.")
     (one-shot? #t)
     (start
      #~(lambda _
@@ -110,7 +133,13 @@
                          #$(file-append (pinenote-ebc-clut-compiler config)
                                         "/bin/wbf-clut")
                          #$(pinenote-ebc-clut-source config)
-                         #$(pinenote-ebc-clut-destination config)))))
+                         #$(pinenote-ebc-clut-destination config)
+                         ;; STAMP: "" keeps the script's default (a dotfile
+                         ;; beside DESTINATION); it is passed only so the
+                         ;; rebind pair can follow positionally.
+                         ""
+                         #$(pinenote-ebc-clut-driver-directory config)
+                         #$(pinenote-ebc-clut-device config)))))
     (stop #~(const #t)))))
 
 (define pinenote-ebc-clut-service-type
@@ -120,7 +149,7 @@
     (list (service-extension shepherd-root-service-type
                              pinenote-ebc-clut-shepherd-service)))
    (default-value (pinenote-ebc-clut-configuration))
-   (description "Compile the device's own ebc.wbf into rockchip/custom_wf.bin for hrdl's direct-mode EBC driver, which fails probe with -EINVAL without it.  The result is derived per-device calibration data: it is produced on the device at boot and never bundled.  Rebuilt whenever the waveform, the compiler or the installed file changes, rather than compiled once if absent.")))
+   (description "Compile the device's own ebc.wbf into rockchip/custom_wf.bin for hrdl's direct-mode EBC driver, which fails probe with -EINVAL without it, then rebind the driver via sysfs so the probe runs again with the CLUT in place (the initrd's raw-load probes -- and fails -- before the root filesystem exists, every boot).  The result is derived per-device calibration data: it is produced on the device at boot and never bundled.  Rebuilt whenever the waveform, the compiler or the installed file changes, rather than compiled once if absent.")))
 
 
 ;;; ===== The direct-mode modprobe options (blocker 1) =====
@@ -128,10 +157,12 @@
 ;;; The rockchip_ebc module options for hrdl's DIRECT-MODE driver.
 ;;;
 ;;; STUDY ARTIFACT.  `doc/direct-mode-adoption.md' P2 builds his driver as
-;;; `linux-pinenote-hrdl-direct'; nothing here reaches a shipping image, and
-;;; no flavor consumes this module yet.  It exists because the parameters had
-;;; to be derived before a flavor could be written, and because getting them
-;;; wrong is silent (see "WHAT THE KERNEL DOES" below).
+;;; `linux-pinenote-hrdl-direct'; nothing here reaches a shipping image.
+;;; The reader-direct flavor consumes this set (since 2026-08-25), REPLACING
+;;; the shipping options instance rather than adding a second one.  It exists
+;;; because the parameters had to be derived before a flavor could be
+;;; written, and because getting them wrong is silent (see "WHAT THE KERNEL
+;;; DOES" below).
 ;;;
 ;;; It lives in its own module rather than beside the shipping options in
 ;;; (pinenote services ebc) for a load-bearing reason: `make settings-check'
