@@ -905,6 +905,64 @@ pen-down rendering, stroke capture on top of it. #20's capture, storage
 and vectorization work is **independent of all of the above** and can
 proceed in parallel from day one — it needs no panel.
 
+## §7. A question on the record, not a plan: does this need to be in the kernel?
+
+**Status: question. Explicitly not being acted on** (operator, 2026-08-25).
+Written down before the first glass session so the session can collect its
+one datum (D9), instead of the question being reconstructed afterwards.
+
+Direct mode makes the silicon's LUT and diff engines unused: the
+hardware's whole job is to DMA-scan a phase buffer and raise a per-frame
+IRQ. Everything else — the waveform state machine, CLUT walk, early
+cancellation, dithering, the fb→Y4 blits — is pure computation over
+memory, and **in his driver it already runs in a kthread, not interrupt
+context**. The seam exists; it is drawn on the kernel side of the
+syscall boundary, not forced there.
+
+The irreducible kernel core is small: probe/clocks/regulators and
+tps65185 sequencing, IRQ ack + frame-done signalling, DMA-able
+phase-buffer allocation + the scanout kick, and a minimal blank/INIT
+path so panic output never depends on a daemon. A few hundred lines.
+The other ~3,500 could be a userspace RT thread over mmap'd buffers —
+double-buffered, needing only to stay one frame ahead; a missed deadline
+repeats a phase buffer (a one-frame stall, not corruption).
+
+**Why the cost may be low for us specifically:** we already ship
+PREEMPT_RT (the scheduling guarantee this needs, hardware-proven); the
+reMarkable 2 runs a userspace software TCON at envied pen latency on a
+weaker CPU; NEON in userspace is *easier* (no `scoped_ksimd`, no
+`-mgeneral-regs-only`, and it opens Mali/NPU doors kernel code cannot);
+`request_firmware` becomes "open a file", dissolving the CLUT-install
+and initramfs machinery this plan just built; module parameters become
+configuration in #12's system, dissolving the silent-unknown-param
+class; and the offline harness stops needing `kernel-shim.h` at all —
+userspace waveform code is its own harness. It also continues the
+project's actual trajectory: `auto_refresh=0` ("own all washes from
+userspace"), publish-on-call, and the idle washer already pulled
+*policy* up; this would pull *mechanism* up.
+
+**The honest costs:** the display becomes daemon-critical (watchdog +
+kernel blank path required); suspend/resume ordering moves to shepherd
+(more of the 2026-07-12-wedge class); loss of fbcon/standard KMS on the
+panel without a dumb-framebuffer fallback; and the strategic one — **we
+would own the architecture again**, when the point of adopting hrdl's
+tree was to stop being a driver-innovation shop. (Mitigation: the
+`advance()`/blit code would still be his, relocated; and a thin kernel
+driver is arguably *more* upstreamable than either full driver.)
+
+**It reframes embrace-or-reject into a possible third outcome**: adopt
+his *computation*, not his *residence*. Nothing in the glass session is
+wasted under that outcome — P3 validates his math and scheduling on real
+glass, which is exactly the part that would move, unchanged.
+
+**The one datum that decides feasibility** is the measured per-frame
+`advance()` cost on the RK3566. His driver already instruments it
+(`delta_advance`, `rockchip_ebc.c:1134–1202`). That is glass-plan item
+**D9**: harvest it during whatever D4–D8 activity runs. Against an
+11.7 ms frame budget at 85 Hz, that number — plus context-switch and
+wake-up jitter under PREEMPT_RT, which we can measure offline — is the
+whole question.
+
 ## What only hardware can answer
 
 Everything in P3, plus: whether FAST mode's 1-bit output and visible

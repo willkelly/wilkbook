@@ -30,6 +30,8 @@ falls back to the reader image.
 | D7 | visual quality vs the shipping driver | the webcam A/B protocol from `doc/artifacts/pinenote-dclk-reclock-20260824/` at minimum; optics rig if available | whether quality regressed enough to matter |
 | D8 | **FAST mode reaches pen-class latency** | drive `DRM_IOCTL_ROCKCHIP_EBC_MODE` into FAST; measure nib-to-ink however crudely (240 fps phone camera works) | the entire reason for the experiment |
 
+| D9 | **the per-frame `advance()` cost on real silicon** | his driver already instruments it — `delta_advance` (µs from `time_start_advance` to `time_advance_sync`) and min/max frame delay, reported around `rockchip_ebc.c:1134–1202`. Enable the reporting and harvest from dmesg during whatever D4–D8 activity runs; no extra panel time needed | **nothing in the embrace/reject gate** — it is the one feasibility number for the userspace-TCON question (`doc/direct-mode-adoption.md` §7), free to record while the machine is doing D4–D8 anyway, and expensive to reconstruct later |
+
 **What would constitute *reject***: D3–D5 unrecoverable, or D7 showing
 reading-quality regression with no visible path back — per the plan's
 bail-out rule, a reader that regresses reading to gain writing is the
