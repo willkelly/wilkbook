@@ -73,7 +73,7 @@ FLAVORS = minimal slim networked dev usb-console usb-console-linux-6-6 reader re
          check-host wbf-check wbf-notice ebc-logic-check ebc-barrier-check rastersim-check koreader-input-check orientation-check optics-check optics-audit-dataset power-check rockchip-pm-check activation-positive-check suspend-check \
         battery-dtb-check time-machine-check gexp-modules-check \
         timezone-check kernel-version-check library-check \
-        manuals-check ultra-coupling-check timesync-check \
+        manuals-check ultra-coupling-check timesync-check settings-check \
         $(FLAVORS) $(addprefix image-,$(FLAVORS)) $(addprefix rootfs-,$(FLAVORS))
 
 help:
@@ -107,6 +107,7 @@ help:
 	@echo "  gexp-modules-check  no use-modules in a shepherd start/stop without a (modules ..) field"
 	@echo "  timezone-check    the build-time timezone knob resolves, and refuses an unusable name"
 	@echo "  timesync-check    SNTP client protocol/policy tests plus a loopback round trip"
+	@echo "  settings-check    every knob declared twice still agrees; today's drift is pinned (issue #12)"
 	@echo
 	@echo "Flags:"
 	@echo "  TIME_MACHINE=1    build through channels.scm (pinned/reproducible; required for releases)"
@@ -315,7 +316,7 @@ CHECK_HOST_TARGETS = ebc-logic-check ebc-barrier-check rastersim-check \
         rockchip-pm-check activation-positive-check suspend-check \
         library-check manuals-check ultra-coupling-check \
         battery-dtb-check time-machine-check gexp-modules-check \
-        timezone-check refresh-trigger-check timesync-check
+        timezone-check refresh-trigger-check timesync-check settings-check
 
 # Parse time, not recipe time: a recipe-level guard would run only AFTER every
 # prerequisite had already completed, so it could not prevent the mistake it
@@ -436,6 +437,24 @@ power-check:
 # needs root or a network: the daemon runs --dry-run and sets no clock.
 timesync-check:
 	$(call guix-shell,luajit) $(MAKE) -C pinenote/tools/timesync check
+
+# The configuration coupling gate (issue #12 step 1).  The same knob is
+# declared in a Guix record, a Lua `opt' table, a .conf key, an argv flag,
+# a modprobe options string and a host model that claims to mirror the
+# device -- with nothing connecting the copies.  This asserts they still
+# agree.  Pure text analysis over the sources; python3 stdlib only, no
+# guix, no store, no device.
+#
+# EXPECTED OUTPUT -- do not "fix" the DEBT lines: the tree HAS drifted, and
+# #12 step 1 asks for that drift to be pinned rather than repaired here.
+# Each DEBT row is inventory that a later #12 step removes; a divergence
+# NOT in the register fails the build, and so does a register row whose
+# divergence has been paid off.  The second command is the positive
+# control: it breaks one coupling at a time in a scratch copy of the tree
+# and requires the gate to reject it.
+settings-check:
+	python3 pinenote/tools/settings/check-settings.py
+	python3 pinenote/tools/settings/test-check-settings.py
 
 rockchip-pm-check:
 	$(call guix-shell,dtc gcc-toolchain git python) $(MAKE) -C pinenote/tools/rockchip-pm check
