@@ -262,6 +262,16 @@ and a bound.
 
 ### Build, CI and gates
 
+- **New rung-1 gate: `make koreader-profile-check`** — KOReader's
+  reading defaults now have exactly one writer, and the gate fails if a
+  second appears. There were two, and only one of them could ever run:
+  that is how a build once shipped with none of the e-ink refresh
+  settings in it (2026-08-05), which a tester would have felt as a
+  slower device rather than seen as an error. The surviving seed is
+  generated from a record whose fields *are* the settings, so the three
+  font settings can no longer go missing one at a time. What the device
+  writes is unchanged — same keys, same values, three new comment lines
+  at the top of the file.
 - **First CI for the channel**: three jobs on every push — no Guix, no
   device, no waveform — whose job is protecting the kernel patch stack
   (`.github/workflows/host-gates.yml`). A safety job asserts that no

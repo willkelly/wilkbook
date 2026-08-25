@@ -74,6 +74,7 @@ FLAVORS = minimal slim networked dev usb-console usb-console-linux-6-6 reader re
         battery-dtb-check time-machine-check gexp-modules-check \
         timezone-check kernel-version-check library-check \
         manuals-check ultra-coupling-check timesync-check \
+        settings-check koreader-profile-check \
         $(FLAVORS) $(addprefix image-,$(FLAVORS)) $(addprefix rootfs-,$(FLAVORS))
 
 help:
@@ -107,6 +108,7 @@ help:
 	@echo "  gexp-modules-check  no use-modules in a shepherd start/stop without a (modules ..) field"
 	@echo "  timezone-check    the build-time timezone knob resolves, and refuses an unusable name"
 	@echo "  timesync-check    SNTP client protocol/policy tests plus a loopback round trip"
+	@echo "  settings-check    every knob declared twice still agrees; today's drift is pinned (issue #12)"
 	@echo
 	@echo "Flags:"
 	@echo "  TIME_MACHINE=1    build through channels.scm (pinned/reproducible; required for releases)"
@@ -313,9 +315,9 @@ refresh-trigger-check:
 CHECK_HOST_TARGETS = ebc-logic-check ebc-barrier-check rastersim-check \
         koreader-input-check orientation-check optics-check power-check \
         rockchip-pm-check activation-positive-check suspend-check \
-        library-check manuals-check ultra-coupling-check \
+        library-check koreader-profile-check manuals-check ultra-coupling-check \
         battery-dtb-check time-machine-check gexp-modules-check \
-        timezone-check refresh-trigger-check timesync-check
+        timezone-check refresh-trigger-check timesync-check settings-check
 
 # Parse time, not recipe time: a recipe-level guard would run only AFTER every
 # prerequisite had already completed, so it could not prevent the mistake it
@@ -437,6 +439,24 @@ power-check:
 timesync-check:
 	$(call guix-shell,luajit) $(MAKE) -C pinenote/tools/timesync check
 
+# The configuration coupling gate (issue #12 step 1).  The same knob is
+# declared in a Guix record, a Lua `opt' table, a .conf key, an argv flag,
+# a modprobe options string and a host model that claims to mirror the
+# device -- with nothing connecting the copies.  This asserts they still
+# agree.  Pure text analysis over the sources; python3 stdlib only, no
+# guix, no store, no device.
+#
+# EXPECTED OUTPUT -- do not "fix" the DEBT lines: the tree HAS drifted, and
+# #12 step 1 asks for that drift to be pinned rather than repaired here.
+# Each DEBT row is inventory that a later #12 step removes; a divergence
+# NOT in the register fails the build, and so does a register row whose
+# divergence has been paid off.  The second command is the positive
+# control: it breaks one coupling at a time in a scratch copy of the tree
+# and requires the gate to reject it.
+settings-check:
+	python3 pinenote/tools/settings/check-settings.py
+	python3 pinenote/tools/settings/test-check-settings.py
+
 rockchip-pm-check:
 	$(call guix-shell,dtc gcc-toolchain git python) $(MAKE) -C pinenote/tools/rockchip-pm check
 
@@ -485,6 +505,17 @@ release-manifest:
 # negative-tested against six ways it has to be able to fail.
 library-check:
 	sh pinenote/scripts/preflight/validate-koreader-library.sh
+
+# One writer for KOReader's settings profile, and it is the record.  The
+# tree carried two seeds of that file until 2026-08-24; only the
+# activation one could ever run, so the six e-ink refresh keys added to
+# the other on 2026-08-05 shipped in nothing.  Checks 1-5 are text
+# analysis and need nothing installed; check 6 generates the seed from the
+# record and reads it, which needs `guix' because the record is a Guix
+# service configuration -- it SKIPS loudly without one (CI has guile but
+# no guix), so a green here is weaker in CI than it is locally.
+koreader-profile-check:
+	sh pinenote/scripts/preflight/validate-koreader-profile.sh
 
 # The man/info -> EPUB converter the manuals shelf is built from (issue #17).
 # Python 3 standard library over generated fixtures plus one committed
