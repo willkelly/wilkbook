@@ -2,9 +2,10 @@
 
 **Status: plan, not a decision record.** Written 2026-08-24, after the
 operator named handwriting as a product direction that the current display
-path cannot support. **The only thing built so far is P1's CLUT compiler**
-(2026-08-25) — a host/device tool with no service, image or kernel change
-behind it. Everything from P2 on is still a plan, and the bail-out
+path cannot support. Built so far (all 2026-08-25): P1's CLUT compiler,
+P2's `linux-pinenote-hrdl-direct` kernel package, and P2a's modprobe
+options. **Nothing has ever run** — not loaded, not probed, not bound, no
+frame on any panel — and P3 onwards is still a plan. The bail-out
 criteria at the bottom still apply.
 
 Read `doc/hrdl-evaluation.md` first — this document assumes it.
@@ -386,10 +387,160 @@ an image, and no flavor references the variant.
 
 **One gap found while doing it:** his `v6.19_ebc_custom` branch contains
 **no EBC device-tree node** and touches no DTS at all, so it cannot bind
-on its own — he must compose branches. For us that is harmless (we have
-the node), but it means the third clock the evaluation cites (`cpll_333m`
-for direct mode, DTS commit `9444147d35a2`) is on a branch we have not
-identified yet. Find it before P3.
+on its own — he must compose branches. It means the third clock the
+evaluation cites (`cpll_333m` for direct mode, DTS commit `9444147d35a2`)
+is on a branch we have not identified yet.
+
+**That gap is not harmless, corrected 2026-08-25.** The note above said
+"for us that is harmless (we have the node)". We have *a* node, and it is
+the wrong one: our forward-port's `ebc@fdec0000` declares
+`clock-names = "hclk", "dclk"` and nothing else, while his probe does a
+hard `devm_clk_get(dev, "cpll_333m")` and `dev_err_probe`s on failure
+(`rockchip_ebc.c:2391`). **The module cannot probe on our device tree.**
+It is a small DT change, but it is a blocker that has to be named before
+P3 step 1, and it is a second reason — alongside `custom_wf.bin` — that
+nothing here has been near a panel.
+
+### P2a — module parameters (blocker 1) — **decided 2026-08-25**
+
+A kernel that builds still needs to be *told* something, and our nine
+shipped `rockchip_ebc` parameters are aimed at a different driver.
+
+**First, a correction to the premise.** The working assumption was that
+our options "would fail the module load". They would not.
+`unknown_module_param_cb()` (7.1.8, `kernel/module/main.c:3366`)
+`pr_warn`s `unknown parameter '%s' ignored` and **returns 0**. So the
+module would load *successfully* with eight of nine intents discarded and
+the ninth accepted into dead code. That is strictly worse than a refusal,
+and it is the reason this needed a gate rather than a comment.
+
+**The real parameter sets**, derived from `module_param*()` registrations
+rather than `modinfo -p` (see below for why that distinction matters):
+ours registers **26**, his registers **16** in the configuration we
+build. Seven names appear in both (`bw_threshold`, `dclk_select`,
+`delay_a`, `hskew_override`, `limit_fb_blits`, `no_off_screen`,
+`temp_override`) — but of the **nine we actually ship**, exactly one is
+in his set, and it is dead code there.
+
+| our option | fate under his driver |
+|---|---|
+| `direct_mode=0` | registered only under `CONFIG_DRM_ROCKCHIP_EBC_3WIN_MODE`, which does not compile (D6) — and inverted in meaning |
+| `auto_refresh=0`, `refresh_threshold=60` | gone; he has no threshold-fired auto-global at all |
+| `panel_reflection=1` | gone |
+| `prepare_prev_before_a2=0` | gone with A2 (D2) |
+| `refresh_waveform=6` | gone — his `GLOBAL_REFRESH` is **hard-coded GC16** |
+| `defio_delay_ms=250` | gone — no knob; `drm_fbdev_shmem`'s `HZ/20` stands |
+| `split_area_limit=0` | **a mirage** — see below |
+| `dclk_select=0` | accepted, and never read in direct mode |
+
+**`split_area_limit` is not shared, it only looks it.** `modinfo -p`
+prints `parm` modinfo tags, which come from `MODULE_PARM_DESC` — and his
+driver carries `MODULE_PARM_DESC(split_area_limit, ...)` on top of
+`module_param(limit_fb_blits, ...)`, a description left behind by a
+rename. So `modinfo -p` advertises a parameter the module will not accept
+and hides the one it will. Transliterating our value into the "renamed"
+parameter would be worse than dropping it: `limit_fb_blits=0` means
+*allow zero framebuffer blits*, i.e. a panel nothing ever reaches
+(`rockchip_ebc.c:1846`). Logged as `doc/upstream-register.md` item 16 and
+pinned as `quirk:stale-parm-desc`.
+
+**`dclk_select` is the trap worth reading twice.** It is a real parameter
+of his driver, it accepts our value, it appears in sysfs — and
+`rockchip_ebc_set_dclk()` returns **before** the `switch (dclk_select)`
+whenever `direct_mode` is true, which for us is always. #23's glass
+measurement (`dclk_select=1` → `cpll_333m` at 250 MHz → 79.68 Hz) does
+not carry over, and the reason is structural rather than a matter of
+degree:
+
+| | 3WIN / LUT mode | direct mode |
+|---|---|---|
+| `SDCLK_DIV` | `pixels_per_sdck - 1` = 7 | **0** |
+| `dclk` | 200 MHz (or 250 at `dclk_select=1`) | **34 MHz**, hard-coded |
+| panel SDCK | dclk ÷ 8 = 25 MHz (31.25 at 250) | = dclk = **34 MHz** |
+| frame rate | 63.7 Hz (79.68 at 250) | **~85 Hz** |
+
+The 33.33 MHz `cpll_333m` in his DTS is not a mistake by a factor of
+eight; it is the parent rate for a dclk that has become the source-driver
+clock itself. The ~85 Hz the whole swap is for arrives from that line of
+`rockchip_ebc_set_dclk()`, with no module parameter involved.
+
+**The decision: the direct-mode options set no parameters at all.** They
+carry the `softdep panfrost pre: rockchip_ebc` guard and nothing else.
+Every one of his sixteen keeps its driver default, each for a stated
+reason recorded in `pinenote/services/ebc-direct.scm`. The two that took
+actual argument:
+
+- **`redraw_delay`** — ayakael's `pinenote-dist` ships `redraw_delay=200`
+  against a driver default of 0, and that is the *only* one of his four
+  shipped options that changes anything (the other three are the
+  defaults written out). It schedules a periodic top-up drive of every
+  `REDRAW`-hinted pixel, ~2.35 s apart at 85 Hz. We keep 0, because our
+  display policy is that **userspace owns every drive** — the same
+  2026-07-12 optics finding 10 that makes us ship `auto_refresh=0` —
+  and because its power and DDR-fetch cost is unmeasured on the one axis
+  with a known silent failure mode.
+- **`shrink_virtual_window`** — off, as hrdl ships it. Recorded as the
+  *first* thing to try if direct mode shows corruption, since it cuts
+  DDR fetch with damage area, but a bring-up default is not where an
+  experiment belongs.
+
+**Where it lives, and why not next to the shipping options.** The
+service type `pinenote-ebc-modprobe-service-type` gained a real
+configuration record with an `options` field, defaulting to the shipping
+text — so `base.scm` is unchanged and the reader system derivation is
+byte-identical (verified: `f849a8rc…-system.drv` before and after). The
+direct-mode value lives in a new `(pinenote services ebc-direct)`, not in
+`ebc.scm`, because `make settings-check` requires **exactly one**
+`options rockchip_ebc` line in `ebc.scm` — that string has three
+build-time copies it holds in agreement, and a second unrelated string
+there would break a gate that is right to be strict. Two *service types*
+were rejected outright: both would extend `etc-service-type` with the
+same `modprobe.d/rockchip_ebc.conf`, so instantiating both collides by
+construction. **This is not issue #12 step 3** — no schema, no
+validation, no p7 override; it is a Guix-level field where there was a
+constructor that ignored its argument.
+
+**Gate:** `make ebc-modprobe-options-check` (in `CHECK_HOST_TARGETS`).
+It reconstructs each driver's `rockchip_ebc.c` from its own patch —
+verified byte-identical to hrdl's real file, 87,016 bytes — reads the
+`module_param*()` registrations with `#ifdef` resolution that **refuses**
+rather than guesses at an unknown guard, and checks each options string
+against the driver it is for. Since the direct set is deliberately
+empty, the load-bearing assertion is the **positive control**: the
+*shipping* string, checked against his driver, must be rejected, and it
+is — 8 of 9 names unknown. Plus the `quirk:stale-parm-desc` membership
+pin, a 3WIN-forced-on control proving the `#ifdef` logic is real, a
+sha256 tripwire on the shipping text, and a `guix repl` step that
+actually loads the new module (nothing else imports it, so no build
+would).
+
+**What this does NOT solve.** Three things, all found while doing it:
+
+1. **On our boot path `/etc/modprobe.d` is nearly inert.** The initrd
+   raw-loads `rockchip_ebc`, so parameters land through
+   `pinenote-apply-ebc-params` writing sysfs. That one-shot hard-codes
+   our nine names and **silently skips** a name whose sysfs file is
+   absent, then exits 0. Against his driver it would apply nothing and
+   report success. A direct-mode flavor needs its own params one-shot, or
+   none — it must not inherit that one unexamined.
+2. **`refresh_waveform=6` has no successor.** Global refresh is
+   hard-coded `GC16` in his loop. The GL16 wash — no white flash, bought
+   with hardware sessions — is a driver change or a CLUT change under
+   direct mode, not a parameter. This is D2 becoming concrete.
+3. **His fbdev client is forced to `RGB565`.** He calls
+   `drm_client_setup_with_fourcc(drm, DRM_FORMAT_RGB565)`; we call
+   `drm_client_setup(drm, NULL)`, which takes the plane's preferred
+   format — `DRM_FORMAT_XRGB8888`, and KOReader runs
+   `framebuffer_linux` on a **32bpp XR24** `/dev/fb0`
+   (`doc/koreader-spike.md`). A 16bpp `/dev/fb0` is a different
+   framebuffer for every consumer we have. Alongside it, his off-screen
+   firmware is `rockchip_ebc_default_screen_x4y4.bin` at one byte per
+   pixel where we install a 4bpp `rockchip_ebc_default_screen.bin`, so
+   his request misses and he memsets white. Neither is fatal, and
+   neither is a parameter.
+
+Nothing here has loaded, probed or bound. It is a configuration derived
+from source, gated offline.
 
 ### P3 — bring-up on glass, one variable at a time
 

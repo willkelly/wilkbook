@@ -658,3 +658,39 @@ option.
 **Status:** not sent. We are not shipping his driver yet, and sending a
 build-break report is more useful attached to a concrete adoption than
 ahead of one.
+
+## 16. Two module parameters in `rockchip_ebc` that do not mean what they say
+
+**Where it would go:** hrdl (`~hrdl/linux`, `v6.19_ebc_custom`).
+
+**What:** two independent defects in the direct-mode driver's parameter
+block, both of which mislead a distributor writing a `modprobe.d` file.
+
+1. **`MODULE_PARM_DESC(split_area_limit, ...)` sits on top of
+   `module_param(limit_fb_blits, ...)`** (`rockchip_ebc.c:266-268`) — a
+   description left behind by a rename. `MODULE_PARM_DESC` does not
+   require its subject to exist, so the module builds, and `modinfo -p`
+   then advertises a `split_area_limit` the module will not accept while
+   hiding the `limit_fb_blits` it will. The m-weigand lineage — which
+   this project ships — has a real `split_area_limit`, so anyone porting
+   a configuration across reads the description as confirmation that the
+   parameter survived. It did not.
+
+2. **`delay_a` is declared, registered and never read.** The comment
+   above it points at `plane_atomic_update` "for specific usage"; there
+   is no use of the identifier anywhere else in the tree.
+
+**How found:** deriving hrdl's real parameter set from `module_param*()`
+registrations while giving the direct-mode kernel its own modprobe
+options (2026-08-25). Pinned as `quirk:stale-parm-desc` in
+`make ebc-modprobe-options-check`, which fails if a future extractor
+starts believing `modinfo -p`.
+
+**Why it matters to him:** the kernel does not refuse an unknown module
+parameter — `unknown_module_param_cb()` warns and returns 0 — so a
+configuration written against the wrong name loads successfully with
+that intent silently dropped. A wrong description is therefore a defect
+whose whole cost lands on the user, quietly.
+
+**Status:** not sent, same reasoning as item 15 — worth more attached to
+a concrete adoption than ahead of one. Both are one-line fixes.

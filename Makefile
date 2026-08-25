@@ -74,7 +74,7 @@ FLAVORS = minimal slim networked dev usb-console usb-console-linux-6-6 reader re
         battery-dtb-check time-machine-check gexp-modules-check \
         timezone-check kernel-version-check library-check \
         manuals-check ultra-coupling-check timesync-check \
-        settings-check koreader-profile-check \
+        settings-check koreader-profile-check ebc-modprobe-options-check \
         $(FLAVORS) $(addprefix image-,$(FLAVORS)) $(addprefix rootfs-,$(FLAVORS))
 
 help:
@@ -110,6 +110,7 @@ help:
 	@echo "  timezone-check    the build-time timezone knob resolves, and refuses an unusable name"
 	@echo "  timesync-check    SNTP client protocol/policy tests plus a loopback round trip"
 	@echo "  settings-check    every knob declared twice still agrees; today's drift is pinned (issue #12)"
+	@echo "  ebc-modprobe-options-check  each rockchip_ebc options set names only parameters its own driver registers"
 	@echo
 	@echo "Flags:"
 	@echo "  TIME_MACHINE=1    build through channels.scm (pinned/reproducible; required for releases)"
@@ -318,7 +319,8 @@ CHECK_HOST_TARGETS = clut-check ebc-logic-check ebc-barrier-check rastersim-chec
         rockchip-pm-check activation-positive-check suspend-check \
         library-check koreader-profile-check manuals-check ultra-coupling-check \
         battery-dtb-check time-machine-check gexp-modules-check \
-        timezone-check refresh-trigger-check timesync-check settings-check
+        timezone-check refresh-trigger-check timesync-check settings-check \
+        ebc-modprobe-options-check
 
 # Parse time, not recipe time: a recipe-level guard would run only AFTER every
 # prerequisite had already completed, so it could not prevent the mistake it
@@ -469,6 +471,24 @@ timesync-check:
 settings-check:
 	python3 pinenote/tools/settings/check-settings.py
 	python3 pinenote/tools/settings/test-check-settings.py
+
+# We now carry TWO rockchip_ebc drivers with almost disjoint module
+# parameters, and the kernel does not protect you from mixing them up:
+# unknown_module_param_cb() warns and IGNORES, so an options line aimed at
+# the wrong driver loads fine with its intents silently discarded.  This
+# gate derives each driver's real parameter set from the module_param()
+# registrations in its own patch -- resolving #ifdef guards, and refusing
+# rather than guessing when it meets a guard it does not know -- and checks
+# each options string against the driver it is for.  It also pins the
+# shipping options text, because the direct-mode set is deliberately empty
+# and a check over an empty set proves nothing on its own; the positive
+# control is that the SHIPPING string must be rejected against hrdl's
+# driver.  python3 stdlib, no device.  One step is not text analysis: it
+# runs `guix repl' to LOAD (pinenote services ebc-direct), because nothing
+# in the tree imports that module yet and so no build would ever compile
+# it.  That step SKIPs, loudly, where guix is absent -- CI included.
+ebc-modprobe-options-check:
+	python3 pinenote/scripts/preflight/validate-ebc-modprobe-options.py
 
 rockchip-pm-check:
 	$(call guix-shell,dtc gcc-toolchain git python) $(MAKE) -C pinenote/tools/rockchip-pm check
