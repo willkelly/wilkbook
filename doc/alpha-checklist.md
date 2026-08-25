@@ -259,7 +259,10 @@ The machinery now exists; the acts themselves wait for sign-off.
       by commit with introductions. This is the reproducibility claim:
       `guix time-machine -C channels.scm` rebuilds the identical closure.
       Regenerate with `make channels-pin` *before* building the shipping
-      artifact.
+      artifact — and note this regeneration is currently *mandatory*,
+      not hygiene: the committed pin predates the kernel's 7.1 series
+      pin, so time-machine against it fails outright until the bump
+      (`doc/building.md`, 2026-08-25).
 - [x] **`make release-manifest ROOTFS=…`** writes `SHA256SUMS` carrying
       the hash, the git description and the channel pointer, so the hash
       lands inside signed history rather than beside a download.

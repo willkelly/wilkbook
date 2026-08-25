@@ -6,16 +6,19 @@ GUIX_BASE = guix
 # channels.scm IS the reproducibility claim (doc/release.md).  TIME_MACHINE=1
 # routes every guix invocation through the pinned channels.
 #
-# This is not a nicety.  pinenote/packages/kernel.scm binds
-# %linux-pinenote-base to nongnu:linux -- a FLOATING alias.  It has already
-# moved 7.0 -> 7.1 on current channels, after which the forward-port patch
-# collides with mainline's own PineNote DTSI:
+# CURRENTLY BROKEN, and known (2026-08-25): pinenote/packages/kernel.scm pins
+# %linux-pinenote-base to nongnu:linux-7.1, but the committed channels.scm
+# still pins a nonguix commit (3ed7c20) that PREDATES linux-7.1, so
+# TIME_MACHINE=1 fails to evaluate the kernel module at all:
 #
-#   rk3566-pinenote.dtsi:433: ERROR (duplicate_node_names):
-#     /i2c@fdd40000/pmic@20/charger
+#   guix build: error: ... Unbound variable: nongnu:linux-7.1
 #
-# so a plain `make kernel' on a freshly-pulled workstation builds a DIFFERENT
-# kernel than the one doc/status.md calls hardware-proven, or fails outright.
+# (verified 2026-08-25, both directions).  Ambient guix -- your last
+# `guix pull' -- is what builds this tree today, resolving 7.1.x.  The repair
+# is a channel-pin bump (`make channels-pin'), which is its own reviewed
+# change; until it lands, the byte-identical-rebuild claim holds for the
+# v0.1.0-prealpha tag and its pin, NOT for current main.  doc/building.md
+# and doc/release.md carry the same caveat.
 GUIX = $(if $(TIME_MACHINE),$(GUIX_BASE) time-machine -C channels.scm --,$(GUIX_BASE))
 TARGET = aarch64-linux-gnu
 GUIX_FLAGS = -L . --target=$(TARGET)
@@ -120,7 +123,8 @@ help:
 	@echo "  ebc-modprobe-options-check  each rockchip_ebc options set names only parameters its own driver registers"
 	@echo
 	@echo "Flags:"
-	@echo "  TIME_MACHINE=1    build through channels.scm (pinned/reproducible; required for releases)"
+	@echo "  TIME_MACHINE=1    build through channels.scm (required for releases; BROKEN until the"
+	@echo "                    pin bump -- channels.scm predates the 7.1 kernel pin, see doc/building.md)"
 	@echo "  HOST_TOOLCHAIN=1  use the toolchain already on PATH instead of 'guix shell' (what CI does)"
 	@echo "  SKIP_CHECKS=..    omit named check-host members (must be in CHECK_HOST_TARGETS)"
 	@echo
@@ -159,17 +163,25 @@ reader-system-drv:
 	$(GUIX) system build -d --no-grafts $(GUIX_FLAGS) \
 	  pinenote/systems/pinenote-reader.scm
 
-# Is the kernel we would build still the one we have hardware-proven?
+# Is the kernel we would build still in the series this repo pins?
 #
-# %linux-pinenote-base is bound to nongnu:linux, a FLOATING alias, so the
-# answer depends on when you last ran `guix pull' rather than on anything in
-# this repo.  The resolved derivation NAME carries the version, so asking is
-# ~0.6s and needs no build.
+# %linux-pinenote-base is bound to nongnu:linux-7.1 -- a SERIES pin, no longer
+# the floating nongnu:linux alias -- so ambient point releases (7.1.5 -> 7.1.8)
+# pass, and the check catches the series moving under us or the pin changing
+# without this expectation following.  The resolved derivation NAME carries
+# the version, so asking is ~0.6s and needs no build.
 #
-# EXPECTED ASYMMETRY -- do not "fix" the red:
-#   make kernel-version-check                 FAILS on drifted channels (7.1.x),
-#                                             which is the entire point;
-#   make kernel-version-check TIME_MACHINE=1  PASSES (7.0.11 via channels.scm).
+# EXPECTED ASYMMETRY (INVERTED 2026-08-25 -- the old comment said the
+# opposite, from before the series pin):
+#   make kernel-version-check                 PASSES on current channels
+#                                             (ambient resolves 7.1.x);
+#   make kernel-version-check TIME_MACHINE=1  FAILS -- not a version mismatch
+#                                             but "Unbound variable:
+#                                             nongnu:linux-7.1": channels.scm
+#                                             still pins a nonguix commit that
+#                                             predates linux-7.1.  Broken until
+#                                             the pin bump (see the GUIX
+#                                             comment at the top).
 #
 # Deliberately NOT in CHECK_HOST_TARGETS: the CI runner installs no Guix.
 KERNEL_EXPECT ?= linux-pinenote-7.1.
@@ -181,8 +193,10 @@ kernel-version-check:
 	case "$$drv" in \
 	  *$(KERNEL_EXPECT)*) echo "PASS: kernel base is $(KERNEL_EXPECT)x as expected"; ;; \
 	  *) echo "FAIL: expected $(KERNEL_EXPECT)x, resolved $$drv"; \
-	     echo "      The nonguix 'linux' alias has moved. Build with TIME_MACHINE=1,"; \
-	     echo "      or see issue #13 for pinning %linux-pinenote-base."; \
+	     echo "      Either your channels no longer provide the pinned series (re-run"; \
+	     echo "      'guix pull', or the pin in pinenote/packages/kernel.scm moved without"; \
+	     echo "      KERNEL_EXPECT following), or this ran with TIME_MACHINE=1, which is"; \
+	     echo "      broken until the channels.scm pin bump (issue #13, doc/building.md)."; \
 	     exit 1 ;; \
 	esac
 
