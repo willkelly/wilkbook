@@ -1,8 +1,129 @@
 (define-module (pinenote services ebc-direct)
   #:use-module (gnu services)
+  #:use-module (gnu services shepherd)
+  #:use-module (guix gexp)
+  #:use-module (guix records)
+  #:use-module (pinenote packages firmware)
   #:use-module (pinenote services ebc)
   #:export (%pinenote-ebc-direct-modprobe-options
-            pinenote-ebc-direct-modprobe-service))
+            pinenote-ebc-direct-modprobe-service
+            pinenote-ebc-clut-service-type
+            pinenote-ebc-clut-configuration
+            pinenote-ebc-clut-configuration?
+            pinenote-ebc-clut-compiler
+            pinenote-ebc-clut-source
+            pinenote-ebc-clut-destination))
+
+;; Services for hrdl's DIRECT-MODE rockchip_ebc (doc/direct-mode-adoption.md).
+;;
+;; NOTHING IN THIS FILE IS INSTANTIATED BY ANY FLAVOR, and the shipping
+;; reader must never gain it: direct mode is a study artifact until P3 puts
+;; it on glass.  It lives in its own module, rather than beside the shipping
+;; EBC services in (pinenote services ebc), so that adding to it cannot move
+;; the reader's derivation even by accident.  Same posture as
+;; pinenote-wbf-clut in (pinenote packages firmware), which says out loud
+;; that it is wired into nothing.
+;;
+;; ---------------------------------------------------------------------
+;; THE ORDERING THIS SERVICE CANNOT SATISFY ON ITS OWN -- read before use
+;; ---------------------------------------------------------------------
+;;
+;; doc/direct-mode-adoption.md P0 asserted, until this was checked on
+;; 2026-08-25 and the paragraph rewritten:
+;;
+;;     "pinenote-ebc-modprobe-service-type loads the module from a shepherd
+;;      one-shot ordered after pinenote-waveform, so the firmware path is
+;;      already populated before modprobe"
+;;
+;; THAT IS FALSE, and it was the load-bearing reason the plan believed we
+;; needed no initramfs work.  Measured in the tree, 2026-08-25:
+;;
+;;   * pinenote-ebc-modprobe-service-type extends etc-service-type ONLY.  It
+;;     writes /etc/modprobe.d/rockchip_ebc.conf and loads nothing.  Nothing
+;;     in pinenote/services or pinenote/systems ever runs
+;;     `modprobe rockchip_ebc'.
+;;   * The module is RAW-LOADED IN THE INITRD.  rockchip_ebc is in
+;;     %pinenote-display-initrd-modules and pinenote-initrd*'s #:pre-mount
+;;     hook calls load-linux-modules-from-directory on it, straight after
+;;     copying the waveform partition to the INITRD's own
+;;     /lib/firmware/rockchip/ebc.wbf.  That same file has the comment
+;;     "the initrd raw-loads rockchip_ebc ... which passes no parameters at
+;;     all", hardware-confirmed 2026-07-05.
+;;
+;; So probe -- and therefore request_firmware("rockchip/custom_wf.bin"), and
+;; therefore hrdl's -EINVAL -- happens inside the initramfs, before the root
+;; filesystem this service writes to is even mounted.  A shepherd one-shot
+;; cannot be "before the module loads"; that is exactly why hrdl's unit runs
+;; `mkinitcpio -P' and then `modprobe -r rockchip_ebc; modprobe rockchip_ebc'.
+;;
+;; The CLUT installer below is still the right and necessary artifact -- it
+;; is needed under every option -- but ON ITS OWN IT DOES NOT MAKE THE
+;; DIRECT-MODE DRIVER PROBE.  One of these has to land with it, and none of
+;; them is written yet -- the three are priced in doc/direct-mode-adoption.md D7:
+;;
+;;   (a) compile the CLUT in the initrd, beside the waveform copy, which
+;;       means wbf-clut and its closure inside the initramfs; or
+;;   (b) drop rockchip_ebc from the direct flavor's initrd module list and
+;;       load it from a shepherd one-shot ordered after this service; or
+;;   (c) reload the module after installing, as hrdl does.
+;;
+;; NONE OF THE THREE HAS BEEN TRIED, AND NOTHING HAS PROBED ON ANY PANEL.
+
+(define-record-type* <pinenote-ebc-clut-configuration>
+  pinenote-ebc-clut-configuration make-pinenote-ebc-clut-configuration
+  pinenote-ebc-clut-configuration?
+  ;; The package providing bin/wbf-clut.  Its STORE PATH is half of the
+  ;; freshness record the installer keeps, so a rebuilt compiler forces a
+  ;; recompile without anyone having to remember to.
+  (compiler    pinenote-ebc-clut-compiler    (default pinenote-wbf-clut))
+  ;; The device's own waveform, as pinenote-install-waveform leaves it.
+  ;; Never bundled, never committed: this service's whole input is
+  ;; per-device calibration data extracted from the device's own partition.
+  (source      pinenote-ebc-clut-source
+               (default "/lib/firmware/rockchip/ebc.wbf"))
+  ;; Where hrdl's driver looks: request_firmware("rockchip/custom_wf.bin").
+  (destination pinenote-ebc-clut-destination
+               (default "/lib/firmware/rockchip/custom_wf.bin")))
+
+(define %pinenote-ebc-clut-install
+  ;; A real file, not a string inside this module, for manuals-stage.sh's
+  ;; two reasons: CI's "every tracked shell script parses" gate covers it,
+  ;; and pinenote/scripts/preflight/test-ebc-clut-install.py EXECUTES it
+  ;; through every branch against a fake firmware tree instead of grepping
+  ;; it.  That is also why it takes its paths as arguments.
+  (local-file "ebc-clut-install.sh" "pinenote-ebc-clut-install"))
+
+(define (pinenote-ebc-clut-shepherd-service config)
+  (list
+   (shepherd-service
+    (provision '(pinenote-ebc-clut))
+    ;; pinenote-waveform is the service that puts ebc.wbf on the ROOT
+    ;; filesystem; it already requires root-file-system and udev.  Without
+    ;; this edge shepherd would start the two concurrently and the compile
+    ;; would race its own input.
+    (requirement '(pinenote-waveform))
+    (documentation "Compile this device's waveform into the CLUT hrdl's direct-mode rockchip_ebc requires; recompiles whenever the waveform or the compiler changes.  Does NOT make the driver probe on its own -- see the ordering note in this file.")
+    (one-shot? #t)
+    (start
+     #~(lambda _
+         (zero? (system* "/bin/sh" #$%pinenote-ebc-clut-install
+                         #$(file-append (pinenote-ebc-clut-compiler config)
+                                        "/bin/wbf-clut")
+                         #$(pinenote-ebc-clut-source config)
+                         #$(pinenote-ebc-clut-destination config)))))
+    (stop #~(const #t)))))
+
+(define pinenote-ebc-clut-service-type
+  (service-type
+   (name 'pinenote-ebc-clut)
+   (extensions
+    (list (service-extension shepherd-root-service-type
+                             pinenote-ebc-clut-shepherd-service)))
+   (default-value (pinenote-ebc-clut-configuration))
+   (description "Compile the device's own ebc.wbf into rockchip/custom_wf.bin for hrdl's direct-mode EBC driver, which fails probe with -EINVAL without it.  The result is derived per-device calibration data: it is produced on the device at boot and never bundled.  Rebuilt whenever the waveform, the compiler or the installed file changes, rather than compiled once if absent.")))
+
+
+;;; ===== The direct-mode modprobe options (blocker 1) =====
 
 ;;; The rockchip_ebc module options for hrdl's DIRECT-MODE driver.
 ;;;

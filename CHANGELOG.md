@@ -277,6 +277,23 @@ and a bound.
   original on purpose (`doc/driver-findings-report.md`) — a "cleaner"
   compiler would have quietly changed the waveform your screen is
   driven with.
+- **New rung-1 gate: `make ebc-clut-check`**, and the boot-time step it
+  covers. The table above has to reach the driver, and on this device
+  that means compiling it **from your own device's waveform, on the
+  device, at boot** — it is calibration data and is never shipped with
+  the image. The one-shot that does it now exists and is driven through
+  every branch offline, including the one that matters most: it
+  **rebuilds the table whenever your waveform changes**, rather than the
+  upstream shape of "build it once and never look again", which would
+  have left a wrong table in place silently. If it cannot build the
+  table it says so loudly and fails, because the alternative on this
+  driver is a device that boots to a blank screen with no explanation.
+  Still true: none of this is in any image, nothing loads the driver,
+  and no panel has run it. Along the way the plan's claim that our boot
+  needed no initramfs work turned out to be **wrong** — the display
+  module is loaded from the initrd, before any of this can run — which
+  is now written down as its own open blocker rather than assumed away
+  (`doc/direct-mode-adoption.md` D7).
 - **New rung-1 gate: `make koreader-profile-check`** — KOReader's
   reading defaults now have exactly one writer, and the gate fails if a
   second appears. There were two, and only one of them could ever run:

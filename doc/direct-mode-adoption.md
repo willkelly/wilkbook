@@ -7,6 +7,11 @@ P2's `linux-pinenote-hrdl-direct` kernel package, and P2a's modprobe
 options. **Nothing has ever run** — not loaded, not probed, not bound, no
 frame on any panel — and P3 onwards is still a plan. The bail-out
 criteria at the bottom still apply.
+path cannot support. What exists so far: **P1's CLUT compiler and its
+installer one-shot**, and **P2's kernel variant** — none of them reachable
+from any flavor, image or running system, and **nothing has ever probed,
+bound or drawn a frame.** P3 on is still a plan, and the bail-out criteria
+at the bottom still apply.
 
 Read `doc/hrdl-evaluation.md` first — this document assumes it.
 
@@ -99,11 +104,13 @@ interpreter (`doc/artifacts/pinenote-input-clocks-20260824/`).
 Three options:
 
 1. **Reimplement the CLUT compiler in C, ship it as an on-device binary.**
-   *Recommended — and **done** as of 2026-08-25 (see P1); the "ship it"
-   half is not.* There is already exactly this precedent:
-   `pinenote-install-waveform` is a compiled binary run by a one-shot
-   shepherd service before the EBC module loads
-   (`pinenote/services/ebc.scm`), and `pinenote-ebc-dump` in
+   *Recommended — and **done** as of 2026-08-25 (see P1), compiler and
+   installing one-shot both; what is not done is any flavor that
+   instantiates it, and **D7** says the one-shot alone cannot be early
+   enough.* There is a near-precedent: `pinenote-install-waveform` is a
+   generated script run by a one-shot shepherd service
+   (`pinenote/services/ebc.scm`) — though note it is **not** "before the
+   EBC module loads", which is D7's whole subject — and `pinenote-ebc-dump` in
    `pinenote/packages/firmware.scm` is an on-device C tool we already
    cross-build. Adding a sibling is the smallest change to a shape we
    already have. It keeps Python off the device, preserves never-bundle
@@ -226,6 +233,46 @@ So the retreat 3WIN was supposed to provide costs a repair, not nothing.
 shipping one — a strictly better retreat than a config of his we would
 have to fix first. Reported upstream rather than patched.
 
+### D7. Probe happens in the INITRD, so nothing in userspace is "before the module loads" — **found 2026-08-25**
+
+This is the blocker P0's item 1 (below, under **The plan**) talked itself
+out of. Measured in the tree, not assumed:
+
+- **`pinenote-ebc-modprobe-service-type` loads nothing.** It extends
+  `etc-service-type` and writes `/etc/modprobe.d/rockchip_ebc.conf`. That
+  is its whole body. Nothing in `pinenote/services/` or
+  `pinenote/systems/` ever runs `modprobe rockchip_ebc`.
+- **The initrd raw-loads it.** `rockchip_ebc` is in
+  `%pinenote-display-initrd-modules`, and `pinenote-initrd*`'s
+  `#:pre-mount` hook calls `load-linux-modules-from-directory` on that
+  list — straight after copying the waveform partition into the
+  *initramfs's own* `/lib/firmware/rockchip/ebc.wbf`.
+  `pinenote/images/pinenote-initramfs.scm` says so in its own words at the
+  bottom of the file ("the initrd raw-loads `rockchip_ebc` … which passes
+  no parameters at all"), hardware-confirmed 2026-07-05 by an image whose
+  cmdline `refresh_waveform=6` was simply ignored.
+
+So probe — and with it `request_firmware("rockchip/custom_wf.bin")` and
+hrdl's `-EINVAL` — happens **inside the initramfs**, before the root
+filesystem a shepherd one-shot writes to has been mounted. A one-shot
+cannot be ordered before that, which is exactly why hrdl's unit runs
+`mkinitcpio -P` and then `modprobe -r rockchip_ebc; modprobe
+rockchip_ebc`. On our stack the same load happens **every boot**, not only
+the first: the initramfs is discarded, so its firmware directory never
+carries anything forward.
+
+Three ways out, none of them written, none tried:
+
+| | cost | risk |
+|---|---|---|
+| (a) compile the CLUT in the initrd, beside the waveform copy | `wbf-clut` and its closure inside the initramfs, and a `system*` in the pre-mount gexp | biggest initrd change; a failure there is pre-console |
+| (b) drop `rockchip_ebc` from the *direct flavor's* initrd module list and modprobe it from a one-shot after the CLUT service | a second initrd variant, a load one-shot, and a working module database at `/run/booted-system/kernel` (the `modprobe -d` shape `usb-gadget.scm` already uses) | display arrives later in boot; the reader flavor drops `console=tty0` anyway, so the U-Boot logo simply stays |
+| (c) install, then reload — `modprobe -r rockchip_ebc; modprobe rockchip_ebc` — as hrdl does | smallest; no initrd work | a reload while something holds the DRM/fb device fails, and every boot pays a failed probe first |
+
+**Nothing here is decided.** (b) reads cleanest and (c) cheapest; both want
+the same module-database plumbing. What is *not* in doubt is that the CLUT
+installer is needed under all three, which is why it was built first.
+
 ## The plan
 
 Cheapest decisive things first, in the ladder's order. **Each phase has a
@@ -270,17 +317,19 @@ neither.
 rockchip_ebc`.
 
 1. The `mkinitcpio` step is because *their* driver needs the firmware in
-   the initramfs. **Ours may not**: `pinenote-ebc-modprobe-service-type`
-   loads the module from a shepherd one-shot ordered after
-   `pinenote-waveform`, so the firmware path is already populated before
-   modprobe. Our existing ordering probably accommodates the CLUT compile
-   with no initrd work — worth confirming, but it makes D1 smaller again.
+   the initramfs. This plan said **"ours may not"**, on the grounds that
+   `pinenote-ebc-modprobe-service-type` "loads the module from a shepherd
+   one-shot ordered after `pinenote-waveform`". **That is false, and it
+   was checked on 2026-08-25 rather than assumed** — see **D7**, which is
+   now the blocker this paragraph used to argue away.
 2. Their `ExecCondition` is *compile-once-if-absent*, the same shape as
    our waveform installer's "destination exists → exit 0" — which
    `doc/configuration.md`'s neighbour issue #12 §7 already flags as a
    hazard, because a stale artifact then wins forever with no checksum.
    Adding a second derived artifact under the same pattern **compounds an
-   existing bug**. Whatever we build should checksum.
+   existing bug**. Whatever we build should checksum. **Done** — the
+   installer keeps a three-line freshness record and rebuilds when any
+   line moves (P1, below).
 
 **A safety gap was closed before it could bite** (2026-08-25). The CI
 gate grepped `\.wbf$|vcom` and **could not see `custom_wf.bin`** — which
@@ -317,11 +366,41 @@ so the driver cannot select the file's top temperature range. A
 clean-room compiler written to what the reference *means* is wrong here,
 which is why the gate had to be identity rather than equivalence.
 
-**What P1 did NOT do.** No service, no image, no initrd work — that is
-the next step, and D4 (what a missing or stale `custom_wf.bin` should do
-at first boot) has to be decided before it, along with the checksum the
-`ExecCondition` note above demands. **And nothing has driven a panel:**
-the compiler is proven against the Python and against nothing else.
+**The installer one-shot exists too, 2026-08-25 — and it is wired into
+nothing.** `pinenote/services/ebc-direct.scm` defines
+`pinenote-ebc-clut-service-type`: a shepherd one-shot, ordered after
+`pinenote-waveform`, that runs `pinenote/services/ebc-clut-install.sh`
+with the compiler, the waveform and the destination as arguments. It is
+the analogue of `pinenote-waveform` for the derived file, and it differs
+from hrdl's unit in the two places that matter:
+
+- **It checksums instead of gating on `test ! -e`.** The stamp beside the
+  file records the source waveform's sha256, the compiler's store path,
+  and the installed file's own sha256; any of the three moving forces a
+  recompile. That closes the stale-derived-artifact hazard issue #12 §7
+  names, rather than adding a second instance of it.
+- **Its failure paths exit non-zero and say why.** `manuals-stage.sh`
+  exits 0 on every failure because a reader without manuals is still a
+  reader; a device without a CLUT has no display at all (D4), so this one
+  is built to be loud in the boot log.
+
+`make ebc-clut-check` runs it — the real file, not a copy — through every
+branch against a fake firmware tree and a stub compiler: first run, no-op
+when current, recompile on a changed waveform / changed compiler /
+corrupted or deleted output, missing waveform, missing compiler, failing
+compiler, empty output, unwritable and symlinked destinations, and a host
+with no `sha256sum` (which recompiles rather than trusts). It carries its
+own **mutation control**: a copy of the script with the checksum replaced
+by upstream's compile-once-if-absent condition, which the freshness
+branches must reject.
+
+**What is still NOT done.** No image, no flavor, no initrd work, and
+**D7** — which says a userspace one-shot cannot be "before the module
+loads" on our boot at all — is unresolved, so this service **does not on
+its own make the direct-mode driver probe.** D4 (what a missing or stale
+`custom_wf.bin` should do at first boot) is still undecided. **And
+nothing has driven a panel:** the compiler is proven against the Python
+and against nothing else, and the installer against a stub.
 
 ### P2 — port the driver onto 7.1.8, behind a flavor
 

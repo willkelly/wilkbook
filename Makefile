@@ -75,6 +75,7 @@ FLAVORS = minimal slim networked dev usb-console usb-console-linux-6-6 reader re
         timezone-check kernel-version-check library-check \
         manuals-check ultra-coupling-check timesync-check \
         settings-check koreader-profile-check ebc-modprobe-options-check \
+        ebc-clut-check \
         $(FLAVORS) $(addprefix image-,$(FLAVORS)) $(addprefix rootfs-,$(FLAVORS))
 
 help:
@@ -94,6 +95,7 @@ help:
 	@echo "  check-host        every host suite needing no hardware ([WBF=..] adds wbf-check + waveform-gated tests)"
 	@echo "  wbf-check         waveform parser checks (WBF=..; never committed)"
 	@echo "  clut-check        C CLUT compiler vs hrdl's wbf_to_custom.py, byte-identical ([WBF=..] [CLUT_REF=..])"
+	@echo "  ebc-clut-check    the direct-mode CLUT installer one-shot, driven through every branch"
 	@echo "  ebc-logic-check   extracted EBC driver logic checks ([WBF=..])"
 	@echo "  ebc-barrier-check supervised EBC sleep-frame command host tests"
 	@echo "  rastersim-check   raster/waveform simulation checks ([WBF=..])"
@@ -320,7 +322,7 @@ CHECK_HOST_TARGETS = clut-check ebc-logic-check ebc-barrier-check rastersim-chec
         library-check koreader-profile-check manuals-check ultra-coupling-check \
         battery-dtb-check time-machine-check gexp-modules-check \
         timezone-check refresh-trigger-check timesync-check settings-check \
-        ebc-modprobe-options-check
+        ebc-modprobe-options-check ebc-clut-check
 
 # Parse time, not recipe time: a recipe-level guard would run only AFTER every
 # prerequisite had already completed, so it could not prevent the mistake it
@@ -388,6 +390,18 @@ wbf-check:
 clut-check:
 	$(call guix-shell,gcc-toolchain python python-numpy) $(MAKE) -C pinenote/tools/wbf clut-check \
 	  WBF=$(WBF) CLUT_REF=$(CLUT_REF) CLUT_REF_BIN=$(CLUT_REF_BIN) CLUT_PYTHON=$(CLUT_PYTHON)
+
+# The other half of D1: the compiler exists, and this is the one-shot that
+# would put its output where hrdl's driver looks (doc/direct-mode-adoption.md
+# D1/D7).  EXECUTES pinenote/services/ebc-clut-install.sh -- the exact file
+# the service hands to shepherd -- through every branch against a fake
+# firmware tree and a stub compiler, plus a mutation control that replaces
+# the checksum with upstream's compile-once-if-absent ExecCondition and
+# requires the freshness branches to go red for it.  stdlib python3 only; no
+# waveform, no store, no device.  `guix repl' compiles the service module
+# when guix is on PATH and says SKIP when it is not.
+ebc-clut-check:
+	python3 pinenote/scripts/preflight/test-ebc-clut-install.py
 
 # EBC driver logic unit tests against the verbatim rockchip_ebc.c from
 # the forward-port patch (offline ladder rung 2). WBF optional; without
