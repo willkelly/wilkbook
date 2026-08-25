@@ -186,11 +186,32 @@ honest reading is that **no obvious blocker exists**, which is a much
 weaker claim than "it will build". The real test is P2, and it is cheap:
 graft his files into our 7.1 tree and run `make kernel`.
 
-### D6. Keep 3WIN as a bail-out?
+### D6. Keep 3WIN as a bail-out? — **the premise was wrong**
 
-3WIN survives upstream behind `CONFIG_DRM_ROCKCHIP_EBC_3WIN_MODE`.
-Keeping it buildable costs little and preserves a retreat if direct mode
-disappoints on glass. Recommended, at least through P3.
+3WIN survives upstream behind `CONFIG_DRM_ROCKCHIP_EBC_3WIN_MODE`, and
+this plan said "keeping it buildable costs little."
+
+**It is not buildable.** Compiling his tree against 7.1.8 with
+`CONFIG_DRM_ROCKCHIP_EBC_3WIN_MODE=y` fails in
+`rockchip_ebc_blit_neon.c`, and not on anything to do with 7.1:
+
+```c
+#ifdef CONFIG_DRM_ROCKCHIP_EBC_3WIN_MODE
+        if (!direct_mode) {
+            vst1q_u8(phases_line, vshrq_n_u8(q8_inner_new, 6);   /* 2 opens, 1 close */
+        } else
+#endif
+```
+
+An unbalanced paren, plus `direct_mode` undeclared in that translation
+unit — both wholly inside the `#ifdef`. A missing parenthesis cannot ever
+have compiled, so **that configuration has never been built**, which fits
+a tree whose default is direct mode.
+
+So the retreat 3WIN was supposed to provide costs a repair, not nothing.
+**The real bail-out is our own driver**, which we keep and which is the
+shipping one — a strictly better retreat than a config of his we would
+have to fix first. Reported upstream rather than patched.
 
 ## The plan
 
@@ -299,6 +320,31 @@ is never the experiment. 3WIN kept buildable (D6).
 running aarch64-under-qemu; the drain-gate and ordering negative controls
 replaced by whatever the new architecture's equivalents are — **a suite
 that goes green because its subject vanished is worse than no suite.**
+
+**Compile gate MET, 2026-08-25.** Grafted his 12 files into a clean
+7.1.8 tree and cross-compiled with `aarch64-linux-gnu-`:
+
+- the 366-line patch for the **5 modified files applies clean** — no
+  conflicts at all, confirming D5's "the textual surface is nothing";
+- **all three objects build in the direct-mode configuration**:
+  `drm_epd_helper.o` (25,792 B), `rockchip_ebc.o` (173,296 B),
+  `rockchip_ebc_blit_neon.o` (75,528 B, `ELF aarch64 relocatable`), with
+  **one** warning (`unused variable 'frame_counter'`).
+
+**What that does and does not prove.** It proves ~4000 lines of his new
+code compile against 7.1.8's headers — which is exactly what D5's static
+name check could not, since a name can survive while its signature or a
+struct layout changes. It does **not** prove the module links, probes,
+binds, or works, and the build used arm64 `defconfig` plus minimal
+enables rather than our `pinenote_defconfig` alongside our other six
+patches. Those are the next steps, not this one.
+
+**One gap found while doing it:** his `v6.19_ebc_custom` branch contains
+**no EBC device-tree node** and touches no DTS at all, so it cannot bind
+on its own — he must compose branches. For us that is harmless (we have
+the node), but it means the third clock the evaluation cites (`cpll_333m`
+for direct mode, DTS commit `9444147d35a2`) is on a branch we have not
+identified yet. Find it before P3.
 
 ### P3 — bring-up on glass, one variable at a time
 
