@@ -262,7 +262,21 @@ and a bound.
 
 ### Build, CI and gates
 
-- **There is a second reader flavor now, and it is not for you to flash.**
+- **The study flavor below now actually contains its boot-time table
+  step — and rebinds the display driver to use it.** The first on-glass
+  run of the direct-mode image (2026-08-25, `doc/status.md`) found the
+  flavor had never been wired to the table-compiling one-shot two
+  entries down: the operator had to compile the table and re-trigger the
+  driver by hand. Both halves are wired now: `reader-direct` runs the
+  one-shot at boot, and the one-shot ends by re-probing the driver
+  through sysfs — because on this boot path the driver always loads,
+  and fails, before the table can exist, *every* boot. A re-probe that
+  fails now fails the service loudly instead of leaving a blank panel
+  with a green boot log. Proven offline (`make ebc-clut-check`, against
+  a fake sysfs) and pinned so the wiring cannot silently vanish again;
+  the image built from this wiring has **not** yet booted on a device —
+  the session proved the same sequence by hand. The shipping reader's
+  system derivation is unchanged, re-checked at the same store path.
   `make reader-direct` builds the reader image on the faster display
   driver we are evaluating for handwriting
   (`doc/direct-mode-adoption.md`). It is a study artifact: it evaluates,

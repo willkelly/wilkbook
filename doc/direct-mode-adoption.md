@@ -1,17 +1,18 @@
 # Adopting direct mode: the plan
 
-**Status: plan, not a decision record.** Written 2026-08-24, after the
-operator named handwriting as a product direction that the current display
-path cannot support. Built so far (all 2026-08-25): P1's CLUT compiler,
-P2's `linux-pinenote-hrdl-direct` kernel package, and P2a's modprobe
-options. **Nothing has ever run** — not loaded, not probed, not bound, no
-frame on any panel — and P3 onwards is still a plan. The bail-out
-criteria at the bottom still apply.
-path cannot support. What exists so far: **P1's CLUT compiler and its
-installer one-shot**, and **P2's kernel variant** — none of them reachable
-from any flavor, image or running system, and **nothing has ever probed,
-bound or drawn a frame.** P3 on is still a plan, and the bail-out criteria
-at the bottom still apply.
+**Status: plan, with its first glass results — not a decision record.**
+Written 2026-08-24, after the operator named handwriting as a product
+direction that the current display path cannot support. Built: P1's CLUT
+compiler and installer one-shot, P2's `linux-pinenote-hrdl-direct` kernel
+package, P2a's modprobe options — and, since 2026-08-25, the
+`reader-direct` flavor instantiates all of it, with the per-boot rebind
+(the D7 answer) as the one-shot's final stage. **The driver has run on
+glass** (2026-08-25, `doc/status.md`): D1–D4 passed with the wiring's job
+done *by hand* — the deployed image predated the wiring — D9 was
+measured, D5 (rotation) is unresolved, and the operator confirmed on
+video the flashing-per-turn cost that makes P4 the next display work.
+The wired image itself has not booted. P4 onwards is still a plan, and
+the bail-out criteria at the bottom still apply.
 
 Read `doc/hrdl-evaluation.md` first — this document assumes it.
 
@@ -104,10 +105,13 @@ interpreter (`doc/artifacts/pinenote-input-clocks-20260824/`).
 Three options:
 
 1. **Reimplement the CLUT compiler in C, ship it as an on-device binary.**
-   *Recommended — and **done** as of 2026-08-25 (see P1), compiler and
-   installing one-shot both; what is not done is any flavor that
-   instantiates it, and **D7** says the one-shot alone cannot be early
-   enough.* There is a near-precedent: `pinenote-install-waveform` is a
+   *Recommended — and **done end to end** as of 2026-08-25 (see P1):
+   compiler, installing one-shot, the `reader-direct` wiring that
+   instantiates both, and the per-boot sysfs rebind that answers **D7**
+   (the one-shot cannot run before the initrd's probe, so it re-triggers
+   the probe instead).  D1 itself passed on glass 2026-08-25 — by hand,
+   because the deployed image predated the wiring (`doc/status.md`).*
+   There is a near-precedent: `pinenote-install-waveform` is a
    generated script run by a one-shot shepherd service
    (`pinenote/services/ebc.scm`) — though note it is **not** "before the
    EBC module loads", which is D7's whole subject — and `pinenote-ebc-dump` in
@@ -233,7 +237,7 @@ So the retreat 3WIN was supposed to provide costs a repair, not nothing.
 shipping one — a strictly better retreat than a config of his we would
 have to fix first. Reported upstream rather than patched.
 
-### D7. Probe happens in the INITRD, so nothing in userspace is "before the module loads" — **found 2026-08-25**
+### D7. Probe happens in the INITRD, so nothing in userspace is "before the module loads" — **found 2026-08-25; resolved on glass the same night, by a fourth option**
 
 This is the blocker P0's item 1 (below, under **The plan**) talked itself
 out of. Measured in the tree, not assumed:
@@ -269,9 +273,27 @@ Three ways out, none of them written, none tried:
 | (b) drop `rockchip_ebc` from the *direct flavor's* initrd module list and modprobe it from a one-shot after the CLUT service | a second initrd variant, a load one-shot, and a working module database at `/run/booted-system/kernel` (the `modprobe -d` shape `usb-gadget.scm` already uses) | display arrives later in boot; the reader flavor drops `console=tty0` anyway, so the U-Boot logo simply stays |
 | (c) install, then reload — `modprobe -r rockchip_ebc; modprobe rockchip_ebc` — as hrdl does | smallest; no initrd work | a reload while something holds the DRM/fb device fails, and every boot pays a failed probe first |
 
-**Nothing here is decided.** (b) reads cleanest and (c) cheapest; both want
-the same module-database plumbing. What is *not* in doubt is that the CLUT
-installer is needed under all three, which is why it was built first.
+**Decided on glass, 2026-08-25 — and it is none of the three.** The
+session proved a fourth mechanism with a smaller blast radius than any
+of them: leave the initrd raw-load (and its now-*expected* per-boot
+`-EINVAL`) alone, and after the CLUT lands write the device back into
+the driver's sysfs `bind` file —
+
+```
+echo fdec0000.ebc > /sys/bus/platform/drivers/rockchip-ebc/bind
+```
+
+— which re-runs the probe, and it passes (`doc/status.md` D2). No initrd
+change, no module reload, no modprobe.d exposure (the module is already
+loaded; parameters never re-enter the picture). The CLUT one-shot now
+performs that rebind itself as its final stage, on every boot including
+is-current ones: unbind if bound, bind, then judge the END STATE — device
+bound and a DRM `card*` minor present — and fail the service loudly
+otherwise (`pinenote/services/ebc-clut-install.sh`, driven through the
+new branches by `make ebc-clut-check`). The service-driven rebind has
+not itself run on glass; the session ran the same steps by hand. One
+prediction above stands: the CLUT installer was needed under every
+option, which is why it was built first.
 ### D7. The EBC node needs a third clock — **RESOLVED 2026-08-25, and it is two lines**
 
 P2 left this open: his `v6.19_ebc_custom` branch touches no DTS at all, so
@@ -444,9 +466,9 @@ we call `clk_round_rate`, which does return the rate.
 Likely cosmetic on a panel with no meaningful vblank — DRM computes its
 timestamping constants from a zero dotclock and complains — but it is a
 difference we would inherit. **Deliberately not filed** in
-`doc/driver-findings-report.md` or the upstream register: it is read off
-source in a driver no panel has run, and this repo's bar for a finding is
-higher than that. File it when P3 step 1 either shows the log line or does
+`doc/driver-findings-report.md` or the upstream register: it was read off
+source before any panel had run this driver, and this repo's bar for a
+finding is higher than that. File it when P3 step 1 either shows the log line or does
 not.
 
 #### What we are NOT adopting, and what is still unknown
@@ -546,7 +568,7 @@ same never-bundle rule. Extended to match `custom_wf` and to reject any
 tracked file carrying the `CLUT0002` magic. Done now, while the count of
 such files in existence is still zero.
 
-### P1 — the CLUT compiler (D1) — ✅ **compiler done, gate met** (2026-08-25)
+### P1 — the CLUT compiler (D1) — ✅ **compiler done, gate met, wired into `reader-direct` with the rebind** (2026-08-25)
 
 Write it in C, cross-built like `pinenote-ebc-dump`, run by a one-shot
 before the EBC module loads. Differential-test against `wbf_to_custom.py`
@@ -574,13 +596,17 @@ so the driver cannot select the file's top temperature range. A
 clean-room compiler written to what the reference *means* is wrong here,
 which is why the gate had to be identity rather than equivalence.
 
-**The installer one-shot exists too, 2026-08-25 — and it is wired into
-nothing.** `pinenote/services/ebc-direct.scm` defines
+**The installer one-shot exists too, 2026-08-25 — and since the same
+date `reader-direct` instantiates it** (it began the day wired into
+nothing, which is how the first glass session came to boot an image with
+no clut service and do D1 by hand — the release review's top
+tag-blocker, now closed). `pinenote/services/ebc-direct.scm` defines
 `pinenote-ebc-clut-service-type`: a shepherd one-shot, ordered after
 `pinenote-waveform`, that runs `pinenote/services/ebc-clut-install.sh`
-with the compiler, the waveform and the destination as arguments. It is
-the analogue of `pinenote-waveform` for the derived file, and it differs
-from hrdl's unit in the two places that matter:
+with the compiler, the waveform, the destination — and the rebind target
+(the driver's sysfs directory and the platform device) as arguments. It
+is the analogue of `pinenote-waveform` for the derived file, and it
+differs from hrdl's unit in the places that matter:
 
 - **It checksums instead of gating on `test ! -e`.** The stamp beside the
   file records the source waveform's sha256, the compiler's store path,
@@ -591,24 +617,39 @@ from hrdl's unit in the two places that matter:
   exits 0 on every failure because a reader without manuals is still a
   reader; a device without a CLUT has no display at all (D4), so this one
   is built to be loud in the boot log.
+- **It rebinds the driver after installing** — the D7 answer, added
+  after the 2026-08-25 session proved it by hand. Every run that leaves
+  a verified CLUT in place ends by re-triggering the probe through the
+  driver's sysfs `bind` (unbind first if bound), then checking the end
+  state: device bound *and* a DRM minor registered. A rebind that fails
+  fails the service; the one legitimate skip — CLUT unchanged, device
+  already bound with a minor — is said out loud in the log.
 
 `make ebc-clut-check` runs it — the real file, not a copy — through every
 branch against a fake firmware tree and a stub compiler: first run, no-op
 when current, recompile on a changed waveform / changed compiler /
 corrupted or deleted output, missing waveform, missing compiler, failing
 compiler, empty output, unwritable and symlinked destinations, and a host
-with no `sha256sum` (which recompiles rather than trusts). It carries its
-own **mutation control**: a copy of the script with the checksum replaced
-by upstream's compile-once-if-absent condition, which the freshness
-branches must reject.
+with no `sha256sum` (which recompiles rather than trusts). The rebind
+branches run against a **fake sysfs** — full cycle, said-out-loud skip,
+the per-boot bind on a current CLUT, missing driver directory, bound
+without a minor, refused unbind, half a rebind target — with the suite
+stating exactly what a static fixture cannot re-enact (the bind
+transition itself, which glass proved). It carries its own **mutation
+control**: a copy of the script with the checksum replaced by upstream's
+compile-once-if-absent condition, which the freshness branches must
+reject. And it pins the wiring **positively**: exactly the
+`reader-direct` flavor instantiates the service — a pin that fires when
+the wiring is dropped again, which its negative-form predecessor
+("no flavor outside the study…") stayed green through.
 
-**What is still NOT done.** No image, no flavor, no initrd work, and
-**D7** — which says a userspace one-shot cannot be "before the module
-loads" on our boot at all — is unresolved, so this service **does not on
-its own make the direct-mode driver probe.** D4 (what a missing or stale
-`custom_wf.bin` should do at first boot) is still undecided. **And
-nothing has driven a panel:** the compiler is proven against the Python
-and against nothing else, and the installer against a stub.
+**What is still NOT done.** The wired flavor has never booted: the
+2026-08-25 session proved the compile-then-rebind sequence by hand on an
+image that predated the wiring, and the host suite proves the service
+reproduces that sequence — against a stub compiler and a fake sysfs. D4's
+first-boot policy for a missing or stale `custom_wf.bin` on a device we
+did not set up is still undecided. **No panel has run the
+service-driven path.**
 
 ### P2 — port the driver onto 7.1.8, behind a flavor
 
@@ -669,8 +710,9 @@ and adds his NEON object with its flags: the blitter needs
 `-mgeneral-regs-only` **removed** and `CC_FLAGS_FPU` added, since kernel
 code is otherwise built with no FP registers.
 
-**The shipping kernel's derivation is unchanged** — nothing here reaches
-an image, and no flavor references the variant.
+**The shipping kernel's derivation is unchanged** — the variant is
+referenced only by the `reader-direct` study flavor, and no shipping
+flavor's closure contains it.
 
 **One gap found while doing it:** his `v6.19_ebc_custom` branch contains
 **no EBC device-tree node** and touches no DTS at all, so it cannot bind
