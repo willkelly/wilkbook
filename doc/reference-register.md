@@ -46,7 +46,7 @@ Verified reachable 2026-08-07.
 |---|---|
 | `v6.19_ultra_suspend` | the ultra config (tip `ee2c553f78`) |
 | `v6.19_rk_suspend_driver` | the suspend driver the ultra branch sits on |
-| `v6.19_ebc_custom` | the custom-waveform display work |
+| `v6.19_ebc_custom` | the custom-waveform display work (tip `819ba1724a6f`, **unchanged** at 2026-08-25 — the same commit `doc/hrdl-evaluation.md` pins, so that evaluation is current) |
 | `v6.19_iio_accel` | accelerometer; visibly unfinished |
 
 **Authoritative for:** ultra suspend, the rockchip suspend driver, the
@@ -68,6 +68,15 @@ and `doc/artifacts/pinenote-ultra-r12-20260808/`.
 anything about wake sources under ultra; the tps65185 resume work.
 
 ### `https://git.sr.ht/~hrdl/pinenote-dist`
+
+**Cloned locally 2026-08-25** to `~/src/reference/pinenote-dist` (main
+tip `3e228db`, 984 KiB) for the direct-mode work — see
+`doc/direct-mode-adoption.md` P0. Deliberately **outside** the wilkbook
+checkout: it holds `bin/wbf_to_custom.py`, and running it produces
+`custom_wf.bin`, which is **per-device calibration data under the same
+never-bundle rule as `ebc.wbf`**. The CI safety gate was extended the
+same day to reject a tracked `custom_wf` or any file carrying the
+`CLUT0002` magic, because it previously could not see either.
 
 The Arch distribution: mkosi build, custom packages, sway/e-ink
 integration, published signed images. Small (66 commits at 2026-06-23).

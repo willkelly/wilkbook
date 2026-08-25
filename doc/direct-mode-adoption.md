@@ -152,19 +152,58 @@ gate; a red gate stops the phase rather than deferring the problem.**
 ### P0 — offline de-risking, no kernel code *(mostly done, all rung 1)*
 
 - ✅ **Harness goes aarch64.** Done 2026-08-24, `907efce`.
-- **Split cross and native build trees.** They share `build/` today, and
-  a stale aarch64 `.o` breaks the native link with a confusing
-  wrong-format error. Cheap, and it bites immediately otherwise.
-- **Port hrdl's `Sim`** (the Python simulator of the two-level counter
-  scheduler inside `wbf_to_custom.py`) into our harness as a reference
-  model. This is the oracle everything downstream differentials against.
-- **Build the CLUT differential**: `wbf-info --dump-lut` versus
-  `wbf_to_custom.py` output, on our own `ebc.wbf`. This is D1's
-  correctness gate *and* the upstream offer.
+- ✅ **hrdl's tree is reachable and has not moved.** `v6.19_ebc_custom` tip
+  is `819ba1724a6f` — byte-identical to the pin in
+  `doc/hrdl-evaluation.md`, so that evaluation is current, not stale.
+  `pinenote-dist` cloned to `~/src/reference/` (984 KiB; the register's
+  `--depth --single-branch` rule matters — sr.ht silently ignores
+  `--filter=blob:none`).
+- ✅ **THEIR COMPILER RUNS ON OUR WAVEFORM.** This was the input-format
+  risk and it is retired: `wbf_to_custom.py` against this device's own
+  2 MiB `ebc.wbf` produces a valid **229,584-byte** `custom_wf.bin`,
+  magic `CLUT0002`, **14 temperature bins**, first bin 0–3 °C. We now
+  have a reference artifact to differential against.
+- **Split cross and native build trees.** Still to do. They share
+  `build/` today, and a stale aarch64 `.o` breaks the native link with a
+  confusing "file in wrong format" — this bit during the 2026-08-24 probe.
+- **Port hrdl's `Sim`** into the harness as a reference model. It is a
+  dataclass at `wbf_to_custom.py:29` (`outer`, `inner`, `i`, `phases`,
+  `history`) — small.
+- **Build the CLUT differential.** Our decode versus theirs.
 
-**Gate:** the differential agrees on every temperature bin and sequence.
-If our independent waveform decode disagrees with his compiler, we do not
-yet understand the format and nothing later is trustworthy.
+**D1 is much cheaper than §D1 estimated.** The compiler is **271 lines**
+plus a 334-line `read_file.py` WBF parser — and *we already have the
+parser*, in C, tested: `wbf-info --dump-lut` decodes a (waveform,
+temperature) LUT to `codes[num_phases][from][to]` and cross-checks itself.
+So the C reimplementation is run-length encoding per (from,to) pair plus
+`CLUT0002` serialisation **on top of a decoder we already trust**, not
+605 lines from scratch. Their Python needs numpy and pandas; ours needs
+neither.
+
+**Two things the systemd unit told us that the plan had wrong.**
+`pinenote-hrdl-convert-waveform.service` runs the compile, then `mv`, then
+**`mkinitcpio -P`**, then `modprobe -r rockchip_ebc; modprobe
+rockchip_ebc`.
+
+1. The `mkinitcpio` step is because *their* driver needs the firmware in
+   the initramfs. **Ours may not**: `pinenote-ebc-modprobe-service-type`
+   loads the module from a shepherd one-shot ordered after
+   `pinenote-waveform`, so the firmware path is already populated before
+   modprobe. Our existing ordering probably accommodates the CLUT compile
+   with no initrd work — worth confirming, but it makes D1 smaller again.
+2. Their `ExecCondition` is *compile-once-if-absent*, the same shape as
+   our waveform installer's "destination exists → exit 0" — which
+   `doc/configuration.md`'s neighbour issue #12 §7 already flags as a
+   hazard, because a stale artifact then wins forever with no checksum.
+   Adding a second derived artifact under the same pattern **compounds an
+   existing bug**. Whatever we build should checksum.
+
+**A safety gap was closed before it could bite** (2026-08-25). The CI
+gate grepped `\.wbf$|vcom` and **could not see `custom_wf.bin`** — which
+is the same calibration data in another encoding, and falls under the
+same never-bundle rule. Extended to match `custom_wf` and to reject any
+tracked file carrying the `CLUT0002` magic. Done now, while the count of
+such files in existence is still zero.
 
 ### P1 — the CLUT compiler (D1)
 
