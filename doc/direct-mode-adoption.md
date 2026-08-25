@@ -9,6 +9,18 @@ criteria at the bottom still apply.
 
 Read `doc/hrdl-evaluation.md` first — this document assumes it.
 
+**Decision (operator, 2026-08-25): we ship ONE image.** The
+`reader-direct` flavor is **scaffolding for the experiment, not a product
+line**. The gate is embrace-or-reject, decided on glass: *embrace* means
+the `reader` flavor itself moves to the direct-mode kernel and the
+scaffolding is deleted; *reject* means the same deletion with the
+shipping driver unchanged. Either way, the next prealpha tag ships
+`reader`, singular — never a direct/non-direct pair. Nothing
+direct-mode-related may therefore grow roots the deletion would tear:
+no doc may tell a user to choose between flavors, and no service may
+exist only in the direct flavor without a note that it dies or graduates
+with the decision.
+
 ## Why now
 
 `doc/hrdl-evaluation.md` rejected the driver swap with an explicitly
