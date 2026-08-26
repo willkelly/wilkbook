@@ -74,7 +74,10 @@ local base_env = {
     EV_SYN = 0, EV_KEY = 1, EV_ABS = 3,
     ABS_X = 0, ABS_Y = 1, ABS_PRESSURE = 24,
     BTN_TOUCH = 330, SYN_REPORT = 0,
-    FB_W = 1872, FB_H = 1404, FB_STRIDE = 7488,
+    -- the direct driver's real geometry: RGB565, stride 3744.  Assuming
+    -- the shipping driver's 32 bpp here is exactly the bug the live
+    -- session hit, so the harness pins the 16 bpp arithmetic.
+    FB_W = 1872, FB_H = 1404, FB_STRIDE = 3744, FB_BYPP = 2,
 }
 local function env()
     local e = {}
@@ -246,14 +249,60 @@ do
     report(syncs == 1, "exactly one publish (fsync) per batch")
     local seen = {}
     for _, w in ipairs(trace) do seen[w.off] = w.len end
-    report(seen[5 * 7488 + 3 * 4] == 12,
-        "the 3..5 run lands at y*stride + x*4 with 3 pixels of black")
-    report(seen[5 * 7488 + 9 * 4] == 4, "the lone pixel is its own 4-byte run")
+    report(seen[5 * 3744 + 3 * 2] == 6,
+        "the 3..5 run lands at y*stride + x*bypp with 3 RGB565 pixels of black")
+    report(seen[5 * 3744 + 9 * 2] == 2, "the lone pixel is its own 2-byte run")
     local black = true
     for _, w in ipairs(trace) do
         if w.s ~= string.rep("\0", w.len) then black = false end
     end
     report(black, "ink is black (all-zero XR24)")
+end
+
+-- ------------------------------------------------- fb geometry
+do
+    local e = env()
+    local geo = load_with(sc_extract("fb_geometry"), e, "fb_geometry")
+    local root = "build/fake-fb"
+    os.execute("rm -rf " .. root .. " && mkdir -p " .. root
+               .. "/class/graphics/fb0")
+    local function put(name, v)
+        local f = io.open(root .. "/class/graphics/fb0/" .. name, "w")
+        f:write(v)
+        f:close()
+    end
+    put("virtual_size", "1872,1404\n")
+    put("stride", "3744\n")
+    put("bits_per_pixel", "16\n")
+    local w, h, stride, bypp = geo(root)
+    report(w == 1872 and h == 1404 and stride == 3744 and bypp == 2,
+        "fb geometry is read from sysfs (the direct driver's RGB565)",
+        string.format("%s %s %s %s", tostring(w), tostring(h),
+                      tostring(stride), tostring(bypp)))
+    put("bits_per_pixel", "32\n")
+    put("stride", "7488\n")
+    local _, _, s32, b32 = geo(root)
+    report(s32 == 7488 and b32 == 4,
+        "the shipping driver's XR24 geometry reads correctly too")
+    os.execute("rm -rf " .. root)
+    report(select("#", geo("build/does-not-exist")) == 1
+           and geo("build/does-not-exist") == nil,
+        "missing sysfs returns nil so the caller keeps its defaults")
+
+    local clear = load_with(sc_extract("clear_white"), env(), "clear_white")
+    local offs, lens, white = {}, {}, true
+    local fake = {
+        seek = function(_, _, off) offs[#offs + 1] = off end,
+        write = function(_, s)
+            lens[#lens + 1] = #s
+            if s ~= string.rep(string.char(255), #s) then white = false end
+        end,
+    }
+    clear(fake)
+    report(#offs == 1404 and offs[1] == 0 and offs[2] == 3744,
+        "clear_white writes every row at its stride offset")
+    report(lens[1] == 1872 * 2 and white,
+        "each cleared row is full-width 0xFF (white in RGB565)")
 end
 
 -- ------------------------------------------------- device discovery

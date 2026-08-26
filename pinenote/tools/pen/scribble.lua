@@ -51,7 +51,35 @@ local BTN_TOUCH = 330
 local SYN_REPORT = 0
 local INPUT_EVENT_SIZE = 24
 
-local FB_W, FB_H, FB_STRIDE = 1872, 1404, 7488
+-- Framebuffer geometry is read from the KERNEL at startup, never
+-- assumed: the shipping driver's fbdev is XR24 (32 bpp, stride 7488)
+-- but hrdl's direct driver exposes RGB565 (16 bpp, stride 3744) -- the
+-- blit is even named rgb565.  Assuming 32 bpp on the direct image drew
+-- ink at twice the vertical position and wrote the lower half of every
+-- stroke past the end of the buffer (2026-08-26, live).  Black is
+-- all-zero bytes in both formats, which is the only pixel value this
+-- tool needs.  The defaults below are the direct driver's, used only
+-- if sysfs cannot be read.
+local FB_W, FB_H, FB_STRIDE, FB_BYPP = 1872, 1404, 3744, 2
+
+-- Read width/height, stride, and bytes-per-pixel from
+-- /sys/class/graphics/fb0.  Returns w, h, stride, bypp or nil.
+local function fb_geometry(sys_root)
+    local function read1(name)
+        local f = io.open(sys_root .. "/class/graphics/fb0/" .. name, "r")
+        if not f then return nil end
+        local v = f:read("*l")
+        f:close()
+        return v
+    end
+    local size = read1("virtual_size")
+    local stride = tonumber(read1("stride") or "")
+    local bpp = tonumber(read1("bits_per_pixel") or "")
+    if not (size and stride and bpp) then return nil end
+    local w, h = size:match("^(%d+),(%d+)")
+    if not w then return nil end
+    return tonumber(w), tonumber(h), stride, math.floor(bpp / 8)
+end
 
 local O_RDONLY, O_RDWR = 0, 2
 
@@ -65,6 +93,7 @@ local opt = {
     sys_root = "/sys",
     dev_root = "/dev",
     verbose = true,
+    clear = false,
 }
 do
     local i = 1
@@ -79,6 +108,7 @@ do
         elseif a == "--sys-root" then i = i + 1; opt.sys_root = arg[i]
         elseif a == "--dev-root" then i = i + 1; opt.dev_root = arg[i]
         elseif a == "--quiet" then opt.verbose = false
+        elseif a == "--clear" then opt.clear = true
         end
         i = i + 1
     end
@@ -218,14 +248,24 @@ local function write_ink_rows(fh, rows, sync)
                 i = i + 1
                 x1 = xs[i]
             end
-            fh:seek("set", y * FB_STRIDE + x0 * 4)
-            fh:write(string.rep("\0", (x1 - x0 + 1) * 4))
+            fh:seek("set", y * FB_STRIDE + x0 * FB_BYPP)
+            fh:write(string.rep("\0", (x1 - x0 + 1) * FB_BYPP))
             runs = runs + 1
             i = i + 1
         end
     end
     sync()
     return runs
+end
+
+-- Fill the whole framebuffer with white (0xFF is white in both XR24
+-- and RGB565) -- a fresh page for a scribbling session.
+local function clear_white(fh)
+    local row = string.rep(string.char(255), FB_W * FB_BYPP)
+    for y = 0, FB_H - 1 do
+        fh:seek("set", y * FB_STRIDE)
+        fh:write(row)
+    end
 end
 
 local function now_us()
@@ -254,6 +294,18 @@ if fd < 0 then
     os.exit(1)
 end
 log("stylus: %s (%s)", devpath, tostring(devname))
+
+do
+    local w, h, stride, bypp = fb_geometry(opt.sys_root)
+    if w then
+        FB_W, FB_H, FB_STRIDE, FB_BYPP = w, h, stride, bypp
+        log("fb: %dx%d stride=%d %d bytes/px (from sysfs)",
+            FB_W, FB_H, FB_STRIDE, FB_BYPP)
+    else
+        log("fb: sysfs geometry unreadable -- assuming %dx%d stride=%d %d bytes/px",
+            FB_W, FB_H, FB_STRIDE, FB_BYPP)
+    end
+end
 
 -- Axis ranges straight from the device; a digitizer is not 0..panel.
 local geom = {
@@ -289,6 +341,12 @@ local fb_fd = ffi.C.open(opt.fb, O_RDWR)
 local function publish()
     fh:flush()
     if fb_fd >= 0 then ffi.C.fsync(fb_fd) end
+end
+
+if opt.clear then
+    clear_white(fh)
+    publish()
+    log("page cleared white")
 end
 
 local NEV = 64

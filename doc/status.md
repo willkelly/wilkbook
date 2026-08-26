@@ -3,6 +3,41 @@
 Last updated: 2026-08-26. Update protocol: add a dated entry at the top
 after every hardware session; entries are per-device/per-operator.
 
+## 2026-08-26 (part 7) — first pen session: "holy crap, amazing"
+
+The D8 instruments went on glass the same hour they were built, ahead
+of the formal experiment, because the operator wanted a feel. Results:
+
+- **`ebc-mode.lua` drove the direct driver's MODE and RECT_HINTS
+  ioctls on hardware for the first time** — FAST mode confirmed live
+  (`mode=1`), default hint set to 0 (Y1+THRESHOLD, REDRAW off).
+- **The scribbler's software path is essentially free: 0.2–1.5 ms**
+  from pen event to fsync-returned, logged per batch across ~14k
+  batches. Whatever the hand feels is driver+glass.
+- **Operator verdicts**: "the responsiveness is extremely good" — and
+  after the rendering fix below, **"holy crap, amazing."** D8's felt
+  half is in; the formal 240 fps nib-to-ink number is still owed, but
+  the embrace side of the scale now has real weight. Combined with
+  part 6's reading verdict, the campaign is now: keep the direct
+  driver, fix reading quality on it (better optics + the
+  PHASE_SEQUENCE user-mode path are the standing directives).
+- **The direct driver's fbdev is RGB565** — 16 bpp, stride 3744 — not
+  the shipping driver's XR24/7488. The scribbler initially assumed
+  32 bpp: ink at twice the vertical position, the lower half of every
+  stroke written past the end of the buffer, calibration squares drawn
+  sheared or entirely off-buffer. Diagnosed live from
+  `/sys/class/graphics/fb0`; the tool now reads geometry from sysfs at
+  startup (harness-pinned for both formats).
+- **Touch mapping needs NO transform**: the operator traced the glass
+  perimeter and the mapped coordinates walked the framebuffer
+  perimeter exactly — digitizer and panel share landscape-native axes
+  (physical-portrait top-left = fb bottom-left, corners to corners).
+- **Latent bug found by the same mistake**: `autosuspend.lua`'s sleep
+  banner hardcodes the 32 bpp geometry, so on the direct image the
+  banner draws sheared half-tone garbage into the top half of the
+  panel (unnoticed until now because nobody looked at a sleeping study
+  device). Needs the same sysfs-geometry fix; filed.
+
 ## 2026-08-26 (rig session, part 6) — the landmine image: both operational traps fixed, deployed, and proven on glass
 
 Follow-up to part 5's two landmines, same night. The `3405a1c9…` image
