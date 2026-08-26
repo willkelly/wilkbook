@@ -34,6 +34,17 @@
 #                               grepped), and every override must call
 #                               publish() with publish-before-wash
 #                               ordering (doc/refresh-policy.md).
+#   * test-rotation-decision.lua -- the rotation-decision hierarchy the
+#                               rung-4v D5 investigation mapped
+#                               (2026-08-25): closed_rotation_mode is
+#                               the boot decider; lock_rotation gates
+#                               the doc-sidecar/copt and FM restores;
+#                               the orientation state file is reachable
+#                               only through toggleGSensor, which
+#                               nothing on the boot path calls.  Source
+#                               pins over the bundle's verbatim files,
+#                               so a KOReader upgrade that moves any
+#                               link fails loudly.
 #
 # Usage: run-tests.sh [/gnu/store/...-koreader-bin-...]
 #
@@ -124,6 +135,8 @@ run_case test-refresh-seam.lua "$tool_dir/test-refresh-seam.lua" \
   "$koreader" "$device_lua"
 run_case test-continuous-gesture-cost.lua \
   "$tool_dir/test-continuous-gesture-cost.lua" "$koreader" "$koreader_device"
+run_case test-rotation-decision.lua "$tool_dir/test-rotation-decision.lua" \
+  "$koreader" "$device_lua"
 
 # Required-device loss is a poll/HUP contract, independent of input-event
 # payloads. Exercise both registrations and an optional node independently.
