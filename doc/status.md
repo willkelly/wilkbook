@@ -3,7 +3,64 @@
 Last updated: 2026-08-26. Update protocol: add a dated entry at the top
 after every hardware session; entries are per-device/per-operator.
 
-## 2026-08-26 (rig session, part 3) — the page-turn program: two-pass refuted, the class experiment judged, the washer retuned
+## 2026-08-26 (rig session, part 4) — the INT-first deploy stalls on the bug it fixes: the study image hangs in shutdown
+
+Deploy attempt for the INT-first-stop image (`cc339412…`, built and
+SHA'd, deploy script staged). The `reboot` reached the running study
+image over SSH — and the shutdown **hung partway and stayed hung**. The
+device is parked in that state awaiting a power-button cycle (operator
+unavailable); a UART watcher is armed to catch U-Boot and select os1
+whenever the cycle happens.
+
+**The evidence chain, all over UART/network, no panel:**
+
+- The boot-slot capture's last line is fbcon restoring (`Console:
+  switching to colour frame buffer device`) — the reader stopped, then
+  400 s of silence; U-Boot never ran.
+- Ping answers and the ttyS2 line echoes keystrokes (kernel alive, IP
+  configured), but sshd **refuses** connections (listener closed, not
+  filtered) and no getty ever re-prompts — userspace torn down to the
+  halfway point and stuck.
+- Console logins can't rescue it: `root` at a live prompt got a getty
+  echo but no `login`/shell response in 30 s+, with correct LF
+  terminators, twice. Nothing on the tty has a reader.
+
+Prime suspect: the shutdown-path incarnation of the known stop-handler
+stall — the deployed (old) image's reader-session `stop` blocks PID 1
+in `usleep`, starving shepherd's fibers; at shutdown every service stop
+runs on that starved scheduler. This is precisely what the INT-first
+stack on deck replaces (lab-measured 0.654 s vs 8 s per stop). The
+shutdown hang is consistent with, and strengthens, that fix's rationale
+— but the root cause on-device is unproven (post-mortem: nothing will
+survive in /tmp; `/var/log/messages` on p6 may hold the shutdown tail —
+harvest from os1 before booting os2, per `doc/device-access.md`).
+
+**Two instrument findings, one fixed in-tree tonight:**
+
+1. **No serial rescue exists for a hung device.** The inherited
+   defconfig sets `CONFIG_MAGIC_SYSRQ=y` but explicitly unsets
+   `CONFIG_MAGIC_SYSRQ_SERIAL` — a BREAK on the plumbed UART does
+   nothing, so a wedged userspace costs a user-present power-cycle even
+   with the cable in. Fixed in the forward-port patch:
+   `MAGIC_SYSRQ_SERIAL=y` guarded by
+   `MAGIC_SYSRQ_SERIAL_SEQUENCE="sysrq"` (BREAK alone stays inert — the
+   floating-RX noise concern that presumably motivated the off setting
+   doesn't survive a required 5-byte sequence). Takes effect with the
+   next deployed kernel; the currently-flashed images predate it.
+2. **A hung shutdown wears the live system's face.** The first read of
+   the evidence was "U-Boot fell through and rebooted os2": a
+   `pinenote-reader-direct login:` prompt answered the UART probe. It
+   was the *dying* session's getty — shutdown had stalled before
+   reaching it. The login attempt that followed consumed that last
+   getty (login(1) exec'd into the starved system and never came back;
+   wedged shepherd, no respawn), closing the only interactive door.
+   Diagnostic for next time: prompt-then-echo-without-response after a
+   reboot command means the OLD system mid-hang, not a fresh boot —
+   check uptime/dmesg BEFORE typing a login name at it, because the
+   attempt itself is destructive to the recovery path.
+
+Also confirmed the hard way: the only ttyACM on this host is the MOTU
+M4 (the documented trap) — no gadget fallback while os2 is down.
 
 The operator's directive: reading first, pen later; direct mode is the
 floor either way. The night's instrumentation dismantled most of the

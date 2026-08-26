@@ -687,9 +687,25 @@ Record anything that took a hardware session to discover:
   it via `linux-pinenote-debug-extract-fbs.patch` (offline-proven by
   the ebc-logic dbg suite; grabber/decoder in
   `pinenote/tools/ebc-logic`; the primary kernel keeps the stub).
-  Still open: `CONFIG_DYNAMIC_DEBUG`, `CONFIG_MAGIC_SYSRQ_SERIAL`, and
-  `CONFIG_DETECT_HUNG_TASK` are all off (the last two also block the
-  qemu-virt udev-hang diagnosis).
+  Still open: `CONFIG_DYNAMIC_DEBUG` and `CONFIG_DETECT_HUNG_TASK` are
+  off (the latter also blocks the qemu-virt udev-hang diagnosis;
+  `MAGIC_SYSRQ_SERIAL` came off this list 2026-08-26, below).
+- `CONFIG_MAGIC_SYSRQ_SERIAL=y` +
+  `CONFIG_MAGIC_SYSRQ_SERIAL_SEQUENCE="sysrq"` (2026-08-26). The
+  inherited defconfig had serial sysrq explicitly off, so when the
+  study image hung mid-shutdown with the UART plumbed in — kernel
+  echoing keystrokes, userspace dead — there was NO software rescue:
+  BREAK was inert, and recovery cost a user-present power-button cycle
+  (`doc/status.md` 2026-08-26 part 4). The likely reason it was off is
+  the floating UART RX line (no cable attached in normal use), where
+  noise can register as a BREAK; the sequence guard answers exactly
+  that — after a BREAK the kernel requires the literal bytes `sysrq`
+  before accepting one sysrq key, so noise cannot fire an accidental
+  reboot/crash. Rescue recipe from the host, cable attached:
+  `python3 -c 'import termios,os; fd=os.open("/dev/ttyUSB0",os.O_RDWR);
+  termios.tcsendbreak(fd,0)'`, then send `sysrq` + the key (`s` sync,
+  `u` remount-ro, `b` reboot). Unproven on glass until a post-2026-08-26
+  kernel ships.
 
 ## Known driver quirks pinned by the host test tools (2026-07-04)
 
