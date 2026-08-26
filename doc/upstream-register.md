@@ -825,3 +825,35 @@ after. If auto-suspend ever runs on a 7.1 image before this is
 resolved, its suspend hook must do the same or every idle suspend will
 silently abort at ~full awake draw — the failure mode is a device that
 never sleeps while looking asleep.
+
+## 19. Direct-mode driver: redraw_delay > 0 parks damage indefinitely from idle
+
+**Status: needs-verification against hrdl's intent before any send —
+this may be working-as-designed for its actual use case.**
+
+**What we saw (2026-08-26, on glass, `doc/status.md`):** with
+`redraw_delay` set nonzero (tried 10000 and 1) and the panel idle,
+every subsequent damage submission — page turns included — is parked
+and never drives: zero EBC interrupts, framebuffer content visibly
+stale. The waiting counter (`waiting_remaining = redraw_delay`,
+`rockchip_ebc.c` work loop) decrements per *hardware frame*, and an
+idle panel generates no frames, so the countdown never advances and
+nothing ever schedules. A `GLOBAL_REFRESH` recovers (the wash bypasses
+the waiting queue and its frames drain the counters).
+
+**Why it is plausibly by design:** the knob pairs with the MODE ioctl's
+`set_redraw_delay` and makes sense for FAST-mode handwriting, where
+continuous strokes keep frames flowing and delayed redraws ride behind
+the pen. Nothing in the driver documents the from-idle behaviour.
+
+**Why it still deserves a report:** the failure is silent and total
+from a reader's perspective — a sysfs write any experimenter would try
+("defer the ghost-clean a little") freezes the screen with no error,
+no log line, and no timeout. A one-line doc comment or an idle-kick
+(schedule a frame when damage waits on a dead panel) would fix the
+trap.
+
+**What has to be true first:** read his dist's actual use of
+set_redraw_delay to confirm the FAST-mode pairing; reproduce on his
+unmodified branch (ours differs only by the DT hunk and build glue in
+this area).

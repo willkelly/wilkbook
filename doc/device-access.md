@@ -185,6 +185,37 @@ UART or a human at the menu.
   7488) and looking at it — separates render-side from glass-side
   instantly.
 
+## Launching KOReader by hand (bypassing reader-session)
+
+When shepherd's reader-session is in the way (crash-loop diagnosis, a
+specific book, extra CLI flags like `-d` for input tracing), launch the
+bundle directly — but replicate the service's environment EXACTLY.
+`env -i` with only HOME/KO_HOME *works* and *lies*: KOReader comes up,
+renders, turns pages — on its bundled fallback fonts, because
+`EXT_FONT_DIR` is gone. An entire 2026-08-26 session's quality
+judgments carried that confound before the operator caught it on video
+(the tell: guile.epub paginates to 3716 pages under fallbacks, 3804
+under the seeded fonts). The full recipe, matching
+`reader-session.scm`:
+
+```
+KO=$(ls -d /gnu/store/*-koreader-bin-*/lib/koreader | head -1)
+cd $KO && env -i \
+  HOME=/root KO_HOME=/root/.config/koreader \
+  PATH=/run/current-system/profile/bin \
+  LC_ALL=en_US.UTF-8 \
+  EXT_FONT_DIR=/run/current-system/profile/share/fonts/local \
+  LD_LIBRARY_PATH=$KO/libs:$KO \
+  ./luajit reader.lua [-d] [/path/to/book.epub]
+```
+
+Stop the service first (`herd stop reader-session` — it does NOT stop
+the orientation bridge, which is a dependency, not a dependent). Kill a
+manual reader with `pkill -f "luajit reader[.]lua"` — the bracket dodge
+matters, and never in the same shell invocation that also *spells out*
+a launch command containing the plain string, or pkill matches your own
+command line and kills the session (three times, 2026-08-25/26).
+
 ## What stays manual, and per-operator permissions
 
 Destructive steps — dd to os2, reboots (which need a human to pick the

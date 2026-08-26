@@ -1031,12 +1031,10 @@ reader before any ink work.
 **Three separable causes** (source references in
 `doc/direct-mode-adoption.md` P4):
 
-1. Two passes per turn: no publish-on-call and no defio knob in the
-   direct-mode driver, so `drm_fbdev_shmem`'s hard-coded `HZ/20`
-   (50 ms) deferred-io window splits every turn's damage into ≥2
-   flushes. The shipping driver needed publish-on-call +
-   `defio_delay_ms=250` for 8/8 single-pass turns; both mechanisms are
-   ours and port.
+1. ~~Two passes per turn~~ **REFUTED on glass 2026-08-26**: ftrace
+   shows one flush per repaint — the shim's fsync publishes through
+   stock `fb_deferred_io_fsync`, so the port is unnecessary ("or prove
+   an equivalent exists": proven). Struck, kept for the record.
 2. Untuned waveform class: all damage takes `default_hint`
    (`Y4 | THRESHOLD | REDRAW`) because no intent mapping exists yet —
    nothing reproduces `doc/refresh-policy.md`'s tuned per-intent

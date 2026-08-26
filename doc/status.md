@@ -3,6 +3,73 @@
 Last updated: 2026-08-26. Update protocol: add a dated entry at the top
 after every hardware session; entries are per-device/per-operator.
 
+## 2026-08-26 (rig session, part 3) — the page-turn program: two-pass refuted, the class experiment judged, the washer retuned
+
+The operator's directive: reading first, pen later; direct mode is the
+floor either way. The night's instrumentation dismantled most of the
+pre-registered P4 model:
+
+**"Two-pass by construction" is REFUTED.** ftrace on the fb blit
+(`rockchip_ebc_blit_fb_rgb565_y4_hints_neon`) shows exactly one flush
+per input-triggered repaint — our KOReader shim's fsync publishes
+through his stock `fb_deferred_io_fsync` path, so publish-on-call works
+on ANY fbdefio driver and the planned defio/publish-on-call port is
+unnecessary. (P4 said "or prove an equivalent exists"; proven.)
+
+**REDRAW is stripped at drive time at the shipping default.** The
+`vbslq` force-mask in `schedule_advance_neon` clears the REDRAW bit
+from every pixel when `redraw_delay==0` — turns were always diff-only;
+the "full-page shimmer" theory was wrong. The dirt = the intrinsic
+GL16 transition (~22 active phases ≈ 260 ms at the cold bin) plus
+bounded ghost accumulation.
+
+**`redraw_delay` cannot defer ghost-cleans from idle** — its countdown
+ticks per hardware frame, an idle panel generates none, so ANY nonzero
+value parks all damage indefinitely (proven twice: rd=10000 and rd=1
+both wedged the queue; a wash recovers). It is a FAST-mode batching
+knob, not a reading-mode one. Register item 19.
+
+**The CLUT classes decoded** (wbf-clut -v against the device's own
+waveform): active run lengths at the cold bin DU 3 / DU4 6 / GC16 9 /
+GL16 22 phases, padded sequence lengths ~10x that (which is what IRQ
+counting measures — 44/37/37 frames per turn for GL16/DU4/DU, ~zero
+optical difference: settle medians 200/200/133 ms on the rig camera).
+
+**The GL16←GC16 slot experiment: BUILT, RUN, REJECTED.** New
+`wbf-clut --class-source=TARGET:SOURCE` (merged; identity is pinned
+byte-identical, the remap pinned to take) compiled a table with page
+turns on GC16's short punchy rows; deployed by live unbind/swap/bind.
+Operator verdict on side-by-side video: **stock GL16 is better** — the
+GC16-slot turns ghost MORE (full prior-page words readable), plausibly
+because wash-pattern rows under-drive arbitrary partial transitions —
+the exact thing GL16 exists for. Stock restored (and a reboot would
+have restored it anyway — the stamp mechanism makes remapped tables
+session-scoped). The crafting direction shifts to hand-built rows,
+which needs DC-balance analysis tooling in wbf-clut first.
+
+**Ghosts are bounded, not compounding**: mean-normalized camera diff
+0.0695 after 12 washless turns, 0.0625 after 24, floor 0.0487.
+
+**The manual-launch font bug**: every `env -i` manual KOReader launch
+this whole session dropped `EXT_FONT_DIR` (and PATH, LC_ALL) — all
+manual-session renders used KOReader's bundled fallback fonts, not the
+seeded ones. Caught by the operator on video; proven by pagination
+(guile.epub: 3716 pages under fallbacks, 3804 under the real fonts).
+The full service environment is now in `doc/device-access.md`; earlier
+quality impressions carry this confound (A/B comparisons were
+same-fonts both sides, so relative judgments stand).
+
+**The practical lever landed: idlewasher retune.** The knobs were
+already G-settings; the device now runs `idlewasher_idle_s=12,
+debt_min=8` (was 45/15) so the ghost-clean lands in natural reading
+pauses. Demonstrated: 10 turns → wash fired 13 s into the pause at
+debt=12. DEVICE-ONLY for now — the repo seed changes only after the
+operator's felt verdict over real reading.
+
+State left: stock CLUT restored and verified, manual reader up with
+correct fonts, washer retuned, autosuspend still pinned off, battery
+~60%.
+
 ## 2026-08-26 (same rig session, continued) — D5: all four orientations on glass; D6: ultra suspend survives the swap; the turn-key inversion; corrected power
 
 **D5 RESOLVED AND PROVEN — rotation works on the direct driver.** The

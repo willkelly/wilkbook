@@ -360,6 +360,23 @@ is **embrace-or-reject, after which one image ships either way**
   flashing and redrawing per page turn than a smooth read wants.** That
   is the pre-registered two-pass expectation confirmed on glass, and it
   is now the driving item for the polish phase of the plan.
+- **The page-turn program got its instruments, and the instruments
+  killed two planned fixes** (2026-08-26): turns were already
+  single-flush (the fsync publish works through the stock driver — the
+  planned defio port is unnecessary) and already diff-only (the REDRAW
+  ghost-clean is stripped at the shipping default). What remains of
+  "dirty transitions" is the waveform transition itself plus bounded
+  ghost residue. A new compiler knob (`wbf-clut --class-source`) let a
+  whole waveform-class swap be tried on glass in one evening — turns on
+  GC16's shorter rows — and the operator's eyes rejected it (more
+  residue: wash-pattern rows under-drive partial transitions; GL16
+  stays). The practical fix that DID land: the idle washer's cadence
+  knobs (already settings) retuned so the ghost-clean fires in natural
+  reading pauses (12 s) instead of only long ones (45 s) — device-side
+  for now, seeded into the profile after the operator's felt verdict.
+  Also caught: hand-launched KOReader sessions were rendering fallback
+  fonts (a dropped `EXT_FONT_DIR`); the faithful launch recipe is now
+  in `doc/device-access.md`.
 - **Direct mode costs nothing at idle** (2026-08-26, wired image):
   reader idle measured **155.3 mA** against the shipping ledger's
   156.9 mA under identical conditions — parity. Real page turns at an
