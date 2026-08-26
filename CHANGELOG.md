@@ -31,7 +31,12 @@ says otherwise.
   the reader stays awake and reachable, an operator's stop holds
   suspend off — and re-arms itself the moment the reader is back.
   Offline-proven in `test-autosuspend-policy.lua` (three-way policy,
-  both suspend paths, the requirement stays dropped).
+  both suspend paths, the requirement stays dropped), then
+  **glass-proven the same night**: the daemon outlived a reader stop,
+  logged the hold-off and the re-arm, and completed two full rails-off
+  suspend cycles through its own gadget quiesce — with the gadget in
+  the exact bound-unattached state that aborts a manual suspend on
+  7.1.8 (`doc/status.md` 2026-08-26 part 6).
 
 - **Standby has a measured number for the first time.** Six days and
   four hours unplugged, never on a charger: **5.47 mA sitting idle** and

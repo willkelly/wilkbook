@@ -3,6 +3,65 @@
 Last updated: 2026-08-26. Update protocol: add a dated entry at the top
 after every hardware session; entries are per-device/per-operator.
 
+## 2026-08-26 (rig session, part 6) — the landmine image: both operational traps fixed, deployed, and proven on glass
+
+Follow-up to part 5's two landmines, same night. The `3405a1c9…` image
+carries the sysrq mask fix (`MAGIC_SYSRQ_DEFAULT_ENABLE=0x0`) and the
+autosuspend fbcon gate (the shepherd requirement on reader-session is
+gone — `pinenote/services/autosuspend.scm`, `autosuspend.lua`,
+offline-pinned in `test-autosuspend-policy.lua`). Deployed by the full
+write protocol; boots hands-off (first probe -22 by design at 2.7 s,
+clean probe + fb0 at 9.0 s, CLUT 229,584 B).
+
+**Proven on glass, in order:**
+
+- **sysrq ships masked**: `/proc/sys/kernel/sysrq` = 0 at boot — the
+  noise-safe posture is now the default, no hand-parking.
+- **The daemon outlives the reader**: it starts six seconds BEFORE
+  reader-session now (no requirement), and `herd stop reader-session`
+  (0.417 s — INT-first again) left it running where the old image's
+  daemon died. With `enabled=1` and no reader it logged
+  `reader-session is down (fbcon bound) -- holding off auto-suspend`
+  and refused to sleep the readerless device; on `herd start` it
+  logged `auto-suspend active again` — no manual `herd start
+  pinenote-autosuspend`, ever.
+- **The daemon's gadget quiesce beats the dwc3 abort**: with the ACM
+  gadget BOUND and unattached — the exact state that hard-aborts a
+  manual `echo mem` on 7.1.8 (register item 18) — the daemon completed
+  two full rails-off cycles at test timers (idle=30/backstop=90):
+  suspend, RTC wake at 86/88 s, ~17 s settle, re-suspend, coulomb
+  telemetry in its log, and the UDC read `fcc00000.usb` again after
+  resume (restore worked). The manual-path register item stands; the
+  shipping path never hits it.
+
+**Two observations for the record:**
+
+1. Starting earlier, the daemon enumerated 7 input devices, not 8: the
+   missing one is `wilkbook-orientation` — the bridge's *synthetic*
+   uinput node, created after the daemon now starts (it only ever
+   rescans on eviction). Every hardware input is watched. Judged
+   benign-to-correct: rotation without touch should not hold the
+   device awake. Noted here so the count change doesn't read as a
+   regression later.
+2. **A staging race nearly flashed the wrong image, and the protocol
+   caught it structurally.** The first deploy run was launched while
+   the artifact/script rsync was still in flight; the on-device script
+   was still the previous one, so the protocol verified and re-flashed
+   the PREVIOUS image — correctly, against its own EXPECT. The tell
+   was the `DEPLOY OK` line naming the old SHA. Because the script and
+   its EXPECT travel together, a stale script can only ever re-deploy
+   the artifact it describes — it cannot flash a half-staged one. The
+   rerun with staging confirmed deployed `3405a1c9…` clean. Lesson for
+   the operator side: gate the launch on the staging task's completion
+   *notification*, not on a glance at its output file; and always
+   check the SHA in `DEPLOY OK` against the intended image.
+
+**Parked state**: os2 = `3405a1c9…`, reader up, washer retune
+re-applied (idle_s=12, debt_min=8), frontlight 153/153, autosuspend
+ENABLED at stock timers (300/3600) — the device is a working reader
+that sleeps on its own; SSH is intermittent by design again. os1
+untouched.
+
 ## 2026-08-26 (rig session, part 5) — the INT-first + sysrq image deploys clean; the stop is 0.484 s on glass; the serial rescue is proven and then re-modeled
 
 After the part-4 power-button recovery: os1 came up (the UART watcher
