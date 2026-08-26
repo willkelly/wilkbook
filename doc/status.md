@@ -3,6 +3,43 @@
 Last updated: 2026-08-26. Update protocol: add a dated entry at the top
 after every hardware session; entries are per-device/per-operator.
 
+## 2026-08-26 (part 8) — D8 CLOSED: 20 ms to ink in FAST, 40–60 ms in NORMAL, both pen-class
+
+The formal half of D8, from two 240 fps phone clips analyzed
+frame-by-frame (`doc/artifacts/pinenote-d8-pen-latency-20260826/`):
+
+| | FAST | NORMAL |
+|---|---|---|
+| software (event→fsync) | 0.3 ms | 0.3 ms |
+| nib → first ink | **~20 ms** (17–25) | **~40–60 ms** |
+| ink → fully dark | ~100 ms | ~250–290 ms |
+
+**The embrace threshold is met with margin** — and the surprise is
+NORMAL: the CLUT engine alone is inside pen-class, which is why the
+operator reported NORMAL "feels pretty much the same to write on."
+Both modes sit at/under the ~50–70 ms threshold hands can feel; FAST
+is 2× to first ink and ~3× to solid, and earns its keep at the
+margins (one NORMAL strike showed ink-free glass 90 ms after the nib
+left; one light tap left no ink at all). Physics cross-checks land:
+FAST first-visibility at 1–2 phases of its ~36 ms table-free drive;
+NORMAL's ~250–290 ms development matches GL16's ~260 ms sequence.
+
+**Product reframe this enables**: NORMAL — the same waveform lineage
+the shipping driver renders with, full grayscale — can carry both
+reading and writing; FAST becomes an opt-in sketch mode instead of a
+required posture. No mode management in the default experience. What
+direct mode still owes the reader is page-turn TRANSITION quality
+(the standing optics + PHASE_SEQUENCE workstreams), not rendering
+fidelity or pen latency. With part 7's felt verdicts and tonight's
+numbers, every D-rung of the embrace gate that can pass has passed.
+
+Analyst traps recorded in the artifact README: Samsung edit lists
+decode as DIFFERENT timelines through ffmpeg's `-i` vs lavfi `movie=`
+paths (frame indices silently disagree — cost three misaligned
+analyses); the dts-warning splice points bound where 4.17 ms/frame is
+true; and an ROI must match the mark's size (a 36×36 box hides an
+8 px dot).
+
 ## 2026-08-26 (part 7) — first pen session: "holy crap, amazing"
 
 The D8 instruments went on glass the same hour they were built, ahead
