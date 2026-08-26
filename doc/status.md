@@ -66,9 +66,22 @@ pauses. Demonstrated: 10 turns → wash fired 13 s into the pause at
 debt=12. DEVICE-ONLY for now — the repo seed changes only after the
 operator's felt verdict over real reading.
 
-State left: stock CLUT restored and verified, manual reader up with
-correct fonts, washer retuned, autosuspend still pinned off, battery
-~60%.
+**R-list opportunistic closes (same userspace as shipping):** R1 —
+`/etc/localtime` resolves to the configured zone (UTC default). R2 —
+the manuals shelf staged (538-doc `Manual pages.epub` present); opens
+measured **30.3 s uncached / 1.7 s cached**, with the catch that
+crengine caches are written only on clean close: SIGTERM (shepherd's
+stop, crashes) leaves zero-byte truncated caches and the next open
+pays the 30 s again, while SIGINT closes cleanly (8 MB cache written,
+proven). Work items: INT-before-kill in reader-session's stop;
+staging-time cache pre-warm (`doc/manuals.md`). R4 largely proven in
+passing: refresh seed honored (`full_refresh_count=0` respected on
+glass), fonts staged and rendering (via `EXT_FONT_DIR`), idlewasher
+G-settings read.
+
+State left: stock CLUT restored and verified, service reader running
+(washer retune persists via G-settings), autosuspend still pinned off,
+battery ~60%.
 
 ## 2026-08-26 (same rig session, continued) — D5: all four orientations on glass; D6: ultra suspend survives the swap; the turn-key inversion; corrected power
 
