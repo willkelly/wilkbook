@@ -14,7 +14,13 @@ video the flashing-per-turn cost that makes P4 the next display work.
 The wired image booted hands-off on 2026-08-26: CLUT compiled at boot,
 rebind at 10.1 s, reader up via shepherd with no crash-loop, washes on
 the resolved card, and reader-idle power at parity with shipping
-(155.3 vs 156.9 mA — `doc/status.md`). P4 onwards is still a plan, and
+(155.3 vs 156.9 mA — `doc/status.md`). Later the same night: **D5
+resolved and proven** (all four orientations on glass; the lever is
+`closed_rotation_mode`, pinned by `test-rotation-decision.lua`), **D6
+passed** (ultra rails-off suspend/resume with this driver; one dwc3
+gadget caveat, registered), and real-turn power measured (+59 mA at
+20 turns/min, ~41.5 frames/turn — the untuned hint is a power cost
+too). P4 onwards is still a plan, and
 the bail-out criteria at the bottom still apply.
 
 Read `doc/hrdl-evaluation.md` first — this document assumes it.

@@ -17,7 +17,15 @@ What it creates: a keyboard device named exactly "wilkbook-optics"
 EV_KEY capabilities KEY_BACK=158, KEY_FORWARD=159, KEY_MENU=139 -- the
 same 158/159 codes the ws8100 pen buttons feed into device.lua's
 event_map (RPgBack/RPgFwd); 139 is declared now so the future UI-action
-path (PLAN task 20) needs no device re-create.  EV_SYN is declared
+path (PLAN task 20) needs no device re-create.
+
+CORRECTION (2026-08-26, proven on glass with -d traces and fb hashes):
+the code that ADVANCES a page on this stack is 158 -- KOReader maps it
+to "RPgBack", whose handler runs goto-relative +1.  159/"RPgFwd" goes
+BACKWARD.  Send "KEY 158" for next-page; a 159 loop on a book's first
+page clamps into full-rect same-page REDRAW repaints that look exactly
+like working turns in every log except the framebuffer hash
+(doc/status.md 2026-08-26).  EV_SYN is declared
 explicitly (the input core would add it anyway).
 
 Protocol, one line per command on the FIFO /run/optics-inject.fifo:

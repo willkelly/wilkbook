@@ -224,13 +224,21 @@ gitignored `build/`, or the reader's static address.
   userspace-TCON feasibility number is banked (23.1 ms full-panel
   `advance()` vs an 11.7 ms frame budget), D5 (rotation) is unresolved,
   and the operator's verdict is quality good but **more flashing per
-  turn than a smooth read wants** — now the P4 driver. The wired image
-  (all the session's fixes) **booted hands-off 2026-08-26**: CLUT
-  compiled at boot, rebind at 10.1 s, reader up with no crash-loop,
-  washes on the resolved card — and **direct-mode reader idle is at
-  power parity with shipping** (155.3 vs 156.9 mA; turning at 20/min
-  adds ~37 mA). The decision remains embrace-or-reject, one shipping
-  image either way (`doc/direct-mode-adoption.md`, `doc/status.md`).
+  turn than a smooth read wants** — now the P4 driver, refined on
+  2026-08-26 to: turns settle flash-free, the TRANSITION is dirty
+  (prior-page ghost text). The wired image **booted hands-off
+  2026-08-26** (CLUT at boot, rebind 10.1 s, no crash-loop, washes on
+  the resolved card); **D5 is resolved and proven** (all four
+  orientations on glass — the lever is `closed_rotation_mode`, seeded
+  by our own profile; chain pinned in `test-rotation-decision.lua`);
+  **D6 passed** (ultra rails-off suspend/resume with the direct driver;
+  caveat: a bound unattached USB gadget aborts suspend on 7.1.8 —
+  registered); **idle power is at parity** (155.3 vs 156.9 mA; real
+  turns at 20/min add ~59 mA at ~41.5 frames/turn — the untuned hint
+  is a power cost too). Page-turn injection trap: KEY 158 advances
+  (KOReader's labels are inverted on this stack). The decision remains
+  embrace-or-reject, one shipping image either way
+  (`doc/direct-mode-adoption.md`, `doc/status.md`).
 - **Kernel — read this carefully, the tree and the device differ.**
   `%linux-pinenote-base` is `nongnu:linux-7.1` and `make kernel`
   cross-builds **7.1.8** clean (both DTBs, both modules linked). The

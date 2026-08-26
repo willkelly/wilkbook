@@ -401,17 +401,26 @@ condition is load-bearing, not ceremonial):
 | condition | mean | vs shipping |
 | --- | --- | --- |
 | reader idle, frontlight 0 | **155.3 mA** | 156.9 — **parity** |
-| page turns every 3 s (20/min) | **192.1 mA** | no shipping bracket at this cadence yet |
-| idle repeat straight after the turns | 169.8 mA | unattributed; consistent with idlewasher debt |
+| REAL page turns every 3 s (20/min) | **214.6 mA** | no shipping bracket at this cadence yet |
+| idle repeat straight after turning | 169.8 mA | unattributed; consistent with idlewasher debt |
 | frontlight 153/153 adds | 39.0 mA (24.1 on a second A/B) | the open term, now bounded |
+
+CORRECTION (same night): the first turn bracket (192.1 mA, "11.7
+frames/turn") was measuring 48 clamped SAME-PAGE repaints — the
+injected key was the inverted one (KOReader's `RPgBack`/158 is what
+advances on this stack; see `doc/status.md`). Real, fb-verified turns
+cost 214.6 mA and drive **41.5 frames/turn** under the default
+Y4|REDRAW hint — near-full-page waveform depth per turn, which makes
+the P4 intent mapping a power lever as well as a visual one.
 
 The direct driver idles honestly: EBC and GPU runtime-suspended, zero
 EBC interrupts, ±15 V and VCOM off (v3p3 held by the driver), CPU ~99%
-resident at 408 MHz. Turning at an aggressive 20/min costs +36.8 mA;
-6–10/min interpolates to +11–18 mA, so **active reading lands roughly
-165–175 mA either driver**. Per-turn drive: 43 frames for the first
-full-page paint, **11.7 frames/turn steady-state average** (561 IRQs /
-48 turns) — the diff/THRESHOLD hint shrinks repeat turns. The missing
+resident at 408 MHz. Turning at an aggressive 20/min costs +59.3 mA;
+6–10/min interpolates to +18–30 mA, so **active reading lands roughly
+173–185 mA on direct** against shipping's 157-floor-plus-turn-term
+(unmeasured at matching cadence). The once-recorded "11.7 frames/turn
+steady state" was the same-page artifact above; real turns hold at
+~41.5 frames. The missing
 piece is the same 3 s-cadence bracket on the shipping image
 (`b2-turns.sh` protocol, `doc/status.md` 2026-08-26) next time it is
 deployed.

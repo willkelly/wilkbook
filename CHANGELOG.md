@@ -362,10 +362,24 @@ is **embrace-or-reject, after which one image ships either way**
   is now the driving item for the polish phase of the plan.
 - **Direct mode costs nothing at idle** (2026-08-26, wired image):
   reader idle measured **155.3 mA** against the shipping ledger's
-  156.9 mA under identical conditions — parity. Turning pages at an
-  aggressive 20/min adds ~37 mA; a normal pace interpolates to
-  +11–18 mA. The battery story does not change with the driver
+  156.9 mA under identical conditions — parity. Real page turns at an
+  aggressive 20/min add ~59 mA (each turn drives ~41.5 waveform frames
+  under the untuned default hint — a power argument for the P4 intent
+  mapping); a normal pace interpolates to +18–30 mA
   (`doc/power-management.md`).
+- **Rotation works — all four orientations, on glass** (2026-08-26).
+  The offline investigation found boot orientation is decided by one
+  setting our own profile seeds (`closed_rotation_mode`), and flipping
+  it rendered all four orientations on the direct driver,
+  camera-verified, with no portrait-wedge. The decision chain is pinned
+  (`make koreader-input-check`) so a KOReader upgrade that moves it
+  fails loudly.
+- **Ultra suspend survives the direct driver** (2026-08-26): rails-off
+  entry, DDR retrain on wake, clean EBC resume, panel intact, zero
+  touch-controller handshake failures. One new 7.1 finding: a bound
+  but unattached USB gadget **aborts suspend entirely** (dwc3 ep0
+  timeout) — workaround is unbinding first; the bug is registered, not
+  papered over.
 - **The one feasibility number for the userspace-TCON question is
   banked**: the driver's own instrumentation puts the per-frame
   `advance()` at 37 µs idle, ~1.9 ms banded, and **23.1 ms peak for a

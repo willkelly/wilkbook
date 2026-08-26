@@ -779,3 +779,49 @@ credibility dependence on our tree.
 **Status:** not sent. Console evidence and reproduction pattern are
 recorded; the offline reproducer is the next step and needs no
 hardware.
+
+## 18. dwc3: a bound, unattached gadget aborts system suspend (7.1.8)
+
+**Status: needs a bisect-or-config check before any send.**
+
+**What we saw (2026-08-26, on glass, `doc/status.md`):** with the ACM
+gadget configured through configfs and bound to `fcc00000.usb` but **no
+host cable attached**, every `echo mem > /sys/power/state` aborts:
+
+    dwc3 fcc00000.usb: wait for SETUP phase timed out
+    dwc3 fcc00000.usb: failed to set STALL on ep0out
+    dwc3 fcc00000.usb: ep0 out: -110
+    dwc3 fcc00000.usb: failed to enable ep0out
+    dwc3 fcc00000.usb: PM: failed to suspend: error -11
+    Some devices failed to suspend, or early wake event detected
+
+The suspend unwinds before the rails ever drop. Unbinding the UDC
+(`echo "" > .../UDC`) makes the identical suspend enter ultra cleanly
+(rails off, DDR retrain on wake), and rebinding afterwards works.
+
+**Why we believe it is a 7.1 change and not our configuration:** the
+2026-08 unplugged soak ran **170 suspend cycles with zero failures** on
+7.0.11 with the same gadget service, same configfs layout, same
+unattached state (`doc/artifacts/pinenote-ultra-soak-20260815/`). Same
+DT, same userspace; only the kernel series moved.
+
+**Where it would go:** linux-usb / dwc3 maintainers, if it reproduces
+outside our patch stack. None of our seven patches touches dwc3 or the
+gadget core, but the BSP SIP suspend patch changes the suspend ordering
+around it, so we cannot yet exclude an interaction.
+
+**What has to be true first:** (1) reproduce on a clean 7.1.x defconfig
+build (no SIP suspend patch) on the device — if it disappears, the bug
+is ours to understand, not theirs; (2) check whether mainline dwc3
+already grew a fix between 7.1 and HEAD (the ep0 SETUP-phase wait in
+`dwc3_gadget_suspend` has history); (3) decide whether the reader's
+suspend path should unbind the UDC as a matter of policy anyway — the
+gadget draws ~2 mA awake and is a development affordance (the
+power ledger already recommends gadget-off by default), which would
+make this moot for the product while still worth reporting.
+
+**Interim workaround, live tonight:** unbind before suspend, rebind
+after. If auto-suspend ever runs on a 7.1 image before this is
+resolved, its suspend hook must do the same or every idle suspend will
+silently abort at ~full awake draw — the failure mode is a device that
+never sleeps while looking asleep.

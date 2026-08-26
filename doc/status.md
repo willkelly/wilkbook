@@ -3,6 +3,81 @@
 Last updated: 2026-08-26. Update protocol: add a dated entry at the top
 after every hardware session; entries are per-device/per-operator.
 
+## 2026-08-26 (same rig session, continued) — D5: all four orientations on glass; D6: ultra suspend survives the swap; the turn-key inversion; corrected power
+
+**D5 RESOLVED AND PROVEN — rotation works on the direct driver.** The
+offline rung-4v investigation (qemu, instrumented chain, now merged as
+`test-rotation-decision.lua`) named the boot decider: the
+`closed_rotation_mode` G-setting, which our own profile seeds to 1
+(portrait) and Generic `Device:init` applies unconditionally — none of
+the four glass mechanisms from 08-25 was ever consulted (two are
+dead-gated by our `lock_rotation=true` seed, one is menu-only, and the
+injected-gyro attempt died because `herd stop orientation-bridge` takes
+reader-session down with it — a shepherd dependency stop). On glass
+tonight: flipping the setting across a reader-session restart rendered
+**all four orientations** — 0/2 both landscapes, 1/3 both portraits —
+each camera-verified after a wash, crisp, no trace of the shipping
+driver's portrait-wedge class. "Nobody has ever rotated via fbdev on
+his stack" is retired.
+
+**D6 PASSES — with one real 7.1 finding.** First attempt never
+suspended: **dwc3 aborts the whole entry when the ACM gadget is bound
+with no cable attached** (ep0 SETUP timeout → `failed to set STALL` →
+`plat_suspend returns -11`; "Some devices failed to suspend"). The
+7.0.11 soak did 170 cycles in the same gadget arrangement, so this is
+new on 7.1.8 — registered (item 17 follow-on pending; workaround:
+unbind the UDC first). With the UDC unbound, the ultra pair engaged
+fully: `PM-STATE: ultra (cfg 0x5ec)`, rails off, LPDDR4X retrained
+324→1056 on wake, `rockchip_ebc_resume` clean, post-resume wash 42
+IRQs, before/after frames identical, **0 cyttsp5 wakeup-response
+failures** (R6: 0/1). Gadget rebound after.
+
+**The page-turn key is inverted, and it invalidated a bracket and a
+video round.** KEY 158 — which KOReader labels `RPgBack` — executes
+`goto relative screen: +1` (advances); 159/`RPgFwd` goes backward. The
+first "turn" bracket and first video set therefore measured 48 clamped
+same-page repaints at page 1: full-rect REDRAW passes whose cost decays
+43→~12 IRQs as the ghost-clean converges (NOT diff-shrink across pages,
+as first recorded), with the framebuffer byte-identical throughout.
+Diagnosed end-to-end: injector emits clean press/release (od on the
+evdev node), KOReader receives and maps them (`-d` trace), the page
+clamps. The optics-inject header's 158/159 = RPgBack/RPgFwd comment now
+carries the correction.
+
+**Corrected active power (real turns, fb-verified advancing):**
+
+| condition | mean |
+|---|---|
+| reader idle, frontlight 0 (unchanged) | 155.3 mA |
+| REAL page turns every 3 s, 48/48 landed | **214.6 mA** |
+| per-turn drive | **41.5 frames/turn** (1993 IRQs / 48) |
+
+Turning at 20/min costs **+59.3 mA**, not the +37 first recorded (that
+figure was the same-page artifact). Under the default Y4|REDRAW hint a
+real turn drives nearly full-page waveform depth every time — a power
+argument for P4's intent mapping, on top of the visual one. Idle parity
+with shipping stands.
+
+**P4 on-glass verdict (operator, watching real turns live):** turns
+settle to a clean page **without any flash** — the profile's
+`full_refresh_count=0` is landed and honored, and across four hint
+variants (baseline 160; diff-only 32 + `redraw_delay=255`; Y2 144;
+`no_off_screen=1`) zero washes and zero flashes fired in 8-turn runs —
+but the **transition is dirty**: intermediary ghosting, prior-page text
+briefly overlapping. P4's target is therefore transition cleanliness at
+constant flash count, not flash removal. (First video round also
+surfaced: a strong luminance dip at each clip's frame 0 is the Brio's
+auto-exposure settling — never a panel event.)
+
+**Operational notes:** KOReader owns frontlight state across
+reader-session restarts (each restart needs the rig's 153/153 re-set
+before captures — two black frames cost the lesson); one `herd start`
+during the orientation sweep hung its SSH block though the service
+itself came up (transient, unreproduced); fbcon briefly bound the fb
+(landscape 234x87, native var 1872x1404) between reader stops around
+the D6 window. Battery 85%→~65% over the whole session. Autosuspend
+still pinned off; frontlight restored; portrait default restored.
+
 ## 2026-08-26 — the wired direct image boots hands-off; direct-mode active power ≈ shipping (agent session, Will's device, optics rig + UART)
 
 Operator granted the dd and the UART slot-pick for this session ("fully
