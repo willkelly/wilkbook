@@ -185,6 +185,49 @@ else
   bad "--class-source=GL16:GC16 exited nonzero"
 fi
 
+# Source-only classes (2026-08-26): real wbf modes the CLUT format has
+# no slot for, loadable INTO a slot.  Two pins carry findings, not just
+# plumbing:
+#   * A2 into the DU slot compiles and differs -- the fast-mono-UI
+#     lever (6 non-neutral rows on this panel).
+#   * GLD16 into the GL16 slot compiles and is BYTE-IDENTICAL to the
+#     identity table on this panel -- the observation that REFUTED the
+#     "shipping turns were REGAL" theory (doc/status.md 2026-08-26):
+#     whatever refresh_waveform=6 selected, it was this same table.
+#     If a future wbf pull breaks this identity, that is a finding
+#     about the panel, not a tool bug -- re-read the theory before
+#     re-pinning.
+if "$clut" -v --class-source=DU:A2 "$WBF" "$work/cs-a2.bin" > "$work/cs-a2.log" 2>&1; then
+  if cmp -s "$ours" "$work/cs-a2.bin"; then
+    bad "--class-source=DU:A2 produced identical bytes -- the remap did nothing"
+  else
+    pass "--class-source=DU:A2 changes the output (the fast-mono-UI lever)"
+  fi
+  if grep -q "mode=DU from=A2" "$work/cs-a2.log"; then
+    pass "-v reports the DU slot sourcing A2"
+  else
+    bad "-v does not report the A2 remap"
+  fi
+else
+  bad "--class-source=DU:A2 exited nonzero"
+fi
+
+if "$clut" --class-source=GL16:GLD16 "$WBF" "$work/cs-gld16.bin" >/dev/null 2>&1; then
+  if cmp -s "$ours" "$work/cs-gld16.bin"; then
+    pass "GLD16 into the GL16 slot is byte-identical on this panel (the REGAL refutation, pinned)"
+  else
+    bad "GLD16 table now DIFFERS from GL16 on this panel -- a finding, not a failure; re-read the theory"
+  fi
+else
+  bad "--class-source=GL16:GLD16 exited nonzero"
+fi
+
+if "$clut" --class-source=A2:GL16 "$WBF" "$work/cs-srconly.bin" >/dev/null 2>&1; then
+  bad "a source-only class was accepted as a TARGET"
+else
+  pass "--class-source=A2:GL16 is refused (A2 is source-only)"
+fi
+
 if "$clut" --class-source=GL16:NOPE "$WBF" "$work/cs-bad.bin" >/dev/null 2>&1; then
   bad "--class-source with an unknown class was accepted"
 else

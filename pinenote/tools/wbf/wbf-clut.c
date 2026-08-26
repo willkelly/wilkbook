@@ -85,10 +85,28 @@ enum wf_idx {
 };
 #define WF_REAL 5	/* WF_IDLE is last and carries no table */
 
+/* Source-only classes: real modes in the wbf that the CLUT format has
+ * no slot for, usable on the SOURCE side of --class-source to load
+ * their sequences into one of the five real slots.  The headline user
+ * (2026-08-26): GLD16 -- the REGAL-family anti-ghost table the
+ * SHIPPING driver turned pages with (refresh_waveform=6) -- into the
+ * GL16 slot, so direct-mode Y4 page turns drive the same table.  A2
+ * (10 phases on this panel) is the classic fast mono UI waveform.
+ * On mode_version 0x19 these are distinct mode indices (GL16=3,
+ * GLR16=4, GLD16=5, A2=6 -- wbf-info); on a panel whose wbf lacks
+ * one, resolution fails loudly at compile time, and only when the
+ * class is actually referenced. */
+enum {
+	WF_SRC_A2 = WF_REAL,
+	WF_SRC_GLR16,
+	WF_SRC_GLD16,
+};
+#define WF_NAMES (WF_SRC_GLD16 + 1)
+
 static const struct {
 	const char *name;
 	enum drm_epd_waveform waveform;
-} wf_table[WF_REAL] = {
+} wf_table[WF_NAMES] = {
 	[WF_DU]   = { "DU",   DRM_EPD_WF_DU },
 	[WF_DU4]  = { "DU4",  DRM_EPD_WF_DU4 },
 	[WF_GL16] = { "GL16", DRM_EPD_WF_GL16 },
@@ -96,6 +114,9 @@ static const struct {
 	/* wbf_to_custom.py reads INIT from mode index 0, which is what the
 	 * driver calls RESET.  Both resolve to 0 for mode_version 0x19. */
 	[WF_INIT] = { "INIT", DRM_EPD_WF_RESET },
+	[WF_SRC_A2]    = { "A2",    DRM_EPD_WF_A2 },
+	[WF_SRC_GLR16] = { "GLR16", DRM_EPD_WF_GLR16 },
+	[WF_SRC_GLD16] = { "GLD16", DRM_EPD_WF_GLD16 },
 };
 
 /* --class-source=TARGET:SOURCE remaps which decoded mode's sequences a
@@ -116,7 +137,7 @@ static int wf_by_name(const char *name, size_t len)
 {
 	int w;
 
-	for (w = 0; w < WF_REAL; w++)
+	for (w = 0; w < WF_NAMES; w++)
 		if (strlen(wf_table[w].name) == len &&
 		    !strncmp(wf_table[w].name, name, len))
 			return w;
@@ -600,7 +621,7 @@ int main(int argc, char **argv)
 	struct drm_epd_lut_file file = { 0 };
 	struct drm_epd_lut lut = { 0 };
 	struct drm_device dev = { 0 };
-	struct mode_summary ms[WF_REAL] = { 0 };
+	struct mode_summary ms[WF_NAMES] = { 0 };
 	const struct pvi_wbf_file_header *h;
 	const char *in_path = NULL, *out_path = NULL;
 	unsigned int n_luts, t;
@@ -630,8 +651,14 @@ int main(int argc, char **argv)
 			src = wf_by_name(colon + 1, strlen(colon + 1));
 			if (tgt < 0 || src < 0) {
 				fprintf(stderr,
-					"FAIL: unknown class in '%s' (DU, DU4, GL16, GC16, INIT)\n",
+					"FAIL: unknown class in '%s' (targets: DU, DU4, GL16, GC16, INIT; sources also: A2, GLR16, GLD16)\n",
 					spec);
+				return 2;
+			}
+			if (tgt >= WF_REAL) {
+				fprintf(stderr,
+					"FAIL: %s is source-only -- the CLUT has no slot for it\n",
+					wf_table[tgt].name);
 				return 2;
 			}
 			class_source[tgt] = src;
@@ -709,7 +736,7 @@ int main(int argc, char **argv)
 		return 1;
 	}
 
-	for (w = 0; w < WF_REAL; w++) {
+	for (w = 0; w < WF_NAMES; w++) {
 		ms[w].rows = calloc(ROWS, sizeof(*ms[w].rows));
 		if (!ms[w].rows) {
 			fprintf(stderr, "FAIL: out of memory\n");
@@ -729,10 +756,22 @@ int main(int argc, char **argv)
 	for (t = 0; t < n_luts; t++) {
 		u8 *lut_out = out + FILE_HEADER + (size_t)t * LUT_BYTES;
 
-		for (w = 0; w < WF_REAL; w++) {
-			int mode_index = pvi_wbf_get_mode_index(
-				&file, wf_table[w].waveform);
+		for (w = 0; w < WF_NAMES; w++) {
+			int mode_index, referenced = (w < WF_REAL), i;
 
+			/* A source-only class is decoded only when some
+			 * slot actually draws from it, so a wbf that
+			 * lacks the mode still compiles the identity
+			 * table -- and fails loudly the moment the
+			 * experiment flag asks for the missing mode. */
+			for (i = 0; i < WF_REAL; i++)
+				if (class_source[i] == w)
+					referenced = 1;
+			if (!referenced)
+				continue;
+
+			mode_index = pvi_wbf_get_mode_index(
+				&file, wf_table[w].waveform);
 			if (mode_index < 0) {
 				fprintf(stderr, "FAIL: no mode index for %s\n",
 					wf_table[w].name);
