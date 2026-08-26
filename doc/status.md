@@ -3,6 +3,81 @@
 Last updated: 2026-08-26. Update protocol: add a dated entry at the top
 after every hardware session; entries are per-device/per-operator.
 
+## 2026-08-26 (part 10) — the optics loop closes: the camera adjudicates the turn-route war
+
+The operator's mid-session idea — "optics rig it so you can detect
+ghosting" — went from proposal to working instrument to a decided
+route war in one sitting. The Brio moved into the rig; fiducial
+registration (four 80 px corner squares, centroid extraction, ImageMagick
+perspective warp into fb space) validated at **2.6 px** on the
+center-dot control; and a differential ghost metric (mean capture luma
+over former-ink vs paper masks, exposure-invariant, baseline-corrected
+for the ±0.5–1 % lighting-gradient floor) measured five routes with no
+human eyes in the loop. Harness committed as
+`pinenote/tools/optics-rig/`; real antialiased typeset pages
+(DejaVu-Serif at 227 dpi, Moby Dick) as payload.
+
+**Part 9's A2 conclusion did not survive the instrument or the
+operator's reading eyes.** The evening's arc, all on the swapped and
+then restored identity table, KOReader live plus lab arms:
+
+- Hint 48 (GC16 partial) as a route: "really gross", "everything is
+  just way slower" — out.
+- Two-pass redraw (`redraw_delay`, prelim-then-GL16): the MODE ioctl
+  only queues `CHANGE_LUT`; the WAITING rows are rebuilt lazily on the
+  next refresh-thread wake, so the set appears dead until damage
+  arrives (query showed 0 until a poke). Enabled at 42 then 200
+  frames: no visible difference to the operator — parked.
+- The operator's own two-stage proposal — **wipe white through DU,
+  then draw through GL16, so every turn passes through white** — was
+  REFUTED by measurement at every horizon: single turn +2.44 % vs
+  plain GL16's +1.72 %; 8-turn alternation +2.55 % vs +2.19 %;
+  4-distinct-page union chain +1.31 % vs +1.04 % (all
+  baseline-corrected). Mechanism: in a plain turn old ink gets GL16's
+  full 38-phase drive to white; the wipe replaces that with a 12-phase
+  DU shove and the draw then no-ops white-over-white. A GC16-quality
+  wipe measured the same (+2.53 %). The wipe DOWNGRADES the clearing
+  waveform. `wipe-flip.lua` (the arm driver) is committed with the
+  refutation in its header.
+- **Plain GL16 partials (hint 32) are the cleanest route this driver
+  has**, and GL16 ghost SATURATES (~2 %) rather than compounding —
+  8 turns added only ~0.5 % over 1 turn.
+- The menu's "degradation" is a **negative ghost**: a half-panel
+  black rect driven back to white measures **−2 %** — the region
+  OVERSHOOTS BRIGHTER than surrounding paper, leaving a visible
+  rectangle edge. Large-area drives overshoot; structured ±2 % steps
+  are what eyes flag, in either direction.
+
+**Where the route war lands** (operator-confirmed live): default
+hint 32, wash-on-debt. Part 9's "horrible GL16 ghosting" was
+accumulated unpaid debt judged on a dirty panel — from a washed
+slate the operator called the same route "much better", and the
+"much more ghosting" that followed was the debt rebuilding plus the
+menu overshoot. The A2/dither routes are retired for reading (the
+"little holes" verdict on dithered glyphs); A2 remains the pen/UI
+lever. What plain GL16 still owes: a wash cadence that pays debt
+during engaged reading (KOReader full-refresh-every-N-pages + the
+idle washer + UI-overlay-close treatment — the flashes were
+load-bearing all along), then per-region RECT_HINTS routing.
+
+Session traps recorded: at hint 64 the "menu flash" the operator saw
+was A2 slamming a big UI rect, not a wash — KOReader's flash toggle
+was rightly innocent; `ffmpeg` without `-y` silently reuses the prior
+capture (one arm measured the baseline twice); an ImageMagick operator
+outside parentheses applies to every loaded image (a mask came out
+82 % instead of 1 %); the device carries no system `luajit`
+(KOReader's bundled one is the interpreter for everything staged).
+
+**Device state at close**: reader running on the IDENTITY table
+(clut-swap restored it), default hint 32, `redraw_delay` param at 200
+(inert at hint 32), mode NORMAL, freshly washed. Session-scoped as
+ever: a reboot reverts to the boot one-shot identity table and the
+module default hint (param default is 64 — dithered mono — NOT the
+160 this file previously assumed; unverified which the service stack
+then overrides). Autosuspend still pinned off. The Brio is in the rig
+with a valid calibration in the session scratchpad — recalibrate on
+any rig move.
+
 ## 2026-08-26 (part 9) — the ghost is grayscale: A2 routing fixes page turns, live
 
 First full run of the ebc-lab iteration loop — a CLUT variant compiled
