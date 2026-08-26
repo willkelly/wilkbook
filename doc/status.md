@@ -3,6 +3,53 @@
 Last updated: 2026-08-26. Update protocol: add a dated entry at the top
 after every hardware session; entries are per-device/per-operator.
 
+## 2026-08-26 (part 11) — the frame clock: turns run 1.5× slow, and the panel wants a colder bin
+
+The operator's challenge to part 10's wash-cadence conclusion — "we
+don't flash on the shipped driver and don't see the same ghosting" —
+was correct, and chasing it found two driver-level defects in one
+sitting (`ebc-lab/frame-clock.lua`, new; measurements in the part-10
+artifact's Part 2):
+
+**1. The direct driver's full-panel frames run 18.4 ms — 54 Hz
+against the panel's true 12.0 ms scan (83 Hz).** Compute-bound: a
+200×200 block and a 1872×660 half-clip both clock exactly 12.0
+ms/frame, so the kernel NEON advance is the long pole for clips much
+beyond half-panel — and a page turn is ~90 % of the panel, so EVERY
+turn runs its waveform ~1.5× out of the vendor timing contract while
+pen strokes stay on it (why writing is "insane" and turns degraded;
+D9's 23.1 ms userspace advance was the same wall). CPU frequency is
+exonerated — 27/40 wash samples at the 1.8 GHz max. The fix direction
+is parallelizing/optimizing the advance (row-parallel work, three
+idle cores), iterable live: rockchip_ebc is a MODULE.
+
+**2. The stretch was partially masking an underdrive.** A
+contract-rate half-clip turn ghosts MORE than the stretched full-page
+turn (+3.48 % vs +2.06 % on identical masks) — at correct timing GL16
+underdrives, and the temperature sweep found why: the TPS65185
+thermistor read exactly 24.0 °C (a bin boundary) and the driver picked
+24–27, but the ghost U-curve bottoms at the **21–24 bin** (+2.66 %;
+18–21 overshoots back to +3.36). One bin ≈ 0.75 % ghost.
+`temp_override` takes effect only on a temperature re-read
+(rebind/probe — the dmesg "override temperature" line is the
+receipt); a bare param write does nothing. Even at the optimal bin a
+contract-rate turn trails the stretched one, so the underdrive
+exceeds one bin — VCOM programming, CLUT playback fidelity vs the
+hardware LUT engine, and source-driver timing are the surviving
+suspects for the remaining gap to the shipping driver, and putting
+the SHIPPING image under this same instrument is now the decisive
+next measurement.
+
+Instrument notes: loop repeatability ±0.1 % on back-to-back arms; two
+poisoned runs caught and excluded (KOReader repainting mid-arm — stop
+the reader for optics arms; and `A && B & C` backgrounding `A && B`
+so the arm never ran and the capture measured the washed book page).
+
+**Device state at close**: reader running, identity table, default
+hint 32, `temp_override=22` live (21–24 bin, the measured optimum —
+session-scoped, gone on reboot), freshly washed, autosuspend still
+pinned off. The Brio remains rigged and calibrated.
+
 ## 2026-08-26 (part 10) — the optics loop closes: the camera adjudicates the turn-route war
 
 The operator's mid-session idea — "optics rig it so you can detect

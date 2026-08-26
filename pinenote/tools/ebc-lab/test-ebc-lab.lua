@@ -185,7 +185,7 @@ do
         local f = io.open(p, "r"); local s = f:read("*a"); f:close(); return s
     end
     for _, p in ipairs({ "ebclib.lua", "rect-hints.lua", "phase-seq.lua",
-                         "page-flip.lua", "wipe-flip.lua" }) do
+                         "page-flip.lua", "wipe-flip.lua", "frame-clock.lua" }) do
         report(not slurp(p):match("/dev/dri/card%d"),
             p .. " carries no DRM card-index literal")
     end
@@ -202,7 +202,7 @@ do
 end
 
 for _, p in ipairs({ "ebclib.lua", "rect-hints.lua", "phase-seq.lua",
-                     "page-flip.lua", "wipe-flip.lua" }) do
+                     "page-flip.lua", "wipe-flip.lua", "frame-clock.lua" }) do
     report(loadfile(p) ~= nil, p .. " compiles")
 end
 
