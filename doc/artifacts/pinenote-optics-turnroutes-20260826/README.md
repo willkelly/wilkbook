@@ -105,3 +105,40 @@ repaints land mid-arm), one where a shell `&` swallowed the arm
 (`A && B & C` backgrounds `A && B`) and the capture measured the
 washed book page. Run arms with the reader stopped, and check the
 flip log actually printed.
+
+## Part 3 — the parallel advance, and the frame-period model refuted
+
+The banded parallel NORMAL advance
+(`pinenote/patches/linux-pinenote-7.1-ebc-parallel-advance.patch`) was
+built out-of-Guix against the same source/config, live-swapped as
+modules (vermagic + MODVERSIONS CRCs matched first try), and measured
+the same night:
+
+- Full-panel wash: **18.4 → 11.9 ms/frame** (the panel scan period);
+  small-clip timing unchanged; no band-seam artifacts at 4 bands
+  (cap-paced-gl16-1turn.png shows the banded paint — clean text).
+- `frame_period_us` pacing holds a steady requested period
+  (~16.7 ms for a 15.7 ms request — fsleep overshoot ~1 ms).
+- `hskew_override` does NOT change the frame period (64→1000: no
+  effect) — it is not a pacing lever on this stack.
+
+Ghost at matched conditions, full-page arms, hint 32:
+
+| arm | capture | raw | corrected |
+|---|---|---|---|
+| 4 bands, 12.0 ms, bin 21–24 | cap-par-gl16-1turn.png | +2.38 | +2.87 |
+| 4 bands, paced ~16.7 ms | cap-paced-gl16-1turn.png | +2.47 | +2.96 |
+| 1 band forced, natural ~17.1 ms, bin 22 pinned | cap-iso-single.png | +2.34 | +2.83 |
+
+All three are the same number: **banding costs nothing** (1 vs 4 bands
+identical) and **frame period 12–18 ms is ghost-neutral** at matched
+temperature — refuting Part 2's "waveform timing contract" reading.
+The stretched-era +1.72 was measured hours earlier on a warmer panel:
+between-session ghost comparisons are temperature-confounded by
+~1 % across an evening, which is the standing reason the
+shipping-vs-direct comparison must be run same-session, minutes apart,
+on this instrument.
+
+Also caught live: writing a black block over fbcon's black console is
+a genuine no-op (frames=0) — the standing zero-IRQ-delta lesson, now
+with an optics-rig cameo.

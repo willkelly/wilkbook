@@ -3,6 +3,55 @@
 Last updated: 2026-08-26. Update protocol: add a dated entry at the top
 after every hardware session; entries are per-device/per-operator.
 
+## 2026-08-26 (part 12) — the advance parallelized live: 18.4 → 11.9 ms, and the frame-period theory dies
+
+The kernel iteration loop part 11 promised is real, and it shipped a
+driver improvement the same night. A full out-of-Guix cross build of
+the study kernel (same source derivation, same config recipe) produced
+modules the running 7.1.8 accepted first try — vermagic and
+MODVERSIONS CRCs matched — so the cycle became: edit → ~15 s
+incremental rebuild → scp → rmmod/insmod → measure. Setup and traps in
+`~/src/wilkbook-kernel-lab` (workstation-local, not committed).
+
+**The banded parallel NORMAL advance**
+(`pinenote/patches/linux-pinenote-7.1-ebc-parallel-advance.patch`,
+wired into `linux-pinenote-hrdl-direct`, source gate green): the
+advance splits into row-disjoint horizontal bands on
+`system_unbound_wq` workers, caller takes the last band, per-band
+kernel-NEON sections (the callers' `scoped_ksimd()` wrappers had to
+go — the dispatcher sleeps), clip reduction merged by rect union.
+FAST/pen untouched. On glass, live-swapped: **full-panel frames
+18.4 → 11.9 ms** (the panel's scan period — timing-correct for the
+first time), small-clip timing unchanged, **no band-seam artifacts**,
+and the ghost metric **identical between 1 and 4 bands** at matched
+conditions — banding costs nothing.
+
+**And the frame-period theory is refuted.** Two new instruments rode
+along (`frame_period_us` — pacing, runtime-writable;
+`advance_bands` — force band count) and the matched-condition matrix
+says 12 ms, ~16.7 ms paced, and ~17.1 ms single-threaded all ghost
+the same (+2.83…+2.96 corrected, bin pinned). Part 11's "turns run
+1.5× out of the waveform timing contract" was true as TIMING but
+irrelevant as QUALITY: the stretched-era +1.72 was a WARMER PANEL
+hours earlier. Between-session ghost numbers drift ~1 % with panel
+temperature across an evening — same-session comparison is the only
+honest kind, which now firmly includes the shipping-vs-direct
+question. (`hskew_override` was also tested and does not change the
+frame period.)
+
+What the parallel advance is FOR, then: not ghost — determinism and
+headroom. Frames no longer stretch under load, turns and pen can
+coexist without the advance falling behind, and the frame period is
+now a chosen number rather than an accident of CPU speed.
+
+**Device state at close**: reader running ON THE HAND-BUILT MODULES
+(RAM only — a reboot reverts to the image's stock compute-stretch
+driver; nothing on disk changed), auto bands (4 for turns),
+`frame_period_us=0`, `temp_override=22` pinned at insmod, identity
+table, hint 32, washed. Autosuspend still pinned off. The image
+itself does not yet carry the patch — next `make` of the study image
+picks it up from kernel.scm.
+
 ## 2026-08-26 (part 11) — the frame clock: turns run 1.5× slow, and the panel wants a colder bin
 
 The operator's challenge to part 10's wash-cadence conclusion — "we

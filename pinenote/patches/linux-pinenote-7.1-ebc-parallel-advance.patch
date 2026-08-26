@@ -1,0 +1,392 @@
+Parallelize the direct-mode NORMAL advance across CPU cores, and add
+frame-period instrumentation.
+
+Applies ON TOP of linux-pinenote-7.1-hrdl-direct-mode.patch (it edits
+files that patch creates); ours, not hrdl's.
+
+Why (doc/status.md 2026-08-26 parts 11-12, measurements in
+doc/artifacts/pinenote-optics-turnroutes-20260826/): the single-threaded
+NEON advance takes ~18 ms for a full-panel clip at 1.8 GHz against the
+panel's 12.0 ms scan period, so every page turn ran its waveform
+stretched ~1.5x while pen-sized damage ran on time.  The rework splits
+the advance into row-disjoint horizontal bands (the only cross-band
+state is the clip min/max reduction, merged by rect union), executed on
+system_unbound_wq workers with the calling thread taking the last band.
+Each band enters its own kernel-NEON section; the dispatcher sleeps
+outside them, so callers must NOT wrap it in scoped_ksimd() -- the four
+refresh-thread call sites are converted accordingly.  FAST (the pen
+path) is untouched.
+
+Measured on glass 2026-08-26 (hand-built module, live-swapped):
+full-panel frames 18.4 -> 11.9 ms (the scan period); small-clip timing
+unchanged; ghost metric identical to the single-threaded path at equal
+frame period and temperature bin (banding costs nothing); no visual
+band-seam artifacts at 4 bands.
+
+Two instruments ride along, both runtime-writable module params:
+  - frame_period_us (rockchip_ebc): minimum frame-to-frame period, 0 =
+    scan rate.  The frame-period/ghost sweep instrument; 12-18 ms
+    measured ghost-NEUTRAL at matched temperature, refuting the
+    "waveform timing contract" theory of the quality gap.
+  - advance_bands (rockchip_ebc_blit_neon): 0 = auto (a band per CPU,
+    max 4), N forces N bands.  The banding-correctness A/B instrument.
+
+--- a/drivers/gpu/drm/rockchip/rockchip_ebc.c	1969-12-31 17:00:01.000000000 -0700
++++ b/drivers/gpu/drm/rockchip/rockchip_ebc.c
+@@ -316,6 +316,20 @@
+ module_param(hskew_override, int, S_IRUGO|S_IWUSR);
+ MODULE_PARM_DESC(hskew_override, "Override hskew value");
+ 
++/*
++ * Minimum frame-to-frame period, in microseconds (0 = run at the panel
++ * scan rate).  The waveform-quality lever the 2026-08-26 optics
++ * campaign exposed: this panel's tables render cleanest near the
++ * shipping driver's ~15.7 ms frames, not the direct-mode dclk's
++ * 12.0 ms scan (doc/status.md part 11).  With the parallel advance
++ * keeping compute under the scan period, this knob sets the effective
++ * waveform frame rate deterministically.  Takes effect per frame; no
++ * rebind needed.
++ */
++static int frame_period_us = 0;
++module_param(frame_period_us, int, S_IRUGO|S_IWUSR);
++MODULE_PARM_DESC(frame_period_us, "minimum frame period in us (0 = scan rate)");
++
+ static unsigned int rect_hint_batch = 20;
+ module_param(rect_hint_batch, uint, S_IRUGO|S_IWUSR);
+ MODULE_PARM_DESC(rect_hint_batch, "Batch size when reading rect_hints in ioctl");
+@@ -1011,16 +1025,14 @@
+ 			if (work_item & ROCKCHIP_EBC_WORK_ITEM_INIT) {
+ 				clip_ongoing_or_waiting = ebc->screen_rect;
+ 				memset(prelim_target, 0xff, ebc->num_pixels);
+-				scoped_ksimd()
+-					rockchip_ebc_schedule_advance_neon(ebc, prelim_target, hints, phase_buffer, &clip_ongoing, &clip_ongoing_or_waiting, 0, ROCKCHIP_EBC_CUSTOM_WF_INIT, 0, ROCKCHIP_EBC_HINT_REDRAW, true);
++				rockchip_ebc_schedule_advance_parallel_neon(ebc, prelim_target, hints, phase_buffer, &clip_ongoing, &clip_ongoing_or_waiting, 0, ROCKCHIP_EBC_CUSTOM_WF_INIT, 0, ROCKCHIP_EBC_HINT_REDRAW, true);
+ 				skip_advance = true;
+ 				no_schedule_until_clip_empty = true;
+ 			} else if (work_item & ROCKCHIP_EBC_WORK_ITEM_SUSPEND) {
+ 				clip_ongoing_or_waiting = ebc->screen_rect;
+ 				if (!no_off_screen) {
+ 					// Use the highest-quality waveform to minimize visible artifacts
+-					scoped_ksimd()
+-						rockchip_ebc_schedule_advance_neon(ebc, ebc->final_off_screen, hints, phase_buffer, &clip_ongoing, &clip_ongoing_or_waiting, 0, ROCKCHIP_EBC_CUSTOM_WF_GC16, 0, ROCKCHIP_EBC_HINT_REDRAW, true);
++					rockchip_ebc_schedule_advance_parallel_neon(ebc, ebc->final_off_screen, hints, phase_buffer, &clip_ongoing, &clip_ongoing_or_waiting, 0, ROCKCHIP_EBC_CUSTOM_WF_GC16, 0, ROCKCHIP_EBC_HINT_REDRAW, true);
+ 				}
+ 				no_off_screen = false;
+ 				skip_advance = true;
+@@ -1043,8 +1055,7 @@
+ 					}
+ 				}
+ 				clip_ongoing_or_waiting = ebc->screen_rect;
+-				scoped_ksimd()
+-					rockchip_ebc_schedule_advance_neon(ebc, prelim_target, hints, phase_buffer, &clip_ongoing, &clip_ongoing_or_waiting, 0, ROCKCHIP_EBC_CUSTOM_WF_GC16, 0, ROCKCHIP_EBC_HINT_REDRAW, true);
++				rockchip_ebc_schedule_advance_parallel_neon(ebc, prelim_target, hints, phase_buffer, &clip_ongoing, &clip_ongoing_or_waiting, 0, ROCKCHIP_EBC_CUSTOM_WF_GC16, 0, ROCKCHIP_EBC_HINT_REDRAW, true);
+ 				// Skip a single advance as we have performed one just now
+ 				skip_advance = true;
+ 				no_schedule_until_clip_empty = true;
+@@ -1089,8 +1100,7 @@
+ 						!no_schedule_until_clip_empty &&
+ 							!work_item);
+ 			} else if (ebc->driver_mode == ROCKCHIP_EBC_DRIVER_MODE_NORMAL) {
+-				scoped_ksimd()
+-					rockchip_ebc_schedule_advance_neon(
++				rockchip_ebc_schedule_advance_parallel_neon(
+ 						ebc, prelim_target, hints, phase_buffer,
+ 						&clip_ongoing, &clip_ongoing_or_waiting,
+ 						early_cancellation_addition, 0,
+@@ -1184,6 +1194,12 @@
+ 				     EBC_CONFIG_DONE_REG_CONFIG_DONE);
+ 			awaiting_completion = true;
+ 			awaiting_start = false;
++			if (frame_period_us > 0) {
++				s64 since_last = ktime_us_delta(
++					ktime_get(), time_last_start);
++				if (since_last < frame_period_us)
++					fsleep(frame_period_us - since_last);
++			}
+ 			if (testing < 2) {
+ 				regmap_write(
+ 					ebc->regmap, EBC_DSP_START,
+--- a/drivers/gpu/drm/rockchip/rockchip_ebc.h	1969-12-31 17:00:01.000000000 -0700
++++ b/drivers/gpu/drm/rockchip/rockchip_ebc.h
+@@ -216,6 +216,15 @@
+ 					u8 force_wf, u8 force_hint,
+ 					u8 force_hint_mask, bool allow_schedule);
+ 
++void rockchip_ebc_schedule_advance_parallel_neon(const struct rockchip_ebc *ebc,
++					const u8 *prelim_target, u8 *hints,
++					u8 *phase_buffer,
++					struct drm_rect *clip_ongoing,
++					struct drm_rect *clip_ongoing_or_waiting,
++					u8 early_cancellation_addition,
++					u8 force_wf, u8 force_hint,
++					u8 force_hint_mask, bool allow_schedule);
++
+ void rockchip_ebc_blit_y4_high_low_neon(u8 *dst, u8 *y4_high_src,
+ 					u8 *y4_low_src, unsigned int size);
+ 
+--- a/drivers/gpu/drm/rockchip/rockchip_ebc_blit_neon.c	1969-12-31 17:00:01.000000000 -0700
++++ b/drivers/gpu/drm/rockchip/rockchip_ebc_blit_neon.c
+@@ -3,15 +3,18 @@
+  * Copyright (C) 2025 hrdl <git@hrdl.eu>
+  */
+ 
++#include <linux/completion.h>
+ #include <linux/module.h>
+ #include <linux/prefetch.h>
+ #include <linux/types.h>
++#include <linux/workqueue.h>
+ #include <drm/drm_epd_helper.h>
+ #include <drm/drm_framebuffer.h>
+ #include <drm/drm_rect.h>
+ #include "rockchip_ebc.h"
+ 
+ #include <asm/neon-intrinsics.h>
++#include <asm/simd.h>
+ 
+ #define NEON_PR_INFO(_q8_name)                                          \
+ 	{                                                               \
+@@ -249,13 +252,25 @@
+ }
+ EXPORT_SYMBOL(rockchip_ebc_schedule_advance_fast_neon);
+ 
+-void rockchip_ebc_schedule_advance_neon(
++/*
++ * One horizontal band of the NORMAL-mode advance.  The body is hrdl's
++ * advance verbatim except that the y range comes from the caller and
++ * the clip reduction lands in out-rects instead of read-modify-writing
++ * the input clip -- which is what lets bands run concurrently: rows
++ * are disjoint (all per-pixel state is row-indexed), so the only
++ * cross-band state is the min/max reduction, merged by the dispatcher.
++ * clip_bounds supplies the x extent and is never written.
++ */
++static void rockchip_ebc_schedule_advance_band(
+ 	const struct rockchip_ebc *ebc, const u8 *prelim_target, u8 *hints,
+-	u8 *phase_buffer, struct drm_rect *clip_ongoing,
+-	struct drm_rect *clip_ongoing_or_waiting,
++	u8 *phase_buffer, const struct drm_rect *clip_bounds,
++	int y_begin, int y_end,
++	struct drm_rect *out_ongoing,
++	struct drm_rect *out_ongoing_or_waiting,
+ 	u8 early_cancellation_addition, u8 force_wf, u8 force_hint,
+ 	u8 force_hint_mask, bool allow_schedule)
+ {
++	const struct drm_rect *clip_ongoing_or_waiting = clip_bounds;
+ 	bool direct_mode = ebc->direct_mode;
+ 	unsigned int pixel_pitch = ebc->pixel_pitch;
+ 	// unsigned int packed_pitch = 3 * pixel_pitch;
+@@ -314,8 +329,7 @@
+ 	uint16x4_t q16s_maxs = vdup_n_u16(0);
+ 	uint64x1_t q64s_0x00 = vdup_n_u64(0);
+ 
+-	for (unsigned int y = max(0, clip_ongoing_or_waiting->y1);
+-	     y < min((int) ebc->height, clip_ongoing_or_waiting->y2); ++y) {
++	for (unsigned int y = y_begin; y < (unsigned int)y_end; ++y) {
+ 		int offset = y * pixel_pitch + x_start;
+ 		u8 *packed_inner_outer_nextprev_line = ebc->packed_inner_outer_nextprev + offset * 3;
+ 		u8 *phases_line = phase_buffer + y * phase_pitch +
+@@ -693,17 +707,197 @@
+ 	u16 *maxs = (u16 *)&u64_maxs;
+ 	vst1_lane_u64(&u64_mins, vreinterpret_u64_u16(q16s_mins), 0);
+ 	vst1_lane_u64(&u64_maxs, vreinterpret_u64_u16(q16s_maxs), 0);
+-	clip_ongoing->x1 = mins[0];
+-	clip_ongoing->y1 = mins[1];
+-	clip_ongoing->x2 = maxs[0] + 16;
+-	clip_ongoing->y2 = maxs[1] + 1;
+-	clip_ongoing_or_waiting->x1 = mins[2];
+-	clip_ongoing_or_waiting->y1 = mins[3];
+-	clip_ongoing_or_waiting->x2 = maxs[2] + 16;
+-	clip_ongoing_or_waiting->y2 = maxs[3] + 1;
++	out_ongoing->x1 = mins[0];
++	out_ongoing->y1 = mins[1];
++	out_ongoing->x2 = maxs[0] + 16;
++	out_ongoing->y2 = maxs[1] + 1;
++	out_ongoing_or_waiting->x1 = mins[2];
++	out_ongoing_or_waiting->y1 = mins[3];
++	out_ongoing_or_waiting->x2 = maxs[2] + 16;
++	out_ongoing_or_waiting->y2 = maxs[3] + 1;
++}
++
++void rockchip_ebc_schedule_advance_neon(
++	const struct rockchip_ebc *ebc, const u8 *prelim_target, u8 *hints,
++	u8 *phase_buffer, struct drm_rect *clip_ongoing,
++	struct drm_rect *clip_ongoing_or_waiting,
++	u8 early_cancellation_addition, u8 force_wf, u8 force_hint,
++	u8 force_hint_mask, bool allow_schedule)
++{
++	struct drm_rect bounds = *clip_ongoing_or_waiting;
++	int y0 = max(0, bounds.y1);
++	int y1 = min((int)ebc->height, bounds.y2);
++
++	rockchip_ebc_schedule_advance_band(ebc, prelim_target, hints,
++					   phase_buffer, &bounds, y0, y1,
++					   clip_ongoing,
++					   clip_ongoing_or_waiting,
++					   early_cancellation_addition,
++					   force_wf, force_hint,
++					   force_hint_mask, allow_schedule);
+ }
+ EXPORT_SYMBOL(rockchip_ebc_schedule_advance_neon);
+ 
++/*
++ * Parallel dispatcher for the NORMAL-mode advance.  Motivation
++ * (doc/status.md 2026-08-26 part 11): a single band takes ~18 ms for
++ * the full panel at 1.8 GHz against the panel's 12.0 ms scan period,
++ * so every large refresh runs its waveform ~1.5x out of the vendor
++ * timing contract.  Bands are row-disjoint; each worker enters its own
++ * kernel-NEON section, and the dispatcher computes the last band on
++ * the calling thread instead of idling.  Callers must NOT wrap this in
++ * scoped_ksimd() -- the dispatcher sleeps in wait_for_completion(),
++ * which is illegal inside a kernel NEON section; each band execution
++ * takes its own.
++ */
++struct rockchip_ebc_advance_work {
++	struct work_struct work;
++	struct completion done;
++	const struct rockchip_ebc *ebc;
++	const u8 *prelim_target;
++	u8 *hints;
++	u8 *phase_buffer;
++	const struct drm_rect *clip_bounds;
++	int y_begin, y_end;
++	struct drm_rect out_ongoing;
++	struct drm_rect out_ongoing_or_waiting;
++	u8 eca, force_wf, force_hint, force_hint_mask;
++	bool allow_schedule;
++};
++
++static void rockchip_ebc_advance_band_run(struct rockchip_ebc_advance_work *w)
++{
++	scoped_ksimd()
++		rockchip_ebc_schedule_advance_band(w->ebc, w->prelim_target,
++						   w->hints, w->phase_buffer,
++						   w->clip_bounds,
++						   w->y_begin, w->y_end,
++						   &w->out_ongoing,
++						   &w->out_ongoing_or_waiting,
++						   w->eca, w->force_wf,
++						   w->force_hint,
++						   w->force_hint_mask,
++						   w->allow_schedule);
++}
++
++static void rockchip_ebc_advance_work_fn(struct work_struct *work)
++{
++	struct rockchip_ebc_advance_work *w =
++		container_of(work, struct rockchip_ebc_advance_work, work);
++
++	rockchip_ebc_advance_band_run(w);
++	complete(&w->done);
++}
++
++/*
++ * Union of possibly-"empty" band results.  An all-idle band reports the
++ * same encoding the single-threaded advance always has (mins stay
++ * 0xffff, maxs stay 0, so x2 = 16 and width <= 0); callers test
++ * emptiness by width, so the merged result must preserve one such
++ * encoding when every band is empty.
++ */
++static void rockchip_ebc_rect_union_nonempty(struct drm_rect *acc,
++					     const struct drm_rect *b)
++{
++	if (b->x2 <= b->x1 || b->y2 <= b->y1)
++		return;
++	if (acc->x2 <= acc->x1 || acc->y2 <= acc->y1) {
++		*acc = *b;
++		return;
++	}
++	acc->x1 = min(acc->x1, b->x1);
++	acc->y1 = min(acc->y1, b->y1);
++	acc->x2 = max(acc->x2, b->x2);
++	acc->y2 = max(acc->y2, b->y2);
++}
++
++/* 0 = auto (one band per CPU up to the max); N = force exactly N
++ * bands.  A/B instrument: force 1 to compare the banded advance
++ * against the original single-threaded path on identical state. */
++static int advance_bands = 0;
++module_param(advance_bands, int, 0644);
++MODULE_PARM_DESC(advance_bands, "advance worker bands (0 = auto)");
++
++#define ROCKCHIP_EBC_ADVANCE_MAX_BANDS 4
++/* Below this many rows per band the workqueue round trip is not worth
++ * dodging: a band this size computes in ~2 ms. */
++#define ROCKCHIP_EBC_ADVANCE_PAR_MIN_ROWS 176
++
++void rockchip_ebc_schedule_advance_parallel_neon(
++	const struct rockchip_ebc *ebc, const u8 *prelim_target, u8 *hints,
++	u8 *phase_buffer, struct drm_rect *clip_ongoing,
++	struct drm_rect *clip_ongoing_or_waiting,
++	u8 early_cancellation_addition, u8 force_wf, u8 force_hint,
++	u8 force_hint_mask, bool allow_schedule)
++{
++	struct rockchip_ebc_advance_work works[ROCKCHIP_EBC_ADVANCE_MAX_BANDS];
++	struct drm_rect bounds = *clip_ongoing_or_waiting;
++	int y0 = max(0, bounds.y1);
++	int y1 = min((int)ebc->height, bounds.y2);
++	int rows = y1 - y0;
++	int nbands, rows_per, i;
++
++	if (advance_bands > 0)
++		nbands = min(advance_bands, ROCKCHIP_EBC_ADVANCE_MAX_BANDS);
++	else
++		nbands = min3((int)num_online_cpus(),
++			      ROCKCHIP_EBC_ADVANCE_MAX_BANDS,
++			      rows / ROCKCHIP_EBC_ADVANCE_PAR_MIN_ROWS);
++	if (nbands < 2) {
++		scoped_ksimd()
++			rockchip_ebc_schedule_advance_band(
++				ebc, prelim_target, hints, phase_buffer,
++				&bounds, y0, y1, clip_ongoing,
++				clip_ongoing_or_waiting,
++				early_cancellation_addition, force_wf,
++				force_hint, force_hint_mask, allow_schedule);
++		return;
++	}
++
++	rows_per = DIV_ROUND_UP(rows, nbands);
++	for (i = 0; i < nbands; ++i) {
++		struct rockchip_ebc_advance_work *w = &works[i];
++
++		w->ebc = ebc;
++		w->prelim_target = prelim_target;
++		w->hints = hints;
++		w->phase_buffer = phase_buffer;
++		w->clip_bounds = &bounds;
++		w->y_begin = y0 + i * rows_per;
++		w->y_end = min(y1, y0 + (i + 1) * rows_per);
++		w->eca = early_cancellation_addition;
++		w->force_wf = force_wf;
++		w->force_hint = force_hint;
++		w->force_hint_mask = force_hint_mask;
++		w->allow_schedule = allow_schedule;
++		if (i < nbands - 1) {
++			init_completion(&w->done);
++			INIT_WORK_ONSTACK(&w->work,
++					  rockchip_ebc_advance_work_fn);
++			queue_work(system_unbound_wq, &w->work);
++		}
++	}
++
++	/* The calling thread takes the last band instead of idling. */
++	rockchip_ebc_advance_band_run(&works[nbands - 1]);
++
++	for (i = 0; i < nbands - 1; ++i) {
++		wait_for_completion(&works[i].done);
++		destroy_work_on_stack(&works[i].work);
++	}
++
++	*clip_ongoing = works[nbands - 1].out_ongoing;
++	*clip_ongoing_or_waiting = works[nbands - 1].out_ongoing_or_waiting;
++	for (i = 0; i < nbands - 1; ++i) {
++		rockchip_ebc_rect_union_nonempty(clip_ongoing,
++						 &works[i].out_ongoing);
++		rockchip_ebc_rect_union_nonempty(
++			clip_ongoing_or_waiting,
++			&works[i].out_ongoing_or_waiting);
++	}
++}
++EXPORT_SYMBOL(rockchip_ebc_schedule_advance_parallel_neon);
++
+ void rockchip_ebc_blit_y4_high_low_neon(u8 *dst, u8 *y4_high_src,
+ 					u8 *y4_low_src, unsigned int size)
+ {
