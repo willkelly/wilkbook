@@ -98,6 +98,31 @@ static const struct {
 	[WF_INIT] = { "INIT", DRM_EPD_WF_RESET },
 };
 
+/* --class-source=TARGET:SOURCE remaps which decoded mode's sequences a
+ * CLUT class slot carries.  Identity by default, which is the
+ * byte-identical-to-reference path; any remap is an EXPERIMENT knob for
+ * the direct-mode display study (doc/direct-mode-adoption.md P4): the
+ * driver picks a class by per-pixel hint, so e.g. GL16:GC16 makes
+ * ordinary Y4 page turns drive the shorter, punchier GC16 sequences.
+ * The output stays a structurally valid CLUT either way -- offsets are
+ * computed from the SOURCE lengths -- but it no longer matches the
+ * reference compiler, so the differential gate only runs the identity
+ * path.  Never ship a remapped table as a default; it is per-experiment
+ * calibration on top of per-device calibration. */
+static int class_source[WF_REAL] = { WF_DU, WF_DU4, WF_GL16, WF_GC16,
+				     WF_INIT };
+
+static int wf_by_name(const char *name, size_t len)
+{
+	int w;
+
+	for (w = 0; w < WF_REAL; w++)
+		if (strlen(wf_table[w].name) == len &&
+		    !strncmp(wf_table[w].name, name, len))
+			return w;
+	return -1;
+}
+
 struct run {
 	u8 phase;
 	u8 count;
@@ -271,7 +296,7 @@ static int build_temp_lut(struct mode_summary *ms, int temp_lower,
 
 	for (w = 0; w < WF_REAL; w++) {
 		offsets[w] = cursor;
-		cursor += ms[w].max_len;
+		cursor += ms[class_source[w]].max_len;
 	}
 	offsets[WF_IDLE] = cursor;	/* takes it, does not advance it */
 
@@ -291,23 +316,25 @@ static int build_temp_lut(struct mode_summary *ms, int temp_lower,
 	memset(cells, 0, (size_t)CELLS * CELLS * SEQ_LEN);
 
 	for (w = 0; w < WF_REAL; w++) {
-		unsigned int off = offsets[w], n = ms[w].count, k;
+		const struct mode_summary *src = &ms[class_source[w]];
+		unsigned int off = offsets[w], n = src->count, k;
 
 		if (verbose)
-			printf("clut: lut=%d mode=%s rows=%u maxlen=%u offset=%u\n",
-			       temp_index, wf_table[w].name, n, ms[w].max_len,
-			       off);
-		if (off + ms[w].max_len > SEQ_LEN) {
+			printf("clut: lut=%d mode=%s from=%s rows=%u maxlen=%u offset=%u\n",
+			       temp_index, wf_table[w].name,
+			       wf_table[class_source[w]].name, n,
+			       src->max_len, off);
+		if (off + src->max_len > SEQ_LEN) {
 			fprintf(stderr,
 				"FAIL: wf %s at bin %d needs %u cells past %u; the reference raises there\n",
-				wf_table[w].name, temp_index, ms[w].max_len,
+				wf_table[w].name, temp_index, src->max_len,
 				(unsigned int)SEQ_LEN);
 			return -1;
 		}
 		for (k = 0; k < n; k++) {
 			unsigned int r = mutate_collision_first_wins ?
 					 n - 1 - k : k;
-			struct row_summary *row = &ms[w].rows[r];
+			const struct row_summary *row = &src->rows[r];
 			u8 *cell = cells[row->src >> 1][row->dst >> 1];
 			unsigned int j;
 
@@ -369,7 +396,11 @@ static int write_output(const char *path, const u8 *buf, size_t size)
 
 static void usage(const char *argv0)
 {
-	fprintf(stderr, "usage: %s [-v] INPUT.wbf OUTPUT.bin\n", argv0);
+	fprintf(stderr, "usage: %s [-v] [--class-source=TARGET:SOURCE]... INPUT.wbf OUTPUT.bin\n", argv0);
+	fprintf(stderr,
+		"       TARGET/SOURCE in DU, DU4, GL16, GC16, INIT; remaps which\n"
+		"       decoded mode a CLUT class slot carries (display-study knob;\n"
+		"       identity is the byte-identical reference path)\n");
 #ifdef WBF_CLUT_MUTATIONS
 	fprintf(stderr,
 		"       SELF-TEST BUILD: --mutate=drop-suffix-off|collision-first-wins|axis-swap\n");
@@ -394,6 +425,26 @@ int main(int argc, char **argv)
 
 		if (!strcmp(arg, "-v") || !strcmp(arg, "--verbose")) {
 			verbose = 1;
+		} else if (!strncmp(arg, "--class-source=", 15)) {
+			const char *spec = arg + 15;
+			const char *colon = strchr(spec, ':');
+			int tgt, src;
+
+			if (!colon || colon == spec || !colon[1]) {
+				fprintf(stderr,
+					"FAIL: --class-source wants TARGET:SOURCE, got '%s'\n",
+					spec);
+				return 2;
+			}
+			tgt = wf_by_name(spec, (size_t)(colon - spec));
+			src = wf_by_name(colon + 1, strlen(colon + 1));
+			if (tgt < 0 || src < 0) {
+				fprintf(stderr,
+					"FAIL: unknown class in '%s' (DU, DU4, GL16, GC16, INIT)\n",
+					spec);
+				return 2;
+			}
+			class_source[tgt] = src;
 #ifdef WBF_CLUT_MUTATIONS
 		} else if (!strcmp(arg, "--mutate=drop-suffix-off")) {
 			mutate_keep_suffix = 1;
