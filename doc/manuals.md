@@ -317,7 +317,8 @@ ONLY on a clean close. SIGTERM — which is what shepherd's
 `make-kill-destructor` stop sends, and what any crash amounts to —
 leaves a **zero-byte truncated cache**, so the next open silently pays
 the full 30 s again. SIGINT triggers the clean close (proven: the 8 MB
-file appears and the 1.7 s open follows). Two fix directions, neither
-done: teach reader-session's stop to send SIGINT and wait briefly
-before the kill, and/or pre-warm the cr3 cache at staging time so the
-first open is never the 30 s one.
+file appears and the 1.7 s open follows). Two fix directions: the
+INT-first stop LANDED (reader-session's stop now sends SIGINT and
+polls cooperatively before the kill fallback, pinned by
+`make reader-stop-check`; on-glass validation pending the next deployed
+image); staging-time cache pre-warm remains open.

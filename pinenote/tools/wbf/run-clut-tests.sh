@@ -106,6 +106,54 @@ else
   bad "magic is '$magic'"
 fi
 
+# ----------------------------------------------------------------------
+# --balance-report: the charge-balance analysis (P4 groundwork for
+# hand-crafted rows).  The arithmetic is positive-controlled on
+# CONSTRUCTED rows in the selftest binary; the real-waveform run can
+# then be held to structure and determinism honestly.
+if "$clut_selftest" --selftest-balance > "$work/bal-self.log" 2>&1 \
+   && grep -q "PASS: selftest-balance" "$work/bal-self.log"; then
+  pass "selftest-balance arithmetic controls"
+else
+  bad "selftest-balance failed"
+  cat "$work/bal-self.log" >&2
+fi
+if "$clut" --selftest-balance "$WBF" /dev/null >/dev/null 2>&1; then
+  bad "the shipping wbf-clut accepted --selftest-balance"
+else
+  pass "shipping build refuses --selftest-balance"
+fi
+
+if "$clut" --balance-report "$WBF" > "$work/bal1.log" 2>&1; then
+  pass "--balance-report (report-only, no OUTPUT) exits 0"
+else
+  bad "--balance-report exited nonzero"
+  cat "$work/bal1.log" >&2
+fi
+if grep -q "^balance: lut=0 mode=DU " "$work/bal1.log" \
+   && grep -q "^balance: lut=0 mode=GC16 " "$work/bal1.log"; then
+  pass "balance report covers the modes"
+else
+  bad "balance report is missing mode lines"
+fi
+if ! grep -q "clut: wrote" "$work/bal1.log"; then
+  pass "report-only mode writes no CLUT"
+else
+  bad "report-only mode wrote output anyway"
+fi
+"$clut" --balance-report "$WBF" > "$work/bal2.log" 2>&1 || true
+if cmp -s "$work/bal1.log" "$work/bal2.log"; then
+  pass "balance report is deterministic"
+else
+  bad "balance report differs between identical runs"
+fi
+if grep -q "phase3_runs=0" "$work/bal1.log" \
+   && ! grep -E "phase3_runs=[1-9]" "$work/bal1.log" >/dev/null; then
+  pass "vendor table uses no phase-3 runs (observation pin: revisit the impulse model if this ever fails)"
+else
+  bad "phase-3 runs appeared -- the impulse arithmetic's phase-3 handling is now load-bearing; decide its meaning before trusting the report"
+fi
+
 cs_id=$work/cs-identity.bin
 if "$clut" --class-source=GL16:GL16 "$WBF" "$cs_id" >/dev/null 2>&1 \
    && cmp -s "$ours" "$cs_id"; then

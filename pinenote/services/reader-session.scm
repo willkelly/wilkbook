@@ -221,13 +221,47 @@ end
            #:log-file "/var/log/reader-session.log")
           args)))
     (stop
-     #~(lambda (pid . args)
-         (let ((stopped ((make-kill-destructor) pid)))
-           ;; restore the text console as a rescue path
-           (when (file-exists? #$%fbcon-bind)
-             (call-with-output-file #$%fbcon-bind
-               (lambda (port) (display "1" port))))
-           stopped))))))
+     #~(lambda (process . args)
+         ;; SIGINT before the kill: KOReader's INT handler runs the CLEAN
+         ;; close that flushes the crengine cache, while TERM -- what
+         ;; make-kill-destructor leads with -- truncates it to zero bytes
+         ;; and silently re-arms the next open's full re-parse (30.3 s
+         ;; for the manuals book vs 1.7 s cached, measured on glass
+         ;; 2026-08-26; doc/manuals.md).  Two shepherd-1.0.9 facts this
+         ;; code depends on, both proven in a scratch shepherd during
+         ;; review: (1) the stop procedure receives a <process> RECORD,
+         ;; not a pid -- unwrap before any kill, or the whole procedure
+         ;; dies on a wrong-type-arg that 'system-error does not catch;
+         ;; (2) shepherd's fiberized runtime replaces SLEEP with the
+         ;; cooperative version but NOT usleep -- a usleep poll blocks
+         ;; PID 1 whole, starves the SIGCHLD reaper fiber, and the exit
+         ;; can never be observed.  (sleep 1/10) yields; the reviewed
+         ;; lab run stopped a clean-exiting reader in 0.65 s.  Up to 8 s
+         ;; of courtesy, then the normal destructor handles a reader
+         ;; that is wedged or ignoring INT.  A clean INT exit skips the
+         ;; destructor's process-GROUP sweep, so KOReader-spawned
+         ;; children can outlive the stop; the start path's stale-reader
+         ;; cleanup covers them, and INT is an orderly app shutdown.
+         (let ((pid (if (integer? process) process (process-id process))))
+           (define (alive? p)
+             (catch 'system-error
+               (lambda () (kill p 0) #t)
+               (lambda _ #f)))
+           (catch 'system-error
+             (lambda () (kill pid SIGINT))
+             (lambda _ #f))
+           (let loop ((tries 80))
+             (when (and (alive? pid) (positive? tries))
+               (sleep 1/10)
+               (loop (- tries 1))))
+           (let ((stopped (if (alive? pid)
+                              ((make-kill-destructor) process)
+                              #f)))
+             ;; restore the text console as a rescue path
+             (when (file-exists? #$%fbcon-bind)
+               (call-with-output-file #$%fbcon-bind
+                 (lambda (port) (display "1" port))))
+             stopped)))))))
 
 (define pinenote-reader-session-service-type
   (service-type

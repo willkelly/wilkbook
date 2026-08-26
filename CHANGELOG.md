@@ -360,6 +360,23 @@ is **embrace-or-reject, after which one image ships either way**
   flashing and redrawing per page turn than a smooth read wants.** That
   is the pre-registered two-pass expectation confirmed on glass, and it
   is now the driving item for the polish phase of the plan.
+- **Stopping the reader no longer destroys your book's cache.** The
+  538-document man-pages book opens in 1.7 s with its cache and 30.3 s
+  without — and every service stop used to silently truncate that cache
+  to zero bytes (SIGTERM skips KOReader's clean close; measured on
+  glass 2026-08-26). The stop now asks nicely first: SIGINT, a
+  cooperative wait for the clean close, then the old kill for a wedged
+  reader. Pinned by a new gate (`make reader-stop-check`) whose review
+  found the first version was dead code under real shepherd — the fixed
+  form was validated in a scratch shepherd (0.65 s clean stop); the
+  on-device proof rides the next deployed image.
+- **The waveform toolbox learned charge balance** (`wbf-clut
+  --balance-report`): per-mode net-impulse and worst round-trip
+  analysis of the decoded sequences, arithmetic positive-controlled on
+  constructed rows. First result: the vendor's own envelope — DU/DU4
+  round-trips perfectly balanced, GL16/GC16 bounded at 48 (cold) to 4
+  (warm), INIT exactly zero. That envelope is the constraint any
+  hand-crafted page-turn sequence must respect, which is the point.
 - **The page-turn program got its instruments, and the instruments
   killed two planned fixes** (2026-08-26): turns were already
   single-flush (the fsync publish works through the stock driver — the

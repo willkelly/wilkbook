@@ -141,6 +141,110 @@ struct mode_summary {
 	unsigned int max_len;
 };
 
+/* --balance-report: charge-balance analysis of the DECODED vendor
+ * sequences, per temperature bin and mode.  Groundwork for hand-crafted
+ * rows (doc/direct-mode-adoption.md P4): before we invent sequences we
+ * need the vendor's own balance envelope to stay inside.  Phase values
+ * follow wbf-info.c's decode: 1 = darken (impulse -1 per frame),
+ * 2 = lighten (+1), 0 = neutral.  Phase 3 is NOT assumed neutral -- the
+ * report counts its occurrences so an assumption never hides in the
+ * arithmetic (the vendor tables observed so far never use it).
+ *
+ * Reported per mode: per-row net impulse extrema (a single transition
+ * need not be balanced), and the worst ROUND TRIP a<->b, which is the
+ * quantity that accumulates DC across a cycle and the one hand-crafted
+ * rows must keep near the vendor envelope.  The analysis runs on the
+ * SUMMARISED rows -- after QUIRK 1's unconditional trailing-run drop --
+ * i.e. the sequences the CLUT actually ships; on the waveforms observed
+ * so far every dropped run is phase-0, so these numbers equal the raw
+ * decode, but a future .wbf with a non-neutral trailing run would make
+ * them diverge, deliberately, toward what ships. */
+static int balance_report;
+
+static int row_net(const struct row_summary *row, unsigned int *phase3_runs)
+{
+	int net = 0;
+	unsigned int j;
+
+	for (j = 0; j < row->len; j++) {
+		switch (row->runs[j].phase & 3) {
+		case 1: net -= row->runs[j].count; break;
+		case 2: net += row->runs[j].count; break;
+		case 3: if (phase3_runs) (*phase3_runs)++; break;
+		}
+	}
+	return net;
+}
+
+/* Worst round trip among (a,b) pairs present in BOTH directions
+ * (last-write-wins per cell, matching QUIRK 2's collision behaviour).
+ * Returns the count of bidirectional pairs; *max_rt/*rt_a/*rt_b carry
+ * the worst offender (rt_a stays -1 when no pair exists).  Factored out
+ * so the selftest can drive it with constructed rows. */
+static unsigned int worst_roundtrip(const struct mode_summary *m,
+				    int *max_rt, int *rt_a, int *rt_b)
+{
+	/* 4-bit cell indices after src>>1/dst>>1: 32x32 is roomy */
+	int net_tab[32][32];
+	u8 present[32][32] = { { 0 } };
+	unsigned int k, pairs = 0;
+	int a, b;
+
+	*max_rt = 0;
+	*rt_a = -1;
+	*rt_b = -1;
+	for (k = 0; k < m->count; k++) {
+		const struct row_summary *row = &m->rows[k];
+		int sa = row->src >> 1, sb = row->dst >> 1;
+
+		net_tab[sa][sb] = row_net(row, NULL);
+		present[sa][sb] = 1;
+	}
+	for (a = 0; a < 32; a++)
+		for (b = a + 1; b < 32; b++)
+			if (present[a][b] && present[b][a]) {
+				int rt = net_tab[a][b] + net_tab[b][a];
+
+				pairs++;
+				if (abs(rt) > abs(*max_rt)) {
+					*max_rt = rt;
+					*rt_a = a;
+					*rt_b = b;
+				}
+			}
+	return pairs;
+}
+
+static void report_balance(const struct mode_summary *ms, int temp_index)
+{
+	int w;
+
+	for (w = 0; w < WF_REAL; w++) {
+		unsigned int phase3_runs = 0, k, pairs;
+		int max_abs_net = 0;
+		long sum_net = 0;
+		int max_rt, rt_a, rt_b;
+
+		for (k = 0; k < ms[w].count; k++) {
+			int net = row_net(&ms[w].rows[k], &phase3_runs);
+
+			if (abs(net) > abs(max_abs_net))
+				max_abs_net = net;
+			sum_net += net;
+		}
+		pairs = worst_roundtrip(&ms[w], &max_rt, &rt_a, &rt_b);
+		printf("balance: lut=%d mode=%s rows=%u extreme_net=%d mean_net=%.2f ",
+		       temp_index, wf_table[w].name, ms[w].count, max_abs_net,
+		       ms[w].count ? (double)sum_net / ms[w].count : 0.0);
+		if (rt_a >= 0)
+			printf("worst_roundtrip=%d (cell %d<->%d of %u pairs) ",
+			       max_rt, rt_a, rt_b, pairs);
+		else
+			printf("worst_roundtrip=none (no bidirectional pairs) ");
+		printf("phase3_runs=%u\n", phase3_runs);
+	}
+}
+
 /* Self-test-only mutations.  Compiled out of the shipping binary entirely
  * (-DWBF_CLUT_MUTATIONS is set by the host Makefile's selftest target
  * only), so the device can never be handed one by accident, and the
@@ -396,16 +500,100 @@ static int write_output(const char *path, const u8 *buf, size_t size)
 
 static void usage(const char *argv0)
 {
-	fprintf(stderr, "usage: %s [-v] [--class-source=TARGET:SOURCE]... INPUT.wbf OUTPUT.bin\n", argv0);
+	fprintf(stderr, "usage: %s [-v] [--balance-report] [--class-source=TARGET:SOURCE]... INPUT.wbf [OUTPUT.bin]\n", argv0);
+	fprintf(stderr,
+	        "       --balance-report prints per-bin, per-mode charge-balance\n"
+	        "       analysis of the decoded sequences; OUTPUT.bin may be\n"
+	        "       omitted in that mode (report only, nothing written)\n");
 	fprintf(stderr,
 		"       TARGET/SOURCE in DU, DU4, GL16, GC16, INIT; remaps which\n"
 		"       decoded mode a CLUT class slot carries (display-study knob;\n"
 		"       identity is the byte-identical reference path)\n");
 #ifdef WBF_CLUT_MUTATIONS
 	fprintf(stderr,
-		"       SELF-TEST BUILD: --mutate=drop-suffix-off|collision-first-wins|axis-swap\n");
+		"       SELF-TEST BUILD: --mutate=drop-suffix-off|collision-first-wins|axis-swap\n"
+		"                        --selftest-balance\n");
 #endif
 }
+
+#ifdef WBF_CLUT_MUTATIONS
+/* Positive controls for the balance arithmetic, on CONSTRUCTED rows --
+ * the report on a real .wbf can only show plausible numbers, it cannot
+ * show the math is right.  Compiled only into the selftest binary. */
+static int selftest_balance(void)
+{
+	struct row_summary balanced = { .src = 0, .dst = 30, .len = 2,
+		.runs = { { .phase = 1, .count = 7 },
+			  { .phase = 2, .count = 7 } } };
+	struct row_summary dark5 = { .src = 30, .dst = 0, .len = 3,
+		.runs = { { .phase = 1, .count = 6 },
+			  { .phase = 0, .count = 9 },
+			  { .phase = 2, .count = 1 } } };
+	struct row_summary ph3 = { .src = 2, .dst = 4, .len = 2,
+		.runs = { { .phase = 3, .count = 4 },
+			  { .phase = 2, .count = 2 } } };
+	unsigned int p3 = 0;
+	int fails = 0;
+
+	if (row_net(&balanced, &p3) != 0) {
+		fprintf(stderr, "FAIL: balanced row nets %d, want 0\n",
+			row_net(&balanced, NULL));
+		fails++;
+	}
+	if (row_net(&dark5, &p3) != -5) {
+		fprintf(stderr, "FAIL: dark row nets %d, want -5\n",
+			row_net(&dark5, NULL));
+		fails++;
+	}
+	if (p3 != 0) {
+		fprintf(stderr, "FAIL: phase3 counted %u on phase-0/1/2 rows\n",
+			p3);
+		fails++;
+	}
+	if (row_net(&ph3, &p3) != 2 || p3 != 1) {
+		fprintf(stderr,
+			"FAIL: phase-3 row: net %d (want 2), phase3_runs %u (want 1)\n",
+			row_net(&ph3, NULL), p3);
+		fails++;
+	}
+	/* the round-trip quantity: balanced(0->30)=0 + dark5(30->0)=-5 */
+	if (row_net(&balanced, NULL) + row_net(&dark5, NULL) != -5) {
+		fprintf(stderr, "FAIL: round-trip arithmetic\n");
+		fails++;
+	}
+	/* the PAIRING SCAN itself, on constructed rows: without this a
+	 * scan that never finds a bidirectional pair reports vacuous
+	 * balance on everything. */
+	{
+		struct row_summary pair_rows[3];
+		struct mode_summary m = { .rows = pair_rows, .count = 3 };
+		int max_rt, rt_a, rt_b;
+		unsigned int pairs;
+
+		pair_rows[0] = balanced;	/* 0 -> 30, net 0  */
+		pair_rows[1] = dark5;		/* 30 -> 0, net -5 */
+		pair_rows[2] = ph3;		/* 2 -> 4, no reverse */
+		pairs = worst_roundtrip(&m, &max_rt, &rt_a, &rt_b);
+		if (pairs != 1 || max_rt != -5 || rt_a != 0 || rt_b != 15) {
+			fprintf(stderr,
+				"FAIL: pairing scan: pairs=%u rt=%d (%d<->%d), want 1/-5/(0<->15)\n",
+				pairs, max_rt, rt_a, rt_b);
+			fails++;
+		}
+		m.count = 1;	/* only 0->30: no bidirectional pair */
+		pairs = worst_roundtrip(&m, &max_rt, &rt_a, &rt_b);
+		if (pairs != 0 || rt_a != -1) {
+			fprintf(stderr,
+				"FAIL: no-pair case: pairs=%u rt_a=%d, want 0/-1\n",
+				pairs, rt_a);
+			fails++;
+		}
+	}
+	if (!fails)
+		printf("PASS: selftest-balance (net, phase3, round-trip, pairing)\n");
+	return fails ? 1 : 0;
+}
+#endif
 
 int main(int argc, char **argv)
 {
@@ -425,6 +613,8 @@ int main(int argc, char **argv)
 
 		if (!strcmp(arg, "-v") || !strcmp(arg, "--verbose")) {
 			verbose = 1;
+		} else if (!strcmp(arg, "--balance-report")) {
+			balance_report = 1;
 		} else if (!strncmp(arg, "--class-source=", 15)) {
 			const char *spec = arg + 15;
 			const char *colon = strchr(spec, ':');
@@ -446,6 +636,8 @@ int main(int argc, char **argv)
 			}
 			class_source[tgt] = src;
 #ifdef WBF_CLUT_MUTATIONS
+		} else if (!strcmp(arg, "--selftest-balance")) {
+			return selftest_balance();
 		} else if (!strcmp(arg, "--mutate=drop-suffix-off")) {
 			mutate_keep_suffix = 1;
 		} else if (!strcmp(arg, "--mutate=collision-first-wins")) {
@@ -466,7 +658,7 @@ int main(int argc, char **argv)
 			return 2;
 		}
 	}
-	if (!in_path || !out_path) {
+	if (!in_path || (!out_path && !balance_report)) {
 		usage(argv[0]);
 		return 2;
 	}
@@ -553,16 +745,20 @@ int main(int argc, char **argv)
 				       t, wf_table[w].name, mode_index,
 				       lut.num_phases);
 		}
-		if (build_temp_lut(ms, h->temp_range_table[t],
+		if (balance_report)
+			report_balance(ms, (int)t);
+		if (out_path &&
+		    build_temp_lut(ms, h->temp_range_table[t],
 				   h->temp_range_table[t + 1], (int)t, lut_out))
 			return 1;
 	}
 
-	if (write_output(out_path, out, size))
-		return 1;
-
-	printf("clut: wrote %s (%zu bytes, %u temperature bins)\n", out_path,
-	       size, n_luts);
+	if (out_path) {
+		if (write_output(out_path, out, size))
+			return 1;
+		printf("clut: wrote %s (%zu bytes, %u temperature bins)\n",
+		       out_path, size, n_luts);
+	}
 	printf("RESULT: ok\n");
 	return 0;
 }

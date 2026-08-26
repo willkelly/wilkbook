@@ -83,7 +83,7 @@ FLAVORS = minimal slim networked dev usb-console usb-console-linux-6-6 reader re
         timezone-check kernel-version-check library-check \
         manuals-check ultra-coupling-check timesync-check \
         settings-check koreader-profile-check ebc-modprobe-options-check \
-        ebc-clut-check ebc-card-resolution-check \
+        ebc-clut-check ebc-card-resolution-check reader-stop-check \
         $(FLAVORS) $(addprefix image-,$(FLAVORS)) $(addprefix rootfs-,$(FLAVORS))
 
 help:
@@ -122,6 +122,7 @@ help:
 	@echo "  settings-check    every knob declared twice still agrees; today's drift is pinned (issue #12)"
 	@echo "  ebc-modprobe-options-check  each rockchip_ebc options set names only parameters its own driver registers"
 	@echo "  ebc-card-resolution-check  no on-device EBC path hardcodes a /dev/dri/cardN index (2026-08-25 wash-to-GPU bug)"
+	@echo "  reader-stop-check  reader-session's stop is SIGINT-first (TERM truncates crengine caches)"
 	@echo
 	@echo "Flags:"
 	@echo "  TIME_MACHINE=1    build through channels.scm (required for releases; BROKEN until the"
@@ -342,7 +343,8 @@ CHECK_HOST_TARGETS = clut-check ebc-logic-check ebc-barrier-check rastersim-chec
         library-check koreader-profile-check manuals-check ultra-coupling-check \
         battery-dtb-check time-machine-check gexp-modules-check \
         timezone-check refresh-trigger-check timesync-check settings-check \
-        ebc-modprobe-options-check ebc-clut-check ebc-card-resolution-check
+        ebc-modprobe-options-check ebc-clut-check ebc-card-resolution-check \
+        reader-stop-check
 
 # Parse time, not recipe time: a recipe-level guard would run only AFTER every
 # prerequisite had already completed, so it could not prevent the mistake it
@@ -532,6 +534,12 @@ ebc-modprobe-options-check:
 # index -- the 2026-08-25 wash-to-GPU ghosting root cause.
 ebc-card-resolution-check:
 	sh pinenote/scripts/preflight/validate-ebc-card-resolution.sh
+
+# reader-session's stop must be INT-first: TERM truncates the crengine
+# cache to zero bytes and re-arms a 30 s re-parse of the manuals book
+# (measured on glass 2026-08-26 -- doc/manuals.md).
+reader-stop-check:
+	sh pinenote/scripts/preflight/validate-reader-stop.sh
 
 rockchip-pm-check:
 	$(call guix-shell,dtc gcc-toolchain git python) $(MAKE) -C pinenote/tools/rockchip-pm check
