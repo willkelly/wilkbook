@@ -66,6 +66,27 @@ harvest from os1 before booting os2, per `doc/device-access.md`).
 Also confirmed the hard way: the only ttyACM on this host is the MOTU
 M4 (the documented trap) — no gadget fallback while os2 is down.
 
+**POST-MORTEM (same night, after the power-button recovery) — the
+suspect above is refuted; the log names the real killer.** p6's own
+`/var/log/messages`, harvested via the os1 ro-mount before the
+redeploy, records the whole thing
+(`doc/artifacts/pinenote-shutdown-wedge-20260826/`): the halt began at
+05:02:01 and the service teardown was FAST — reader-session stopped
+within a second, orientation-bridge in ~1 s (the SIGTERM fix proven
+working on device), ddr-boost in 3 s. No PID 1 crawl. What wedged it:
+the halt killed the very ssh session that had issued `reboot`, the
+deploy script misread that client's nonzero exit as failure and fired
+its `||` fallback ssh, shepherd's inetd listener — still armed
+mid-halt — accepted the connection, and serving it **restarted the
+networking service the halt had just stopped** (dhcpcd relaunched;
+which is why ping kept answering all night). `Service networking has
+been started.` is the final line the system ever logged. Two fixes:
+the deploy tooling now makes ONE reboot attempt, ignores its exit
+status, and never reconnects until U-Boot shows on the UART; and the
+shepherd halt/inetd race is registered as upstream item 20. The
+usleep/INT-first stop fix remains lab-proven and worth shipping — it
+just wasn't tonight's culprit.
+
 The operator's directive: reading first, pen later; direct mode is the
 floor either way. The night's instrumentation dismantled most of the
 pre-registered P4 model:

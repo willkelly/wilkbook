@@ -98,20 +98,27 @@ required — the runtime `console_suspend=N` knob does not hold the 8250 up
 through its own dev_pm_ops. UART gives passwordless root whenever the
 device is awake; it is the recovery channel if auto-suspend misbehaves.
 
-3. (2026-08-26) **A hung shutdown answers the UART like a live system.**
-   After issuing `reboot`, a `login:` prompt on ttyS2 does NOT mean a
-   fresh boot: if the shutdown stalls (wedged PID 1 mid-stop), the old
-   session's getty keeps prompting until the teardown reaches it. The
-   tell, once things degrade further: keystrokes **echo** (kernel tty
-   alive) but nothing ever responds — no password prompt, no getty
-   respawn, and sshd flips to connection-refused while ping still
-   answers. That state has no reader on the tty; no line-ending game
-   helps. Worse, *typing a login name at the stale prompt is
-   destructive*: login(1) consumes the last getty, execs into the
-   starved system, and never returns — closing the only interactive
-   door. Before trusting a post-reboot prompt, ask it for `uptime` (or
-   watch for U-Boot/kernel boot chatter in the capture); a boot you
-   didn't see happen didn't happen. Recovery from the fully-wedged
+3. (2026-08-26) **A hung shutdown answers the UART like a live system —
+   and reconnecting over ssh is what causes the hang.** Root-caused
+   from the device's own log
+   (`doc/artifacts/pinenote-shutdown-wedge-20260826/`): the halt kills
+   the ssh session that issued `reboot`, so that client exits nonzero;
+   anything that treats the nonzero exit as failure and reconnects hits
+   shepherd's inetd listener — still armed mid-halt — which accepts the
+   connection and *restarts the stopped networking service* to serve
+   it, wedging the halt permanently (upstream register item 20). The
+   rule: **one reboot attempt, exit status ignored, and no connection
+   to the device between issuing `reboot` and seeing U-Boot on the
+   UART.** The wedged state's signature: keystrokes **echo** (kernel
+   tty alive) but nothing ever responds — no password prompt, no getty
+   respawn — and sshd flips to connection-refused while ping still
+   answers (the restarted dhcpcd). A `login:` prompt seen after
+   `reboot` can be the DYING session's getty, and *typing a login name
+   at it is destructive*: login(1) consumes the last getty, execs into
+   the half-torn-down system, and never returns — closing the only
+   interactive door. Before trusting a post-reboot prompt, ask it for
+   `uptime` (or watch for U-Boot/kernel chatter in the capture); a boot
+   you didn't see happen didn't happen. Recovery from the fully-wedged
    state is the power button — a serial BREAK is inert on kernels
    before the 2026-08-26 forward-port revision (the inherited defconfig
    unset `MAGIC_SYSRQ_SERIAL`; it is now enabled, guarded by the

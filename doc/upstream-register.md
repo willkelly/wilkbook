@@ -857,3 +857,42 @@ trap.
 set_redraw_delay to confirm the FAST-mode pairing; reproduce on his
 unmodified branch (ours differs only by the DT hunk and build glue in
 this area).
+
+## 20. shepherd: the inetd ssh listener stays armed during halt and restarts stopped dependencies, wedging shutdown
+
+**Where it would go:** bug-guix / the Shepherd's tracker
+(shepherd is the supervisor; the service arrangement is Guix's
+`openssh-service-type` in inetd style).
+
+**Status: proven on device from the system's own log, one occurrence;
+needs a minimal reproducer before sending.**
+
+**What we saw (2026-08-26, `doc/artifacts/pinenote-shutdown-wedge-20260826/`):**
+during `Stopping service root...` — four seconds into a clean, fast
+teardown — shepherd killed the transient sshd serving the very session
+that had issued `reboot`. The client reconnected (a tooling bug on our
+side, since fixed), and shepherd **accepted** the new connection on the
+still-armed inetd listener, spawned a transient service for it, and
+**started the `networking` service the halt had stopped moments
+earlier** to satisfy the transient's dependency. `Service networking
+has been started.` is the last line the system ever logged: the halt
+never completed, and the device sat indefinitely with the kernel alive
+and userspace half-torn-down (ping answering through the restarted
+dhcpcd, no ssh listener, no getty, no respawns) until a power-button
+cycle.
+
+**Why it deserves a report:** a headless machine that receives one ssh
+connection in its ~seconds-wide halt window hangs forever instead of
+rebooting — and monitoring systems, retrying deploy scripts, and
+health-checkers all connect on exactly that schedule. The
+half-alive state is also actively misleading (the box answers ping,
+so remote hands conclude "it's up, ssh is just broken"). Plausible
+fixes at either layer: shepherd could close inetd listeners at the
+top of halt rather than in dependency order, refuse constructor
+starts once halt has begun, or both.
+
+**What has to be true first:** the baseline gate, plus a reproducer
+outside our tree — a stock Guix system (or bare shepherd) with an
+inetd-style service, `reboot` over ssh, and a scripted reconnect-on-
+disconnect; confirm the same accept→dependency-restart→wedge sequence.
+Also confirm against current shepherd (the device ran 1.0.x).
