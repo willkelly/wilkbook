@@ -3,6 +3,63 @@
 Last updated: 2026-08-26. Update protocol: add a dated entry at the top
 after every hardware session; entries are per-device/per-operator.
 
+## 2026-08-26 (part 9) — the ghost is grayscale: A2 routing fixes page turns, live
+
+First full run of the ebc-lab iteration loop — a CLUT variant compiled
+on the workstation, swapped onto the running device, and judged through
+five live hint changes under an unmodified KOReader, no image write.
+The result is a validated product recipe for direct-mode page turns.
+
+**Setup**: fresh boot (identity CLUT via the boot one-shot, hands-off
+probe at 12.3 s), then `clut-swap.sh` installed a `--class-source=DU:A2`
+table (`556388ec…`) — A2 (10 phases, 6 rows, run length 1) in the DU
+slot, every other slot byte-identity. First hardware use of
+`clut-swap.sh`, `page-flip.lua`, and the lab's GLOBAL_REFRESH one-liner;
+`rect-hints.lua --default` drove the whole sweep live under the reader.
+
+**Synthetic flips** (page-flip.lua, 12 flips at 2 s, mono blocks):
+hint 0 → A2: crisp swaps, "not really" any ghosting, 20–28 IRQs/flip
+(~two defio waves × A2's 10 phases). Hint 160 → GL16: 42–60 IRQs,
+minor artifacting and lingering ghost — but **still far better than
+KOReader's turns**, which killed the "it's the waveform table" theory
+on the spot: same driver, same routing, same table, mono content is
+fine.
+
+**Live KOReader hint sweep** (operator turning real pages):
+
+| default hint | route | verdict |
+|---|---|---|
+| 160 (Y4+REDRAW) | GL16 | horrible ghosting (baseline) |
+| 32 (Y4) | GL16 | identical — **REDRAW exonerated** |
+| 0 (Y1 threshold) | A2 | **ghosting gone**, text readable, no antialias |
+| 64 (Y1 dither) | A2 | text nice; dither visible on images; heavy images ghost (A2's drive is too weak to scrub dense content) |
+| 80 (Y2 dither) | DU4 | worse: lots of ghost AND slow settle — DU4 is out |
+
+So the horrible page-turn ghosting is **GL16 × antialiased grayscale
+text**, specifically — not the table bytes (mono blocks through GL16
+are near-clean), not the REDRAW flag, not the damage path. Why this
+driver's Y4 transitions ghost where the shipping driver ran the same
+GL16 lineage cleanly is now a research question, not a product blocker.
+
+**The wash lever closes the loop**: one GLOBAL_REFRESH (fired from the
+lab via ebclib) scrubbed the full-page-image ghost completely.
+Operator: "the wash cleared it. Idle washer is fine for the current
+situation. Text page turns are much nicer. Whatever the config is now
+is good."
+
+**The validated recipe** (the commercial fast-mode pattern): default
+hint 64 (dithered mono via A2) for turns + wash-on-debt for ghost
+management (idle washer suffices today) + per-region Y4 routing for
+images later, via the RECT_HINTS plumbing this session proved live.
+
+**Device state at close**: SESSION-SCOPED config live on os2 — A2-in-DU
+table + driver default hint 64. A reboot reverts both (identity CLUT,
+hint 160) and brings the ghosting back; persistence needs the one-shot
+and the hint default wired into the image. Reader running, autosuspend
+still pinned off. Trap for future lab work: no system `luajit` on the
+image — use KOReader's bundled one
+(`…-koreader-bin-…/lib/koreader/luajit`).
+
 ## 2026-08-26 (part 8) — D8 CLOSED: 20 ms to ink in FAST, 40–60 ms in NORMAL, both pen-class
 
 The formal half of D8, from two 240 fps phone clips analyzed
