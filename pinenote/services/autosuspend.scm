@@ -88,10 +88,19 @@
     (list
      (shepherd-service
       (provision '(pinenote-autosuspend))
-      ;; Needs input nodes and the reader it suspends around.  Ordering
-      ;; after reader-session also means a boot that fails to reach the
-      ;; reader does not start suspending itself.
-      (requirement '(udev reader-session))
+      ;; Needs input nodes only.  NOT reader-session, deliberately
+      ;; (2026-08-26): a shepherd requirement made `herd stop
+      ;; reader-session` stop this daemon as a dependent, and `herd
+      ;; start reader-session` does not restart dependents -- so every
+      ;; reader stop test silently disabled auto-suspend until someone
+      ;; noticed (found dead 18 minutes after a stop-timing test).  The
+      ;; property the requirement bought -- a boot that fails to reach
+      ;; the reader does not start suspending itself -- is enforced by
+      ;; the daemon's fbcon gate instead (reader_owns_panel in
+      ;; autosuspend.lua): fbcon bound means no reader, and the daemon
+      ;; holds off; the same gate covers an operator's stop-for-tests
+      ;; and re-arms the moment the reader is back.
+      (requirement '(udev))
       (documentation "Suspend to deep after an idle period; wake on button.")
       (start
        #~(make-forkexec-constructor

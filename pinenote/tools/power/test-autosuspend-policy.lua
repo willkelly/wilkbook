@@ -493,6 +493,48 @@ do
         "the guard exists but nothing calls it")
 end
 
+-- The reader-session gate (2026-08-26).  The daemon used to die with
+-- `herd stop reader-session` through a shepherd requirement -- and
+-- `herd start reader-session` does not restart dependents, so every
+-- stop test silently disabled auto-suspend (found dead 18 minutes
+-- after a stop-timing test).  The requirement is gone; in its place
+-- the daemon gates suspend on fbcon ownership: vtcon1/bind reads "0"
+-- exactly while reader-session owns the panel (its start unbinds
+-- fbcon, its stop rebinds).  Pin the three-way policy and that BOTH
+-- suspend paths consult it.
+do
+    local gate_src = extract_function("reader_owns_panel")
+    local function owns(bind_value)
+        local env = {
+            read_file = function() return bind_value end,
+        }
+        local chunk = loadstring(gate_src .. "\nreturn reader_owns_panel",
+                                 "@" .. source_path .. ":gate")
+        if not chunk then fatal("extracted reader_owns_panel does not compile") end
+        setfenv(chunk, env)
+        return chunk()()
+    end
+    report(owns("0") == true, "fbcon unbound (reader up) allows suspend")
+    report(owns("1") == false, "fbcon bound (reader down) holds suspend off")
+    report(owns(nil) == true,
+        "no fbcon signal fails OPEN: a platform without vtcon1 still suspends")
+
+    local src = table.concat(lines, "\n")
+    report(src:find("if not reader_owns_panel() then", 1, true) ~= nil,
+        "the idle path consults the reader gate")
+    report(src:find("elseif not reader_owns_panel() then", 1, true) ~= nil,
+        "press-to-suspend and cover-close are gated as well")
+
+    local svc = io.open(service_path, "r")
+    if svc then
+        local body = svc:read("*a")
+        svc:close()
+        report(body:find("requirement '(udev)", 1, true) ~= nil
+               and body:find("requirement '(udev reader-session)", 1, true) == nil,
+            "the service no longer requires reader-session (the gate replaces it)")
+    end
+end
+
 -- Cheapest gate available on a daemon nothing else on the host can run.
 report(loadfile(source_path) ~= nil, "autosuspend.lua compiles")
 

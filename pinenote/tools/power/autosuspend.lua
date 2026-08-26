@@ -213,6 +213,32 @@ local function may_suspend_charging()
 end
 local charging_notice = false
 
+-- reader-session and this daemon share a panel-ownership signal that
+-- needs no IPC: the reader's start unbinds fbcon (the same
+-- /sys/class/vtconsole/vtcon1/bind that services/reader-session.scm
+-- names %fbcon-bind) and its stop -- clean stop, stop test, or a crash
+-- that shepherd notices -- rebinds it.  So the file reads "0" exactly
+-- while the reader owns the panel.  Gating suspend on it keeps both
+-- properties the old `requirement '(reader-session)` bought (a boot
+-- that never reaches the reader stays awake and reachable; an
+-- operator's stop-for-tests holds suspend off) while fixing what the
+-- requirement broke: `herd stop reader-session` used to stop this
+-- daemon as a dependent, and `herd start reader-session` does not
+-- restart dependents, so every reader stop test silently disabled
+-- auto-suspend until someone noticed (2026-08-26: dead 18 minutes
+-- after a stop-timing test, found by accident).  With the gate, this
+-- daemon keeps running and re-arms itself the moment the reader is
+-- back.  Fail OPEN when the file is absent: a platform without fbcon
+-- (qemu-virt) simply has no signal, and never-suspending is the worse
+-- failure for the daemon's primary job.
+local FBCON_BIND = "/sys/class/vtconsole/vtcon1/bind"
+local function reader_owns_panel()
+    local b = read_file(FBCON_BIND)
+    if b == nil then return true end
+    return b:match("^%s*0") ~= nil
+end
+local reader_notice = false
+
 -- fd_set helpers: a bit array of longs, which is what select() wants.
 local LONG_BITS = 64
 local fdset = ffi.new("long[?]", FD_SETSIZE / LONG_BITS)
@@ -268,9 +294,9 @@ local power_nodes = {}
 for _, d in ipairs(fds) do
     if d.is_power then power_nodes[#power_nodes + 1] = d.path .. " (" .. d.name .. ")" end
 end
-log("watching %d input devices, idle=%ds backstop=%ds overlay=%s config=%s%s",
+log("watching %d input devices, idle=%ds backstop=%ds overlay=%s config=%s persistent=%s%s",
     #fds, idle_secs(), backstop_secs(), tostring(opt.overlay), opt.config,
-    opt.dry and " [DRY RUN]" or "")
+    persistent_config, opt.dry and " [DRY RUN]" or "")
 if #power_nodes == 0 then
     log("no power-key node found -- press-to-suspend unavailable (idle timer still works)")
 else
@@ -847,6 +873,16 @@ while true do
         log("external power gone -- auto-suspend active again")
         charging_notice = false
     end
+    if not reader_owns_panel() then
+        if not reader_notice then
+            log("reader-session is down (fbcon bound) -- holding off auto-suspend")
+            reader_notice = true
+        end
+        last_activity = os.time()
+    elseif reader_notice then
+        log("reader-session is back (fbcon unbound) -- auto-suspend active again")
+        reader_notice = false
+    end
     local elapsed, stepped = idle_elapsed(os.time(), last_activity, idle_secs())
     if stepped then
         log("wall clock stepped under the idle timer -- re-basing")
@@ -965,6 +1001,8 @@ while true do
                     log("power tap within resume grace -- ignoring")
                 elseif not runtime.enabled then
                     log("%s but auto-suspend is paused (enabled=0) -- ignoring", why)
+                elseif not reader_owns_panel() then
+                    log("%s but reader-session is down (fbcon bound) -- ignoring", why)
                 elseif opt.dry then
                     log("DRY RUN: %s would suspend now", why)
                 else

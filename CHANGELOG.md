@@ -20,6 +20,19 @@ says otherwise.
 
 ### Battery and suspend
 
+- **Stopping the reader no longer silently kills auto-suspend.** The
+  daemon used to be a shepherd dependent of reader-session, so a stop
+  test (or any reader stop) took it down — and nothing restarted it,
+  leaving the device draining at awake current while looking configured
+  to sleep (found dead 18 minutes after a stop test, 2026-08-26). The
+  requirement is gone; the daemon instead gates each suspend on fbcon
+  ownership (`vtcon1/bind` reads `0` exactly while the reader owns the
+  panel), which keeps the old protections — a boot that never reaches
+  the reader stays awake and reachable, an operator's stop holds
+  suspend off — and re-arms itself the moment the reader is back.
+  Offline-proven in `test-autosuspend-policy.lua` (three-way policy,
+  both suspend paths, the requirement stays dropped).
+
 - **Standby has a measured number for the first time.** Six days and
   four hours unplugged, never on a charger: **5.47 mA sitting idle** and
   **10.07 mA as the device was actually read**. Against a 4000 mAh
