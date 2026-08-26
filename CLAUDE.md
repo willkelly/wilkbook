@@ -249,12 +249,15 @@ gitignored `build/`, or the reader's static address.
   the shipping-driver 7.1 build has never driven a panel, and os2
   currently carries the study image — os1 remains the rescue path.
   So: 7.1 is what the repo *builds*, 7.0.11 is what is *proven* for the
-  product, the study ran 7.1.8 once. Never state one as the other. `channels.scm` still pins
-  nonguix at 7.0.11 and has no 7.1, so a reproducible `TIME_MACHINE=1`
-  build of the current tree is **not yet possible** — that pin bump is
-  its own change. 6.6.30 remains regression-isolation only. Seven
-  patches; the 7.1 move *deleted* two hunks mainline absorbed. Inventory
-  in `doc/kernel-forward-port.md`.
+  product, the study ran 7.1.8 once. Never state one as the other.
+  `channels.scm` was pin-bumped 2026-08-26 to the 7.1-resolving
+  generation, so `TIME_MACHINE=1` works again on `main` (gated on
+  time-machine resolving the identical kernel derivation as ambient);
+  a future series bump must carry the pin with it. Serial-BREAK sysrq
+  is enabled behind a `sysrq` guard sequence as of the same date —
+  built, never on glass. 6.6.30 remains regression-isolation only.
+  Seven patches; the 7.1 move *deleted* two hunks mainline absorbed.
+  Inventory in `doc/kernel-forward-port.md`.
 - **Suspend**: **ultra suspend is the shipping suspend** (2026-08-08,
   R12): hrdl's configuration adopted whole — standing
   `rockchip,suspend-state-override = <5>` + three `*_pmu` rails

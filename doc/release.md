@@ -19,12 +19,12 @@ guix time-machine -C channels.scm -- \
 `channels.scm` pins Guix itself plus every extra channel by commit, with
 channel introductions. That is the whole reproducibility claim — and note
 that it is a claim about a *tag and its committed pin*, not about any
-tree between pins. As of 2026-08-25 it does **not** hold for current
-`main`: the kernel moved to the `nongnu:linux-7.1` series pin while the
-committed `channels.scm` still pins a nonguix commit that predates
-`linux-7.1`, so the command above fails at module evaluation until the
-pin bump lands (a reviewed change of its own; `doc/building.md`). It
-remains true of `v0.1.0-prealpha` with its pin. It is
+tree between pins. It holds for `v0.1.0-prealpha` with its pin, and for
+`main` since the 2026-08-26 pin bump (gated on time-machine resolving
+the identical kernel derivation as the ambient build); the 2026-08-25→26
+window between — after the kernel moved to the `nongnu:linux-7.1` series
+pin, before `channels.scm` followed — is not reproducible through its
+own committed pin (`doc/building.md`). It is
 the one thing a rolling binary distribution structurally cannot offer:
 hrdl's Arch images are built against moving mirrors with a `-git` kernel
 whose `sha256sums=('SKIP')`, so "the same tarball" is not reconstructible

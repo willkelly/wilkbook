@@ -75,7 +75,7 @@ the first thing to check.
   `guix time-machine -C channels.scm --` when the flag is set:
 
   ```sh
-  make rootfs-reader TIME_MACHINE=1     # pinned — BUT SEE BELOW
+  make rootfs-reader TIME_MACHINE=1     # pinned
   make rootfs-reader                    # ambient guix, whatever you pulled
   ```
 
@@ -83,23 +83,27 @@ the first thing to check.
   materialize the pinned Guix first, which would turn the cheap rung-2
   gates (`make kernel-drv`, ~0.6 s) into a long build.
 
-  **As of 2026-08-25, `TIME_MACHINE=1` is BROKEN on this tree, and the
-  ambient build is the working one — the inverse of the story this
-  section used to tell.** `%linux-pinenote-base`
-  (`pinenote/packages/kernel.scm`) is now a *series pin*,
-  `nongnu:linux-7.1`, but the committed `channels.scm` still pins a
-  nonguix commit (`3ed7c20`) that predates `linux-7.1`, so every
-  time-machine build of the kernel — and of any image containing it —
-  dies at module evaluation with `Unbound variable: nongnu:linux-7.1`
-  (verified 2026-08-25, both directions: ambient resolves
-  `linux-pinenote-7.1.8` and passes `make kernel-version-check`;
-  `TIME_MACHINE=1` fails it). The repair is a channel-pin bump
-  (`make channels-pin` + commit), which is its own reviewed change.
-  Until it lands, the byte-identical-rebuild claim holds for the
-  `v0.1.0-prealpha` tag with *its* pin, not for current `main`. See
+  **The 2026-08-26 pin bump made `TIME_MACHINE=1` work again on
+  current `main`.** From 2026-08-25 until then it was broken: the
+  kernel had moved to the `nongnu:linux-7.1` series pin while
+  `channels.scm` still pinned a nonguix commit (`3ed7c20`) predating
+  `linux-7.1`, so every time-machine build died at module evaluation
+  with `Unbound variable: nongnu:linux-7.1`. The bump pinned the exact
+  channel generation the working ambient builds were using, and its
+  acceptance gate was equality: `make kernel-drv TIME_MACHINE=1`
+  resolves the *identical derivation* as the ambient build, and
+  `make kernel-version-check TIME_MACHINE=1` passes. The
+  byte-identical-rebuild claim therefore holds for `v0.1.0-prealpha`
+  with its pin and for `main` from the bump onward — not for the
+  2026-08-25→26 window between. The lesson is now procedure: **a
+  kernel-series bump and the channel-pin bump travel in the same
+  change** (`make channels-pin`, then both TIME_MACHINE=1 gates). See
   issue #13 for the history (the base used to be the floating
-  `nongnu:linux` alias, which is how 7.1 arrived uninvited in the first
-  place).
+  `nongnu:linux` alias, which is how 7.1 arrived uninvited in the
+  first place). Note the pinned nonguix generation has since deleted
+  `linux-7.0` upstream — the 7.0.11 track builds only through the
+  *old* pin at the `v0.1.0-prealpha` tag, another reason the tag's
+  pin is never rewritten.
 
   Three `guix` call sites stay ambient **by design**, and are not
   oversights: the `guix-shell` toolchain helper in the `Makefile`

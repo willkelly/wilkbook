@@ -490,6 +490,17 @@ is **embrace-or-reject, after which one image ships either way**
 
 ### Build, CI and gates
 
+- **Reproducible builds work again on `main`** (2026-08-26). The
+  channel pin now carries the generation that resolves the 7.1 kernel,
+  ending the window opened 2026-08-25 when the kernel series moved
+  without it. The acceptance gate was equality, not just success:
+  `TIME_MACHINE=1` resolves the byte-identical kernel derivation the
+  ambient build does. Procedure now recorded in `doc/building.md`: a
+  kernel-series bump and the pin bump travel in the same change.
+  (Urgency footnote: upstream nonguix has since *deleted* `linux-7.0`
+  — the 7.0.11 track now builds only through the old pin at the
+  `v0.1.0-prealpha` tag.)
+
 - **The study flavor below now actually contains its boot-time table
   step — and rebinds the display driver to use it.** The first on-glass
   run of the direct-mode image (2026-08-25, `doc/status.md`) found the
