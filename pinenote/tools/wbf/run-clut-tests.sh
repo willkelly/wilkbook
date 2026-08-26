@@ -75,6 +75,14 @@ u8_at() {
 # These need no reference.  They are what stops "byte-identical" from being
 # satisfiable by a tool that writes an empty file.
 
+# ----------------------------------------------------------------------
+# --class-source: the display-study remap knob (P4).  Identity must be a
+# no-op byte-for-byte (so the reference differential below still covers
+# the shipping path), a real remap must change the bytes and say so in
+# -v, and junk must be refused.  Without the identity control, a build
+# that silently ignored the option would pass every other test here.
+
+
 ours=$work/ours.bin
 if "$clut" "$WBF" "$ours" > "$work/ours.log" 2>&1; then
   pass "wbf-clut exits 0 on the device waveform"
@@ -96,6 +104,96 @@ if [ "$magic" = "CLUT0002" ]; then
   pass "magic CLUT0002"
 else
   bad "magic is '$magic'"
+fi
+
+# ----------------------------------------------------------------------
+# --balance-report: the charge-balance analysis (P4 groundwork for
+# hand-crafted rows).  The arithmetic is positive-controlled on
+# CONSTRUCTED rows in the selftest binary; the real-waveform run can
+# then be held to structure and determinism honestly.
+if "$clut_selftest" --selftest-balance > "$work/bal-self.log" 2>&1 \
+   && grep -q "PASS: selftest-balance" "$work/bal-self.log"; then
+  pass "selftest-balance arithmetic controls"
+else
+  bad "selftest-balance failed"
+  cat "$work/bal-self.log" >&2
+fi
+if "$clut" --selftest-balance "$WBF" /dev/null >/dev/null 2>&1; then
+  bad "the shipping wbf-clut accepted --selftest-balance"
+else
+  pass "shipping build refuses --selftest-balance"
+fi
+
+if "$clut" --balance-report "$WBF" > "$work/bal1.log" 2>&1; then
+  pass "--balance-report (report-only, no OUTPUT) exits 0"
+else
+  bad "--balance-report exited nonzero"
+  cat "$work/bal1.log" >&2
+fi
+if grep -q "^balance: lut=0 mode=DU " "$work/bal1.log" \
+   && grep -q "^balance: lut=0 mode=GC16 " "$work/bal1.log"; then
+  pass "balance report covers the modes"
+else
+  bad "balance report is missing mode lines"
+fi
+if ! grep -q "clut: wrote" "$work/bal1.log"; then
+  pass "report-only mode writes no CLUT"
+else
+  bad "report-only mode wrote output anyway"
+fi
+"$clut" --balance-report "$WBF" > "$work/bal2.log" 2>&1 || true
+if cmp -s "$work/bal1.log" "$work/bal2.log"; then
+  pass "balance report is deterministic"
+else
+  bad "balance report differs between identical runs"
+fi
+if grep -q "phase3_runs=0" "$work/bal1.log" \
+   && ! grep -E "phase3_runs=[1-9]" "$work/bal1.log" >/dev/null; then
+  pass "vendor table uses no phase-3 runs (observation pin: revisit the impulse model if this ever fails)"
+else
+  bad "phase-3 runs appeared -- the impulse arithmetic's phase-3 handling is now load-bearing; decide its meaning before trusting the report"
+fi
+
+cs_id=$work/cs-identity.bin
+if "$clut" --class-source=GL16:GL16 "$WBF" "$cs_id" >/dev/null 2>&1 \
+   && cmp -s "$ours" "$cs_id"; then
+  pass "--class-source identity (GL16:GL16) is byte-identical to default"
+else
+  bad "--class-source=GL16:GL16 changed the output or failed -- the option is not a clean no-op"
+fi
+
+cs_swap=$work/cs-swap.bin
+if "$clut" -v --class-source=GL16:GC16 "$WBF" "$cs_swap" > "$work/cs-swap.log" 2>&1; then
+  if cmp -s "$ours" "$cs_swap"; then
+    bad "--class-source=GL16:GC16 produced identical bytes -- the remap did nothing"
+  else
+    pass "--class-source=GL16:GC16 changes the output"
+  fi
+  if grep -q "mode=GL16 from=GC16" "$work/cs-swap.log"; then
+    pass "-v reports the GL16 slot sourcing GC16"
+  else
+    bad "-v does not report the remap (mode=GL16 from=GC16 missing)"
+  fi
+  gl16_len=$(grep -o "mode=GL16 from=GC16 rows=[0-9]* maxlen=[0-9]*" "$work/cs-swap.log" | head -1 | grep -o "maxlen=[0-9]*")
+  gc16_len=$(grep -o "mode=GC16 from=GC16 rows=[0-9]* maxlen=[0-9]*" "$work/cs-swap.log" | head -1 | grep -o "maxlen=[0-9]*")
+  if [ -n "$gl16_len" ] && [ "$gl16_len" = "$gc16_len" ]; then
+    pass "remapped GL16 slot carries GC16's length ($gl16_len)"
+  else
+    bad "remapped GL16 maxlen '$gl16_len' != GC16 maxlen '$gc16_len'"
+  fi
+else
+  bad "--class-source=GL16:GC16 exited nonzero"
+fi
+
+if "$clut" --class-source=GL16:NOPE "$WBF" "$work/cs-bad.bin" >/dev/null 2>&1; then
+  bad "--class-source with an unknown class was accepted"
+else
+  pass "--class-source=GL16:NOPE is refused"
+fi
+if "$clut" --class-source=GL16 "$WBF" "$work/cs-bad2.bin" >/dev/null 2>&1; then
+  bad "--class-source without :SOURCE was accepted"
+else
+  pass "--class-source=GL16 (malformed) is refused"
 fi
 
 n_luts=$(le32_at "$ours" 8)

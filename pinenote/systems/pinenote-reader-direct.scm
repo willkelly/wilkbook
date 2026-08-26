@@ -1,7 +1,10 @@
 (define-module (pinenote systems pinenote-reader-direct)
+  #:use-module (gnu services)
   #:use-module (gnu system)
   #:use-module (pinenote packages firmware)
   #:use-module (pinenote packages kernel)
+  #:use-module (pinenote services ebc)
+  #:use-module (pinenote services ebc-direct)
   #:use-module (pinenote systems pinenote-reader)
   #:export (pinenote-reader-direct-operating-system))
 
@@ -9,88 +12,89 @@
 ;; driver (linux-pinenote-hrdl-direct) -- doc/direct-mode-adoption.md P2's
 ;; "new flavor alongside the shipping reader, exactly as reader-debug exists
 ;; today, so the production image is never the experiment".  The shape is
-;; pinenote-reader-debug's, deliberately: inherit the reader, swap the
-;; kernel, rename the host so the flashed slot is identifiable at the login
-;; prompt, add one tool.  Nothing here touches pinenote-reader, and no
-;; shipping flavor references linux-pinenote-hrdl-direct.
+;; pinenote-reader-debug's plus the direct-mode wiring: inherit the reader,
+;; swap the kernel, rename the host so the flashed slot is identifiable at
+;; the login prompt, add one tool, add the CLUT one-shot, and REPLACE the
+;; shipping rockchip_ebc modprobe options with the direct-mode set.  Nothing
+;; here touches pinenote-reader, and no shipping flavor references
+;; linux-pinenote-hrdl-direct or (pinenote services ebc-direct).
 ;;
-;; NOTHING IN THIS FLAVOR HAS EVER RUN.  The kernel and its three modules
-;; build and link (2026-08-25, doc/direct-mode-adoption.md P2); no module has
-;; been loaded, no device bound, no panel driven.  The realistic first goal
-;; is "rockchip_ebc probes, binds, and lights the panel at all", not a
-;; working page turn.
+;; Per the adoption doc's no-roots rule, everything in this file dies with a
+;; reject or graduates into pinenote-reader with an embrace; delete it
+;; together with linux-pinenote-hrdl-direct and its patch either way.
 ;;
-;; THREE REASONS TO EXPECT A FIRST BOOT WITHOUT A DISPLAY, all known offline
-;; and none of them fixed here:
+;; WHERE THIS STANDS (2026-08-25, doc/status.md).  The first direct-mode
+;; glass session ran an image built from this file AS IT WAS -- which never
+;; instantiated the CLUT service or the direct options (the release
+;; review's top tag-blocker, confirmed live: `herd` showed no clut
+;; service).  D1-D4 passed anyway because the operator did the wiring's job
+;; by hand: compiled the CLUT on the device with wbf-clut, then rebound the
+;; driver via sysfs.  This file now lands exactly that wiring.  THE WIRED
+;; IMAGE ITSELF HAS NOT BOOTED: the services below reproduce the proven
+;; hand-sequence, host-suite-tested (make ebc-clut-check), but no glass
+;; session has run them.
 ;;
-;;   1. custom_wf.bin IS MANDATORY AND NOTHING PRODUCES IT AT BOOT.  hrdl's
-;;      rockchip_ebc request_firmware()s rockchip/custom_wf.bin in
-;;      rockchip_ebc_waveform_init() and returns -EINVAL when it is absent,
-;;      so the probe fails outright -- D4's "worse first-boot failure": no
-;;      display, indistinguishable from a brick.  pinenote-wbf-clut compiles
-;;      that file from the device's own ebc.wbf and is added to this flavor's
-;;      profile below (as wbf-clut), so an operator on the console can make
-;;      one by hand; NO SERVICE RUNS IT.
+;; THE THREE THINGS THIS FLAVOR WIRES DIFFERENTLY, and why:
 ;;
-;;      TODO(direct-mode): the custom_wf.bin installation -- a one-shot in
-;;      the shape of pinenote-install-waveform, with the checksum
-;;      doc/direct-mode-adoption.md P0 demands instead of upstream's
-;;      compile-once-if-absent -- is separate work.  When it lands, wire it
-;;      in here.  Do not grow a second copy of it in this file.
+;;   1. THE CLUT ONE-SHOT (pinenote-ebc-clut-service-type), WITH THE
+;;      PER-BOOT REBIND.  hrdl's rockchip_ebc request_firmware()s
+;;      rockchip/custom_wf.bin in rockchip_ebc_waveform_init() and returns
+;;      -EINVAL when it is absent.  Our initrd RAW-LOADS the module from its
+;;      pre-mount hook (%pinenote-display-initrd-modules in
+;;      pinenote/images/pinenote-initramfs.scm), before the root filesystem
+;;      -- and therefore before any CLUT -- exists, so under this kernel the
+;;      first probe fails -EINVAL EVERY BOOT, by construction.  That initrd
+;;      failure is EXPECTED and is not the bug.  The one-shot, ordered after
+;;      pinenote-waveform, compiles the CLUT from the device's own ebc.wbf
+;;      (never bundled -- per-device calibration, CLAUDE.md safety model),
+;;      checksums it against a freshness record, and then REBINDS the
+;;      driver:
 ;;
-;;      AND THE ORDERING IS THE HARDER HALF.  Our initrd RAW-LOADS
-;;      rockchip_ebc from its pre-mount hook (%pinenote-display-initrd-modules
-;;      in pinenote/images/pinenote-initramfs.scm), i.e. before the root
-;;      filesystem is mounted and long before any shepherd one-shot can
-;;      compile anything.  That hook stages ebc.wbf into the initrd's
-;;      /lib/firmware/rockchip and stages no custom_wf.bin -- so under this
-;;      kernel the probe runs, and fails, inside the initrd.  A root-filesystem
-;;      service that writes custom_wf.bin afterwards cannot fix that on its
-;;      own: something must also reload the module (hrdl's own
-;;      pinenote-hrdl-convert-waveform.service ends in `modprobe -r
-;;      rockchip_ebc; modprobe rockchip_ebc' for exactly this reason), or the
-;;      compile must happen in the initrd, or rockchip_ebc must come out of
-;;      the initrd module list for this flavor and be loaded later.  Which of
-;;      those is right is undecided; measuring it needs the module to have
-;;      probed once, which has not happened.
+;;          echo fdec0000.ebc > /sys/bus/platform/drivers/rockchip-ebc/bind
 ;;
-;;   2. THE MODPROBE OPTIONS NAME PARAMETERS THIS DRIVER DOES NOT HAVE.
-;;      pinenote-ebc-modprobe-service-type installs
-;;      /etc/modprobe.d/rockchip_ebc.conf with nine `options rockchip_ebc'
-;;      settings (pinenote/services/ebc.scm).  Against hrdl's module -- 17
-;;      module_param() calls in his source, 16 of them registered in what we
-;;      build, direct_mode's being compiled out with 3WIN off -- exactly ONE
-;;      of our nine exists:
-;;      dclk_select.  auto_refresh, refresh_threshold, panel_reflection,
-;;      prepare_prev_before_a2, refresh_waveform and defio_delay_ms are simply
-;;      absent; direct_mode is registered only under
-;;      CONFIG_DRM_ROCKCHIP_EBC_3WIN_MODE, which does not compile in his tree
-;;      and which we correctly build without, so `direct_mode=0' is both
-;;      invalid and backwards -- direct mode is what this flavor is for.
+;;      which re-runs the probe against the CLUT -- the exact sequence the
+;;      2026-08-25 session proved by hand (doc/status.md D1/D2).  A rebind
+;;      that fails fails the service loudly; see the ordering note in
+;;      (pinenote services ebc-direct).
 ;;
-;;      split_area_limit looks shared and is not: his tree has
-;;      MODULE_PARM_DESC(split_area_limit, ...) attached to
-;;      module_param(limit_fb_blits, ...), a copy/paste that puts the name in
-;;      modinfo's parm lines while registering nothing.  There is no
-;;      parameters/split_area_limit -- and the kernel warns and IGNORES
-;;      an unknown parameter (kernel/module/main.c:3381), silently
-;;      dropping the intent, which is worse than a refusal.  Read
-;;      modinfo carefully here; a "parm:" line is not proof of a parameter.
+;;      KNOWN GAP, deliberate: reader-session does NOT require
+;;      pinenote-ebc-clut, so shepherd may start KOReader before /dev/fb0
+;;      exists.  Its requirement list is hard-coded in the shared service
+;;      type, and adding the edge there would move the SHIPPING reader's
+;;      derivation -- the one thing this flavor must never do.  KOReader
+;;      has respawn? #t, so the expected first-boot behaviour is a few
+;;      failed starts until the rebind lands; whether shepherd's
+;;      crash-loop backoff copes is a bring-up observation for the next
+;;      glass session, not something to engineer around unobserved.
+;;      (Precision about 2026-08-25, doc/status.md: after crash-loops
+;;      shepherd marked reader-session failing and later starts failed
+;;      SILENTLY -- undiagnosed.  The herd-stop WEDGE that session was a
+;;      different bug: orientation-bridge ignoring SIGTERM, since fixed
+;;      in the bridge itself.)
 ;;
-;;      This is INERT TODAY only because the initrd raw-load ignores
-;;      modprobe.d (the same reason kernel-cmdline module params never
-;;      applied -- hardware-confirmed 2026-07-05).  It stops being inert the
-;;      moment anyone reloads the module, which is precisely what (1) will
-;;      ask them to do: modprobe then fails on the unknown parameters.
-;;      pinenote-apply-ebc-params is the softer half -- it skips parameters
-;;      whose sysfs node is absent, so it degrades to setting dclk_select and
-;;      nothing else.
+;;      wbf-clut stays in the profile below as the CONSOLE FALLBACK: if the
+;;      service path breaks, an operator can still run
 ;;
-;;      TODO(direct-mode): making the modprobe options per-flavor means giving
-;;      pinenote-ebc-modprobe-service-type a configuration; that is separate
-;;      work in pinenote/services/ebc.scm, not this file's.  Until it lands
-;;      this flavor ships the shipping reader's option line, wrong parameters
-;;      and all.
+;;        wbf-clut /lib/firmware/rockchip/ebc.wbf \
+;;                 /lib/firmware/rockchip/custom_wf.bin
+;;
+;;      and rebind by hand, exactly as the first session did.
+;;
+;;   2. THE MODPROBE OPTIONS ARE THE DIRECT-MODE SET, replacing the shipping
+;;      instance (both write /etc/modprobe.d/rockchip_ebc.conf, so this must
+;;      be a replacement, not a second service).  Of our nine shipping
+;;      parameters, exactly one (dclk_select) is registered by hrdl's module
+;;      at all -- and the kernel WARNS AND IGNORES an unknown parameter
+;;      (unknown_module_param_cb returns 0, kernel/module/main.c), so
+;;      feeding it the shipping line would not refuse the load: it would
+;;      load fine with eight of nine intents silently dropped, which is
+;;      worse.  The direct set carries the panfrost softdep and sets
+;;      nothing; the parameter-by-parameter derivation lives in
+;;      (pinenote services ebc-direct), and `make ebc-modprobe-options-check'
+;;      gates both sets against their own driver's registrations.  Note the
+;;      rebind in (1) re-probes the already-loaded module, so modprobe.d
+;;      stays out of the boot path either way; this matters the day
+;;      something really does modprobe the module.
 ;;
 ;;   3. EVERYTHING ABOVE THE DRIVER STILL SPEAKS THE OLD VOCABULARY.  The
 ;;      shipped refresh policy is written in A2/DU/GL16/GC16 terms and hrdl's
@@ -101,40 +105,38 @@
 ;;      plugin, and pinenote-apply-ebc-params -- and that node does not exist
 ;;      here.  None of the three crashes on it: the two washers log and fall
 ;;      back to a plain full wash, and the params one-shot skips any parameter
-;;      whose node is absent.  So this is reading quality, not a boot failure.
+;;      whose node is absent.  So this is reading quality, not a boot failure
+;;      -- and the 2026-08-25 session CONFIRMED the predicted cost on glass:
+;;      quality good, but more flashing/redrawing per page turn than a
+;;      smooth read wants (the two-pass + waveform-class expectation, now
+;;      driving P4's policy rewrite in doc/direct-mode-adoption.md).
 ;;
 ;;      The ioctl NUMBER survives: GLOBAL_REFRESH is ABI-identical
 ;;      (DRM_COMMAND_BASE + 0x00, same single-bool struct), so KOReader's
-;;      0xC0016440 still reaches the driver.  The single-pass page turn
-;;      does NOT: both mechanisms that produce it are wilkbook-only hunks
-;;      absent here -- publish-on-call, and the defio_delay_ms window.
-;;      hrdl uses stock drm_fbdev_shmem, whose defio delay is hardcoded
-;;      HZ/20 = 50 ms (drm_fbdev_shmem.c:184).  Expect the portrait
-;;      double-refresh class this project spent July killing to be BACK
-;;      on this flavor, by construction.;;
-;; Delete this file together with linux-pinenote-hrdl-direct and its patch if
-;; the adoption hits one of doc/direct-mode-adoption.md's bail-out criteria.
+;;      0xC0016440 still reaches the driver -- though on this image it must
+;;      reach the EBC's card node, not /dev/dri/card0, which panfrost claims
+;;      (doc/status.md D4: every wash was a malformed GPU job until the
+;;      session bind-mounted a card1 copy; the KOReader-side fix is its own
+;;      work, not this file's).
 
 (define pinenote-reader-direct-operating-system
   (operating-system
     (inherit pinenote-reader-operating-system)
     (host-name "pinenote-reader-direct")
     (kernel linux-pinenote-hrdl-direct)
-    ;; wbf-clut on the device, for the by-hand path in (1) above:
-    ;;
-    ;;   wbf-clut /lib/firmware/rockchip/ebc.wbf \
-    ;;            /lib/firmware/rockchip/custom_wf.bin
-    ;;
-    ;; reading the waveform pinenote-install-waveform has already staged on
-    ;; the root filesystem, and writing the CLUT0002 table this driver
-    ;; demands.  Reloading the module to pick it up then trips (2) above,
-    ;; because modprobe -- unlike the initrd's raw load -- reads
-    ;; /etc/modprobe.d.
-    ;; Per-device calibration data, compiled on the device from the device's
-    ;; own waveform -- as with the waveform itself, nothing of the sort is
-    ;; ever bundled in the image.
+    ;; Per-device calibration data is compiled on the device from the
+    ;; device's own waveform -- as with the waveform itself, nothing of the
+    ;; sort is ever bundled in the image.
     (packages (cons pinenote-wbf-clut
                     (operating-system-packages
-                     pinenote-reader-operating-system)))))
+                     pinenote-reader-operating-system)))
+    (services
+     (cons (service pinenote-ebc-clut-service-type)
+           (modify-services (operating-system-user-services
+                             pinenote-reader-operating-system)
+             (pinenote-ebc-modprobe-service-type
+              config => (pinenote-ebc-modprobe-configuration
+                         (inherit config)
+                         (options %pinenote-ebc-direct-modprobe-options))))))))
 
 pinenote-reader-direct-operating-system

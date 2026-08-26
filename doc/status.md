@@ -1,7 +1,434 @@
 # Hardware status
 
-Last updated: 2026-08-15. Update protocol: add a dated entry at the top
+Last updated: 2026-08-26. Update protocol: add a dated entry at the top
 after every hardware session; entries are per-device/per-operator.
+
+## 2026-08-26 (rig session, part 6) — the landmine image: both operational traps fixed, deployed, and proven on glass
+
+Follow-up to part 5's two landmines, same night. The `3405a1c9…` image
+carries the sysrq mask fix (`MAGIC_SYSRQ_DEFAULT_ENABLE=0x0`) and the
+autosuspend fbcon gate (the shepherd requirement on reader-session is
+gone — `pinenote/services/autosuspend.scm`, `autosuspend.lua`,
+offline-pinned in `test-autosuspend-policy.lua`). Deployed by the full
+write protocol; boots hands-off (first probe -22 by design at 2.7 s,
+clean probe + fb0 at 9.0 s, CLUT 229,584 B).
+
+**Proven on glass, in order:**
+
+- **sysrq ships masked**: `/proc/sys/kernel/sysrq` = 0 at boot — the
+  noise-safe posture is now the default, no hand-parking.
+- **The daemon outlives the reader**: it starts six seconds BEFORE
+  reader-session now (no requirement), and `herd stop reader-session`
+  (0.417 s — INT-first again) left it running where the old image's
+  daemon died. With `enabled=1` and no reader it logged
+  `reader-session is down (fbcon bound) -- holding off auto-suspend`
+  and refused to sleep the readerless device; on `herd start` it
+  logged `auto-suspend active again` — no manual `herd start
+  pinenote-autosuspend`, ever.
+- **The daemon's gadget quiesce beats the dwc3 abort**: with the ACM
+  gadget BOUND and unattached — the exact state that hard-aborts a
+  manual `echo mem` on 7.1.8 (register item 18) — the daemon completed
+  two full rails-off cycles at test timers (idle=30/backstop=90):
+  suspend, RTC wake at 86/88 s, ~17 s settle, re-suspend, coulomb
+  telemetry in its log, and the UDC read `fcc00000.usb` again after
+  resume (restore worked). The manual-path register item stands; the
+  shipping path never hits it.
+
+**Two observations for the record:**
+
+1. Starting earlier, the daemon enumerated 7 input devices, not 8: the
+   missing one is `wilkbook-orientation` — the bridge's *synthetic*
+   uinput node, created after the daemon now starts (it only ever
+   rescans on eviction). Every hardware input is watched. Judged
+   benign-to-correct: rotation without touch should not hold the
+   device awake. Noted here so the count change doesn't read as a
+   regression later.
+2. **A staging race nearly flashed the wrong image, and the protocol
+   caught it structurally.** The first deploy run was launched while
+   the artifact/script rsync was still in flight; the on-device script
+   was still the previous one, so the protocol verified and re-flashed
+   the PREVIOUS image — correctly, against its own EXPECT. The tell
+   was the `DEPLOY OK` line naming the old SHA. Because the script and
+   its EXPECT travel together, a stale script can only ever re-deploy
+   the artifact it describes — it cannot flash a half-staged one. The
+   rerun with staging confirmed deployed `3405a1c9…` clean. Lesson for
+   the operator side: gate the launch on the staging task's completion
+   *notification*, not on a glance at its output file; and always
+   check the SHA in `DEPLOY OK` against the intended image.
+
+**Parked state**: os2 = `3405a1c9…`, reader up, washer retune
+re-applied (idle_s=12, debt_min=8), frontlight 153/153, autosuspend
+ENABLED at stock timers (300/3600) — the device is a working reader
+that sleeps on its own; SSH is intermittent by design again. os1
+untouched.
+
+## 2026-08-26 (rig session, part 5) — the INT-first + sysrq image deploys clean; the stop is 0.484 s on glass; the serial rescue is proven and then re-modeled
+
+After the part-4 power-button recovery: os1 came up (the UART watcher
+picked the slot), p6's post-mortem was harvested (see part 4's
+POST-MORTEM), and the deploy ran the full write protocol
+hands-off — staged-SHA, dd, readback-SHA all
+`0c9fabcf…` (the rebuilt artifact: INT-first stop + serial-sysrq
+kernel, 445498×4096 B). The fixed boot-slot script (one reboot attempt,
+exit status ignored, no reconnect until U-Boot) caught the menu at poll
+18 and booted os2.
+
+**Hands-off boot regression: PASS.** First EBC probe fails by
+construction at t=3.3 s (`custom_wf.bin` -2, probe -22); the CLUT
+one-shot compiled 229,584 B from the device's own waveform; rebind at
+**t=11.0 s** — "Loaded 4-bit PVI waveform version 0x19", initialized on
+minor 1 (panfrost holds card0; the card resolution held — zero GPU
+fault lines all session); fb0 bound; reader-session up. No crash-loop.
+
+**The INT-first stop on glass: `herd stop reader-session` = 0.484 s**
+(old image: 8 s; lab: 0.654 s). Clean stop, clean restart. The
+crengine-cache half (SIGINT → clean close) still wants a check with a
+book open; nothing was open on the fresh boot.
+
+**The serial-sysrq rescue: proven end-to-end, and the model was wrong
+in an important way.** First test (sysrq mask at its shipped 0x1)
+fired **Emergency Sync from the `s` of the sequence itself** — with
+sysrq *enabled*, BREAK + any char fires immediately and
+`MAGIC_SYSRQ_SERIAL_SEQUENCE` is never consulted; it is an arming
+toggle for the *disabled* state, not a per-use guard. That shipped
+state was noise-dangerous (BREAK + line noise `b` = reboot). Verified
+the intended posture live: with `kernel.sysrq=0`, BREAK+`sysrq` armed
+("SysRq is enabled by magic sequence 'sysrq' on serial") and a second
+BREAK+`h` printed the full key table. The deployed image's runtime is
+parked at `kernel.sysrq=0` (re-park after any reboot until the next
+image); the tree now adds `CONFIG_MAGIC_SYSRQ_DEFAULT_ENABLE=0x0` so
+later builds boot that way.
+
+**Restored device state:** washer retune re-applied to the seeded
+settings (`idlewasher_idle_s=12`, `idlewasher_debt_min=8` — wiped by
+the reflash, as expected), frontlight 153/153, autosuspend still
+pinned `enabled=0` on `/data` (survived, as designed). os2 carries
+`0c9fabcf…`; os1 untouched.
+
+## 2026-08-26 (rig session, part 4) — the INT-first deploy stalls on the bug it fixes: the study image hangs in shutdown
+
+Deploy attempt for the INT-first-stop image (`cc339412…`, built and
+SHA'd, deploy script staged). The `reboot` reached the running study
+image over SSH — and the shutdown **hung partway and stayed hung**. The
+device is parked in that state awaiting a power-button cycle (operator
+unavailable); a UART watcher is armed to catch U-Boot and select os1
+whenever the cycle happens. (While parked, the artifact was superseded:
+the image on deck was rebuilt to include the serial-sysrq kernel below
+— `0c9fabcf…`, 445498×4096 B, all inspection gates green, sysrq
+symbols verified in the embedded `/boot/config`. `cc339412…` was never
+flashed.)
+
+**The evidence chain, all over UART/network, no panel:**
+
+- The boot-slot capture's last line is fbcon restoring (`Console:
+  switching to colour frame buffer device`) — the reader stopped, then
+  400 s of silence; U-Boot never ran.
+- Ping answers and the ttyS2 line echoes keystrokes (kernel alive, IP
+  configured), but sshd **refuses** connections (listener closed, not
+  filtered) and no getty ever re-prompts — userspace torn down to the
+  halfway point and stuck.
+- Console logins can't rescue it: `root` at a live prompt got a getty
+  echo but no `login`/shell response in 30 s+, with correct LF
+  terminators, twice. Nothing on the tty has a reader.
+
+Prime suspect: the shutdown-path incarnation of the known stop-handler
+stall — the deployed (old) image's reader-session `stop` blocks PID 1
+in `usleep`, starving shepherd's fibers; at shutdown every service stop
+runs on that starved scheduler. This is precisely what the INT-first
+stack on deck replaces (lab-measured 0.654 s vs 8 s per stop). The
+shutdown hang is consistent with, and strengthens, that fix's rationale
+— but the root cause on-device is unproven (post-mortem: nothing will
+survive in /tmp; `/var/log/messages` on p6 may hold the shutdown tail —
+harvest from os1 before booting os2, per `doc/device-access.md`).
+
+**Two instrument findings, one fixed in-tree tonight:**
+
+1. **No serial rescue exists for a hung device.** The inherited
+   defconfig sets `CONFIG_MAGIC_SYSRQ=y` but explicitly unsets
+   `CONFIG_MAGIC_SYSRQ_SERIAL` — a BREAK on the plumbed UART does
+   nothing, so a wedged userspace costs a user-present power-cycle even
+   with the cable in. Fixed in the forward-port patch. (The guard model
+   this entry originally described was wrong — the sequence is an
+   arming toggle, not a per-use guard; the live test that corrected it
+   and the final three-symbol config are in part 5 below and
+   `doc/kernel-forward-port.md`.)
+2. **A hung shutdown wears the live system's face.** The first read of
+   the evidence was "U-Boot fell through and rebooted os2": a
+   `pinenote-reader-direct login:` prompt answered the UART probe. It
+   was the *dying* session's getty — shutdown had stalled before
+   reaching it. The login attempt that followed consumed that last
+   getty (login(1) exec'd into the starved system and never came back;
+   wedged shepherd, no respawn), closing the only interactive door.
+   Diagnostic for next time: prompt-then-echo-without-response after a
+   reboot command means the OLD system mid-hang, not a fresh boot —
+   check uptime/dmesg BEFORE typing a login name at it, because the
+   attempt itself is destructive to the recovery path.
+
+Also confirmed the hard way: the only ttyACM on this host is the MOTU
+M4 (the documented trap) — no gadget fallback while os2 is down.
+
+**POST-MORTEM (same night, after the power-button recovery) — the
+suspect above is refuted; the log names the real killer.** p6's own
+`/var/log/messages`, harvested via the os1 ro-mount before the
+redeploy, records the whole thing
+(`doc/artifacts/pinenote-shutdown-wedge-20260826/`): the halt began at
+05:02:01 and the service teardown was FAST — reader-session stopped
+within a second, orientation-bridge in ~1 s (the SIGTERM fix proven
+working on device), ddr-boost in 3 s. No PID 1 crawl. What wedged it:
+the halt killed the very ssh session that had issued `reboot`, the
+deploy script misread that client's nonzero exit as failure and fired
+its `||` fallback ssh, shepherd's inetd listener — still armed
+mid-halt — accepted the connection, and serving it **restarted the
+networking service the halt had just stopped** (dhcpcd relaunched;
+which is why ping kept answering all night). `Service networking has
+been started.` is the final line the system ever logged. Two fixes:
+the deploy tooling now makes ONE reboot attempt, ignores its exit
+status, and never reconnects until U-Boot shows on the UART; and the
+shepherd halt/inetd race is registered as upstream item 20. The
+usleep/INT-first stop fix remains lab-proven and worth shipping — it
+just wasn't tonight's culprit.
+
+The operator's directive: reading first, pen later; direct mode is the
+floor either way. The night's instrumentation dismantled most of the
+pre-registered P4 model:
+
+**"Two-pass by construction" is REFUTED.** ftrace on the fb blit
+(`rockchip_ebc_blit_fb_rgb565_y4_hints_neon`) shows exactly one flush
+per input-triggered repaint — our KOReader shim's fsync publishes
+through his stock `fb_deferred_io_fsync` path, so publish-on-call works
+on ANY fbdefio driver and the planned defio/publish-on-call port is
+unnecessary. (P4 said "or prove an equivalent exists"; proven.)
+
+**REDRAW is stripped at drive time at the shipping default.** The
+`vbslq` force-mask in `schedule_advance_neon` clears the REDRAW bit
+from every pixel when `redraw_delay==0` — turns were always diff-only;
+the "full-page shimmer" theory was wrong. The dirt = the intrinsic
+GL16 transition (~22 active phases ≈ 260 ms at the cold bin) plus
+bounded ghost accumulation.
+
+**`redraw_delay` cannot defer ghost-cleans from idle** — its countdown
+ticks per hardware frame, an idle panel generates none, so ANY nonzero
+value parks all damage indefinitely (proven twice: rd=10000 and rd=1
+both wedged the queue; a wash recovers). It is a FAST-mode batching
+knob, not a reading-mode one. Register item 19.
+
+**The CLUT classes decoded** (wbf-clut -v against the device's own
+waveform): active run lengths at the cold bin DU 3 / DU4 6 / GC16 9 /
+GL16 22 phases, padded sequence lengths ~10x that (which is what IRQ
+counting measures — 44/37/37 frames per turn for GL16/DU4/DU, ~zero
+optical difference: settle medians 200/200/133 ms on the rig camera).
+
+**The GL16←GC16 slot experiment: BUILT, RUN, REJECTED.** New
+`wbf-clut --class-source=TARGET:SOURCE` (merged; identity is pinned
+byte-identical, the remap pinned to take) compiled a table with page
+turns on GC16's short punchy rows; deployed by live unbind/swap/bind.
+Operator verdict on side-by-side video: **stock GL16 is better** — the
+GC16-slot turns ghost MORE (full prior-page words readable), plausibly
+because wash-pattern rows under-drive arbitrary partial transitions —
+the exact thing GL16 exists for. Stock restored (and a reboot would
+have restored it anyway — the stamp mechanism makes remapped tables
+session-scoped). The crafting direction shifts to hand-built rows,
+which needs DC-balance analysis tooling in wbf-clut first.
+
+**Ghosts are bounded, not compounding**: mean-normalized camera diff
+0.0695 after 12 washless turns, 0.0625 after 24, floor 0.0487.
+
+**The manual-launch font bug**: every `env -i` manual KOReader launch
+this whole session dropped `EXT_FONT_DIR` (and PATH, LC_ALL) — all
+manual-session renders used KOReader's bundled fallback fonts, not the
+seeded ones. Caught by the operator on video; proven by pagination
+(guile.epub: 3716 pages under fallbacks, 3804 under the real fonts).
+The full service environment is now in `doc/device-access.md`; earlier
+quality impressions carry this confound (A/B comparisons were
+same-fonts both sides, so relative judgments stand).
+
+**The practical lever landed: idlewasher retune.** The knobs were
+already G-settings; the device now runs `idlewasher_idle_s=12,
+debt_min=8` (was 45/15) so the ghost-clean lands in natural reading
+pauses. Demonstrated: 10 turns → wash fired 13 s into the pause at
+debt=12. DEVICE-ONLY for now — the repo seed changes only after the
+operator's felt verdict over real reading.
+
+**R-list opportunistic closes (same userspace as shipping):** R1 —
+`/etc/localtime` resolves to the configured zone (UTC default). R2 —
+the manuals shelf staged (538-doc `Manual pages.epub` present); opens
+measured **30.3 s uncached / 1.7 s cached**, with the catch that
+crengine caches are written only on clean close: SIGTERM (shepherd's
+stop, crashes) leaves zero-byte truncated caches and the next open
+pays the 30 s again, while SIGINT closes cleanly (8 MB cache written,
+proven). Work items: INT-before-kill in reader-session's stop;
+staging-time cache pre-warm (`doc/manuals.md`). R4 largely proven in
+passing: refresh seed honored (`full_refresh_count=0` respected on
+glass), fonts staged and rendering (via `EXT_FONT_DIR`), idlewasher
+G-settings read.
+
+State left: stock CLUT restored and verified, service reader running
+(washer retune persists via G-settings), autosuspend still pinned off,
+battery ~60%.
+
+## 2026-08-26 (same rig session, continued) — D5: all four orientations on glass; D6: ultra suspend survives the swap; the turn-key inversion; corrected power
+
+**D5 RESOLVED AND PROVEN — rotation works on the direct driver.** The
+offline rung-4v investigation (qemu, instrumented chain, now merged as
+`test-rotation-decision.lua`) named the boot decider: the
+`closed_rotation_mode` G-setting, which our own profile seeds to 1
+(portrait) and Generic `Device:init` applies unconditionally — none of
+the four glass mechanisms from 08-25 was ever consulted (two are
+dead-gated by our `lock_rotation=true` seed, one is menu-only, and the
+injected-gyro attempt died because `herd stop orientation-bridge` takes
+reader-session down with it — a shepherd dependency stop). On glass
+tonight: flipping the setting across a reader-session restart rendered
+**all four orientations** — 0/2 both landscapes, 1/3 both portraits —
+each camera-verified after a wash, crisp, no trace of the shipping
+driver's portrait-wedge class. "Nobody has ever rotated via fbdev on
+his stack" is retired.
+
+**D6 PASSES — with one real 7.1 finding.** First attempt never
+suspended: **dwc3 aborts the whole entry when the ACM gadget is bound
+with no cable attached** (ep0 SETUP timeout → `failed to set STALL` →
+`plat_suspend returns -11`; "Some devices failed to suspend"). The
+7.0.11 soak did 170 cycles in the same gadget arrangement, so this is
+new on 7.1.8 — registered (item 17 follow-on pending; workaround:
+unbind the UDC first). With the UDC unbound, the ultra pair engaged
+fully: `PM-STATE: ultra (cfg 0x5ec)`, rails off, LPDDR4X retrained
+324→1056 on wake, `rockchip_ebc_resume` clean, post-resume wash 42
+IRQs, before/after frames identical, **0 cyttsp5 wakeup-response
+failures** (R6: 0/1). Gadget rebound after.
+
+**The page-turn key is inverted, and it invalidated a bracket and a
+video round.** KEY 158 — which KOReader labels `RPgBack` — executes
+`goto relative screen: +1` (advances); 159/`RPgFwd` goes backward. The
+first "turn" bracket and first video set therefore measured 48 clamped
+same-page repaints at page 1: full-rect REDRAW passes whose cost decays
+43→~12 IRQs as the ghost-clean converges (NOT diff-shrink across pages,
+as first recorded), with the framebuffer byte-identical throughout.
+Diagnosed end-to-end: injector emits clean press/release (od on the
+evdev node), KOReader receives and maps them (`-d` trace), the page
+clamps. The optics-inject header's 158/159 = RPgBack/RPgFwd comment now
+carries the correction.
+
+**Corrected active power (real turns, fb-verified advancing):**
+
+| condition | mean |
+|---|---|
+| reader idle, frontlight 0 (unchanged) | 155.3 mA |
+| REAL page turns every 3 s, 48/48 landed | **214.6 mA** |
+| per-turn drive | **41.5 frames/turn** (1993 IRQs / 48) |
+
+Turning at 20/min costs **+59.3 mA**, not the +37 first recorded (that
+figure was the same-page artifact). Under the default Y4|REDRAW hint a
+real turn drives nearly full-page waveform depth every time — a power
+argument for P4's intent mapping, on top of the visual one. Idle parity
+with shipping stands.
+
+**P4 on-glass verdict (operator, watching real turns live):** turns
+settle to a clean page **without any flash** — the profile's
+`full_refresh_count=0` is landed and honored, and across four hint
+variants (baseline 160; diff-only 32 + `redraw_delay=255`; Y2 144;
+`no_off_screen=1`) zero washes and zero flashes fired in 8-turn runs —
+but the **transition is dirty**: intermediary ghosting, prior-page text
+briefly overlapping. P4's target is therefore transition cleanliness at
+constant flash count, not flash removal. (First video round also
+surfaced: a strong luminance dip at each clip's frame 0 is the Brio's
+auto-exposure settling — never a panel event.)
+
+**Operational notes:** KOReader owns frontlight state across
+reader-session restarts (each restart needs the rig's 153/153 re-set
+before captures — two black frames cost the lesson); one `herd start`
+during the orientation sweep hung its SSH block though the service
+itself came up (transient, unreproduced); fbcon briefly bound the fb
+(landscape 234x87, native var 1872x1404) between reader stops around
+the D6 window. Battery 85%→~65% over the whole session. Autosuspend
+still pinned off; frontlight restored; portrait default restored.
+
+## 2026-08-26 — the wired direct image boots hands-off; direct-mode active power ≈ shipping (agent session, Will's device, optics rig + UART)
+
+Operator granted the dd and the UART slot-pick for this session ("fully
+permitted to do the dd step yourself while the box is in the optics
+rig"); every destructive step below ran over UART/SSH with no hands on
+the device.
+
+**Deployed**: `pinenote-reader-direct` built from main at the post-glass
+fix stack (flavor wiring + rebind + card resolution + bridge SIGTERM
+fix), sha256 `28eebed0ba1b17cfd25e0b298f61271fcf40ffaacb61dad25add4b923af45dec`,
+staged→dd→readback all three SHAs equal. One live confirmation on the
+way out: the OLD image's shutdown wedged on orientation-bridge's
+`--cleanup` ignoring SIGTERM — the exact registered bug — and needed one
+last SIGKILL; the reboot resumed the instant the hook died.
+
+**The tag-blocker validation passes, fully hands-off:**
+
+- **Boot → working reader with no hands**: initrd probe fails
+  `-EINVAL` at 2.7 s (by construction, every boot), root hands off,
+  `pinenote-ebc-clut` compiles `custom_wf.bin` from the device's own
+  waveform (229,584 B — byte-identical size to the 08-25 hand compile),
+  rebind probes clean at **10.1 s**, fb0 registers, and shepherd starts
+  reader-session **once** — no crash-loop, no respawn, no wedge. The
+  KNOWN GAP's expected few-failed-starts never materialized: the
+  dependency chain delays KOReader past the rebind.
+- **Card resolution is glass-proven**: the EBC is **card1** on this
+  image (panfrost holds card0 — the exact arrangement that broke
+  washes). `pinenote-ebc-refresh` through the by-driver-name path drove
+  a global refresh (45 EBC IRQs), **zero** panfrost faults in dmesg,
+  and KOReader logged no "full refresh disabled" (its designed failure
+  signature; silence + washes landing = resolved).
+- **The bridge dies on SIGTERM**: `herd stop orientation-bridge`
+  completed in **1 s**, "terminated with signal 15" — where the
+  previous night's image wedged until SIGKILL. Restart clean.
+- **U-Boot slot-pick trap**: this U-Boot draws the boot menu without a
+  contiguous "Hit any key to stop autoboot" in the byte stream —
+  boot-slot.sh's old trigger missed it and the countdown fell through
+  to os1 once. Trigger widened to the menu strings themselves
+  ("U-Boot Boot Menu"/"Boot OS2 (part 6)"); second attempt picked os2.
+
+**Active power under direct mode** (rk817-battery `current_avg`,
+cross-checked against `charge_now` deltas; on battery, charger offline;
+each bracket n=60–75 over ~150 s, sampler detached on-device — see
+instrument lessons):
+
+| condition | mean |
+|---|---|
+| reader idle, frontlight 0 (ledger conditions) | **155.3 mA** |
+| shipping reference, same conditions (ledger) | 156.9 mA |
+| reader idle, frontlight 153/153 (rig illuminant) | 194.3 mA |
+| page turns every 3 s (48 turns injected, guile.epub) | **192.1 mA** |
+| idle repeat, immediately after the turn run (ABA) | 169.8 mA |
+| system floor, reader stopped (old image, same kernel) | 161.4 mA |
+
+- **Direct-mode reader idle is at parity with shipping** (155.3 vs
+  156.9 — inside the bracket noise). The direct driver idles properly:
+  EBC and GPU runtime-suspended, 0 EBC IRQs, ±15 V/VCOM off (v3p3 held),
+  cpu ~99% at 408 MHz.
+- **Turning costs +36.8 mA at 20 turns/min** (aggressive pace); a
+  normal 6–10/min pace interpolates to roughly +11–18 mA. Per-turn IRQ
+  meta: first full-page paint 43 frames, steady state **11.7
+  frames/turn average** (561 IRQs / 48 turns) — the diff/THRESHOLD hint
+  shrinks steady-state turns.
+- The elevated ABA repeat (169.8) is unattributed but consistent with
+  the idlewasher retiring wash debt in the minute after activity;
+  worth one dedicated bracket someday.
+- **Frontlight term measured twice, disagreeing**: 39.0 mA (this image,
+  B1−B1b) vs 24.1 mA (old image, reader stopped, SSH attached both
+  sides). The ledger's "open term" now has a 24–39 mA range — over its
+  15.4 mA 25-hour budget either way. ABBA owed before a single number
+  enters the ledger.
+
+**Instrument lessons (cost a first wrong reading of 235 mA):**
+
+- An **attached SSH session inflates awake brackets ~50 mA** (Wi-Fi held
+  out of powersave + per-sample wakes): 211 mA attached vs 161 mA
+  detached, same state. Detached on-device sampler, fetched after, is
+  the only honest method — matching the ledger's no-SSH condition.
+- `scaling_cur_freq` read over SSH shows the probe's own 1.8 GHz burst;
+  `time_in_state` shows the truth (~99% at 408 MHz).
+- The frontlight had been left at the rig's 153/153 from the previous
+  session (+24–39 mA) — check it before any power bracket.
+
+**State left**: os2 = wired image `28eebed0…`, service KOReader at the
+FileManager, frontlight 153/153 (rig standard), autosuspend still
+pinned `enabled=0` on p7 (direct sessions ongoing — re-enable when they
+end), injector torn down (reader stopped first; no panic — the
+destroy-under-reader ordering held). os1 untouched.
 
 ## Current state (2026-08-15)
 
@@ -13,8 +440,11 @@ rails-off configuration on the primary kernel, three consecutive resumes
 (`doc/artifacts/pinenote-ultra-r12-20260808/`); deep (~20 mA) is
 superseded as the shipping suspend.
 
-**On os2 now**: promoted image `9a08803e…` (deployed 2026-08-08,
-readback-verified), auto-suspend ON (5 min idle → ultra). The **≥3-day
+**On os2 now (since 2026-08-26)**: the `reader-direct` study image
+`28eebed0…` (wired: boot-time CLUT + rebind + card resolution + bridge
+fix; readback-verified), auto-suspend OFF (p7 pin, direct sessions
+ongoing). The promoted shipping image `9a08803e…` last held os2 up to
+2026-08-25; the shipping-image facts below describe that deployment. The **≥3-day
 unplugged ultra soak has CONCLUDED** — it ran 6.17 days and met its exit
 criteria: **170 suspend cycles, zero failures**, no forced power-off,
 and a measured standby figure at last — **5.47 mA idle (~30 days) and
@@ -35,6 +465,113 @@ the long-standing "arithmetic only" caveat is retired.
 
 **Next actions**: (1) the human QC cycle (`doc/alpha-signoff.md`) on a
 post-soak image; (2) the alpha tag.
+
+**2026-08-25 FIRST DIRECT-MODE GLASS: D1–D4 pass, D9 measured, one panic captured, D5 unresolved.** [wilkbook / wkelly + agent]
+The deployed study image booted and ran KOReader through hrdl's
+direct-mode driver, in the optics rig, driven entirely over SSH/UART.
+Videos and frames in the session scratchpad; key artifacts to be
+committed with the writeup.
+
+LADDER RESULTS
+  D1  CLUT compiled ON THE DEVICE by wbf-clut from its own ebc.wbf:
+      229,584 B, 14 bins — but BY HAND: the clut service is not in the
+      image (the flavor never instantiates it; found independently by
+      the release review). Persists on p6, so later boots need no
+      recompile — but see D2.
+  D2  PROBE PASSES only after a per-boot REBIND: the initrd raw-loads
+      rockchip_ebc before the rootfs (and its custom_wf.bin) exists, so
+      first probe fails -EINVAL and `echo fdec0000.ebc > .../bind` must
+      follow. The DT third clock works (no clock error); temp bin 24–27
+      selected via IIO.
+  D3  Panel lights and paints. fb0 is RGB565 1872x1404 and KOReader
+      ADAPTS — the feared XR24 wall does not exist (his rgb565→Y4 blit).
+  D4  Page turns work through GLOBAL_REFRESH (ABI-identical 0xC0016440)
+      — after fixing THE GHOSTING ROOT CAUSE: KOReader's device.lua
+      hardcodes /dev/dri/card0 for the wash ioctl, and on this image
+      card0 is PANFROST (the GPU) — every wash was a malformed GPU job
+      (the dmesg "JOB_CONFIG_FAULT" lines) and the panel had never been
+      washed. Post-fix (bind-mounted card1), ghost-vs-wash SSIM sits at
+      the camera noise floor. OPERATOR VALIDATION on video: quality
+      good; MORE FLASHING/REDRAWING PER TURN than a smooth read wants —
+      the pre-registered two-pass + waveform-class expectation, now the
+      P4 driver (see doc/direct-mode-adoption.md).
+  D9  advance() cost from his own instrumentation: 37 µs idle,
+      ~1.9 ms band, **23.1 ms full-panel peak** vs the 11.7 ms frame
+      budget — over budget IN THE KERNEL, single-threaded on 4 cores
+      (matches the boot RT-throttle event). Residence is not the
+      constraint; parallelism is the lever. This is the §7
+      userspace-TCON feasibility number.
+  D5  ROTATION UNRESOLVED, not failed: four remote mechanisms (injected
+      gyro events, doc sidecar, copt_rotation_mode, the
+      /run/wilkbook-orientation.state file) all produced portrait
+      boots; the rotated render path never executed. Four cold full
+      paints were clean. Next: instrument the rotation chain at rung 4v
+      offline, then one targeted glass pass (or physically rotate the
+      device out-of-box).
+
+THE PANIC, CAPTURED ON CONSOLE (uart-d5.log):
+      Unable to handle kernel NULL pointer dereference at virtual
+      address 0000000000000008 / Oops: 0000000096000044 [#1] SMP /
+      Kernel panic - not syncing. Pattern across both occurrences:
+      a uinput device destroyed WHILE KOReader holds it open, then the
+      reader restart panics; restarts without a preceding device
+      destruction never crashed, and the stop-reader-first ordering
+      survived where the other died. Reproducible; trace partially
+      garbled by console interleaving. To upstream-register.
+
+OPERATIONAL FINDINGS
+  * UART slot selection works end-to-end: scripted DOWN,DOWN,ENTER at
+    the U-Boot menu booted os2 twice, no hands. My earlier "RX dead"
+    was two broken captures of my own (a backgrounding race, then a
+    pkill that matched its own command line). /dev/ttyACM0 is the
+    operator's MOTU M4, not the PineNote.
+  * orientation-bridge ignores SIGTERM — its --cleanup stop hook hangs
+    `herd stop` (shepherd wedged "being stopped" until SIGKILL).
+  * After crash-loop failures, shepherd marks reader-session failing
+    and later constructor starts fail silently; a manual env-matched
+    launch works. Not yet diagnosed.
+  * Two auto-suspends interrupted work before autosuspend was pinned
+    off (p7 enabled=1 + the daemon restarting with the reader). The
+    standing disable-first rule exists for this reason; it now also
+    survives on p7 as enabled=0 — RE-ENABLE AFTER THE DIRECT SESSIONS.
+
+Session-local state (bind-mounts, injectors, manual reader) dies at
+reboot. p6 keeps custom_wf.bin; p7 keeps enabled=0. os1 rescue path
+verified twice tonight, involuntarily.
+
+**2026-08-25 FIRST DIRECT-MODE DEPLOY — written and verified, not yet booted.** [wilkbook / wkelly + agent]
+The `reader-direct` STUDY image (hrdl's direct-mode EBC driver; see
+`doc/direct-mode-adoption.md` and the agenda in
+`doc/glass-plan-2026-08.md`) was written to os2 per the
+`doc/hardware-deploy.md` protocol. os1 booted and confirmed as running
+root (`/dev/mmcblk0p5`), p6 unmounted, preconditions re-checked
+immediately before the write.
+
+  artifact  pinenote-reader-direct-PNGuixRoot-20260825.ext4 (1,824,632,832 B)
+  sha256    f0e9b4ad2d4fa39efe465895c7ba4f90ad67b5bb092d9bad0a1f0cba276ad0c4
+            (host == staged-on-p7 == readback-from-p6, all three identical;
+             readback with iflag=direct over exactly the written 445,467
+             4 KiB blocks)
+  kernel    linux-pinenote-hrdl-direct-7.1.8 (three EBC modules; DTB
+            carries the third clock, CPLL_333M, verified in the compiled
+            blob before deploy)
+  contains  wbf-clut (on-device CLUT compiler; verified present and USED
+            in the session below). CORRECTION, same day: this entry
+            originally also claimed the checksummed ebc-clut-install
+            one-shot and the zero-parameter modprobe options. The image
+            contains NEITHER — the flavor on main never instantiates
+            them (found independently by the release review and by the
+            live session, where `herd` showed no clut service and D1
+            needed a hand-compile). The wiring gap is the top
+            tag-blocking item in the release-review fix-list.
+
+This replaces the promoted reader image `9a08803e…` on os2 FOR THE STUDY
+SESSION; the shipping reader remains the deploy candidate for the next
+tag and its rootfs is unchanged in the store. os1 untouched throughout.
+Boot and D1–D9 results get their own entry when they happen. Expectations
+going in are pre-registered in the glass plan: A2 absent from the CLUT,
+`refresh_waveform` writes inert, two-pass page turns by construction,
+RGB565-vs-XR24 the likely first wall after probe.
 
 **2026-08-15 THE SOAK CONCLUDED — standby measured.** [wilkbook / wkelly]
 Harvested read-only over SSH from os2 while the device was still running;

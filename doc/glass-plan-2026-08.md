@@ -21,14 +21,16 @@ falls back to the reader image.
 
 | # | prove | how | decides |
 |---|---|---|---|
-| D1 | `custom_wf.bin` gets compiled at boot from the device's own `ebc.wbf` | boot log of the CLUT one-shot; file present with plausible size (~229,584 B for this panel), checksum stamp written | the on-device compile path works |
-| D2 | the module **probes** | `dmesg`: no `-EINVAL`, no missing-firmware, no unknown-parameter refusal | blockers 1+2 were actually fixed |
+| D1 ✅ 2026-08-25, **by hand** | `custom_wf.bin` gets compiled at boot from the device's own `ebc.wbf` | boot log of the CLUT one-shot; file present with plausible size (~229,584 B for this panel), checksum stamp written | the on-device compile path works. **Result**: 229,584 B / 14 bins compiled ON the device — but by an operator running `wbf-clut`, because the deployed image had NO clut one-shot (the flavor never instantiated it; the release review's top tag-blocker). The wiring landed, and **the as-wired criterion passed 2026-08-26**: hands-off boot compiled 229,584 B at boot, stamp written, rebind at 10.1 s (`doc/status.md`) |
+| D2 ✅ 2026-08-25, **after a rebind** | the module **probes** | `dmesg`: no `-EINVAL`, no missing-firmware, no unknown-parameter refusal | blockers 1+2 were actually fixed. **Result**: probe passes — but the initrd raw-loads the module before the rootfs, so the first probe fails `-EINVAL` EVERY boot by construction, and `echo fdec0000.ebc > .../rockchip-ebc/bind` after the CLUT lands is what makes it pass. That rebind is now the clut one-shot's final stage (`doc/direct-mode-adoption.md` D7); **the service-driven form ran on glass 2026-08-26** — hands-off boot, rebind at 10.1 s, no crash-loop (`doc/status.md`) |
 | D3 | the panel **lights at all** | any visible frame — even garbage counts as data | clocks + DT are close enough to drive glass |
 | D4 | a page turn reaches glass | KOReader up; `GLOBAL_REFRESH` (ABI-identical `0xC0016440`) produces a visible wash | the KOReader path survives the swap |
-| D5 | **rotation, all four orientations** | rotate through all four; look for the portrait wedge class | the single highest-risk item — nobody has ever rotated via fbdev on his stack |
-| D6 | suspend/resume with the ultra pair | one cover-close/open cycle, then one backstop-length sleep | his driver coexists with our rails-off configuration |
+| D5 ✅ 2026-08-26 | **rotation, all four orientations** | rotate through all four; look for the portrait wedge class | **RESOLVED AND PROVEN**: rung-4v named the lever (`closed_rotation_mode`, seeded to portrait by our own profile — the four 08-25 mechanisms were never consulted; chain pinned in `test-rotation-decision.lua`), and the glass pass rendered all four orientations camera-verified with no wedge (`doc/status.md` 2026-08-26) |
+| D6 ✅ 2026-08-26 (RTC cycle) | suspend/resume with the ultra pair | one cover-close/open cycle, then one backstop-length sleep | **PASSED via RTC cycle**: full rails-off entry (`cfg 0x5ec`), DDR retrain on wake, clean EBC resume, panel intact, 0 cyttsp5 failures. CAVEAT: a bound, unattached USB gadget **aborts suspend on 7.1.8** (dwc3 ep0 timeout, registered) — unbind first. Still unexercised: cover-close wake and a backstop-length sleep |
 | D7 | visual quality vs the shipping driver | the webcam A/B protocol from `doc/artifacts/pinenote-dclk-reclock-20260824/` at minimum; optics rig if available | whether quality regressed enough to matter |
 | D8 | **FAST mode reaches pen-class latency** | drive `DRM_IOCTL_ROCKCHIP_EBC_MODE` into FAST; measure nib-to-ink however crudely (240 fps phone camera works) | the entire reason for the experiment |
+
+| D9 | **the per-frame `advance()` cost on real silicon** | his driver already instruments it — `delta_advance` (µs from `time_start_advance` to `time_advance_sync`) and min/max frame delay, reported around `rockchip_ebc.c:1134–1202`. Enable the reporting and harvest from dmesg during whatever D4–D8 activity runs; no extra panel time needed | **nothing in the embrace/reject gate** — it is the one feasibility number for the userspace-TCON question (`doc/direct-mode-adoption.md` §7), free to record while the machine is doing D4–D8 anyway, and expensive to reconstruct later |
 
 **What would constitute *reject***: D3–D5 unrecoverable, or D7 showing
 reading-quality regression with no visible path back — per the plan's
@@ -63,6 +65,25 @@ device. Any order; each is independent.
   direct mode is *rejected*; it only matters to the LUT path.
 - **Pen wake (#9)** — needs a DT change through branch-and-review first.
 - **Anything destructive to os1.** Per the safety model, always.
+- **D5's rotation lever — queued as OFFLINE work first (rung 4v), added
+  2026-08-25.** The session left rotation *unresolved, not failed*:
+  four remote mechanisms — injected MSC gyro events, the KOReader doc
+  sidecar, `copt_rotation_mode`, and the
+  `/run/wilkbook-orientation.state` file — all produced portrait boots,
+  so the rotated render path never executed and we do not actually
+  know what decides orientation (the enumeration is in the
+  `doc/status.md` session entry). Spending more glass guessing would
+  invert the ladder. The work item: boot the same stack under
+  `make qemu-virt-visual ROOTFS=…` and instrument KOReader's
+  rotation-decision chain end to end — from each candidate input
+  (gyro/accelerometer events, the sidecar's `rotation_mode`, defaults,
+  the orientation bridge) through `device.lua`/`screen` to the actual
+  framebuffer rotation call — until the mechanism that *does* flip the
+  virt framebuffer is identified and the four failures are each
+  attributed (never read, read-then-overridden, or read-too-late).
+  Exit criterion: one named lever that rotates the qemu boot
+  deterministically. Only then one targeted glass pass — or physically
+  rotate the device out of the box and watch the chain react.
 
 ## 4. Session hygiene
 

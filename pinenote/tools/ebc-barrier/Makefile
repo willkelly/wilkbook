@@ -46,7 +46,12 @@ check: all
 	./$(BUILD)/reader-scan-test
 	./$(BUILD)/pinenote-ebc-sleep-frame-test --help >/dev/null
 	@./$(BUILD)/pinenote-ebc-sleep-frame-test --invalid >/dev/null 2>&1; test $$? -eq 2
-	@! grep -Eq '/sys/power|/dev/(input|mmc|ttyS)|/boot/|/lib/firmware|/sys/class' pinenote-ebc-sleep-frame-test.c ebc-barrier.c
+	@! grep -Eq '/sys/power|/dev/(input|mmc|ttyS)|/boot/|/lib/firmware' pinenote-ebc-sleep-frame-test.c ebc-barrier.c
+#	/sys/class is allowed ONLY for the read-only DRM-card uevent scan
+#	(the EBC's card index is not stable across images -- panfrost takes
+#	card0 on the direct-mode image, 2026-08-25); every other /sys/class
+#	reference stays forbidden.
+	@! grep -E '/sys/class' pinenote-ebc-sleep-frame-test.c ebc-barrier.c | grep -v '/sys/class/drm/card' | grep -q .
 	@! grep -q 'pinenote-ebc-barrier-test-service' ../../services/*.scm
 	@echo "ebc-barrier: static safety checks passed"
 #	The card the device paints is also the value the supervised procedure

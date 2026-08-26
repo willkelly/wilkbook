@@ -8,14 +8,35 @@ means an instrument or a log said so, and anything that is division from
 a measurement is labelled as such. Depth lives in `doc/`; these entries
 are pointers, not summaries.
 
-Nothing after `v0.1.0-prealpha` has been tagged or cut as an image. If
-you are running wilkbook today you are running the pre-alpha image
-`9a08803e…` on Linux 7.0.11, and everything under **Unreleased** that
-was proven was proven on that image.
+Nothing after `v0.1.0-prealpha` has been tagged. One image has been cut
+since — the `reader-direct` study image, deployed to the author's own
+device on 2026-08-25 for the direct-mode experiment; it is not a release
+and not for testers. If you are running wilkbook today you are running
+the pre-alpha image `9a08803e…` on Linux 7.0.11, and everything under
+**Unreleased** that was proven was proven on that image unless an entry
+says otherwise.
 
 ## Unreleased
 
 ### Battery and suspend
+
+- **Stopping the reader no longer silently kills auto-suspend.** The
+  daemon used to be a shepherd dependent of reader-session, so a stop
+  test (or any reader stop) took it down — and nothing restarted it,
+  leaving the device draining at awake current while looking configured
+  to sleep (found dead 18 minutes after a stop test, 2026-08-26). The
+  requirement is gone; the daemon instead gates each suspend on fbcon
+  ownership (`vtcon1/bind` reads `0` exactly while the reader owns the
+  panel), which keeps the old protections — a boot that never reaches
+  the reader stays awake and reachable, an operator's stop holds
+  suspend off — and re-arms itself the moment the reader is back.
+  Offline-proven in `test-autosuspend-policy.lua` (three-way policy,
+  both suspend paths, the requirement stays dropped), then
+  **glass-proven the same night**: the daemon outlived a reader stop,
+  logged the hold-off and the re-arm, and completed two full rails-off
+  suspend cycles through its own gadget quiesce — with the gadget in
+  the exact bound-unattached state that aborts a manual suspend on
+  7.1.8 (`doc/status.md` 2026-08-26 part 6).
 
 - **Standby has a measured number for the first time.** Six days and
   four hours unplugged, never on a charger: **5.47 mA sitting idle** and
@@ -54,9 +75,32 @@ was proven was proven on that image.
   unpowered in suspend" premise that used to explain it is now known
   false for at least the cover pin, which reopens pen wake as a question
   worth testing (issue #9).
+- **Auto-suspend no longer believes an impossible clock.** It measures
+  idleness as a difference of wall-clock readings, and a clock *step* —
+  `date` on the console today, the new time-sync service routinely
+  tomorrow — used to destroy that measurement in both directions: a
+  backwards step held the device awake at full draw exactly when it had
+  just been put down, and a forwards step could suspend it under your
+  fingers. The daemon now re-bases instead of believing either. Tested
+  on the host by extracting the guard verbatim; **no device has stepped
+  its clock with this in place** — host-proven, not hardware truth.
 
 ### Setup and first boot
 
+- **Stopping the rotation service no longer hangs the service manager.**
+  The orientation bridge inherited a SIGTERM-proof signal state from
+  its parent, so `herd stop` waited forever on a process that could not
+  hear it — the 2026-08-25 session hit this live and had to SIGKILL.
+  The bridge now restores default signal handling at startup and bounds
+  its cleanup with a 15-second watchdog, so a wedged teardown ends
+  instead of wedging the stop. Host-proven with a positive control
+  (an unrestored copy provably survives SIGTERM) — and the real test
+  passed on glass 2026-08-26: `herd stop orientation-bridge` completed
+  in one second, terminated by signal 15, where the previous night's
+  image wedged until SIGKILL. This changes the
+  shipping reader image — the bridge script rides in it — and is the
+  cycle's one deliberate change to shipping behavior outside the
+  display work.
 - **The reader now suspends out of the box.** The first install by
   someone other than the author produced a device that never slept: our
   own install page recommended creating an `autosuspend.conf` with
@@ -134,8 +178,25 @@ was proven was proven on that image.
 ### Display and page turns
 
 One real change to the display driver this cycle, and it has not run on
-a panel yet. Otherwise: a long-suspected defect acquired evidence, a name
-and a bound.
+a panel yet; one real change to how userspace finds the display, proven
+offline only. Otherwise: a long-suspected defect acquired evidence, a
+name and a bound.
+
+- **Full-screen washes now find the e-ink display instead of assuming
+  it is the first graphics device.** On the direct-mode study image the
+  GPU claims that first slot, so every deghosting wash was silently
+  handed to the GPU as a garbage command and the panel accumulated
+  ghosting unwashed — the 2026-08-25 session's root cause, fixed live
+  with a bind-mount and now fixed properly: every wash path (KOReader,
+  the reader-stop deep clean, the post-resume wash tool, the
+  diagnostics) resolves the EBC's DRM node by driver name via sysfs.
+  On the shipping image the answer is the same node as before, so
+  nothing changes there. A new repo gate
+  (`make ebc-card-resolution-check`) keeps index hardcodes out of every
+  on-device path. Glass-proven 2026-08-26: on the wired image the EBC
+  is card1 behind the GPU's card0, a wash through the resolved path
+  drove the panel (45 EBC interrupts), and dmesg carried zero GPU
+  faults.
 
 - **The display can no longer be jammed by something that keeps drawing**
   (#22). Until now, anything producing continuous screen damage — a
@@ -226,14 +287,199 @@ and a bound.
   is field evidence rather than a fixture: if those logs move, it fails
   loudly instead of quietly measuring something else.
 - A re-read of hrdl's driver found a **potential 1.25× on every refresh
-  mode** — a clock reclock to 79.68 Hz, worth about two device-tree
-  lines and ten driver lines. It is not shipped and not measured: it
-  raises the display's memory traffic on exactly the path that a
-  one-variable A/B proved starves silently when DDR is slowed
-  (issue #23, `doc/hrdl-evaluation.md`).
+  mode** — a clock reclock to 79.68 Hz — and then the measurement made
+  it cheaper than the re-read priced it. The estimate was two
+  device-tree lines and ten driver lines; **measured on glass
+  2026-08-24, it is one existing module parameter** (`dclk_select=1`),
+  because the CRU divider already runs the parent clock at 250 MHz.
+  The clock change is measured — both directions, three transitions —
+  and the per-mode payoff is arithmetic from it: GL16/GC16 596 →
+  477 ms, A2 157 → 126 ms
+  (`doc/artifacts/pinenote-dclk-reclock-20260824/`, issue #23).
+- **Not cleared to ship, and the artifact says exactly why:** the
+  failure mode is silent display corruption on the memory path a
+  one-variable A/B proved starves without an error, and the only visual
+  check so far is a webcam with a drift-controlled noise floor — no
+  clock-attributable difference was found *above that floor*, which is
+  real evidence and much weaker than the optics rig would give. Faster
+  page turns arrive when that check happens, not before.
+- **The replay workbench had quietly stopped modelling the device you
+  hold** (issue #30). Its "shipped stack" baseline was written on
+  2026-07-05, was correct that day, and was never touched again through
+  two shipped policy changes — for seven weeks it modelled auto-refresh
+  behaviour and a deferred-io window this image stopped shipping in
+  July. Corrected; its usage banner's argued-from-a-stale-number advice
+  is withdrawn rather than restated; and the first study's tables in
+  `doc/refresh-policy.md` carry a correction block instead of a silent
+  re-run. No number a policy decision rests on changed — those were
+  ratios and A/Bs, re-checked.
+- **KOReader's pen-slot collision stopped being hypothetical.** The
+  router that keeps pen and finger apart assumed the touchscreen hands
+  out contact slots densely; a device capture showed it does not (a
+  120 s capture peaking at three simultaneous contacts used slots
+  {0, 1, 2, 5}), so a lone finger can be
+  assigned the very slot KOReader reserves for the pen — its swipe then
+  gets the pen's coordinates written onto it. Reproduced offline as a
+  one-variable A/B and **pinned as a `quirk:` test, not fixed** — the
+  fix belongs upstream (issue #21). Alongside it, the device's input
+  axes (slot count, pen pressure/tilt/hover ranges) are now recorded by
+  the standing ground-truth capture, so issues #20 and #21 stop costing
+  hardware sessions (issue #20, #21).
+
+### The direct-mode display experiment
+
+The week's defining thread: handwriting became a stated product
+direction, and the display path that could support it (hrdl's
+direct-mode driver) went from "rejected, re-evaluate later" to a sized
+plan, a study image, and — on 2026-08-25 — a first session on glass.
+None of this changes the image a tester flashes; the decision it feeds
+is **embrace-or-reject, after which one image ships either way**
+(`doc/direct-mode-adoption.md`).
+
+- **The plan and its agenda are written before the sessions, not
+  after**: `doc/direct-mode-adoption.md` (blockers, bail-out criteria,
+  and the operator's one-image decision) and
+  `doc/glass-plan-2026-08.md` (the D1–D9 direct-mode ladder plus the
+  R1–R7 shipping-reader list, each item naming the decision it feeds,
+  with reject criteria pre-registered). ROADMAP §5 now carries the
+  direction itself — note-taking, drawn UIs in books, handwritten code
+  — which until 2026-08-25 lived only in conversation records.
+- **His driver compiles and links against our stack** — first grafted
+  into a clean 7.1.8 tree (all three objects build), then the real
+  integration: our `pinenote_defconfig`, our seven patches, his driver
+  as a kernel package variant, full build, modules linking their
+  symbols across. Along the way his 3WIN fallback config turned out to
+  have **never been compilable** (a missing parenthesis wholly inside
+  its `#ifdef`) — reported to the upstream register rather than
+  patched, and a reminder that our own shipping driver is the real
+  retreat, not a configuration of his we would first have to repair.
+- **The rebase surface is measured, not feared**: 182 commits over
+  mainline, but seven of twelve touched files are new and four are
+  build glue; the nine kernel APIs his driver uses that ours does not
+  all exist in 7.1.8, checked against the source rather than assumed.
+- **First glass session, 2026-08-25** (`doc/status.md` has the full
+  entry): the study image booted, KOReader ran through the direct-mode
+  driver, and **D1–D4 of the ladder pass** — CLUT compiled on the
+  device from its own waveform by the C compiler (by hand; see the gap
+  below), the driver probed (after a rebind; see below), the panel
+  lights, and page turns reach glass through the identical
+  `GLOBAL_REFRESH` ioctl. The feared framebuffer-format wall does not
+  exist: KOReader adapts to the driver's RGB565 fbdev on its own.
+- **The ghosting root cause of the session was ours to find — and ours
+  to fix**: our KOReader device shim hardcodes `/dev/dri/card0` for
+  the full-refresh wash, and on the direct image card0 is the **GPU** —
+  so every wash was a malformed GPU job (a dmesg fault line each time)
+  and the panel was never washed at all. Redirecting it to the real
+  display node live on the device fixed it; ghost-vs-wash then sat at
+  the camera noise floor (measured, optics rig). The proper fix —
+  resolve the display by driver name in every wash path — has since
+  landed; see "Display and page turns".
+- **The operator's verdict on video: quality good, but more
+  flashing and redrawing per page turn than a smooth read wants.** That
+  is the pre-registered two-pass expectation confirmed on glass, and it
+  is now the driving item for the polish phase of the plan.
+- **Stopping the reader no longer destroys your book's cache.** The
+  538-document man-pages book opens in 1.7 s with its cache and 30.3 s
+  without — and every service stop used to silently truncate that cache
+  to zero bytes (SIGTERM skips KOReader's clean close; measured on
+  glass 2026-08-26). The stop now asks nicely first: SIGINT, a
+  cooperative wait for the clean close, then the old kill for a wedged
+  reader. Pinned by a new gate (`make reader-stop-check`) whose review
+  found the first version was dead code under real shepherd — the fixed
+  form was validated in a scratch shepherd (0.65 s clean stop); the
+  on-device proof rides the next deployed image.
+- **The waveform toolbox learned charge balance** (`wbf-clut
+  --balance-report`): per-mode net-impulse and worst round-trip
+  analysis of the decoded sequences, arithmetic positive-controlled on
+  constructed rows. First result: the vendor's own envelope — DU/DU4
+  round-trips perfectly balanced, GL16/GC16 bounded at 48 (cold) to 4
+  (warm), INIT exactly zero. That envelope is the constraint any
+  hand-crafted page-turn sequence must respect, which is the point.
+- **The page-turn program got its instruments, and the instruments
+  killed two planned fixes** (2026-08-26): turns were already
+  single-flush (the fsync publish works through the stock driver — the
+  planned defio port is unnecessary) and already diff-only (the REDRAW
+  ghost-clean is stripped at the shipping default). What remains of
+  "dirty transitions" is the waveform transition itself plus bounded
+  ghost residue. A new compiler knob (`wbf-clut --class-source`) let a
+  whole waveform-class swap be tried on glass in one evening — turns on
+  GC16's shorter rows — and the operator's eyes rejected it (more
+  residue: wash-pattern rows under-drive partial transitions; GL16
+  stays). The practical fix that DID land: the idle washer's cadence
+  knobs (already settings) retuned so the ghost-clean fires in natural
+  reading pauses (12 s) instead of only long ones (45 s) — device-side
+  for now, seeded into the profile after the operator's felt verdict.
+  Also caught: hand-launched KOReader sessions were rendering fallback
+  fonts (a dropped `EXT_FONT_DIR`); the faithful launch recipe is now
+  in `doc/device-access.md`.
+- **Direct mode costs nothing at idle** (2026-08-26, wired image):
+  reader idle measured **155.3 mA** against the shipping ledger's
+  156.9 mA under identical conditions — parity. Real page turns at an
+  aggressive 20/min add ~59 mA (each turn drives ~41.5 waveform frames
+  under the untuned default hint — a power argument for the P4 intent
+  mapping); a normal pace interpolates to +18–30 mA
+  (`doc/power-management.md`).
+- **Rotation works — all four orientations, on glass** (2026-08-26).
+  The offline investigation found boot orientation is decided by one
+  setting our own profile seeds (`closed_rotation_mode`), and flipping
+  it rendered all four orientations on the direct driver,
+  camera-verified, with no portrait-wedge. The decision chain is pinned
+  (`make koreader-input-check`) so a KOReader upgrade that moves it
+  fails loudly.
+- **Ultra suspend survives the direct driver** (2026-08-26): rails-off
+  entry, DDR retrain on wake, clean EBC resume, panel intact, zero
+  touch-controller handshake failures. One new 7.1 finding: a bound
+  but unattached USB gadget **aborts suspend entirely** (dwc3 ep0
+  timeout) — workaround is unbinding first; the bug is registered, not
+  papered over.
+- **The one feasibility number for the userspace-TCON question is
+  banked**: the driver's own instrumentation puts the per-frame
+  `advance()` at 37 µs idle, ~1.9 ms banded, and **23.1 ms peak for a
+  full panel** against an 11.7 ms frame budget — over budget *inside
+  the kernel*, single-threaded on four cores. Measured on glass;
+  residence is not the constraint, parallelism is
+  (`doc/direct-mode-adoption.md` §7).
+- **Rotation is unresolved, not failed** (D5): four remote mechanisms
+  for rotating the reader all produced portrait boots — the
+  rotation-decision chain is unmapped. The investigation is queued
+  offline at rung 4v before any more glass is spent on it
+  (`doc/glass-plan-2026-08.md` §3).
+- **A reproducible kernel panic was captured on console**: destroy a
+  uinput device while KOReader holds it open, then restart the reader —
+  NULL dereference, the same pattern both times it was provoked, while
+  restarts without the destruction never crashed. To the upstream
+  register. Also found live: the orientation bridge ignores SIGTERM,
+  which wedges service stop — that one is our own bug, and its fix is
+  under "Setup and first boot".
+- **Two wiring gaps stand between the session and a hands-off boot,
+  and both are known tag-blockers**: the flavor never instantiates the
+  CLUT one-shot or the direct-mode modprobe options (D1 was compiled by
+  hand), and the initrd raw-loads the display module before the root
+  filesystem — and thus the CLUT — exists, so the first probe fails on
+  every boot and a rebind must follow. Found independently by the
+  release review and by the session. Both fixes have since landed in
+  the tree — the flavor wiring under "Build, CI and gates", the
+  wash-path resolution under "Display and page turns" — and the image
+  carrying both **booted hands-off on 2026-08-26**: CLUT compiled at
+  boot, rebind at 10.1 s, KOReader up via shepherd with no crash-loop,
+  washes on the resolved card, reader-idle power at parity with
+  shipping (155.3 vs 156.9 mA, `doc/status.md`).
 
 ### Kernel
 
+- **A hung device can now be rescued over the debug cable** (kernels
+  built after 2026-08-26). The inherited defconfig shipped serial sysrq
+  off, which was discovered the expensive way: a wedged shutdown left
+  the kernel echoing keystrokes with userspace dead, and the only way
+  out was a finger on the power button — with the UART cable plugged in
+  the whole time. Serial BREAK sysrq is now enabled but ships
+  **masked off**, with a break-then-`sysrq` arming sequence, so a
+  floating RX line's noise cannot fake a reboot (the presumed reason it
+  was off; a live test proved the sequence is an arming toggle, not a
+  per-use guard, which is why the mask matters). The whole chain is
+  glass-proven: arm with BREAK+`sysrq`, fire with BREAK+key. Recipe and
+  the semantics trap in `doc/kernel-forward-port.md`; the hang itself
+  in `doc/status.md` (2026-08-26 part 4).
 - **The kernel this repo built used to be chosen by when you last ran
   `guix pull`.** The base was a floating nonguix alias; it moved to 7.1
   on its own and `make kernel` stopped working. The base is now an
@@ -242,9 +488,12 @@ and a bound.
 - **The tree now targets the 7.1 series and the reader image builds
   again.** Two device-tree hunks were deleted because mainline absorbed
   them verbatim, shrinking the forward-port patch from 31 hunks to 29 —
-  the good direction for a forward port. **Nothing on 7.1 has run on
-  glass.** The hardware-proven kernel remains 7.0.11, which is what the
-  deployed image runs (`doc/kernel-forward-port.md`).
+  the good direction for a forward port. When this entry landed nothing
+  on 7.1 had run on glass; since 2026-08-25 a 7.1.8 build **has** — but
+  only the direct-mode *study* configuration (hrdl's display driver
+  swapped in), never the shipping driver. The hardware-proven kernel
+  for the image you flash remains 7.0.11, which is what the deployed
+  reader runs (`doc/kernel-forward-port.md`).
 - Two upstream Guix cross-compilation defects are repaired in
   `pinenote/packages/cross-fixes.scm` — alsa-lib declaring its build
   tools as `inputs`, and groff-minimal typesetting PDFs through a
@@ -262,18 +511,49 @@ and a bound.
 
 ### Build, CI and gates
 
-- **There is a second reader flavor now, and it is not for you to flash.**
-  `make reader-direct` builds the reader image on the faster display
-  driver we are evaluating for handwriting
-  (`doc/direct-mode-adoption.md`). It is a study artifact: it evaluates,
-  **nothing in it has ever run** — no module loaded, no panel driven —
-  and it is expected *not* to reach a working reader on a first boot,
-  because that driver refuses to probe without a table compiled from your
-  device's own waveform and nothing compiles that table at boot yet. The
-  image you are actually running is unaffected, and that is checked
-  rather than asserted: the shipping reader's system derivation is the
-  same store path before and after the change, and its build closure
-  contains none of the new driver. `doc/pinenote-flavors.md` has the row.
+- **Reproducible builds work again on `main`** (2026-08-26). The
+  channel pin now carries the generation that resolves the 7.1 kernel,
+  ending the window opened 2026-08-25 when the kernel series moved
+  without it. The acceptance gate was equality, not just success:
+  `TIME_MACHINE=1` resolves the byte-identical kernel derivation the
+  ambient build does. Procedure now recorded in `doc/building.md`: a
+  kernel-series bump and the pin bump travel in the same change.
+  (Urgency footnote: upstream nonguix has since *deleted* `linux-7.0`
+  — the 7.0.11 track now builds only through the old pin at the
+  `v0.1.0-prealpha` tag.)
+
+- **The study flavor below now actually contains its boot-time table
+  step — and rebinds the display driver to use it.** The first on-glass
+  run of the direct-mode image (2026-08-25, `doc/status.md`) found the
+  flavor had never been wired to the table-compiling one-shot two
+  entries down: the operator had to compile the table and re-trigger the
+  driver by hand. Both halves are wired now: `reader-direct` runs the
+  one-shot at boot, and the one-shot ends by re-probing the driver
+  through sysfs — because on this boot path the driver always loads,
+  and fails, before the table can exist, *every* boot. A re-probe that
+  fails now fails the service loudly instead of leaving a blank panel
+  with a green boot log. Proven offline (`make ebc-clut-check`, against
+  a fake sysfs) and pinned so the wiring cannot silently vanish again;
+  when this entry landed the image built from this wiring had not yet
+  booted — the 08-25 session proved the sequence by hand; on 2026-08-26
+  the wired image ran it hands-off, rebind at 10.1 s, reader up with no
+  crash-loop. The shipping reader's
+  system derivation is unchanged, re-checked at the same store path.
+- **There is a second reader flavor now, and it is not for you to
+  flash.** `make reader-direct` builds the reader image on the faster
+  display driver we are evaluating for handwriting
+  (`doc/direct-mode-adoption.md`). It is a study artifact, and when this
+  entry first landed nothing in it had ever run. **That changed on
+  2026-08-25**: it was deployed to the author's os2 and drove the panel
+  through a full session — see "The direct-mode display experiment"
+  above. It still does *not* reach a working reader hands-off: the
+  session's two wiring gaps are fixed in the tree (the entry above,
+  and the wash-path resolution under "Display and page turns"), but no
+  image containing those fixes has booted. The image you are actually
+  running was unaffected by the flavor itself — checked rather than
+  asserted: adding the flavor left the shipping reader's system
+  derivation at the same store path, and its build closure contains
+  none of the new driver. `doc/pinenote-flavors.md` has the row.
 - **New rung-1 gate: `make clut-check`, and the tool behind it.** The
   faster display path we are evaluating for handwriting
   (`doc/direct-mode-adoption.md`) will not even *start* without a table
@@ -283,12 +563,27 @@ and a bound.
   that produces a **byte-identical** file. That comparison needs both a
   device waveform and hrdl's Python to hand, so it runs on a developer's
   machine and **not in CI** — where the gate checks structure only and
-  says so rather than printing an unqualified pass. Nothing on the device
-  changes: this is not wired into any image, and no panel has been
-  driven from its output. Finding it took reproducing two bugs in the
+  says so rather than printing an unqualified pass. Finding it took
+  reproducing two bugs in the
   original on purpose (`doc/driver-findings-report.md`) — a "cleaner"
   compiler would have quietly changed the waveform your screen is
-  driven with.
+  driven with. Since 2026-08-25 the compiler has run **on the device**,
+  in the study image, and the panel has been driven from its output —
+  invoked by hand on that session's image, which predated the wiring;
+  the study flavor now runs it at boot (two entries up), and on
+  2026-08-26 the wired image did exactly that hands-off — compile,
+  rebind, reader — with no hands on the device.
+- **A follow-up fixed the compiler's safety gate, which had shipped
+  inoperative** — and the fixes had been *described as merged* while
+  sitting uncommitted in a working tree (a `git commit --amend` with
+  nothing staged succeeds silently; the record is corrected rather than
+  quietly re-landed). The gate that keeps per-device waveform data out
+  of the repo asked `file(1)` to recognize the format, but libmagic
+  does not know it and reports plain "data" — so a genuine compiled
+  table under an innocuous name was committable the whole time. It now
+  reads the bytes itself, and the test summary now says which of its
+  two honesty levels actually ran instead of printing one unqualified
+  "ALL TESTS PASSED".
 - **New rung-1 gate: `make ebc-clut-check`**, and the boot-time step it
   covers. The table above has to reach the driver, and on this device
   that means compiling it **from your own device's waveform, on the
@@ -300,12 +595,16 @@ and a bound.
   have left a wrong table in place silently. If it cannot build the
   table it says so loudly and fails, because the alternative on this
   driver is a device that boots to a blank screen with no explanation.
-  Still true: none of this is in any image, nothing loads the driver,
-  and no panel has run it. Along the way the plan's claim that our boot
-  needed no initramfs work turned out to be **wrong** — the display
-  module is loaded from the initrd, before any of this can run — which
-  is now written down as its own open blocker rather than assumed away
-  (`doc/direct-mode-adoption.md` D7).
+  When this entry first landed the one-shot was wired into no image —
+  the study image shipped without it, which is why the 2026-08-25
+  session compiled the table by hand. **The study flavor now runs it at
+  boot** (the top entry of this section), together with the rebind
+  below. Along the way the plan's claim that our boot needed no
+  initramfs work turned out to be **wrong** — the display module is
+  loaded from the initrd, before any of this can run, so the first
+  probe fails on *every* boot — which was written down as its own
+  blocker (`doc/direct-mode-adoption.md` D7) and is now resolved by
+  the one-shot's closing re-probe.
 - **New rung-1 gate: `make koreader-profile-check`** — KOReader's
   reading defaults now have exactly one writer, and the gate fails if a
   second appears. There were two, and only one of them could ever run:
@@ -316,6 +615,34 @@ and a bound.
   font settings can no longer go missing one at a time. What the device
   writes is unchanged — same keys, same values, three new comment lines
   at the top of the file.
+- **New rung-1 gate: `make settings-check`** — this project declares the
+  same knob in up to five places (a Guix record, a daemon's own
+  defaults, a `.conf` key, an argv flag, a modprobe string) and nothing
+  connected the copies; issue #12 counted 63 operator-reachable knobs.
+  The gate compares every declared coupling, and what it found on day
+  one was not the drift everyone expected: the record/daemon default
+  pairs agreed in 14 of 15 cases, while the real divergences included
+  two `.conf` parsers in the same directory reading the same key name
+  `enabled` with **opposite grammars and opposite defaults**, and a
+  host tool modelling a device we stopped shipping in July. Today's
+  divergences are recorded in a **debt register that can only shrink**:
+  new drift fails the gate, and so does a register row whose divergence
+  has been paid off — both properties positive-controlled by mutation,
+  since a text gate without positive controls is how this repo grew
+  vacuous checks before. A review fix made the register pin the exact
+  divergence rather than merely the site, so new drift at a
+  known-divergent site cannot hide as old inventory (issue #12 step 1).
+  Nothing here changes the device; the gate proves declarations agree,
+  not that the device behaves — and the same evening three of its debt rows
+  retired themselves when the issue-#30 fix landed, which is the
+  can-only-shrink property working in anger.
+- **The artifact root is `/tmp/wilkbook` now, not `/tmp/opencode`** —
+  the old name came from a previous coding tool, and it was not
+  decorative: it is the write-containment boundary eight preflight and
+  qemu scripts refuse to write outside of. The checks and the writes
+  moved in one commit, because a docs-only rename would have left the
+  containment checks guarding a directory nothing writes to any more
+  (issue #3).
 - **First CI for the channel**: three jobs on every push — no Guix, no
   device, no waveform — whose job is protecting the kernel patch stack
   (`.github/workflows/host-gates.yml`). A safety job asserts that no
@@ -331,8 +658,17 @@ and a bound.
   end-to-end pass runs there rather than only on a workstation.
 - The host gates now run without Guix installed (`HOST_TOOLCHAIN=1`),
   and `guix time-machine -C channels.scm` is finally wired into the
-  build targets (`TIME_MACHINE=1`), so the reproducibility claim in
-  `doc/release.md` is true of the commands it names (issue #2).
+  build targets (`TIME_MACHINE=1`), which made the reproducibility
+  claim in `doc/release.md` true of the commands it names when it
+  landed (issue #2). **It is not true today**: the kernel then moved to
+  the 7.1 series pin while `channels.scm` still pins a nonguix commit
+  that predates it, so `TIME_MACHINE=1` currently fails outright
+  (verified 2026-08-25 — the ambient build is the working one, exactly
+  inverted from mid-August). The byte-identical-rebuild claim holds for
+  the `v0.1.0-prealpha` tag with its pin, not for current `main`; the
+  repair is a pin bump, which is its own reviewed change, and
+  `doc/building.md`, `doc/release.md` and the Makefile all now say so
+  rather than telling the pre-inversion story.
   `make help` gained a Flags section; these were undiscoverable without
   reading the Makefile.
 - **`make timesync-check`**, the gate behind the new clock service. It
@@ -391,6 +727,18 @@ and a bound.
 - `CLAUDE.md` records the two-remote workflow (GitHub is PR-only
   upstream; Forgejo is the working remote) and the `git add -A` incident
   that is why contributors stage explicit paths.
+- **New: `doc/configuration.md`** — the settled direction for every knob
+  on the device, written down so it stops living in one conversation
+  thread. The parts a future tester will feel: the idle timeout belongs
+  to the person holding the device, not to us; an override stores only
+  what you explicitly set (absent means "give me the new default",
+  present means "I chose this" and survives); when a valid value stops
+  being valid we migrate it rather than dropping it, and a question
+  that needs a human is queued rather than asked at boot, because at
+  boot nobody is there; and **settings survive a reflash, KOReader's
+  included** — losing "show clock in footer" while font size survives
+  is a bug, because that boundary is invisible from the reading chair.
+  Direction, not implementation: almost none of it is built.
 
 ## v0.1.0-prealpha — 2026-08-08
 

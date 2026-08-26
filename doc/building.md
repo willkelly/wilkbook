@@ -75,7 +75,7 @@ the first thing to check.
   `guix time-machine -C channels.scm --` when the flag is set:
 
   ```sh
-  make rootfs-reader TIME_MACHINE=1     # pinned, reproducible
+  make rootfs-reader TIME_MACHINE=1     # pinned
   make rootfs-reader                    # ambient guix, whatever you pulled
   ```
 
@@ -83,13 +83,27 @@ the first thing to check.
   materialize the pinned Guix first, which would turn the cheap rung-2
   gates (`make kernel-drv`, ~0.6 s) into a long build.
 
-  **This is not a theoretical difference.** `%linux-pinenote-base`
-  (`pinenote/packages/kernel.scm`) is bound to `nongnu:linux`, a
-  *floating* alias. Measured 2026-08-14: the pin resolves to
-  `linux-pinenote-7.0.11`, while a workstation pulled on 2026-08-11
-  resolves to `7.1.5` — where the forward-port patch collides with
-  mainline's own PineNote DTSI and `make kernel` fails outright in
-  `dtbs`. See issue #13.
+  **The 2026-08-26 pin bump made `TIME_MACHINE=1` work again on
+  current `main`.** From 2026-08-25 until then it was broken: the
+  kernel had moved to the `nongnu:linux-7.1` series pin while
+  `channels.scm` still pinned a nonguix commit (`3ed7c20`) predating
+  `linux-7.1`, so every time-machine build died at module evaluation
+  with `Unbound variable: nongnu:linux-7.1`. The bump pinned the exact
+  channel generation the working ambient builds were using, and its
+  acceptance gate was equality: `make kernel-drv TIME_MACHINE=1`
+  resolves the *identical derivation* as the ambient build, and
+  `make kernel-version-check TIME_MACHINE=1` passes. The
+  byte-identical-rebuild claim therefore holds for `v0.1.0-prealpha`
+  with its pin and for `main` from the bump onward — not for the
+  2026-08-25→26 window between. The lesson is now procedure: **a
+  kernel-series bump and the channel-pin bump travel in the same
+  change** (`make channels-pin`, then both TIME_MACHINE=1 gates). See
+  issue #13 for the history (the base used to be the floating
+  `nongnu:linux` alias, which is how 7.1 arrived uninvited in the
+  first place). Note the pinned nonguix generation has since deleted
+  `linux-7.0` upstream — the 7.0.11 track builds only through the
+  *old* pin at the `v0.1.0-prealpha` tag, another reason the tag's
+  pin is never rewritten.
 
   Three `guix` call sites stay ambient **by design**, and are not
   oversights: the `guix-shell` toolchain helper in the `Makefile`
@@ -106,6 +120,9 @@ the first thing to check.
   nonguix 3ed7c20  https://gitlab.com/nonguix/nonguix       (master)
   saayix  f0e272e  https://codeberg.org/look/saayix         (main)
   ```
+
+  That set built the 7.0.11-era images and remains true of them; it
+  cannot build the current 7.1-series tree (the paragraph above).
 
   Record your own `guix describe` output alongside any image you
   deploy, so a misbehaving build can be bisected to a channel bump.

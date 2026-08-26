@@ -1,0 +1,66 @@
+2026-08-26 05:01:27 localhost shepherd[1]: Accepted connection on 0.0.0.0:22 from WORKSTATION:38968.
+2026-08-26 05:01:27 localhost shepherd[1]: Starting service sshd-133...
+2026-08-26 05:01:27 localhost shepherd[1]: Service sshd-133 started.
+2026-08-26 05:01:27 localhost shepherd[1]: Service sshd-133 running with value #<<process> id: 6033 command: ("/gnu/store/i08640hf0j0y0cqyx4q7yai88vc842qc-openssh-10.4p1/sbin/sshd" "-D" "-f" "/gnu/store/88lpk60asrkgdmizavgllmsl0idkb7s1-sshd_config" "-i")>.
+2026-08-26 05:01:27 localhost shepherd[1]: Service sshd-133 has been started.
+2026-08-26 05:01:28 localhost sshd-session[6033]: Accepted publickey for root from WORKSTATION port 38968 ssh2: ED25519 SHA256:0Ko3iBPh7XdwENEYqpB+X5nnbmUJnr3GofRoAYzS3AE
+2026-08-26 05:01:28 localhost sshd-session[6037]: Received disconnect from WORKSTATION port 38968:11: disconnected by user
+2026-08-26 05:01:28 localhost sshd-session[6037]: Disconnected from user root WORKSTATION port 38968
+2026-08-26 05:01:28 localhost shepherd[1]: 0 connections still in use after sshd-133 termination.
+2026-08-26 05:01:28 localhost shepherd[1]: Service sshd-133 (PID 6033) exited with 255.
+2026-08-26 05:01:28 localhost shepherd[1]: Service sshd-133 has been disabled.
+2026-08-26 05:01:28 localhost shepherd[1]: Transient service sshd-133 terminated, now unregistered.
+2026-08-26 05:02:00 localhost shepherd[1]: Accepted connection on 0.0.0.0:22 from WORKSTATION:47678.
+2026-08-26 05:02:00 localhost shepherd[1]: Starting service sshd-134...
+2026-08-26 05:02:00 localhost shepherd[1]: Service sshd-134 started.
+2026-08-26 05:02:00 localhost shepherd[1]: Service sshd-134 running with value #<<process> id: 6047 command: ("/gnu/store/i08640hf0j0y0cqyx4q7yai88vc842qc-openssh-10.4p1/sbin/sshd" "-D" "-f" "/gnu/store/88lpk60asrkgdmizavgllmsl0idkb7s1-sshd_config" "-i")>.
+2026-08-26 05:02:00 localhost shepherd[1]: Service sshd-134 has been started.
+2026-08-26 05:02:00 localhost sshd-session[6047]: Accepted publickey for root from WORKSTATION port 47678 ssh2: ED25519 SHA256:0Ko3iBPh7XdwENEYqpB+X5nnbmUJnr3GofRoAYzS3AE
+2026-08-26 05:02:01 localhost shepherd[1]: Stopping service root...
+2026-08-26 05:02:01 localhost shepherd[1]: Exiting shepherd...
+2026-08-26 05:02:01 localhost shepherd[1]: Service pinenote-ebc-clut is not running.
+2026-08-26 05:02:01 localhost shepherd[1]: Service pinenote-waveform is not running.
+2026-08-26 05:02:01 localhost shepherd[1]: Service pinenote-ebc-params is not running.
+2026-08-26 05:02:01 localhost shepherd[1]: Service pinenote-diagnostics is not running.
+2026-08-26 05:02:01 localhost shepherd[1]: Service pinenote-ebc-test is not running.
+2026-08-26 05:02:01 localhost shepherd[1]: Stopping service reader-session...
+2026-08-26 05:02:01 localhost linux: [13155.623144] Console: switching to colour frame buffer device 234x87
+2026-08-26 05:02:01 localhost shepherd[1]: Service reader-session stopped.
+2026-08-26 05:02:01 localhost shepherd[1]: Service reader-session is now stopped.
+2026-08-26 05:02:01 localhost shepherd[1]: Stopping service orientation-bridge...
+2026-08-26 05:02:02 localhost shepherd[1]: Registering new logger for orientation-bridge.
+2026-08-26 05:02:02 localhost shepherd[1]: Service orientation-bridge stopped.
+2026-08-26 05:02:02 localhost shepherd[1]: Service orientation-bridge is now stopped.
+2026-08-26 05:02:02 localhost shepherd[1]: Service pinenote-frontlight is not running.
+2026-08-26 05:02:02 localhost shepherd[1]: Service pinenote-dmc is not running.
+2026-08-26 05:02:02 localhost shepherd[1]: Stopping service pinenote-ddr-boost...
+2026-08-26 05:02:05 localhost shepherd[1]: Service pinenote-ddr-boost stopped.
+2026-08-26 05:02:05 localhost shepherd[1]: Service pinenote-ddr-boost is now stopped.
+2026-08-26 05:02:05 localhost shepherd[1]: Service pinenote-library is not running.
+2026-08-26 05:02:05 localhost shepherd[1]: Service pinenote-manuals is not running.
+2026-08-26 05:02:05 localhost shepherd[1]: Service reader-session is not running.
+2026-08-26 05:02:05 localhost shepherd[1]: Service pinenote-autosuspend is not running.
+2026-08-26 05:02:05 localhost shepherd[1]: Service pinenote-wifi is not running.
+2026-08-26 05:02:05 localhost shepherd[1]: Stopping service sshd-134...
+2026-08-26 05:02:05 localhost sshd-session[6047]: error: mm_reap: child terminated by signal 15
+2026-08-26 05:02:05 localhost shepherd[1]: Service sshd-134 stopped.
+2026-08-26 05:02:05 localhost shepherd[1]: Service sshd-134 is now stopped.
+2026-08-26 05:02:05 localhost shepherd[1]: Transient service sshd-134 unregistered.
+2026-08-26 05:02:05 localhost shepherd[1]: Accepted connection on 0.0.0.0:22 from WORKSTATION:47688.
+2026-08-26 05:02:05 localhost shepherd[1]: Stopping service ssh-daemon...
+2026-08-26 05:02:05 localhost shepherd[1]: Service ssh-daemon stopped.
+2026-08-26 05:02:05 localhost shepherd[1]: Service ssh-daemon is now stopped.
+2026-08-26 05:02:05 localhost shepherd[1]: Stopping service networking...
+2026-08-26 05:02:05 localhost dhcpcd[443]: received SIGTERM, stopping
+2026-08-26 05:02:05 localhost dhcpcd[443]: wlan0: removing interface
+2026-08-26 05:02:05 localhost dhcpcd[443]: dhcpcd exited
+2026-08-26 05:02:05 localhost shepherd[1]: Service networking stopped.
+2026-08-26 05:02:05 localhost shepherd[1]: Service networking is now stopped.
+2026-08-26 05:02:05 localhost shepherd[1]: Service pinenote-timesync is not running.
+2026-08-26 05:02:05 localhost shepherd[1]: Service ssh-daemon is not running.
+2026-08-26 05:02:05 localhost shepherd[1]: Service pinenote-ssh-authorized-keys is not running.
+2026-08-26 05:02:05 localhost shepherd[1]: Service pinenote-usb-acm-gadget is not running.
+2026-08-26 05:02:05 localhost shepherd[1]: Starting service networking...
+2026-08-26 05:02:05 localhost shepherd[1]: Service networking started.
+2026-08-26 05:02:05 localhost shepherd[1]: Service networking running with value #<<process> id: 6062 command: ("/gnu/store/w9lbngmv1185awplnqpgcrkj1xi8yjg5-dhcpcd-10.3.2/sbin/dhcpcd" "-q" "-q" "-B" "-f" "/gnu/store/n2p4x6s77n2qp2g6j8l97qaha9dbpqar-dhcpcd.conf")>.
+2026-08-26 05:02:05 localhost shepherd[1]: Service networking has been started.

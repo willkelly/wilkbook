@@ -7,7 +7,13 @@
  * the ioctl with -EOPNOTSUPP; that case exits with a clear message).
  *
  * Usage:
- *   ebc-dump-grab [-d /dev/dri/card0] [--verify] [--planes LIST] OUT
+ *   ebc-dump-grab [-d /dev/dri/cardN] [--verify] [--planes LIST] OUT
+ *
+ * Without -d the EBC card is resolved by driver name
+ * (DRIVER=rockchip-ebc in /sys/class/drm/cardN/device/uevent): the
+ * index is not stable across images -- panfrost takes card0 on the
+ * direct-mode image, and this ioctl aimed at the GPU is a malformed
+ * GPU job (2026-08-25 glass session).
  *
  *   --verify      two back-to-back ioctls; if byte-identical, sets the
  *                 container's verified-stable flag (proves the panel
@@ -109,9 +115,46 @@ static int do_extract(int fd, unsigned char *buf, const bool want[N_PLANES],
 	return ioctl(fd, DRM_IOCTL_ROCKCHIP_EBC_EXTRACT_FBS, &args);
 }
 
+/* Resolve the EBC's card node by driver name via sysfs (readable
+ * without root, needs no udev, and cannot make us DRM master of the
+ * GPU the way probing by open() would).  DRM reserves minors 0..63
+ * for card nodes.  Returns 0 and fills path, or -1 when no card is
+ * bound to rockchip-ebc. */
+static int find_ebc_card(char *path, size_t path_size)
+{
+	int n;
+
+	for (n = 0; n <= 63; n++) {
+		char uevent[64];
+		char line[128];
+		FILE *f;
+		bool found = false;
+
+		snprintf(uevent, sizeof(uevent),
+			 "/sys/class/drm/card%d/device/uevent", n);
+		f = fopen(uevent, "r");
+		if (!f)
+			continue;
+		while (fgets(line, sizeof(line), f)) {
+			if (!strcmp(line, "DRIVER=rockchip-ebc\n") ||
+			    !strcmp(line, "DRIVER=rockchip-ebc")) {
+				found = true;
+				break;
+			}
+		}
+		fclose(f);
+		if (found) {
+			snprintf(path, path_size, "/dev/dri/card%d", n);
+			return 0;
+		}
+	}
+	return -1;
+}
+
 int main(int argc, char **argv)
 {
-	const char *dev = "/dev/dri/card0";
+	const char *dev = NULL;
+	char devbuf[32];
 	const char *out = NULL;
 	bool verify = false;
 	bool want[N_PLANES] = { true, true, true, true, true };
@@ -172,6 +215,14 @@ int main(int argc, char **argv)
 		total += sz[i];
 	}
 
+	if (!dev) {
+		/* No -d given: resolve the EBC card by driver name (the
+		 * index is not stable across images). */
+		if (find_ebc_card(devbuf, sizeof(devbuf)) == 0)
+			dev = devbuf;
+		else
+			dev = "/dev/dri/by-path/platform-fdec0000.ebc-card";
+	}
 	fd = open(dev, O_RDWR);
 	if (fd < 0) {
 		/* by-path fallback: the EBC is the only display-port DRM

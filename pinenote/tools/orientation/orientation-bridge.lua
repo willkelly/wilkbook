@@ -21,6 +21,16 @@ struct input_id { unsigned short bustype, vendor, product, version; };
 struct uinput_user_dev { char name[80]; struct input_id id; unsigned int ff_effects_max;
   int absmax[64]; int absmin[64]; int absfuzz[64]; int absflat[64]; };
 struct input_event { long tv_sec, tv_usec; unsigned short type, code; int value; };
+typedef struct { unsigned long __val[16]; } sigset_t;
+int sigemptyset(sigset_t *set);
+int sigaddset(sigset_t *set, int signum);
+int sigprocmask(int how, const sigset_t *set, sigset_t *oldset);
+typedef void (*sighandler_t)(int);
+sighandler_t signal(int signum, sighandler_t handler);
+unsigned int alarm(unsigned int seconds);
+int kill(int pid, int sig);
+int fork(void);
+int waitpid(int pid, int *status, int options);
 ]]
 local C = ffi.C
 local O_RDONLY, O_WRONLY, O_NONBLOCK = 0, 1, 0x800
@@ -30,6 +40,36 @@ local BUS_VIRTUAL = 0x06
 local UI_SET_EVBIT, UI_SET_MSCBIT = 0x40045564, 0x40045568
 local UI_DEV_CREATE, UI_DEV_DESTROY = 0x00005501, 0x00005502
 local DEVICE_NAME = "wilkbook-orientation"
+local SIG_BLOCK, SIG_UNBLOCK = 0, 1
+local SIGINT, SIGKILL, SIGALRM, SIGTERM = 2, 9, 14, 15
+local SIG_DFL = ffi.cast("sighandler_t", 0)
+
+-- `herd stop orientation-bridge` wedged on glass (2026-08-25,
+-- doc/status.md): the stop hook's `--cleanup` invocation ignored SIGTERM
+-- and shepherd sat "being stopped" until SIGKILL.  An ignored disposition
+-- survives exec and a blocked signal mask survives fork+exec, so a child
+-- spawned from shepherd's stop hook can inherit a SIGTERM-proof state
+-- through either channel.  Restore both to defaults on entry, so every
+-- mode of this script dies on SIGTERM again.  (A D-state hang would still
+-- be immune; nothing in userspace can fix that.)
+local function restore_termination_signals()
+    -- Order matters: re-default the dispositions BEFORE unblocking.  A
+    -- signal already pending under an inherited block is delivered at the
+    -- unblock using the disposition current at that moment -- unblocking
+    -- first would deliver it while still SIG_IGN and silently discard it
+    -- (the signal-self-test pins this ordering).
+    C.signal(SIGTERM, SIG_DFL)
+    C.signal(SIGINT, SIG_DFL)
+    C.signal(SIGALRM, SIG_DFL)
+    local set = ffi.new("sigset_t")
+    C.sigemptyset(set)
+    C.sigaddset(set, SIGTERM)
+    C.sigaddset(set, SIGINT)
+    C.sigaddset(set, SIGALRM)
+    C.sigprocmask(SIG_UNBLOCK, set, nil)
+end
+restore_termination_signals()
+
 local READY = arg[1] or "/run/wilkbook-orientation.ready"
 local CONSUMER_READY = "/run/wilkbook-orientation.consumer"
 local STATE = "/run/wilkbook-orientation.state"
@@ -101,6 +141,10 @@ local function teardown_sensor(base)
 end
 
 if arg[1] == "--cleanup" then
+    -- Watchdog: teardown is milliseconds of sysfs writes.  If any of them
+    -- wedges, die by SIGALRM instead of hanging `herd stop` forever --
+    -- nobody automatically sends the cleanup child a SIGTERM.
+    C.alarm(15)
     local base = sensor()
     teardown_sensor(base)
     os.remove("/run/wilkbook-orientation.ready")
@@ -214,8 +258,87 @@ local function self_test()
     if not ok then error(err) end
 end
 
+-- Behavioural check for restore_termination_signals(): simulate the
+-- shepherd stop-hook environment (SIGTERM blocked in the parent,
+-- inherited across fork) and prove the restore makes SIGTERM lethal
+-- again.  Runs on any host; needs no device, no root, no /dev/uinput.
+local function signal_self_test()
+    local WNOHANG = 1
+    local function reap(pid, timeout_ms)
+        local status = ffi.new("int[1]")
+        local waited = 0
+        while true do
+            local r = C.waitpid(pid, status, WNOHANG)
+            assert(r == pid or r == 0, "signal-self-test: waitpid failed")
+            if r == pid then return status[0] end
+            if waited >= timeout_ms then return nil end
+            C.poll(nil, 0, 20)
+            waited = waited + 20
+        end
+    end
+    local function spawn_and_term(restore)
+        local pid = C.fork()
+        assert(pid >= 0, "signal-self-test: fork failed")
+        if pid == 0 then
+            if restore then restore_termination_signals() end
+            C.poll(nil, 0, 30000)
+            os.exit(86) -- reached only if SIGTERM never lands
+        end
+        -- Blocked-then-pending or delivered live: either way SIGTERM must
+        -- kill a restored child, and must not kill an unrestored one.
+        C.kill(pid, SIGTERM)
+        return pid
+    end
+
+    local set = ffi.new("sigset_t")
+    C.sigemptyset(set)
+    C.sigaddset(set, SIGTERM)
+    assert(C.sigprocmask(SIG_BLOCK, set, nil) == 0,
+           "signal-self-test: cannot block SIGTERM")
+    -- Arm BOTH inheritance channels the fix's comment names: the blocked
+    -- mask (above) and an ignored disposition.  With both armed, the
+    -- restored child below dies only if restore_termination_signals()
+    -- undoes both -- a mask-only or disposition-only mutant leaves it
+    -- alive and fails the assertion.  Arming SIG_IGN alongside the block
+    -- (rather than as a separate pair) also avoids a race: a SIGTERM sent
+    -- while merely ignored is discarded, but one pending under the block
+    -- is delivered at unblock using the disposition current THEN.
+    local SIG_IGN = ffi.cast("sighandler_t", 1)
+    C.signal(SIGTERM, SIG_IGN)
+
+    -- Positive control first: WITHOUT the restore, the inherited state
+    -- must make the child shrug off SIGTERM.  If this control fails, the
+    -- harness does not actually produce the shepherd-like state and a
+    -- pass below would be vacuous.
+    local pid = spawn_and_term(false)
+    assert(reap(pid, 600) == nil,
+           "signal-self-test: control child died despite inherited blocked+ignored SIGTERM")
+    C.kill(pid, SIGKILL)
+    assert(reap(pid, 2000), "signal-self-test: control child survived SIGKILL")
+    print("PASS: signal-self-test: inherited blocked mask + SIG_IGN make SIGTERM inert (control)")
+
+    -- The fix: the same child, same blocked+ignored inheritance, same
+    -- SIGTERM -- but restore_termination_signals() runs first, so it must
+    -- die, and die BY SIGTERM rather than by falling off the 30 s sleep.
+    -- This requires BOTH the unblock and the re-default to have happened.
+    pid = spawn_and_term(true)
+    local status = reap(pid, 2000)
+    assert(status, "signal-self-test: restored child ignored SIGTERM")
+    assert(bit.band(status, 0x7f) == SIGTERM,
+           "signal-self-test: restored child died, but not by SIGTERM (status "
+           .. tostring(status) .. ")")
+    C.signal(SIGTERM, SIG_DFL)
+    C.sigprocmask(SIG_UNBLOCK, set, nil)
+    print("PASS: signal-self-test: restore_termination_signals makes SIGTERM lethal again")
+end
+
 if arg[1] == "--uinput-self-test" then
     self_test()
+    os.exit(0)
+end
+
+if arg[1] == "--signal-self-test" then
+    signal_self_test()
     os.exit(0)
 end
 

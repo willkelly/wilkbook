@@ -216,15 +216,19 @@ for the panel-corruption investigations.")))
 (define-public linux-pinenote-hrdl-direct
   ;; STUDY ARTIFACT, not a product.  The primary kernel with our EBC driver
   ;; SWAPPED OUT for hrdl's direct-mode rework (doc/direct-mode-adoption.md).
-  ;; It exists so the swap can be built and read rather than argued about,
-  ;; and it reaches no image: no flavor references it.
+  ;; It exists so the swap can be built and read rather than argued about.
+  ;; Exactly one flavor references it: pinenote-reader-direct, the study
+  ;; image (pinenote/systems/pinenote-reader-direct.scm).
   ;;
   ;; Built and linked against 7.1.8 with pinenote_defconfig on 2026-08-25 --
-  ;; Image, three modules and both PineNote DTBs, zero errors.  NOTHING HAS
-  ;; RUN.  It cannot even probe as-is: the driver request_firmware()s
-  ;; rockchip/custom_wf.bin and fails -EINVAL without it (that is what
-  ;; pinenote/tools/wbf/wbf-clut.c produces), and the third clock direct mode
-  ;; wants is on an hrdl branch we have not identified.
+  ;; Image, three modules and both PineNote DTBs, zero errors.  RAN ON GLASS
+  ;; the same day (doc/status.md 2026-08-25): probed, lit the panel, drove a
+  ;; full KOReader session.  Two run-time conditions apply: the driver
+  ;; request_firmware()s rockchip/custom_wf.bin (what wbf-clut produces;
+  ;; -EINVAL without it, and the initrd load order guarantees the FIRST
+  ;; probe of every boot fails, so a post-CLUT rebind is required -- the
+  ;; clut one-shot's final stage), and the third clock (cpll_333m) is
+  ;; supplied by our own DT hunk in the swap patch.
   (package
     (inherit linux-pinenote)
     (name "linux-pinenote-hrdl-direct")

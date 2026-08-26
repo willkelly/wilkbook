@@ -1,17 +1,27 @@
 # Adopting direct mode: the plan
 
-**Status: plan, not a decision record.** Written 2026-08-24, after the
-operator named handwriting as a product direction that the current display
-path cannot support. Built so far (all 2026-08-25): P1's CLUT compiler,
-P2's `linux-pinenote-hrdl-direct` kernel package, and P2a's modprobe
-options. **Nothing has ever run** — not loaded, not probed, not bound, no
-frame on any panel — and P3 onwards is still a plan. The bail-out
-criteria at the bottom still apply.
-path cannot support. What exists so far: **P1's CLUT compiler and its
-installer one-shot**, and **P2's kernel variant** — none of them reachable
-from any flavor, image or running system, and **nothing has ever probed,
-bound or drawn a frame.** P3 on is still a plan, and the bail-out criteria
-at the bottom still apply.
+**Status: plan, with its first glass results — not a decision record.**
+Written 2026-08-24, after the operator named handwriting as a product
+direction that the current display path cannot support. Built: P1's CLUT
+compiler and installer one-shot, P2's `linux-pinenote-hrdl-direct` kernel
+package, P2a's modprobe options — and, since 2026-08-25, the
+`reader-direct` flavor instantiates all of it, with the per-boot rebind
+(the D7 answer) as the one-shot's final stage. **The driver has run on
+glass** (2026-08-25, `doc/status.md`): D1–D4 passed with the wiring's job
+done *by hand* — the deployed image predated the wiring — D9 was
+measured, D5 (rotation) is unresolved, and the operator confirmed on
+video the flashing-per-turn cost that makes P4 the next display work.
+The wired image booted hands-off on 2026-08-26: CLUT compiled at boot,
+rebind at 10.1 s, reader up via shepherd with no crash-loop, washes on
+the resolved card, and reader-idle power at parity with shipping
+(155.3 vs 156.9 mA — `doc/status.md`). Later the same night: **D5
+resolved and proven** (all four orientations on glass; the lever is
+`closed_rotation_mode`, pinned by `test-rotation-decision.lua`), **D6
+passed** (ultra rails-off suspend/resume with this driver; one dwc3
+gadget caveat, registered), and real-turn power measured (+59 mA at
+20 turns/min, ~41.5 frames/turn — the untuned hint is a power cost
+too). P4 onwards is still a plan, and
+the bail-out criteria at the bottom still apply.
 
 Read `doc/hrdl-evaluation.md` first — this document assumes it.
 
@@ -104,10 +114,13 @@ interpreter (`doc/artifacts/pinenote-input-clocks-20260824/`).
 Three options:
 
 1. **Reimplement the CLUT compiler in C, ship it as an on-device binary.**
-   *Recommended — and **done** as of 2026-08-25 (see P1), compiler and
-   installing one-shot both; what is not done is any flavor that
-   instantiates it, and **D7** says the one-shot alone cannot be early
-   enough.* There is a near-precedent: `pinenote-install-waveform` is a
+   *Recommended — and **done end to end** as of 2026-08-25 (see P1):
+   compiler, installing one-shot, the `reader-direct` wiring that
+   instantiates both, and the per-boot sysfs rebind that answers **D7**
+   (the one-shot cannot run before the initrd's probe, so it re-triggers
+   the probe instead).  D1 itself passed on glass 2026-08-25 — by hand,
+   because the deployed image predated the wiring (`doc/status.md`).*
+   There is a near-precedent: `pinenote-install-waveform` is a
    generated script run by a one-shot shepherd service
    (`pinenote/services/ebc.scm`) — though note it is **not** "before the
    EBC module loads", which is D7's whole subject — and `pinenote-ebc-dump` in
@@ -233,7 +246,7 @@ So the retreat 3WIN was supposed to provide costs a repair, not nothing.
 shipping one — a strictly better retreat than a config of his we would
 have to fix first. Reported upstream rather than patched.
 
-### D7. Probe happens in the INITRD, so nothing in userspace is "before the module loads" — **found 2026-08-25**
+### D7. Probe happens in the INITRD, so nothing in userspace is "before the module loads" — **found 2026-08-25; resolved on glass the same night, by a fourth option**
 
 This is the blocker P0's item 1 (below, under **The plan**) talked itself
 out of. Measured in the tree, not assumed:
@@ -269,10 +282,32 @@ Three ways out, none of them written, none tried:
 | (b) drop `rockchip_ebc` from the *direct flavor's* initrd module list and modprobe it from a one-shot after the CLUT service | a second initrd variant, a load one-shot, and a working module database at `/run/booted-system/kernel` (the `modprobe -d` shape `usb-gadget.scm` already uses) | display arrives later in boot; the reader flavor drops `console=tty0` anyway, so the U-Boot logo simply stays |
 | (c) install, then reload — `modprobe -r rockchip_ebc; modprobe rockchip_ebc` — as hrdl does | smallest; no initrd work | a reload while something holds the DRM/fb device fails, and every boot pays a failed probe first |
 
-**Nothing here is decided.** (b) reads cleanest and (c) cheapest; both want
-the same module-database plumbing. What is *not* in doubt is that the CLUT
-installer is needed under all three, which is why it was built first.
-### D7. The EBC node needs a third clock — **RESOLVED 2026-08-25, and it is two lines**
+**Decided on glass, 2026-08-25 — and it is none of the three.** The
+session proved a fourth mechanism with a smaller blast radius than any
+of them: leave the initrd raw-load (and its now-*expected* per-boot
+`-EINVAL`) alone, and after the CLUT lands write the device back into
+the driver's sysfs `bind` file —
+
+```
+echo fdec0000.ebc > /sys/bus/platform/drivers/rockchip-ebc/bind
+```
+
+— which re-runs the probe, and it passes (`doc/status.md` D2). No initrd
+change, no module reload, no modprobe.d exposure (the module is already
+loaded; parameters never re-enter the picture). The CLUT one-shot now
+performs that rebind itself as its final stage, on every boot including
+is-current ones: unbind if bound, bind, then judge the END STATE — device
+bound and a DRM `card*` minor present — and fail the service loudly
+otherwise (`pinenote/services/ebc-clut-install.sh`, driven through the
+new branches by `make ebc-clut-check`). The service-driven rebind has
+not itself run on glass; the session ran the same steps by hand. One
+prediction above stands: the CLUT installer was needed under every
+option, which is why it was built first.
+### D8. The EBC node needs a third clock — **RESOLVED 2026-08-25, and it is two lines**
+
+(Numbered D7 until 2026-08-25, when the initrd-probe finding took a
+section of its own; every bare "D7" cross-reference in the tree means
+the initrd section above.)
 
 P2 left this open: his `v6.19_ebc_custom` branch touches no DTS at all, so
 the EBC node his driver binds to had to live somewhere we had not found.
@@ -444,9 +479,9 @@ we call `clk_round_rate`, which does return the rate.
 Likely cosmetic on a panel with no meaningful vblank — DRM computes its
 timestamping constants from a zero dotclock and complains — but it is a
 difference we would inherit. **Deliberately not filed** in
-`doc/driver-findings-report.md` or the upstream register: it is read off
-source in a driver no panel has run, and this repo's bar for a finding is
-higher than that. File it when P3 step 1 either shows the log line or does
+`doc/driver-findings-report.md` or the upstream register: it was read off
+source before any panel had run this driver, and this repo's bar for a
+finding is higher than that. File it when P3 step 1 either shows the log line or does
 not.
 
 #### What we are NOT adopting, and what is still unknown
@@ -546,7 +581,7 @@ same never-bundle rule. Extended to match `custom_wf` and to reject any
 tracked file carrying the `CLUT0002` magic. Done now, while the count of
 such files in existence is still zero.
 
-### P1 — the CLUT compiler (D1) — ✅ **compiler done, gate met** (2026-08-25)
+### P1 — the CLUT compiler (D1) — ✅ **compiler done, gate met, wired into `reader-direct` with the rebind** (2026-08-25)
 
 Write it in C, cross-built like `pinenote-ebc-dump`, run by a one-shot
 before the EBC module loads. Differential-test against `wbf_to_custom.py`
@@ -574,13 +609,17 @@ so the driver cannot select the file's top temperature range. A
 clean-room compiler written to what the reference *means* is wrong here,
 which is why the gate had to be identity rather than equivalence.
 
-**The installer one-shot exists too, 2026-08-25 — and it is wired into
-nothing.** `pinenote/services/ebc-direct.scm` defines
+**The installer one-shot exists too, 2026-08-25 — and since the same
+date `reader-direct` instantiates it** (it began the day wired into
+nothing, which is how the first glass session came to boot an image with
+no clut service and do D1 by hand — the release review's top
+tag-blocker, now closed). `pinenote/services/ebc-direct.scm` defines
 `pinenote-ebc-clut-service-type`: a shepherd one-shot, ordered after
 `pinenote-waveform`, that runs `pinenote/services/ebc-clut-install.sh`
-with the compiler, the waveform and the destination as arguments. It is
-the analogue of `pinenote-waveform` for the derived file, and it differs
-from hrdl's unit in the two places that matter:
+with the compiler, the waveform, the destination — and the rebind target
+(the driver's sysfs directory and the platform device) as arguments. It
+is the analogue of `pinenote-waveform` for the derived file, and it
+differs from hrdl's unit in the places that matter:
 
 - **It checksums instead of gating on `test ! -e`.** The stamp beside the
   file records the source waveform's sha256, the compiler's store path,
@@ -591,24 +630,39 @@ from hrdl's unit in the two places that matter:
   exits 0 on every failure because a reader without manuals is still a
   reader; a device without a CLUT has no display at all (D4), so this one
   is built to be loud in the boot log.
+- **It rebinds the driver after installing** — the D7 answer, added
+  after the 2026-08-25 session proved it by hand. Every run that leaves
+  a verified CLUT in place ends by re-triggering the probe through the
+  driver's sysfs `bind` (unbind first if bound), then checking the end
+  state: device bound *and* a DRM minor registered. A rebind that fails
+  fails the service; the one legitimate skip — CLUT unchanged, device
+  already bound with a minor — is said out loud in the log.
 
 `make ebc-clut-check` runs it — the real file, not a copy — through every
 branch against a fake firmware tree and a stub compiler: first run, no-op
 when current, recompile on a changed waveform / changed compiler /
 corrupted or deleted output, missing waveform, missing compiler, failing
 compiler, empty output, unwritable and symlinked destinations, and a host
-with no `sha256sum` (which recompiles rather than trusts). It carries its
-own **mutation control**: a copy of the script with the checksum replaced
-by upstream's compile-once-if-absent condition, which the freshness
-branches must reject.
+with no `sha256sum` (which recompiles rather than trusts). The rebind
+branches run against a **fake sysfs** — full cycle, said-out-loud skip,
+the per-boot bind on a current CLUT, missing driver directory, bound
+without a minor, refused unbind, half a rebind target — with the suite
+stating exactly what a static fixture cannot re-enact (the bind
+transition itself, which glass proved). It carries its own **mutation
+control**: a copy of the script with the checksum replaced by upstream's
+compile-once-if-absent condition, which the freshness branches must
+reject. And it pins the wiring **positively**: exactly the
+`reader-direct` flavor instantiates the service — a pin that fires when
+the wiring is dropped again, which its negative-form predecessor
+("no flavor outside the study…") stayed green through.
 
-**What is still NOT done.** No image, no flavor, no initrd work, and
-**D7** — which says a userspace one-shot cannot be "before the module
-loads" on our boot at all — is unresolved, so this service **does not on
-its own make the direct-mode driver probe.** D4 (what a missing or stale
-`custom_wf.bin` should do at first boot) is still undecided. **And
-nothing has driven a panel:** the compiler is proven against the Python
-and against nothing else, and the installer against a stub.
+**What is still NOT done.** The wired flavor has never booted: the
+2026-08-25 session proved the compile-then-rebind sequence by hand on an
+image that predated the wiring, and the host suite proves the service
+reproduces that sequence — against a stub compiler and a fake sysfs. D4's
+first-boot policy for a missing or stale `custom_wf.bin` on a device we
+did not set up is still undecided. **No panel has run the
+service-driven path.**
 
 ### P2 — port the driver onto 7.1.8, behind a flavor
 
@@ -669,8 +723,9 @@ and adds his NEON object with its flags: the blitter needs
 `-mgeneral-regs-only` **removed** and `CC_FLAGS_FPU` added, since kernel
 code is otherwise built with no FP registers.
 
-**The shipping kernel's derivation is unchanged** — nothing here reaches
-an image, and no flavor references the variant.
+**The shipping kernel's derivation is unchanged** — the variant is
+referenced only by the `reader-direct` study flavor, and no shipping
+flavor's closure contains it.
 
 **One gap found while doing it:** his `v6.19_ebc_custom` branch contains
 **no EBC device-tree node** and touches no DTS at all, so it cannot bind
@@ -892,11 +947,131 @@ one-variable protocol:
 Ink is the *reason*, but a reader that regresses reading to gain writing
 is not a trade this project should make.
 
-### P4 — policy rewrite (D2)
+### P4 — policy rewrite (D2) — **driven by an on-glass verdict since 2026-08-25**
 
 Re-derive `doc/refresh-policy.md`'s decisions against hints. Rewrite
 `device.lua`'s intent mapping. Re-establish the idle washer and
 publish-on-call equivalents.
+
+**The P4 driver.** The operator's verdict on the first direct-mode
+glass session, watching page turns on video (D4, `doc/status.md`
+2026-08-25): **"quality good; more flashing/redrawing per page turn
+than a smooth read wants."** That is the pre-registered two-pass +
+waveform-class expectation confirmed on glass, and it makes P4 the work
+that decides *embrace*: rendering quality is not the problem, drive
+policy is. Three separable causes, each with its own fix surface:
+
+1. **Every turn is two passes.** No publish-on-call, and no defio knob:
+   his driver has zero references to `defio`
+   (`doc/upstream-register.md` item 3), so `drm_fbdev_shmem`'s
+   hard-coded `HZ/20` = 50 ms flush window stands, and a page turn's
+   damage is split across at least two flushes — two visible drive
+   passes per turn, by construction (pre-registered in the deploy
+   entry). The shipping driver needed BOTH publish-on-call and
+   `defio_delay_ms=250` to reach 8/8 single-pass turns on glass
+   (2026-08-01, `doc/refresh-policy.md`); direct mode currently has
+   neither. Both mechanisms are ours, small, and port.
+
+2. **The waveform class is untuned, and its per-turn contribution is
+   unmeasured.** Under direct mode the waveform class is the per-pixel
+   hint bit depth (D2: Y1→DU, Y2→DU4, Y4→GL16), and every pixel no
+   `RECT_HINTS` rect covers takes `default_hint` =
+   `Y4 | THRESHOLD | REDRAW` (the parameter's driver default). No
+   intent mapping exists yet, so nothing reproduces the tuned
+   per-intent choices `doc/refresh-policy.md` bought with hardware
+   sessions (the wash-promotion threshold, the GL16 global class). The
+   shipping record cuts both ways here: shipping's own partials stay
+   on the 16-level class *deliberately* (refresh-policy decision 3 —
+   DU would corrupt antialiased text) and measured essentially
+   flash-free, so the untuned default is a tuning unknown to measure,
+   not a proven flashing source.
+
+3. **Washes are hard-coded GC16** — the white-flash class. The shipping
+   GL16 wash (no white flash; a policy decision proven on glass) has no
+   parameter successor: his `GLOBAL_REFRESH` work item drives
+   `ROCKCHIP_EBC_CUSTOM_WF_GC16` unconditionally (P2a gap 2). Under
+   direct mode a non-flashing wash is a driver or CLUT change, not
+   configuration.
+
+**The tuning surface his driver exposes** — P4 starts from this map,
+not from scratch:
+
+| lever | what it moves |
+|---|---|
+| `default_hint` (module param, mode 0644 → runtime-writable in sysfs) | waveform class + threshold/dither choice + redraw participation for every pixel not covered by a rect |
+| `DRM_IOCTL_ROCKCHIP_EBC_RECT_HINTS` | per-rectangle hints, plus `set_default_hint` — the per-region policy instrument, and the successor of our per-refresh waveform choice |
+| `DRM_IOCTL_ROCKCHIP_EBC_MODE` | driver mode (NORMAL/FAST/…) and `set_redraw_delay` at runtime — the lever P5 would have KOReader wrap around pen-down/pen-up |
+| `redraw_delay` (module param; also via the MODE ioctl) | periodic top-up drive of REDRAW-hinted pixels; ships 0 = off (P2a) |
+
+What has NO knob, and therefore needs code: the defio flush window
+(cause 1 — port our `defio_delay_ms` `.fbdev_probe` wrapper and a
+publish-on-call equivalent) and the wash class (cause 3 — a driver or
+CLUT change, reported upstream per the register either way).
+
+#### File-ready issue text: the two-pass/flashing work item
+
+Written 2026-08-25 so the operator can open it once the session writeup
+is reviewed. **Do not open it before then.** Everything between the
+rules is the issue body, verbatim; suggested title: *direct mode: page
+turns flash and redraw more than the shipping reader (two-pass +
+waveform-class policy)*.
+
+---
+
+**Symptom (on glass, 2026-08-25).** First direct-mode session, KOReader
+page turns on video: rendering quality is good, but each turn flashes
+and redraws more than the shipping reader — the operator's verdict was
+"quality good; more flashing/redrawing per page turn than a smooth read
+wants" (`doc/status.md`, D4). This was the pre-registered expectation
+for an untuned direct-mode image, now confirmed on glass. It is the P4
+driver in `doc/direct-mode-adoption.md`, and it gates *embrace*:
+reading is the product, and P3's gate is parity with the shipping
+reader before any ink work.
+
+**Three separable causes** (source references in
+`doc/direct-mode-adoption.md` P4):
+
+1. ~~Two passes per turn~~ **REFUTED on glass 2026-08-26**: ftrace
+   shows one flush per repaint — the shim's fsync publishes through
+   stock `fb_deferred_io_fsync`, so the port is unnecessary ("or prove
+   an equivalent exists": proven). Struck, kept for the record.
+2. Untuned waveform class: all damage takes `default_hint`
+   (`Y4 | THRESHOLD | REDRAW`) because no intent mapping exists yet —
+   nothing reproduces `doc/refresh-policy.md`'s tuned per-intent
+   choices. Shipping's own 16-level partials measured flash-free, so
+   this cause's per-turn contribution is unmeasured, not established.
+3. Washes are hard-coded GC16 (the white-flash class); the shipping
+   GL16 wash has no parameter successor — a driver or CLUT change.
+
+**Work items**, in offline-first ladder order:
+
+- [ ] Port the `defio_delay_ms` `.fbdev_probe` wrapper onto the
+      direct-mode driver; pin it behind the host suites like the
+      original (rung 1).
+- [ ] Port publish-on-call (fsync-triggered flush) or prove an
+      equivalent exists; keep the flush/EBC-idle semantics honest
+      (rung 1, then 4v).
+- [ ] Write the intent mapping: KOReader intents →
+      `RECT_HINTS`/`default_hint`, re-deriving — not transliterating —
+      the `doc/refresh-policy.md` decisions (rung 1; the re-derived
+      choices get proven on glass later).
+- [ ] Decide the wash: a GL16-class global refresh as a driver change
+      vs a CLUT change; either way report upstream per
+      `doc/upstream-register.md` rather than quietly forking.
+- [ ] Idle-washer equivalent on top of whichever wash lands.
+- [ ] One glass session: single-pass turn count (target 8/8, the
+      shipping figure), wash behaviour, and the operator's felt verdict
+      on video — the 2026-08-25 protocol.
+
+**Acceptance:** page turns on the direct image are single-pass and read
+as calm as the shipping reader's to the operator on video, with washes
+no flashier than today's GL16 policy — or a recorded decision that a
+specific residual is acceptable, and why.
+
+**Non-goals here:** FAST-mode ink (P5), rotation (the D5 chain has its
+own item), and anything that changes the shipping reader.
+
+---
 
 ### P5 — FAST mode and ink
 
@@ -904,6 +1079,64 @@ Only now does the thing we came for get built: `DRIVER_MODE_FAST` for
 pen-down rendering, stroke capture on top of it. #20's capture, storage
 and vectorization work is **independent of all of the above** and can
 proceed in parallel from day one — it needs no panel.
+
+## §7. A question on the record, not a plan: does this need to be in the kernel?
+
+**Status: question. Explicitly not being acted on** (operator, 2026-08-25).
+Written down before the first glass session so the session can collect its
+one datum (D9), instead of the question being reconstructed afterwards.
+
+Direct mode makes the silicon's LUT and diff engines unused: the
+hardware's whole job is to DMA-scan a phase buffer and raise a per-frame
+IRQ. Everything else — the waveform state machine, CLUT walk, early
+cancellation, dithering, the fb→Y4 blits — is pure computation over
+memory, and **in his driver it already runs in a kthread, not interrupt
+context**. The seam exists; it is drawn on the kernel side of the
+syscall boundary, not forced there.
+
+The irreducible kernel core is small: probe/clocks/regulators and
+tps65185 sequencing, IRQ ack + frame-done signalling, DMA-able
+phase-buffer allocation + the scanout kick, and a minimal blank/INIT
+path so panic output never depends on a daemon. A few hundred lines.
+The other ~3,500 could be a userspace RT thread over mmap'd buffers —
+double-buffered, needing only to stay one frame ahead; a missed deadline
+repeats a phase buffer (a one-frame stall, not corruption).
+
+**Why the cost may be low for us specifically:** we already ship
+PREEMPT_RT (the scheduling guarantee this needs, hardware-proven); the
+reMarkable 2 runs a userspace software TCON at envied pen latency on a
+weaker CPU; NEON in userspace is *easier* (no `scoped_ksimd`, no
+`-mgeneral-regs-only`, and it opens Mali/NPU doors kernel code cannot);
+`request_firmware` becomes "open a file", dissolving the CLUT-install
+and initramfs machinery this plan just built; module parameters become
+configuration in #12's system, dissolving the silent-unknown-param
+class; and the offline harness stops needing `kernel-shim.h` at all —
+userspace waveform code is its own harness. It also continues the
+project's actual trajectory: `auto_refresh=0` ("own all washes from
+userspace"), publish-on-call, and the idle washer already pulled
+*policy* up; this would pull *mechanism* up.
+
+**The honest costs:** the display becomes daemon-critical (watchdog +
+kernel blank path required); suspend/resume ordering moves to shepherd
+(more of the 2026-07-12-wedge class); loss of fbcon/standard KMS on the
+panel without a dumb-framebuffer fallback; and the strategic one — **we
+would own the architecture again**, when the point of adopting hrdl's
+tree was to stop being a driver-innovation shop. (Mitigation: the
+`advance()`/blit code would still be his, relocated; and a thin kernel
+driver is arguably *more* upstreamable than either full driver.)
+
+**It reframes embrace-or-reject into a possible third outcome**: adopt
+his *computation*, not his *residence*. Nothing in the glass session is
+wasted under that outcome — P3 validates his math and scheduling on real
+glass, which is exactly the part that would move, unchanged.
+
+**The one datum that decides feasibility** is the measured per-frame
+`advance()` cost on the RK3566. His driver already instruments it
+(`delta_advance`, `rockchip_ebc.c:1134–1202`). That is glass-plan item
+**D9**: harvest it during whatever D4–D8 activity runs. Against an
+11.7 ms frame budget at 85 Hz, that number — plus context-switch and
+wake-up jitter under PREEMPT_RT, which we can measure offline — is the
+whole question.
 
 ## What only hardware can answer
 

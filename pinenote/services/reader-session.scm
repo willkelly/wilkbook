@@ -74,7 +74,26 @@ local function set_wf(v)
   return false
 end
 local deep = (prior ~= nil) and set_wf('4')
-local card = C.open('/dev/dri/card0', 2)
+-- The EBC's DRM card index is not stable across images (on the
+-- direct-mode image the panfrost GPU takes card0, and a wash aimed
+-- there is a malformed GPU job -- 2026-08-25); resolve by driver name
+-- via sysfs, which needs no root and, unlike open()ing candidates,
+-- cannot make this process DRM master of the GPU.
+local ebc_card
+for n = 0, 63 do
+  local u = io.open('/sys/class/drm/card' .. n .. '/device/uevent', 'r')
+  if u then
+    for line in u:lines() do
+      if line == 'DRIVER=rockchip-ebc' then ebc_card = '/dev/dri/card' .. n end
+    end
+    u:close()
+    if ebc_card then break end
+  end
+end
+if ebc_card == nil then
+  io.stderr:write('panel-wash: no DRM card with driver rockchip-ebc\\n')
+end
+local card = ebc_card and C.open(ebc_card, 2) or -1
 if card >= 0 then
   local arg = ffi.new('uint8_t[1]', 1)
   local rc = C.ioctl(card, 0xC0016440, arg)
@@ -83,8 +102,8 @@ if card >= 0 then
   end
   if deep and rc == 0 then C.poll(nil, 0, 3000) end
   C.close(card)
-else
-  io.stderr:write('panel-wash: /dev/dri/card0 open failed errno=' .. ffi.errno() .. '\\n')
+elseif ebc_card then
+  io.stderr:write('panel-wash: ' .. ebc_card .. ' open failed errno=' .. ffi.errno() .. '\\n')
 end
 if deep and not set_wf(prior) then
   io.stderr:write('panel-wash: waveform restore failed\\n')
@@ -202,13 +221,47 @@ end
            #:log-file "/var/log/reader-session.log")
           args)))
     (stop
-     #~(lambda (pid . args)
-         (let ((stopped ((make-kill-destructor) pid)))
-           ;; restore the text console as a rescue path
-           (when (file-exists? #$%fbcon-bind)
-             (call-with-output-file #$%fbcon-bind
-               (lambda (port) (display "1" port))))
-           stopped))))))
+     #~(lambda (process . args)
+         ;; SIGINT before the kill: KOReader's INT handler runs the CLEAN
+         ;; close that flushes the crengine cache, while TERM -- what
+         ;; make-kill-destructor leads with -- truncates it to zero bytes
+         ;; and silently re-arms the next open's full re-parse (30.3 s
+         ;; for the manuals book vs 1.7 s cached, measured on glass
+         ;; 2026-08-26; doc/manuals.md).  Two shepherd-1.0.9 facts this
+         ;; code depends on, both proven in a scratch shepherd during
+         ;; review: (1) the stop procedure receives a <process> RECORD,
+         ;; not a pid -- unwrap before any kill, or the whole procedure
+         ;; dies on a wrong-type-arg that 'system-error does not catch;
+         ;; (2) shepherd's fiberized runtime replaces SLEEP with the
+         ;; cooperative version but NOT usleep -- a usleep poll blocks
+         ;; PID 1 whole, starves the SIGCHLD reaper fiber, and the exit
+         ;; can never be observed.  (sleep 1/10) yields; the reviewed
+         ;; lab run stopped a clean-exiting reader in 0.65 s.  Up to 8 s
+         ;; of courtesy, then the normal destructor handles a reader
+         ;; that is wedged or ignoring INT.  A clean INT exit skips the
+         ;; destructor's process-GROUP sweep, so KOReader-spawned
+         ;; children can outlive the stop; the start path's stale-reader
+         ;; cleanup covers them, and INT is an orderly app shutdown.
+         (let ((pid (if (integer? process) process (process-id process))))
+           (define (alive? p)
+             (catch 'system-error
+               (lambda () (kill p 0) #t)
+               (lambda _ #f)))
+           (catch 'system-error
+             (lambda () (kill pid SIGINT))
+             (lambda _ #f))
+           (let loop ((tries 80))
+             (when (and (alive? pid) (positive? tries))
+               (sleep 1/10)
+               (loop (- tries 1))))
+           (let ((stopped (if (alive? pid)
+                              ((make-kill-destructor) process)
+                              #f)))
+             ;; restore the text console as a rescue path
+             (when (file-exists? #$%fbcon-bind)
+               (call-with-output-file #$%fbcon-bind
+                 (lambda (port) (display "1" port))))
+             stopped)))))))
 
 (define pinenote-reader-session-service-type
   (service-type

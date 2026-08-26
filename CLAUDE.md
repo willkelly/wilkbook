@@ -207,7 +207,7 @@ truth is per-device, so never overwrite another operator's entries; add
 your own. Don't commit the per-device waveform, anything under a tool's
 gitignored `build/`, or the reader's static address.
 
-## Where we are (2026-08-24)
+## Where we are (2026-08-25)
 
 - **Product**: the reader image on os2 — KOReader natively on fbdev with
   pen/finger input, four orientations, publish-on-call single-pass page
@@ -217,19 +217,49 @@ gitignored `build/`, or the reader's static address.
   `v0.1.0-prealpha` is tagged and the repo is public
   (github.com/willkelly/wilkbook); the alpha sign-off has NOT happened
   (`doc/alpha-signoff.md`, `doc/alpha-checklist.md`).
+- **Direct mode (the handwriting experiment) ran on glass 2026-08-25**:
+  the `reader-direct` study image booted on os2, D1–D4 of the ladder
+  passed (CLUT compiled on-device, driver probed after a rebind, panel
+  lit, page turns through the same `GLOBAL_REFRESH` ioctl), D9's
+  userspace-TCON feasibility number is banked (23.1 ms full-panel
+  `advance()` vs an 11.7 ms frame budget), D5 (rotation) is unresolved,
+  and the operator's verdict is quality good but **more flashing per
+  turn than a smooth read wants** — now the P4 driver, refined on
+  2026-08-26 to: turns settle flash-free, the TRANSITION is dirty
+  (prior-page ghost text). The wired image **booted hands-off
+  2026-08-26** (CLUT at boot, rebind 10.1 s, no crash-loop, washes on
+  the resolved card); **D5 is resolved and proven** (all four
+  orientations on glass — the lever is `closed_rotation_mode`, seeded
+  by our own profile; chain pinned in `test-rotation-decision.lua`);
+  **D6 passed** (ultra rails-off suspend/resume with the direct driver;
+  caveat: a bound unattached USB gadget aborts suspend on 7.1.8 —
+  registered); **idle power is at parity** (155.3 vs 156.9 mA; real
+  turns at 20/min add ~59 mA at ~41.5 frames/turn — the untuned hint
+  is a power cost too). Page-turn injection trap: KEY 158 advances
+  (KOReader's labels are inverted on this stack). The decision remains
+  embrace-or-reject, one shipping image either way
+  (`doc/direct-mode-adoption.md`, `doc/status.md`).
 - **Kernel — read this carefully, the tree and the device differ.**
   `%linux-pinenote-base` is `nongnu:linux-7.1` and `make kernel`
-  cross-builds **7.1.8** clean (both DTBs, both modules linked). But
-  **nothing on 7.1 has run on glass.** The hardware-proven kernel is
-  still **7.0.11** (display, PREEMPT_RT, Wi-Fi/BT, gadget — 2026-07-04),
-  and 7.0.11 is what the deployed os2 image runs today (`uname -a`,
-  2026-08-24). So: 7.1 is what the repo *builds*, 7.0.11 is what is
-  *proven*. Never state one as the other. `channels.scm` still pins
-  nonguix at 7.0.11 and has no 7.1, so a reproducible `TIME_MACHINE=1`
-  build of the current tree is **not yet possible** — that pin bump is
-  its own change. 6.6.30 remains regression-isolation only. Seven
-  patches; the 7.1 move *deleted* two hunks mainline absorbed. Inventory
-  in `doc/kernel-forward-port.md`.
+  cross-builds **7.1.8** clean (both DTBs, both modules linked). The
+  hardware-proven kernel for the SHIPPING driver is still **7.0.11**
+  (display, PREEMPT_RT, Wi-Fi/BT, gadget — 2026-07-04). 7.1.8 has run
+  on glass only in the **direct-mode study configuration** (2026-08-25:
+  hrdl's EBC driver swapped in, `linux-pinenote-hrdl-direct`, on os2);
+  the shipping-driver 7.1 build has never driven a panel, and os2
+  currently carries the study image — os1 remains the rescue path.
+  So: 7.1 is what the repo *builds*, 7.0.11 is what is *proven* for the
+  product, the study ran 7.1.8 once. Never state one as the other.
+  `channels.scm` was pin-bumped 2026-08-26 to the 7.1-resolving
+  generation, so `TIME_MACHINE=1` works again on `main` (gated on
+  time-machine resolving the identical kernel derivation as ambient);
+  a future series bump must carry the pin with it. Serial-BREAK sysrq
+  is enabled as of the same date and **glass-proven**: it ships masked
+  off (`DEFAULT_ENABLE=0x0`), BREAK+`sysrq` arms, BREAK+key fires —
+  the sequence is an arming toggle, NOT a per-use guard
+  (`doc/kernel-forward-port.md`). 6.6.30 remains regression-isolation only.
+  Seven patches; the 7.1 move *deleted* two hunks mainline absorbed.
+  Inventory in `doc/kernel-forward-port.md`.
 - **Suspend**: **ultra suspend is the shipping suspend** (2026-08-08,
   R12): hrdl's configuration adopted whole — standing
   `rockchip,suspend-state-override = <5>` + three `*_pmu` rails

@@ -85,15 +85,40 @@ barrier UAPI header from the carried kernel patch while building.")
             ;; _IOC(3, 'd', 0x40, 1) = #xC0016440 (see
             ;; include/uapi/drm/rockchip_ebc_drm.h in the forward-port
             ;; patch).  DRM_AUTH-gated: run as root with no other DRM
-            ;; master (the first opener of card0 becomes master).
+            ;; master (the first opener of a card node becomes master).
+            ;;
+            ;; The EBC's card index is not stable across images: on the
+            ;; direct-mode image the panfrost GPU takes card0 and a wash
+            ;; aimed there is a malformed GPU job (2026-08-25 glass
+            ;; session).  Resolve the node by driver name via
+            ;; /sys/class/drm/cardN/device/uevent (DRIVER=rockchip-ebc,
+            ;; both drivers register that name) -- readable without root
+            ;; and side-effect-free, where probing by open() would take
+            ;; DRM master on the GPU.  Fail loudly when absent.
             (call-with-output-file refresh
               (lambda (port)
                 (display (string-append
                           "#!" #$(file-append guile-3.0 "/bin/guile")
                           " --no-auto-compile\n") port)
                 (display "!#\n" port)
-                (display "(use-modules (system foreign) (rnrs bytevectors))\n" port)
-                (display "(define card \"/dev/dri/card0\")\n" port)
+                (display "(use-modules (system foreign) (rnrs bytevectors) (ice-9 rdelim))\n" port)
+                (display "(define (ebc-card? uevent)\n" port)
+                (display "  (and (file-exists? uevent)\n" port)
+                (display "       (call-with-input-file uevent\n" port)
+                (display "         (lambda (port)\n" port)
+                (display "           (let scan ((line (read-line port)))\n" port)
+                (display "             (cond ((eof-object? line) #f)\n" port)
+                (display "                   ((string=? line \"DRIVER=rockchip-ebc\") #t)\n" port)
+                (display "                   (else (scan (read-line port)))))))))\n" port)
+                (display "(define card\n" port)
+                (display "  (let loop ((n 0))\n" port)
+                (display "    (cond ((> n 63)\n" port)
+                (display "           (format (current-error-port)\n" port)
+                (display "                   \"pinenote-ebc-refresh: no DRM card with DRIVER=rockchip-ebc~%\")\n" port)
+                (display "           (exit 1))\n" port)
+                (display "          ((ebc-card? (format #f \"/sys/class/drm/card~a/device/uevent\" n))\n" port)
+                (display "           (format #f \"/dev/dri/card~a\" n))\n" port)
+                (display "          (else (loop (+ n 1))))))\n" port)
                 (display "(define ioctl\n" port)
                 (display "  (pointer->procedure int (dynamic-func \"ioctl\" (dynamic-link))\n" port)
                 (display "                      (list int unsigned-long '*)))\n" port)

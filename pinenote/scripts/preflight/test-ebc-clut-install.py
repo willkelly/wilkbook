@@ -14,8 +14,11 @@ What this does NOT cover.  No waveform is committed (per-device calibration,
 CLAUDE.md safety model), so the compiler here is a stub: what is proven is
 the installer's contract -- when it compiles, when it refuses, what it
 leaves behind on failure -- and nothing about the CLUT's contents.  Those
-are `make clut-check''s job, and it is byte-identical-or-fail.  Nothing here
-has loaded a module, and no panel has ever run this driver.
+are `make clut-check''s job, and it is byte-identical-or-fail.  The rebind
+stage runs against a FAKE sysfs (see FakeSysfs for exactly what a static
+fixture can and cannot re-enact); the real bind transition was proven by
+hand on glass 2026-08-25 (doc/status.md D2), and the wired service
+reproducing it has not itself booted.
 
 Python 3 standard library only; no Guix, no store, no device.  The one
 optional step is `guix repl', which compiles (pinenote services ebc-direct)
@@ -114,9 +117,64 @@ class Fixture:
             return None
 
 
-def run(script, compiler, source, destination, stamp=None, env=None):
+class FakeSysfs:
+    """A fake driver sysfs directory for the rebind stage.
+
+    A static tree cannot re-enact sysfs's side effects: writing a device
+    name into `bind' creates no bound-device entry here, and writing
+    `unbind' removes none.  What IS provable is the script's observable
+    contract -- which files it writes, what it writes into them, that it
+    trusts the unbind WRITE's status but judges bind by the END STATE
+    (device entry present plus a drm/card* minor), and that every failed
+    outcome is loud.  The state transition itself was proven on glass
+    2026-08-25 (doc/status.md D2).  bind/unbind start as `sentinel' so a
+    test can positively assert an untouched file.
+    """
+
+    DEVICE = "fdec0000.ebc"
+
+    def __init__(self, root, name="sysfs"):
+        base = os.path.join(root, name)
+        self.driver_dir = os.path.join(base, "bus", "platform", "drivers",
+                                       "rockchip-ebc")
+        self.devices = os.path.join(base, "devices")
+        os.makedirs(self.driver_dir)
+        os.makedirs(self.devices)
+        self.device = self.DEVICE
+        self.bind_file = os.path.join(self.driver_dir, "bind")
+        self.unbind_file = os.path.join(self.driver_dir, "unbind")
+        self.reset_sentinels()
+
+    def reset_sentinels(self):
+        for path in (self.bind_file, self.unbind_file):
+            with open(path, "w") as fh:
+                fh.write("sentinel")
+
+    def bind(self, minor=True):
+        """Pre-bind the device: driver_dir/DEVICE -> a device dir, with or
+        without a drm/card* minor under it (as real sysfs lays it out)."""
+        devdir = os.path.join(self.devices, self.device)
+        os.makedirs(os.path.join(devdir, "drm"), exist_ok=True)
+        if minor:
+            with open(os.path.join(devdir, "drm", "card1"), "w"):
+                pass
+        link = os.path.join(self.driver_dir, self.device)
+        if not os.path.lexists(link):
+            os.symlink(devdir, link)
+
+    def wrote(self, path):
+        with open(path) as fh:
+            return fh.read()
+
+
+def run(script, compiler, source, destination, stamp=None, env=None,
+        sysfs=None):
     argv = ["sh", script, compiler, source, destination]
-    if stamp is not None:
+    if sysfs is not None:
+        # STAMP is positional before the rebind pair; "" keeps its default.
+        argv.append(stamp if stamp is not None else "")
+        argv += [sysfs.driver_dir, sysfs.device]
+    elif stamp is not None:
         argv.append(stamp)
     environ = dict(os.environ)
     if env is not None:
@@ -371,6 +429,130 @@ def mutation_control(script, tmp):
 
 
 # --------------------------------------------------------------------------
+# the rebind stage (D2, 2026-08-25)
+# --------------------------------------------------------------------------
+
+def rebind_tests(script, tmp):
+    """The per-boot rebind: install alone is a file nobody reads.
+
+    The initrd raw-loads rockchip_ebc before the rootfs exists, so under
+    the direct-mode driver the first probe fails -EINVAL EVERY boot and
+    the device sits unbound until something writes it back into the
+    driver's `bind' file (hand-proven on glass 2026-08-25).  These cases
+    drive the real script against FakeSysfs; see its docstring for what a
+    static fixture can honestly claim.
+    """
+    # 1. Full cycle on a fresh compile: the device name lands in `unbind'
+    #    then `bind', and the pre-wired good end state reads as success.
+    fx = Fixture(tmp, "rb-cycle")
+    sysfs = FakeSysfs(fx.root)
+    sysfs.bind(minor=True)
+    rc, out = run(script, fx.compiler, fx.source, fx.destination, sysfs=sysfs)
+    check("rebind: a compile run unbinds and rebinds the device",
+          rc == 0 and sysfs.wrote(sysfs.unbind_file) == sysfs.device
+          and sysfs.wrote(sysfs.bind_file) == sysfs.device
+          and "DRM minor present" in out, out)
+
+    # 2. Nothing changed and the device is already bound with a minor: the
+    #    script says so and touches NEITHER sysfs file (the sentinels
+    #    survive) -- rebinding here would tear down a live display to
+    #    re-read an identical CLUT.
+    sysfs.reset_sentinels()
+    rc, out = run(script, fx.compiler, fx.source, fx.destination, sysfs=sysfs)
+    check("rebind: current CLUT on a bound device is a said-out-loud no-op",
+          rc == 0 and "not rebinding" in out
+          and sysfs.wrote(sysfs.bind_file) == "sentinel"
+          and sysfs.wrote(sysfs.unbind_file) == "sentinel", out)
+
+    # 3. Current CLUT, device NOT bound -- the NORMAL boot: the CLUT
+    #    persisted on disk, the initrd probe failed again, and the rebind
+    #    is the whole reason the service ran.  The script must attempt the
+    #    bind even though nothing was compiled; and since a static fixture
+    #    can never BECOME bound, the same run proves the end-state rule:
+    #    still-unbound after the write is a loud failure, never a quiet
+    #    green (a green service over a dark panel is the exact state this
+    #    stage exists to prevent).  The installed CLUT must survive.
+    fx2 = Fixture(tmp, "rb-boot")
+    run(script, fx2.compiler, fx2.source, fx2.destination)  # install only
+    sysfs2 = FakeSysfs(fx2.root)  # driver registered, device unbound
+    rc, out = run(script, fx2.compiler, fx2.source, fx2.destination,
+                  sysfs=sysfs2)
+    check("rebind: a current CLUT still attempts the per-boot bind",
+          "is current" in out
+          and sysfs2.wrote(sysfs2.bind_file) == sysfs2.device
+          and sysfs2.wrote(sysfs2.unbind_file) == "sentinel", out)
+    check("rebind: a device that stays unbound is loud, with the CLUT intact",
+          rc != 0 and "did not bind" in out and "dmesg" in out
+          and os.path.exists(fx2.destination), out)
+
+    # 4. No driver directory (the initrd never registered the driver):
+    #    loud, names the directory -- and the CLUT still lands, because the
+    #    install half succeeded before the rebind half could not.
+    fx3 = Fixture(tmp, "rb-nodriver")
+    sysfs3 = FakeSysfs(fx3.root)
+    shutil.rmtree(sysfs3.driver_dir)
+    rc, out = run(script, fx3.compiler, fx3.source, fx3.destination,
+                  sysfs=sysfs3)
+    check("rebind: a missing driver directory is loud; the CLUT still lands",
+          rc != 0 and "no driver directory" in out
+          and os.path.exists(fx3.destination), out)
+
+    # 5. Bound but no DRM minor: bind is judged by the END STATE, and the
+    #    bound link alone is not it -- a probe that binds without
+    #    registering DRM is a dark panel that would otherwise read green.
+    fx4 = Fixture(tmp, "rb-nominor")
+    sysfs4 = FakeSysfs(fx4.root)
+    sysfs4.bind(minor=False)
+    rc, out = run(script, fx4.compiler, fx4.source, fx4.destination,
+                  sysfs=sysfs4)
+    check("rebind: bound without a DRM minor is a loud failure",
+          rc != 0 and "no DRM minor" in out, out)
+
+    # 6. A refused unbind: the WRITE status is the authority on that side
+    #    -- proceeding would leave a driver bound against a stale CLUT
+    #    while the service reports success.
+    fx5 = Fixture(tmp, "rb-nounbind")
+    sysfs5 = FakeSysfs(fx5.root)
+    sysfs5.bind(minor=True)
+    run(script, fx5.compiler, fx5.source, fx5.destination, sysfs=sysfs5)
+    fx5.write_source("waveform-rev-2")  # force a recompile: no no-op path
+    if os.geteuid() == 0:
+        skip("rebind: a refused unbind is a loud failure",
+             "running as root: mode bits do not deny writes")
+    else:
+        os.chmod(sysfs5.unbind_file, 0o444)
+        try:
+            rc, out = run(script, fx5.compiler, fx5.source, fx5.destination,
+                          sysfs=sysfs5)
+            check("rebind: a refused unbind is a loud failure",
+                  rc != 0 and "cannot unbind" in out, out)
+        finally:
+            os.chmod(sysfs5.unbind_file, 0o644)
+
+    # 7. Half a rebind target is a usage error, not a silent downgrade to
+    #    install-only -- a truncated service invocation must not produce a
+    #    green service over a dark panel.
+    fx6 = Fixture(tmp, "rb-half")
+    proc = subprocess.run(["sh", script, fx6.compiler, fx6.source,
+                           fx6.destination, "", "/half/a/target"],
+                          capture_output=True)
+    out = (proc.stdout + proc.stderr).decode("utf-8", "replace")
+    check("rebind: DRIVER_DIR without DEVICE is refused",
+          proc.returncode != 0 and "usage" in out, out)
+
+    #    ... and the mirror half.  The script guards both orders; a suite
+    #    that pins only one is the exact "every branch" gap class this
+    #    file's failure_guards docstring records.
+    fx6b = Fixture(tmp, "rb-half-b")
+    proc = subprocess.run(["sh", script, fx6b.compiler, fx6b.source,
+                           fx6b.destination, "", "", "fdec0000.ebc"],
+                          capture_output=True)
+    out = (proc.stdout + proc.stderr).decode("utf-8", "replace")
+    check("rebind: DEVICE without DRIVER_DIR is refused",
+          proc.returncode != 0 and "usage" in out, out)
+
+
+# --------------------------------------------------------------------------
 # structural: who is allowed to instantiate this, and the ordering premise
 # --------------------------------------------------------------------------
 
@@ -455,21 +637,52 @@ def structural(repo, service):
           "the .scm no longer references the file this suite executes -- "
           "the suite is testing an orphan")
 
-    # Rule 4 of the direct-mode work: nothing here may reach a shipping
-    # image.  This fires the day someone adds it to a flavor whose name does
-    # not say `direct'.
+    # The service must hand the installer its rebind target: without the
+    # two trailing arguments the script is install-only, and on the device
+    # that is a green service over a dark panel (the CLUT lands, nothing
+    # re-probes).  Pin the accessors INSIDE the start gexp: the record
+    # defaults existing elsewhere in the file is not evidence the start
+    # lambda passes them.
+    start_at = scm.find("(start")
+    stop_at = scm.find("(stop", start_at if start_at >= 0 else 0)
+    start = scm[start_at:stop_at] if 0 <= start_at < stop_at else ""
+    check("service: the start gexp passes the rebind target",
+          "pinenote-ebc-clut-driver-directory" in start
+          and "pinenote-ebc-clut-device" in start,
+          "the start lambda no longer hands the script DRIVER_DIR/DEVICE -- "
+          "the service would install the CLUT and never rebind")
+
+    # Rule 4 of the direct-mode work, in POSITIVE form: EXACTLY the
+    # reader-direct flavor instantiates the CLUT service.  The old negative
+    # pin ("no flavor outside the study...") passed green while NO flavor
+    # instantiated it -- which is precisely the image the 2026-08-25
+    # session booted: no clut service, D1 by hand (doc/status.md).  This
+    # fires both when the wiring is dropped again and when it leaks toward
+    # a shipping flavor.
     systems = os.path.join(repo, "pinenote", "systems")
-    offenders = []
+    users = []
     for name in sorted(os.listdir(systems)):
         if not name.endswith(".scm"):
             continue
         with open(os.path.join(systems, name)) as fh:
             body = fh.read()
         if "ebc-direct" in body or "pinenote-ebc-clut" in body:
-            if "direct" not in name:
-                offenders.append(name)
-    check("no flavor outside the direct-mode study instantiates the CLUT service",
-          not offenders, str(offenders))
+            users.append(name)
+    check("exactly the reader-direct flavor instantiates the CLUT service",
+          users == ["pinenote-reader-direct.scm"], str(users))
+    flavor_path = os.path.join(systems, "pinenote-reader-direct.scm")
+    flavor = ""
+    if os.path.isfile(flavor_path):
+        with open(flavor_path) as fh:
+            flavor = fh.read()
+    check("and it instantiates the service type, not just the module",
+          "(service pinenote-ebc-clut-service-type)" in flavor,
+          "importing (pinenote services ebc-direct) without instantiating "
+          "pinenote-ebc-clut-service-type is the 2026-08-25 gap again")
+    check("and it swaps in the direct modprobe options",
+          "%pinenote-ebc-direct-modprobe-options" in flavor,
+          "the flavor keeps the shipping nine-parameter options line, whose "
+          "intents the kernel would warn-and-ignore against hrdl's module")
 
     # The ordering premise D7 records.  Both halves are mechanism, not prose:
     # if either moves, the direct-mode plan's account of when probe happens
@@ -509,15 +722,26 @@ def guix_module_loads(repo):
              "no guix on PATH (this is the CI case)")
         return
     with tempfile.NamedTemporaryFile("w", suffix=".scm", delete=False) as fh:
+        # Also evaluate the rebind-target accessors: the structural grep
+        # above only matched their names; this proves the record fields
+        # are real and carry the sysfs defaults the device needs.
         fh.write("(use-modules (gnu services) (pinenote services ebc-direct))\n"
-                 "(display (service-type-name pinenote-ebc-clut-service-type))\n")
+                 "(display (service-type-name pinenote-ebc-clut-service-type))\n"
+                 "(newline)\n"
+                 "(display (pinenote-ebc-clut-driver-directory\n"
+                 "          (pinenote-ebc-clut-configuration)))\n"
+                 "(newline)\n"
+                 "(display (pinenote-ebc-clut-device\n"
+                 "          (pinenote-ebc-clut-configuration)))\n")
         probe = fh.name
     try:
         proc = subprocess.run([guix, "repl", "-L", repo, probe],
                               capture_output=True, timeout=600)
         check("(pinenote services ebc-direct) compiles",
               proc.returncode == 0
-              and b"pinenote-ebc-clut" in proc.stdout,
+              and b"pinenote-ebc-clut" in proc.stdout
+              and b"/sys/bus/platform/drivers/rockchip-ebc" in proc.stdout
+              and b"fdec0000.ebc" in proc.stdout,
               (proc.stdout + proc.stderr).decode("utf-8", "replace")[-800:])
     except subprocess.TimeoutExpired:
         skip("(pinenote services ebc-direct) compiles", "guix repl timed out")
@@ -541,6 +765,7 @@ def main(argv):
         branch_tests(script, tmp)
         mutation_control(script, tmp)
         failure_guards(script, tmp)
+        rebind_tests(script, tmp)
         structural(repo, service)
         guix_module_loads(repo)
     finally:

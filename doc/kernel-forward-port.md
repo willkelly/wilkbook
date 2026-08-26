@@ -369,7 +369,8 @@ a claim that dynamic EBC removal is safe or supported.
 ## Upgrading the kernel: the base is pinned to a SERIES
 
 `%linux-pinenote-base` (`pinenote/packages/kernel.scm`) is bound to
-**`nongnu:linux-7.0`**, not to `nongnu:linux`.
+**`nongnu:linux-7.1`** (since the 2026-08-15 series bump), not to
+`nongnu:linux`.
 
 It used to be the floating alias, and that meant the kernel this repo
 built was chosen by *when the developer last ran `guix pull`* rather
@@ -380,15 +381,21 @@ carries, and dtc rejected the duplicate nodes (issue #13).
 
 Two consequences, and the distinction between them is the whole policy:
 
-- **A point release inside 7.0.x arrives on its own.** Security fixes
+- **A point release inside 7.1.x arrives on its own.** Security fixes
   should not need a commit here, and mainline does not touch arch DTS in
   a point release.
-- **Leaving 7.0.x is a project, not a bump**, and cannot happen by
+- **Leaving 7.1.x is a project, not a bump**, and cannot happen by
   accident. `make kernel-version-check` asserts the series in ~0.6 s
-  without building anything.
+  without building anything — in its *ambient* form; under
+  `TIME_MACHINE=1` it currently fails, because `channels.scm` still
+  pins a nonguix that predates `linux-7.1` (bumping that pin is its own
+  reviewed change — `doc/building.md`).
 
-**The hardware-proven version is 7.0.11** (`doc/status.md`). Anything
-else in 7.0.x is *accepted* but not *proven*.
+**The hardware-proven version for the shipping driver is 7.0.11**
+(`doc/status.md`), and that is what the deployed reader image runs.
+7.1.8 has run on glass only in the direct-mode *study* configuration
+(2026-08-25: hrdl's EBC driver swapped in, our other patches intact);
+the shipping-driver 7.1 build has never driven a panel.
 
 ### Accepting a point release (cheap, offline)
 
@@ -680,9 +687,37 @@ Record anything that took a hardware session to discover:
   it via `linux-pinenote-debug-extract-fbs.patch` (offline-proven by
   the ebc-logic dbg suite; grabber/decoder in
   `pinenote/tools/ebc-logic`; the primary kernel keeps the stub).
-  Still open: `CONFIG_DYNAMIC_DEBUG`, `CONFIG_MAGIC_SYSRQ_SERIAL`, and
-  `CONFIG_DETECT_HUNG_TASK` are all off (the last two also block the
-  qemu-virt udev-hang diagnosis).
+  Still open: `CONFIG_DYNAMIC_DEBUG` and `CONFIG_DETECT_HUNG_TASK` are
+  off (the latter also blocks the qemu-virt udev-hang diagnosis;
+  `MAGIC_SYSRQ_SERIAL` came off this list 2026-08-26, below).
+- `CONFIG_MAGIC_SYSRQ_SERIAL=y` +
+  `CONFIG_MAGIC_SYSRQ_SERIAL_SEQUENCE="sysrq"` +
+  `CONFIG_MAGIC_SYSRQ_DEFAULT_ENABLE=0x0` (2026-08-26; the third
+  symbol added the same night after a live test corrected the model).
+  The inherited defconfig had serial sysrq explicitly off, so when the
+  study image hung mid-shutdown with the UART plumbed in — kernel
+  echoing keystrokes, userspace dead — there was NO software rescue:
+  BREAK was inert, and recovery cost a user-present power-button cycle
+  (`doc/status.md` 2026-08-26 part 4). The likely reason it was off is
+  the floating UART RX line (no cable attached in normal use), where
+  noise can register as a BREAK. **Semantics learned the empirical
+  way** (first on-glass test fired an Emergency Sync with the `s` of
+  the sequence itself): `MAGIC_SYSRQ_SERIAL_SEQUENCE` is NOT a per-use
+  guard — while sysrq is *enabled*, BREAK + any single char fires
+  immediately and the sequence is never consulted. The sequence is an
+  **arming toggle for when sysrq is disabled**: with `kernel.sysrq=0`,
+  BREAK followed by the literal bytes `sysrq` enables sysrq (logged:
+  "SysRq is enabled by magic sequence 'sysrq' on serial"), after which
+  BREAK + key fires. Hence `DEFAULT_ENABLE=0x0`: ship with sysrq
+  masked off, so line noise must spell `sysrq` before anything arms —
+  and `/proc/sysrq-trigger` still works regardless (its handler
+  bypasses the mask). Rescue recipe from the host, cable attached, two
+  stages: (1) BREAK, then type `sysrq` — arms; (2) BREAK, then the key
+  (`s` sync, `u` remount-ro, `b` reboot). The whole chain is
+  **glass-proven 2026-08-26** on the deployed study image (arming
+  logged, `h` printed the full key table); that image predates the
+  `DEFAULT_ENABLE=0x0` line, so its runtime was parked at
+  `kernel.sysrq=0` by hand — images built after the fix boot that way.
 
 ## Known driver quirks pinned by the host test tools (2026-07-04)
 

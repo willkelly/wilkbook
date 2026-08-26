@@ -717,3 +717,182 @@ not. Worth reporting to both, in opposite registers of severity.
 
 **Status:** not sent, same reasoning as item 15 — worth more attached to
 a concrete adoption than ahead of one. Both are one-line fixes.
+
+## 17. Kernel NULL-deref panic: destroy a uinput device under a live evdev reader, then restart the reader
+
+**Where it would go:** mainline `input`/`evdev` (likely — the faulting
+frame is not conclusively attributed, see below), as observed on Linux
+7.1.8 (`linux-pinenote-hrdl-direct-7.1.8`, the direct-mode study
+kernel; nothing in our patch stack touches uinput or evdev, so the code
+under suspicion is mainline's).
+
+**What:** destroying a uinput-backed input device **while a consumer
+still holds its evdev node open**, then restarting that consumer, panics
+the kernel. Captured on the UART console during the 2026-08-25
+direct-mode glass session (`uart-d5.log`; excerpt as recorded in
+`doc/status.md`):
+
+```
+Unable to handle kernel NULL pointer dereference at virtual address 0000000000000008
+Oops: 0000000096000044 [#1] SMP
+Kernel panic - not syncing
+```
+
+**Reproduction pattern**, consistent across both occurrences that
+session: (1) a uinput device exists (the orientation bridge's
+`wilkbook-orientation` node, or a D5 gyro injector's); (2) KOReader has
+the evdev node open; (3) the uinput device is destroyed out from under
+it — the provider process killed, or `UI_DEV_DESTROY` on its fd; (4) the
+reader is restarted; (5) NULL deref at offset 8, Oops
+`0000000096000044` (a data-abort **write** through a near-NULL pointer),
+panic. The controls both hold: reader restarts with **no** preceding
+device destruction never crashed, and the **stop-consumer-first**
+ordering — stop KOReader, then tear down the uinput device — survived
+the same session where the other ordering died. That ordering is now the
+standing session discipline, but it is a workaround: hot-unplugging an
+input device under a reader is an ordinary event (any USB keyboard
+yank), not an API misuse.
+
+**How found:** D5 rotation debugging on the first direct-mode glass
+session — injected uinput devices and repeated reader restarts made the
+destroy-while-held ordering common enough to hit twice.
+
+**Why it matters to mainline:** if this is what it looks like, any
+userspace can panic the kernel with unprivileged-shaped operations on
+`/dev/uinput` plus an open evdev client — a crash, possibly a
+use-after-free-adjacent one, in core input hotplug. That is worth a
+report even from a niche tree, *provided* it reproduces on a kernel
+nobody can blame us for.
+
+**What has to be true first:** (1) a minimal reproducer — create uinput
+device, open its evdev node from a second process, destroy the device,
+restart the second process — on a **vanilla** kernel; QEMU is enough,
+no PineNote required, and it doubles as the trace decode the console
+capture cannot give us (both on-glass traces are partially garbled by
+console interleaving, which is why the faulting function is still
+unattributed). (2) Check current mainline `drivers/input/` history for
+an existing fix before reporting — 7.1.8 is not tip. (3) The standing
+baseline gate does **not** apply if the vanilla reproducer works: a
+panic reproducible on stock kernels stands on its own, with no
+credibility dependence on our tree.
+
+**Status:** not sent. Console evidence and reproduction pattern are
+recorded; the offline reproducer is the next step and needs no
+hardware.
+
+## 18. dwc3: a bound, unattached gadget aborts system suspend (7.1.8)
+
+**Status: needs a bisect-or-config check before any send.**
+
+**What we saw (2026-08-26, on glass, `doc/status.md`):** with the ACM
+gadget configured through configfs and bound to `fcc00000.usb` but **no
+host cable attached**, every `echo mem > /sys/power/state` aborts:
+
+    dwc3 fcc00000.usb: wait for SETUP phase timed out
+    dwc3 fcc00000.usb: failed to set STALL on ep0out
+    dwc3 fcc00000.usb: ep0 out: -110
+    dwc3 fcc00000.usb: failed to enable ep0out
+    dwc3 fcc00000.usb: PM: failed to suspend: error -11
+    Some devices failed to suspend, or early wake event detected
+
+The suspend unwinds before the rails ever drop. Unbinding the UDC
+(`echo "" > .../UDC`) makes the identical suspend enter ultra cleanly
+(rails off, DDR retrain on wake), and rebinding afterwards works.
+
+**Why we believe it is a 7.1 change and not our configuration:** the
+2026-08 unplugged soak ran **170 suspend cycles with zero failures** on
+7.0.11 with the same gadget service, same configfs layout, same
+unattached state (`doc/artifacts/pinenote-ultra-soak-20260815/`). Same
+DT, same userspace; only the kernel series moved.
+
+**Where it would go:** linux-usb / dwc3 maintainers, if it reproduces
+outside our patch stack. None of our seven patches touches dwc3 or the
+gadget core, but the BSP SIP suspend patch changes the suspend ordering
+around it, so we cannot yet exclude an interaction.
+
+**What has to be true first:** (1) reproduce on a clean 7.1.x defconfig
+build (no SIP suspend patch) on the device — if it disappears, the bug
+is ours to understand, not theirs; (2) check whether mainline dwc3
+already grew a fix between 7.1 and HEAD (the ep0 SETUP-phase wait in
+`dwc3_gadget_suspend` has history); (3) decide whether the reader's
+suspend path should unbind the UDC as a matter of policy anyway — the
+gadget draws ~2 mA awake and is a development affordance (the
+power ledger already recommends gadget-off by default), which would
+make this moot for the product while still worth reporting.
+
+**Interim workaround, live tonight:** unbind before suspend, rebind
+after. If auto-suspend ever runs on a 7.1 image before this is
+resolved, its suspend hook must do the same or every idle suspend will
+silently abort at ~full awake draw — the failure mode is a device that
+never sleeps while looking asleep.
+
+## 19. Direct-mode driver: redraw_delay > 0 parks damage indefinitely from idle
+
+**Status: needs-verification against hrdl's intent before any send —
+this may be working-as-designed for its actual use case.**
+
+**What we saw (2026-08-26, on glass, `doc/status.md`):** with
+`redraw_delay` set nonzero (tried 10000 and 1) and the panel idle,
+every subsequent damage submission — page turns included — is parked
+and never drives: zero EBC interrupts, framebuffer content visibly
+stale. The waiting counter (`waiting_remaining = redraw_delay`,
+`rockchip_ebc.c` work loop) decrements per *hardware frame*, and an
+idle panel generates no frames, so the countdown never advances and
+nothing ever schedules. A `GLOBAL_REFRESH` recovers (the wash bypasses
+the waiting queue and its frames drain the counters).
+
+**Why it is plausibly by design:** the knob pairs with the MODE ioctl's
+`set_redraw_delay` and makes sense for FAST-mode handwriting, where
+continuous strokes keep frames flowing and delayed redraws ride behind
+the pen. Nothing in the driver documents the from-idle behaviour.
+
+**Why it still deserves a report:** the failure is silent and total
+from a reader's perspective — a sysfs write any experimenter would try
+("defer the ghost-clean a little") freezes the screen with no error,
+no log line, and no timeout. A one-line doc comment or an idle-kick
+(schedule a frame when damage waits on a dead panel) would fix the
+trap.
+
+**What has to be true first:** read his dist's actual use of
+set_redraw_delay to confirm the FAST-mode pairing; reproduce on his
+unmodified branch (ours differs only by the DT hunk and build glue in
+this area).
+
+## 20. shepherd: the inetd ssh listener stays armed during halt and restarts stopped dependencies, wedging shutdown
+
+**Where it would go:** bug-guix / the Shepherd's tracker
+(shepherd is the supervisor; the service arrangement is Guix's
+`openssh-service-type` in inetd style).
+
+**Status: proven on device from the system's own log, one occurrence;
+needs a minimal reproducer before sending.**
+
+**What we saw (2026-08-26, `doc/artifacts/pinenote-shutdown-wedge-20260826/`):**
+during `Stopping service root...` — four seconds into a clean, fast
+teardown — shepherd killed the transient sshd serving the very session
+that had issued `reboot`. The client reconnected (a tooling bug on our
+side, since fixed), and shepherd **accepted** the new connection on the
+still-armed inetd listener, spawned a transient service for it, and
+**started the `networking` service the halt had stopped moments
+earlier** to satisfy the transient's dependency. `Service networking
+has been started.` is the last line the system ever logged: the halt
+never completed, and the device sat indefinitely with the kernel alive
+and userspace half-torn-down (ping answering through the restarted
+dhcpcd, no ssh listener, no getty, no respawns) until a power-button
+cycle.
+
+**Why it deserves a report:** a headless machine that receives one ssh
+connection in its ~seconds-wide halt window hangs forever instead of
+rebooting — and monitoring systems, retrying deploy scripts, and
+health-checkers all connect on exactly that schedule. The
+half-alive state is also actively misleading (the box answers ping,
+so remote hands conclude "it's up, ssh is just broken"). Plausible
+fixes at either layer: shepherd could close inetd listeners at the
+top of halt rather than in dependency order, refuse constructor
+starts once halt has begun, or both.
+
+**What has to be true first:** the baseline gate, plus a reproducer
+outside our tree — a stock Guix system (or bare shepherd) with an
+inetd-style service, `reboot` over ssh, and a scripted reconnect-on-
+disconnect; confirm the same accept→dependency-restart→wedge sequence.
+Also confirm against current shepherd (the device ran 1.0.x).

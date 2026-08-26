@@ -464,8 +464,12 @@ already there:
   `pinenote-ebc-params` one-shot already sets (`refresh_waveform`,
   `refresh_threshold`, `auto_refresh`, …; `pinenote/packages/firmware.scm`).
 - **Trigger a global refresh:** the `GLOBAL_REFRESH` ioctl
-  (`0xC0016440` on `/dev/dri/card0`), packaged as `pinenote-ebc-refresh`
-  and hardware-validated 2026-07-04 (`pinenote/packages/ebc-test.scm`,
+  (`0xC0016440` on the EBC's DRM card node, resolved by
+  `DRIVER=rockchip-ebc` in sysfs — the index is not stable across
+  images), packaged as `pinenote-ebc-refresh`. The ioctl itself is
+  hardware-validated 2026-07-04; the by-driver-name resolution was
+  glass-proven 2026-08-26 — a wash through it on the card1-behind-GPU
+  arrangement, zero GPU faults (`pinenote/packages/ebc-test.scm`,
   `doc/status.md`). No compiled tool needed; it's a Guile FFI one-liner.
 - **Harvest results:** pull `/var/log/reader-session.log` (the
   `[pn-refresh]` trace the phase-B workbench already consumes) back over

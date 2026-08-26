@@ -52,11 +52,23 @@ check out. Four corrections, most consequential first:
    over {400, 333, 200} -- true, and the reason is that nothing reclocks
    the mux parent. `CPLL_333M` is `COMPOSITE_NOMUX` off cpll with its own
    divider, so setting it to 250 MHz first lets the EBC mux select 250
-   exactly. Cost: ~2 DT lines + ~10 driver lines. Gain: 1.25x on every
+   exactly. Gain: 1.25x on every
    mode we ship (GL16 596 -> 477 ms, A2 157 -> 126 ms) and 94% of the
    waveform's authored rate instead of 75%. **Gated on DDR** -- EBC fetch
    rises ~335 -> ~419 MB/s on the path the 2026-08-07 A/B proved starves
-   silently at 324 MHz. Not to be shipped on arithmetic.
+   silently at 324 MHz.
+
+   *[Measured 2026-08-24, superseding the cost estimate this correction
+   originally carried (~2 DT lines + ~10 driver lines): the reclock is
+   already done in hardware. `cpll_333m` runs at 250 MHz, not 333 -- the
+   CRU divider sits at /4 -- so the whole change is the existing
+   `dclk_select=1` module parameter, runtime-writable and applied on the
+   next mode set. Confirmed on glass in both directions, three
+   transitions, 79.68 Hz reached
+   (`doc/artifacts/pinenote-dclk-reclock-20260824/`, issue #23). Still
+   NOT cleared to ship: the failure mode is silent corruption and the
+   only check so far is webcam-grade with a drift-controlled noise
+   floor.]*
 
 3. **`ROCKCHIP_EBC_DRIVER_MODE_FAST` is named in the UAPI table and
    nowhere else, and it is the interesting one.** It is a separate

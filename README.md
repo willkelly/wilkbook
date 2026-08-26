@@ -124,7 +124,7 @@ channel (`doc/building.md` starts from zero). Charge to ~100% *before*
 the cable goes on — the cable and the charger share the PineNote's one
 port.
 
-**1. Build.** Everything is pinned by commit; a tagged tree rebuilds
+**1. Build.** Everything is pinned by commit; a *tagged* tree rebuilds
 byte-identically anywhere:
 
 ```sh
@@ -133,13 +133,16 @@ guix time-machine -C channels.scm -- \
   pinenote/systems/pinenote-reader.scm
 ```
 
-Or `make rootfs-reader`, which builds the image *and* extracts the
-rootfs you will actually write (an ext4 labelled `PNGuixRoot`) into
-`$(ARTIFACTS)`. Fair warning: a cold kernel cross-build is hours, not
-minutes. Add `TIME_MACHINE=1` and the wrapper *is* the pinned,
-byte-identical path shown above — without it you build against whatever
-your last `guix pull` produced, which is currently a kernel that does not
-compile (`doc/building.md`, issue #13). Day-to-day:
+That command is true of the `v0.1.0-prealpha` tag with its committed
+pin. **On current `main` it fails** (2026-08-25): the kernel moved to
+the 7.1 series pin and `channels.scm` has not been re-pinned yet, so
+build with your ambient `guix pull` instead — plain `make
+rootfs-reader`, which builds the image *and* extracts the rootfs you
+will actually write (an ext4 labelled `PNGuixRoot`) into
+`$(ARTIFACTS)`. `TIME_MACHINE=1` (the wrapper for the pinned path
+above) works again after the next pin bump — `doc/building.md` has the
+full story. Fair warning: a cold kernel cross-build is hours, not
+minutes. Day-to-day:
 `make help`, `make kernel-drv` (seconds, before any real build),
 `make qemu-smoke`. The gitignored licensed fonts are optional — a fresh
 clone builds and runs with KOReader's bundled fallbacks
@@ -274,8 +277,8 @@ build time, never hand-copied — so they cannot drift from the driver.
   LuaJIT; its build snippets hardcode Guix store paths you would replace.
 - `pinenote/tools/power/fb-damage-gates.sh` — a read-only dump of the
   four silent gates between a userspace framebuffer write and an EBC
-  frame. It deliberately opens no device node (the first opener of
-  `/dev/dri/card0` becomes DRM master).
+  frame. It deliberately opens no device node (the first opener of a
+  `/dev/dri/cardN` node becomes DRM master).
 
 **Kernel work.**
 

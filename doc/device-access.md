@@ -98,6 +98,40 @@ required — the runtime `console_suspend=N` knob does not hold the 8250 up
 through its own dev_pm_ops. UART gives passwordless root whenever the
 device is awake; it is the recovery channel if auto-suspend misbehaves.
 
+3. (2026-08-26) **A hung shutdown answers the UART like a live system —
+   and reconnecting over ssh is what causes the hang.** Root-caused
+   from the device's own log
+   (`doc/artifacts/pinenote-shutdown-wedge-20260826/`): the halt kills
+   the ssh session that issued `reboot`, so that client exits nonzero;
+   anything that treats the nonzero exit as failure and reconnects hits
+   shepherd's inetd listener — still armed mid-halt — which accepts the
+   connection and *restarts the stopped networking service* to serve
+   it, wedging the halt permanently (upstream register item 20). The
+   rule: **one reboot attempt, exit status ignored, and no connection
+   to the device between issuing `reboot` and seeing U-Boot on the
+   UART.** The wedged state's signature: keystrokes **echo** (kernel
+   tty alive) but nothing ever responds — no password prompt, no getty
+   respawn — and sshd flips to connection-refused while ping still
+   answers (the restarted dhcpcd). A `login:` prompt seen after
+   `reboot` can be the DYING session's getty, and *typing a login name
+   at it is destructive*: login(1) consumes the last getty, execs into
+   the half-torn-down system, and never returns — closing the only
+   interactive door. Before trusting a post-reboot prompt, ask it for
+   `uptime` (or watch for U-Boot/kernel chatter in the capture); a boot
+   you didn't see happen didn't happen. Recovery from the fully-wedged
+   state is the power button on kernels before the 2026-08-26
+   forward-port revision (the inherited defconfig unset
+   `MAGIC_SYSRQ_SERIAL`, so BREAK is inert there). Kernels built after
+   that date carry serial sysrq shipped disabled, with a break-sequence
+   arming toggle — glass-proven: **(1)** send BREAK, then type the
+   literal bytes `sysrq` (arms; the kernel logs "SysRq is enabled by
+   magic sequence"); **(2)** send BREAK again, then the key — `s`
+   sync, `u` remount-ro, `b` reboot. From the host:
+   `python3 -c 'import termios,os;
+   fd=os.open("/dev/ttyUSB0",os.O_RDWR); termios.tcsendbreak(fd,0)'`
+   then write the bytes to the port. Details and the semantics trap
+   behind the two-stage shape: `doc/kernel-forward-port.md`.
+
 ### Proving the link end to end (2026-08-06)
 
 Silence on the host does not say *where* the link is broken. The SoC's
@@ -184,6 +218,37 @@ UART or a human at the menu.
 - Diagnose "blank page" issues by dumping `/dev/fb0` (32bpp XR24, stride
   7488) and looking at it — separates render-side from glass-side
   instantly.
+
+## Launching KOReader by hand (bypassing reader-session)
+
+When shepherd's reader-session is in the way (crash-loop diagnosis, a
+specific book, extra CLI flags like `-d` for input tracing), launch the
+bundle directly — but replicate the service's environment EXACTLY.
+`env -i` with only HOME/KO_HOME *works* and *lies*: KOReader comes up,
+renders, turns pages — on its bundled fallback fonts, because
+`EXT_FONT_DIR` is gone. An entire 2026-08-26 session's quality
+judgments carried that confound before the operator caught it on video
+(the tell: guile.epub paginates to 3716 pages under fallbacks, 3804
+under the seeded fonts). The full recipe, matching
+`reader-session.scm`:
+
+```
+KO=$(ls -d /gnu/store/*-koreader-bin-*/lib/koreader | head -1)
+cd $KO && env -i \
+  HOME=/root KO_HOME=/root/.config/koreader \
+  PATH=/run/current-system/profile/bin \
+  LC_ALL=en_US.UTF-8 \
+  EXT_FONT_DIR=/run/current-system/profile/share/fonts/local \
+  LD_LIBRARY_PATH=$KO/libs:$KO \
+  ./luajit reader.lua [-d] [/path/to/book.epub]
+```
+
+Stop the service first (`herd stop reader-session` — it does NOT stop
+the orientation bridge, which is a dependency, not a dependent). Kill a
+manual reader with `pkill -f "luajit reader[.]lua"` — the bracket dodge
+matters, and never in the same shell invocation that also *spells out*
+a launch command containing the plain string, or pkill matches your own
+command line and kills the session (three times, 2026-08-25/26).
 
 ## What stays manual, and per-operator permissions
 

@@ -6,16 +6,15 @@ GUIX_BASE = guix
 # channels.scm IS the reproducibility claim (doc/release.md).  TIME_MACHINE=1
 # routes every guix invocation through the pinned channels.
 #
-# This is not a nicety.  pinenote/packages/kernel.scm binds
-# %linux-pinenote-base to nongnu:linux -- a FLOATING alias.  It has already
-# moved 7.0 -> 7.1 on current channels, after which the forward-port patch
-# collides with mainline's own PineNote DTSI:
-#
-#   rk3566-pinenote.dtsi:433: ERROR (duplicate_node_names):
-#     /i2c@fdd40000/pmic@20/charger
-#
-# so a plain `make kernel' on a freshly-pulled workstation builds a DIFFERENT
-# kernel than the one doc/status.md calls hardware-proven, or fails outright.
+# REPAIRED 2026-08-26: the pin bump landed (channels.scm now carries the
+# generation that builds linux-pinenote-7.1.x), and the gate was that
+# `make kernel-drv TIME_MACHINE=1' resolves the IDENTICAL derivation as
+# the ambient build.  From 2026-08-25 until then it was broken -- the
+# committed pin predated nongnu:linux-7.1 and died at module evaluation
+# with "Unbound variable" -- so the byte-identical-rebuild claim skips
+# that window of main.  When bumping the kernel series again, bump the
+# pin in the same change and re-run both gates (kernel-drv and
+# kernel-version-check, each with TIME_MACHINE=1).
 GUIX = $(if $(TIME_MACHINE),$(GUIX_BASE) time-machine -C channels.scm --,$(GUIX_BASE))
 TARGET = aarch64-linux-gnu
 GUIX_FLAGS = -L . --target=$(TARGET)
@@ -80,7 +79,7 @@ FLAVORS = minimal slim networked dev usb-console usb-console-linux-6-6 reader re
         timezone-check kernel-version-check library-check \
         manuals-check ultra-coupling-check timesync-check \
         settings-check koreader-profile-check ebc-modprobe-options-check \
-        ebc-clut-check \
+        ebc-clut-check ebc-card-resolution-check reader-stop-check \
         $(FLAVORS) $(addprefix image-,$(FLAVORS)) $(addprefix rootfs-,$(FLAVORS))
 
 help:
@@ -118,9 +117,12 @@ help:
 	@echo "  timesync-check    SNTP client protocol/policy tests plus a loopback round trip"
 	@echo "  settings-check    every knob declared twice still agrees; today's drift is pinned (issue #12)"
 	@echo "  ebc-modprobe-options-check  each rockchip_ebc options set names only parameters its own driver registers"
+	@echo "  ebc-card-resolution-check  no on-device EBC path hardcodes a /dev/dri/cardN index (2026-08-25 wash-to-GPU bug)"
+	@echo "  reader-stop-check  reader-session's stop is SIGINT-first (TERM truncates crengine caches)"
 	@echo
 	@echo "Flags:"
-	@echo "  TIME_MACHINE=1    build through channels.scm (pinned/reproducible; required for releases)"
+	@echo "  TIME_MACHINE=1    build through channels.scm (required for releases; pin bumped"
+	@echo "                    2026-08-26 to the 7.1-resolving generation, see doc/building.md)"
 	@echo "  HOST_TOOLCHAIN=1  use the toolchain already on PATH instead of 'guix shell' (what CI does)"
 	@echo "  SKIP_CHECKS=..    omit named check-host members (must be in CHECK_HOST_TARGETS)"
 	@echo
@@ -159,17 +161,20 @@ reader-system-drv:
 	$(GUIX) system build -d --no-grafts $(GUIX_FLAGS) \
 	  pinenote/systems/pinenote-reader.scm
 
-# Is the kernel we would build still the one we have hardware-proven?
+# Is the kernel we would build still in the series this repo pins?
 #
-# %linux-pinenote-base is bound to nongnu:linux, a FLOATING alias, so the
-# answer depends on when you last ran `guix pull' rather than on anything in
-# this repo.  The resolved derivation NAME carries the version, so asking is
-# ~0.6s and needs no build.
+# %linux-pinenote-base is bound to nongnu:linux-7.1 -- a SERIES pin, no longer
+# the floating nongnu:linux alias -- so ambient point releases (7.1.5 -> 7.1.8)
+# pass, and the check catches the series moving under us or the pin changing
+# without this expectation following.  The resolved derivation NAME carries
+# the version, so asking is ~0.6s and needs no build.
 #
-# EXPECTED ASYMMETRY -- do not "fix" the red:
-#   make kernel-version-check                 FAILS on drifted channels (7.1.x),
-#                                             which is the entire point;
-#   make kernel-version-check TIME_MACHINE=1  PASSES (7.0.11 via channels.scm).
+# Since the 2026-08-26 pin bump BOTH forms pass, and time-machine
+# resolves the identical derivation as ambient guix (that equality was
+# the bump's acceptance gate; see the GUIX comment at the top).  If the
+# TIME_MACHINE=1 form ever fails with an "Unbound variable" while the
+# ambient form passes, the kernel series moved without the pin -- bump
+# channels.scm in the same change.
 #
 # Deliberately NOT in CHECK_HOST_TARGETS: the CI runner installs no Guix.
 KERNEL_EXPECT ?= linux-pinenote-7.1.
@@ -181,8 +186,10 @@ kernel-version-check:
 	case "$$drv" in \
 	  *$(KERNEL_EXPECT)*) echo "PASS: kernel base is $(KERNEL_EXPECT)x as expected"; ;; \
 	  *) echo "FAIL: expected $(KERNEL_EXPECT)x, resolved $$drv"; \
-	     echo "      The nonguix 'linux' alias has moved. Build with TIME_MACHINE=1,"; \
-	     echo "      or see issue #13 for pinning %linux-pinenote-base."; \
+	     echo "      Either your channels no longer provide the pinned series (re-run"; \
+	     echo "      'guix pull', or the pin in pinenote/packages/kernel.scm moved without"; \
+	     echo "      KERNEL_EXPECT following), or this ran with TIME_MACHINE=1 against a"; \
+	     echo "      channels.scm that predates the series (issue #13, doc/building.md)."; \
 	     exit 1 ;; \
 	esac
 
@@ -327,7 +334,8 @@ CHECK_HOST_TARGETS = clut-check ebc-logic-check ebc-barrier-check rastersim-chec
         library-check koreader-profile-check manuals-check ultra-coupling-check \
         battery-dtb-check time-machine-check gexp-modules-check \
         timezone-check refresh-trigger-check timesync-check settings-check \
-        ebc-modprobe-options-check ebc-clut-check
+        ebc-modprobe-options-check ebc-clut-check ebc-card-resolution-check \
+        reader-stop-check
 
 # Parse time, not recipe time: a recipe-level guard would run only AFTER every
 # prerequisite had already completed, so it could not prevent the mistake it
@@ -503,11 +511,26 @@ settings-check:
 # and a check over an empty set proves nothing on its own; the positive
 # control is that the SHIPPING string must be rejected against hrdl's
 # driver.  python3 stdlib, no device.  One step is not text analysis: it
-# runs `guix repl' to LOAD (pinenote services ebc-direct), because nothing
-# in the tree imports that module yet and so no build would ever compile
-# it.  That step SKIPs, loudly, where guix is absent -- CI included.
+# runs `guix repl' to LOAD (pinenote services ebc-direct): when the check
+# was written nothing imported that module, and even now only the
+# reader-direct study flavor does, so an ordinary reader build would
+# never compile it.  That step SKIPs, loudly, where guix is absent --
+# CI included.
 ebc-modprobe-options-check:
 	python3 pinenote/scripts/preflight/validate-ebc-modprobe-options.py
+
+# The EBC's DRM card index is not stable across images (panfrost takes
+# card0 on the direct-mode image), so every on-device EBC-ioctl path
+# must resolve the card by DRIVER=rockchip-ebc rather than hardcode an
+# index -- the 2026-08-25 wash-to-GPU ghosting root cause.
+ebc-card-resolution-check:
+	sh pinenote/scripts/preflight/validate-ebc-card-resolution.sh
+
+# reader-session's stop must be INT-first: TERM truncates the crengine
+# cache to zero bytes and re-arms a 30 s re-parse of the manuals book
+# (measured on glass 2026-08-26 -- doc/manuals.md).
+reader-stop-check:
+	sh pinenote/scripts/preflight/validate-reader-stop.sh
 
 rockchip-pm-check:
 	$(call guix-shell,dtc gcc-toolchain git python) $(MAKE) -C pinenote/tools/rockchip-pm check
