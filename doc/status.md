@@ -10,7 +10,11 @@ SHA'd, deploy script staged). The `reboot` reached the running study
 image over SSH — and the shutdown **hung partway and stayed hung**. The
 device is parked in that state awaiting a power-button cycle (operator
 unavailable); a UART watcher is armed to catch U-Boot and select os1
-whenever the cycle happens.
+whenever the cycle happens. (While parked, the artifact was superseded:
+the image on deck was rebuilt to include the serial-sysrq kernel below
+— `0c9fabcf…`, 445498×4096 B, all inspection gates green, sysrq
+symbols verified in the embedded `/boot/config`. `cc339412…` was never
+flashed.)
 
 **The evidence chain, all over UART/network, no panel:**
 
