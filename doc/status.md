@@ -3,6 +3,49 @@
 Last updated: 2026-08-26. Update protocol: add a dated entry at the top
 after every hardware session; entries are per-device/per-operator.
 
+## 2026-08-26 (rig session, part 5) — the INT-first + sysrq image deploys clean; the stop is 0.484 s on glass; the serial rescue is proven and then re-modeled
+
+After the part-4 power-button recovery: os1 came up (the UART watcher
+picked the slot), p6's post-mortem was harvested (see part 4's
+POST-MORTEM), and the deploy ran the full write protocol
+hands-off — staged-SHA, dd, readback-SHA all
+`0c9fabcf…` (the rebuilt artifact: INT-first stop + serial-sysrq
+kernel, 445498×4096 B). The fixed boot-slot script (one reboot attempt,
+exit status ignored, no reconnect until U-Boot) caught the menu at poll
+18 and booted os2.
+
+**Hands-off boot regression: PASS.** First EBC probe fails by
+construction at t=3.3 s (`custom_wf.bin` -2, probe -22); the CLUT
+one-shot compiled 229,584 B from the device's own waveform; rebind at
+**t=11.0 s** — "Loaded 4-bit PVI waveform version 0x19", initialized on
+minor 1 (panfrost holds card0; the card resolution held — zero GPU
+fault lines all session); fb0 bound; reader-session up. No crash-loop.
+
+**The INT-first stop on glass: `herd stop reader-session` = 0.484 s**
+(old image: 8 s; lab: 0.654 s). Clean stop, clean restart. The
+crengine-cache half (SIGINT → clean close) still wants a check with a
+book open; nothing was open on the fresh boot.
+
+**The serial-sysrq rescue: proven end-to-end, and the model was wrong
+in an important way.** First test (sysrq mask at its shipped 0x1)
+fired **Emergency Sync from the `s` of the sequence itself** — with
+sysrq *enabled*, BREAK + any char fires immediately and
+`MAGIC_SYSRQ_SERIAL_SEQUENCE` is never consulted; it is an arming
+toggle for the *disabled* state, not a per-use guard. That shipped
+state was noise-dangerous (BREAK + line noise `b` = reboot). Verified
+the intended posture live: with `kernel.sysrq=0`, BREAK+`sysrq` armed
+("SysRq is enabled by magic sequence 'sysrq' on serial") and a second
+BREAK+`h` printed the full key table. The deployed image's runtime is
+parked at `kernel.sysrq=0` (re-park after any reboot until the next
+image); the tree now adds `CONFIG_MAGIC_SYSRQ_DEFAULT_ENABLE=0x0` so
+later builds boot that way.
+
+**Restored device state:** washer retune re-applied to the seeded
+settings (`idlewasher_idle_s=12`, `idlewasher_debt_min=8` — wiped by
+the reflash, as expected), frontlight 153/153, autosuspend still
+pinned `enabled=0` on `/data` (survived, as designed). os2 carries
+`0c9fabcf…`; os1 untouched.
+
 ## 2026-08-26 (rig session, part 4) — the INT-first deploy stalls on the bug it fixes: the study image hangs in shutdown
 
 Deploy attempt for the INT-first-stop image (`cc339412…`, built and
@@ -45,12 +88,11 @@ harvest from os1 before booting os2, per `doc/device-access.md`).
    defconfig sets `CONFIG_MAGIC_SYSRQ=y` but explicitly unsets
    `CONFIG_MAGIC_SYSRQ_SERIAL` — a BREAK on the plumbed UART does
    nothing, so a wedged userspace costs a user-present power-cycle even
-   with the cable in. Fixed in the forward-port patch:
-   `MAGIC_SYSRQ_SERIAL=y` guarded by
-   `MAGIC_SYSRQ_SERIAL_SEQUENCE="sysrq"` (BREAK alone stays inert — the
-   floating-RX noise concern that presumably motivated the off setting
-   doesn't survive a required 5-byte sequence). Takes effect with the
-   next deployed kernel; the currently-flashed images predate it.
+   with the cable in. Fixed in the forward-port patch. (The guard model
+   this entry originally described was wrong — the sequence is an
+   arming toggle, not a per-use guard; the live test that corrected it
+   and the final three-symbol config are in part 5 below and
+   `doc/kernel-forward-port.md`.)
 2. **A hung shutdown wears the live system's face.** The first read of
    the evidence was "U-Boot fell through and rebooted os2": a
    `pinenote-reader-direct login:` prompt answered the UART probe. It

@@ -691,21 +691,33 @@ Record anything that took a hardware session to discover:
   off (the latter also blocks the qemu-virt udev-hang diagnosis;
   `MAGIC_SYSRQ_SERIAL` came off this list 2026-08-26, below).
 - `CONFIG_MAGIC_SYSRQ_SERIAL=y` +
-  `CONFIG_MAGIC_SYSRQ_SERIAL_SEQUENCE="sysrq"` (2026-08-26). The
-  inherited defconfig had serial sysrq explicitly off, so when the
+  `CONFIG_MAGIC_SYSRQ_SERIAL_SEQUENCE="sysrq"` +
+  `CONFIG_MAGIC_SYSRQ_DEFAULT_ENABLE=0x0` (2026-08-26; the third
+  symbol added the same night after a live test corrected the model).
+  The inherited defconfig had serial sysrq explicitly off, so when the
   study image hung mid-shutdown with the UART plumbed in — kernel
   echoing keystrokes, userspace dead — there was NO software rescue:
   BREAK was inert, and recovery cost a user-present power-button cycle
   (`doc/status.md` 2026-08-26 part 4). The likely reason it was off is
   the floating UART RX line (no cable attached in normal use), where
-  noise can register as a BREAK; the sequence guard answers exactly
-  that — after a BREAK the kernel requires the literal bytes `sysrq`
-  before accepting one sysrq key, so noise cannot fire an accidental
-  reboot/crash. Rescue recipe from the host, cable attached:
-  `python3 -c 'import termios,os; fd=os.open("/dev/ttyUSB0",os.O_RDWR);
-  termios.tcsendbreak(fd,0)'`, then send `sysrq` + the key (`s` sync,
-  `u` remount-ro, `b` reboot). Unproven on glass until a post-2026-08-26
-  kernel ships.
+  noise can register as a BREAK. **Semantics learned the empirical
+  way** (first on-glass test fired an Emergency Sync with the `s` of
+  the sequence itself): `MAGIC_SYSRQ_SERIAL_SEQUENCE` is NOT a per-use
+  guard — while sysrq is *enabled*, BREAK + any single char fires
+  immediately and the sequence is never consulted. The sequence is an
+  **arming toggle for when sysrq is disabled**: with `kernel.sysrq=0`,
+  BREAK followed by the literal bytes `sysrq` enables sysrq (logged:
+  "SysRq is enabled by magic sequence 'sysrq' on serial"), after which
+  BREAK + key fires. Hence `DEFAULT_ENABLE=0x0`: ship with sysrq
+  masked off, so line noise must spell `sysrq` before anything arms —
+  and `/proc/sysrq-trigger` still works regardless (its handler
+  bypasses the mask). Rescue recipe from the host, cable attached, two
+  stages: (1) BREAK, then type `sysrq` — arms; (2) BREAK, then the key
+  (`s` sync, `u` remount-ro, `b` reboot). The whole chain is
+  **glass-proven 2026-08-26** on the deployed study image (arming
+  logged, `h` printed the full key table); that image predates the
+  `DEFAULT_ENABLE=0x0` line, so its runtime was parked at
+  `kernel.sysrq=0` by hand — images built after the fix boot that way.
 
 ## Known driver quirks pinned by the host test tools (2026-07-04)
 

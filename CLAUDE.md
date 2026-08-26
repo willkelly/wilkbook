@@ -254,8 +254,10 @@ gitignored `build/`, or the reader's static address.
   generation, so `TIME_MACHINE=1` works again on `main` (gated on
   time-machine resolving the identical kernel derivation as ambient);
   a future series bump must carry the pin with it. Serial-BREAK sysrq
-  is enabled behind a `sysrq` guard sequence as of the same date —
-  built, never on glass. 6.6.30 remains regression-isolation only.
+  is enabled as of the same date and **glass-proven**: it ships masked
+  off (`DEFAULT_ENABLE=0x0`), BREAK+`sysrq` arms, BREAK+key fires —
+  the sequence is an arming toggle, NOT a per-use guard
+  (`doc/kernel-forward-port.md`). 6.6.30 remains regression-isolation only.
   Seven patches; the 7.1 move *deleted* two hunks mainline absorbed.
   Inventory in `doc/kernel-forward-port.md`.
 - **Suspend**: **ultra suspend is the shipping suspend** (2026-08-08,

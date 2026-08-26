@@ -119,12 +119,18 @@ device is awake; it is the recovery channel if auto-suspend misbehaves.
    interactive door. Before trusting a post-reboot prompt, ask it for
    `uptime` (or watch for U-Boot/kernel chatter in the capture); a boot
    you didn't see happen didn't happen. Recovery from the fully-wedged
-   state is the power button — a serial BREAK is inert on kernels
-   before the 2026-08-26 forward-port revision (the inherited defconfig
-   unset `MAGIC_SYSRQ_SERIAL`; it is now enabled, guarded by the
-   required break-then-`sysrq` escape sequence, so BREAK + `sysrq` +
-   key works on kernels built after that date —
-   `doc/kernel-forward-port.md`).
+   state is the power button on kernels before the 2026-08-26
+   forward-port revision (the inherited defconfig unset
+   `MAGIC_SYSRQ_SERIAL`, so BREAK is inert there). Kernels built after
+   that date carry serial sysrq shipped disabled, with a break-sequence
+   arming toggle — glass-proven: **(1)** send BREAK, then type the
+   literal bytes `sysrq` (arms; the kernel logs "SysRq is enabled by
+   magic sequence"); **(2)** send BREAK again, then the key — `s`
+   sync, `u` remount-ro, `b` reboot. From the host:
+   `python3 -c 'import termios,os;
+   fd=os.open("/dev/ttyUSB0",os.O_RDWR); termios.tcsendbreak(fd,0)'`
+   then write the bytes to the port. Details and the semantics trap
+   behind the two-stage shape: `doc/kernel-forward-port.md`.
 
 ### Proving the link end to end (2026-08-06)
 

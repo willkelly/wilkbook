@@ -450,15 +450,18 @@ is **embrace-or-reject, after which one image ships either way**
 ### Kernel
 
 - **A hung device can now be rescued over the debug cable** (kernels
-  built after 2026-08-26; nothing flashed today has it). The inherited
-  defconfig shipped serial sysrq off, which was discovered the expensive
-  way: a wedged shutdown left the kernel echoing keystrokes with
-  userspace dead, and the only way out was a finger on the power button
-  — with the UART cable plugged in the whole time. Serial BREAK sysrq
-  is now enabled, guarded by a required `sysrq` escape sequence so a
-  floating RX line's noise cannot fake one (the presumed reason it was
-  off). Recipe and rationale in `doc/kernel-forward-port.md`; the hang
-  itself in `doc/status.md` (2026-08-26 part 4).
+  built after 2026-08-26). The inherited defconfig shipped serial sysrq
+  off, which was discovered the expensive way: a wedged shutdown left
+  the kernel echoing keystrokes with userspace dead, and the only way
+  out was a finger on the power button — with the UART cable plugged in
+  the whole time. Serial BREAK sysrq is now enabled but ships
+  **masked off**, with a break-then-`sysrq` arming sequence, so a
+  floating RX line's noise cannot fake a reboot (the presumed reason it
+  was off; a live test proved the sequence is an arming toggle, not a
+  per-use guard, which is why the mask matters). The whole chain is
+  glass-proven: arm with BREAK+`sysrq`, fire with BREAK+key. Recipe and
+  the semantics trap in `doc/kernel-forward-port.md`; the hang itself
+  in `doc/status.md` (2026-08-26 part 4).
 - **The kernel this repo built used to be chosen by when you last ran
   `guix pull`.** The base was a floating nonguix alias; it moved to 7.1
   on its own and `make kernel` stopped working. The base is now an
