@@ -11,7 +11,10 @@ glass** (2026-08-25, `doc/status.md`): D1–D4 passed with the wiring's job
 done *by hand* — the deployed image predated the wiring — D9 was
 measured, D5 (rotation) is unresolved, and the operator confirmed on
 video the flashing-per-turn cost that makes P4 the next display work.
-The wired image itself has not booted. P4 onwards is still a plan, and
+The wired image booted hands-off on 2026-08-26: CLUT compiled at boot,
+rebind at 10.1 s, reader up via shepherd with no crash-loop, washes on
+the resolved card, and reader-idle power at parity with shipping
+(155.3 vs 156.9 mA — `doc/status.md`). P4 onwards is still a plan, and
 the bail-out criteria at the bottom still apply.
 
 Read `doc/hrdl-evaluation.md` first — this document assumes it.

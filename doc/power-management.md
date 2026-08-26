@@ -352,7 +352,7 @@ Will's targets, and where we actually stand. All from a 4000 mAh charge
 
 | target | needs | measured | verdict |
 | --- | --- | --- | --- |
-| **>= 25 h active reading** | <= 160 mA | awake floor **156.9 mA** (25.5 h) since the vdd_cpu fix | **met on the floor, thinly** — and the floor was measured at frontlight ZERO, so this is "25.5 h in daylight". Two switchable domains take it to 144.6 mA / **27.7 h** (below), leaving **15.4 mA of budget for the frontlight** before 25 h is at risk. The frontlight's cost is unmeasured — that is the open term. |
+| **>= 25 h active reading** | <= 160 mA | awake floor **156.9 mA** (25.5 h) since the vdd_cpu fix | **met on the floor, thinly** — and the floor was measured at frontlight ZERO, so this is "25.5 h in daylight". Two switchable domains take it to 144.6 mA / **27.7 h** (below), leaving **15.4 mA of budget for the frontlight** before 25 h is at risk. The frontlight's cost was the open term until 2026-08-26: **24–39 mA at the rig's 153/153** (two single-A/B measurements disagreeing; ABBA owed) — over the budget either way, so 25 h holds only below roughly half illuminant. |
 | **>= 18 days suspend** (accepted) | <= 9.2 mA idle average | **5.47 mA idle standby, measured** over 6.17 unplugged days (2026-08-15) — and **10.07 mA as actually read** over the same window | **met on idle standby** (5.47 well inside 9.2, → ~30.5 d). **Missed as actually read**: 10.07 mA → ~16.6 d, ~1.4 d short. What now stands between here and 18 days is the *awake* term, not the suspend term. |
 | **> 30 days suspend** (desired) | <= 5.56 mA idle average | as above | **met, by 1.6 %.** 5.47 vs 5.56 mA, from one six-day run on one device — real, but with no margin to spend. Not met as actually read (~16.6 d), so quote both: ">30 days" is a statement about *suspend*, not about reading. |
 
@@ -388,6 +388,33 @@ development affordance. Neither should be on by default in the reader
 flavor. The panel itself measured **0.0 mA** — on e-ink a static page is
 genuinely free, which is why the frontlight is the only awake term left
 worth measuring.
+
+### Direct mode changes nothing at idle (2026-08-26, wired study image)
+
+Measured on the wired `reader-direct` image (kernel 7.1.8, hrdl's
+driver), rk817 `current_avg` cross-checked against `charge_now` deltas,
+on battery, sampler detached on-device (an attached SSH session
+inflates awake brackets by ~50 mA — Wi-Fi held out of powersave plus
+per-sample wakes; 211 vs 161 mA same-state, so the ledger's no-SSH
+condition is load-bearing, not ceremonial):
+
+| condition | mean | vs shipping |
+| --- | --- | --- |
+| reader idle, frontlight 0 | **155.3 mA** | 156.9 — **parity** |
+| page turns every 3 s (20/min) | **192.1 mA** | no shipping bracket at this cadence yet |
+| idle repeat straight after the turns | 169.8 mA | unattributed; consistent with idlewasher debt |
+| frontlight 153/153 adds | 39.0 mA (24.1 on a second A/B) | the open term, now bounded |
+
+The direct driver idles honestly: EBC and GPU runtime-suspended, zero
+EBC interrupts, ±15 V and VCOM off (v3p3 held by the driver), CPU ~99%
+resident at 408 MHz. Turning at an aggressive 20/min costs +36.8 mA;
+6–10/min interpolates to +11–18 mA, so **active reading lands roughly
+165–175 mA either driver**. Per-turn drive: 43 frames for the first
+full-page paint, **11.7 frames/turn steady-state average** (561 IRQs /
+48 turns) — the diff/THRESHOLD hint shrinks repeat turns. The missing
+piece is the same 3 s-cadence bracket on the shipping image
+(`b2-turns.sh` protocol, `doc/status.md` 2026-08-26) next time it is
+deployed.
 
 **Which suspend-draw number to quote (19.3 vs 20.6 mA):** both are
 real measurements of the same deep draw at different dates and

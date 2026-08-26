@@ -76,8 +76,10 @@ says otherwise.
   The bridge now restores default signal handling at startup and bounds
   its cleanup with a 15-second watchdog, so a wedged teardown ends
   instead of wedging the stop. Host-proven with a positive control
-  (an unrestored copy provably survives SIGTERM); the real test is the
-  next session's `herd stop orientation-bridge`. This changes the
+  (an unrestored copy provably survives SIGTERM) — and the real test
+  passed on glass 2026-08-26: `herd stop orientation-bridge` completed
+  in one second, terminated by signal 15, where the previous night's
+  image wedged until SIGKILL. This changes the
   shipping reader image — the bridge script rides in it — and is the
   cycle's one deliberate change to shipping behavior outside the
   display work.
@@ -173,8 +175,10 @@ name and a bound.
   On the shipping image the answer is the same node as before, so
   nothing changes there. A new repo gate
   (`make ebc-card-resolution-check`) keeps index hardcodes out of every
-  on-device path. Offline-proven only; the resolved-path wash has not
-  itself run on glass.
+  on-device path. Glass-proven 2026-08-26: on the wired image the EBC
+  is card1 behind the GPU's card0, a wash through the resolved path
+  drove the panel (45 EBC interrupts), and dmesg carried zero GPU
+  faults.
 
 - **The display can no longer be jammed by something that keeps drawing**
   (#22). Until now, anything producing continuous screen damage — a
@@ -356,6 +360,12 @@ is **embrace-or-reject, after which one image ships either way**
   flashing and redrawing per page turn than a smooth read wants.** That
   is the pre-registered two-pass expectation confirmed on glass, and it
   is now the driving item for the polish phase of the plan.
+- **Direct mode costs nothing at idle** (2026-08-26, wired image):
+  reader idle measured **155.3 mA** against the shipping ledger's
+  156.9 mA under identical conditions — parity. Turning pages at an
+  aggressive 20/min adds ~37 mA; a normal pace interpolates to
+  +11–18 mA. The battery story does not change with the driver
+  (`doc/power-management.md`).
 - **The one feasibility number for the userspace-TCON question is
   banked**: the driver's own instrumentation puts the per-frame
   `advance()` at 37 µs idle, ~1.9 ms banded, and **23.1 ms peak for a
@@ -383,8 +393,11 @@ is **embrace-or-reject, after which one image ships either way**
   every boot and a rebind must follow. Found independently by the
   release review and by the session. Both fixes have since landed in
   the tree — the flavor wiring under "Build, CI and gates", the
-  wash-path resolution under "Display and page turns" — but **no image
-  containing them has booted**; that is the next session's first check.
+  wash-path resolution under "Display and page turns" — and the image
+  carrying both **booted hands-off on 2026-08-26**: CLUT compiled at
+  boot, rebind at 10.1 s, KOReader up via shepherd with no crash-loop,
+  washes on the resolved card, reader-idle power at parity with
+  shipping (155.3 vs 156.9 mA, `doc/status.md`).
 
 ### Kernel
 
@@ -431,8 +444,10 @@ is **embrace-or-reject, after which one image ships either way**
   fails now fails the service loudly instead of leaving a blank panel
   with a green boot log. Proven offline (`make ebc-clut-check`, against
   a fake sysfs) and pinned so the wiring cannot silently vanish again;
-  the image built from this wiring has **not** yet booted on a device —
-  the session proved the same sequence by hand. The shipping reader's
+  when this entry landed the image built from this wiring had not yet
+  booted — the 08-25 session proved the sequence by hand; on 2026-08-26
+  the wired image ran it hands-off, rebind at 10.1 s, reader up with no
+  crash-loop. The shipping reader's
   system derivation is unchanged, re-checked at the same store path.
 - **There is a second reader flavor now, and it is not for you to
   flash.** `make reader-direct` builds the reader image on the faster
@@ -465,8 +480,9 @@ is **embrace-or-reject, after which one image ships either way**
   driven with. Since 2026-08-25 the compiler has run **on the device**,
   in the study image, and the panel has been driven from its output —
   invoked by hand on that session's image, which predated the wiring;
-  the study flavor now runs it at boot (two entries up), though the
-  wired image has not itself booted yet.
+  the study flavor now runs it at boot (two entries up), and on
+  2026-08-26 the wired image did exactly that hands-off — compile,
+  rebind, reader — with no hands on the device.
 - **A follow-up fixed the compiler's safety gate, which had shipped
   inoperative** — and the fixes had been *described as merged* while
   sitting uncommitted in a working tree (a `git commit --amend` with

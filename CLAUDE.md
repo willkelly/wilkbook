@@ -224,11 +224,13 @@ gitignored `build/`, or the reader's static address.
   userspace-TCON feasibility number is banked (23.1 ms full-panel
   `advance()` vs an 11.7 ms frame budget), D5 (rotation) is unresolved,
   and the operator's verdict is quality good but **more flashing per
-  turn than a smooth read wants** — now the P4 driver. The session's
-  two wiring gaps and its ghosting root cause are fixed in the tree but
-  **no image with the fixes has booted**. The decision remains
-  embrace-or-reject, one shipping image either way
-  (`doc/direct-mode-adoption.md`, `doc/status.md`).
+  turn than a smooth read wants** — now the P4 driver. The wired image
+  (all the session's fixes) **booted hands-off 2026-08-26**: CLUT
+  compiled at boot, rebind at 10.1 s, reader up with no crash-loop,
+  washes on the resolved card — and **direct-mode reader idle is at
+  power parity with shipping** (155.3 vs 156.9 mA; turning at 20/min
+  adds ~37 mA). The decision remains embrace-or-reject, one shipping
+  image either way (`doc/direct-mode-adoption.md`, `doc/status.md`).
 - **Kernel — read this carefully, the tree and the device differ.**
   `%linux-pinenote-base` is `nongnu:linux-7.1` and `make kernel`
   cross-builds **7.1.8** clean (both DTBs, both modules linked). The

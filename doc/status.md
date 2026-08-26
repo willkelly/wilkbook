@@ -1,7 +1,96 @@
 # Hardware status
 
-Last updated: 2026-08-25. Update protocol: add a dated entry at the top
+Last updated: 2026-08-26. Update protocol: add a dated entry at the top
 after every hardware session; entries are per-device/per-operator.
+
+## 2026-08-26 — the wired direct image boots hands-off; direct-mode active power ≈ shipping (agent session, Will's device, optics rig + UART)
+
+Operator granted the dd and the UART slot-pick for this session ("fully
+permitted to do the dd step yourself while the box is in the optics
+rig"); every destructive step below ran over UART/SSH with no hands on
+the device.
+
+**Deployed**: `pinenote-reader-direct` built from main at the post-glass
+fix stack (flavor wiring + rebind + card resolution + bridge SIGTERM
+fix), sha256 `28eebed0ba1b17cfd25e0b298f61271fcf40ffaacb61dad25add4b923af45dec`,
+staged→dd→readback all three SHAs equal. One live confirmation on the
+way out: the OLD image's shutdown wedged on orientation-bridge's
+`--cleanup` ignoring SIGTERM — the exact registered bug — and needed one
+last SIGKILL; the reboot resumed the instant the hook died.
+
+**The tag-blocker validation passes, fully hands-off:**
+
+- **Boot → working reader with no hands**: initrd probe fails
+  `-EINVAL` at 2.7 s (by construction, every boot), root hands off,
+  `pinenote-ebc-clut` compiles `custom_wf.bin` from the device's own
+  waveform (229,584 B — byte-identical size to the 08-25 hand compile),
+  rebind probes clean at **10.1 s**, fb0 registers, and shepherd starts
+  reader-session **once** — no crash-loop, no respawn, no wedge. The
+  KNOWN GAP's expected few-failed-starts never materialized: the
+  dependency chain delays KOReader past the rebind.
+- **Card resolution is glass-proven**: the EBC is **card1** on this
+  image (panfrost holds card0 — the exact arrangement that broke
+  washes). `pinenote-ebc-refresh` through the by-driver-name path drove
+  a global refresh (45 EBC IRQs), **zero** panfrost faults in dmesg,
+  and KOReader logged no "full refresh disabled" (its designed failure
+  signature; silence + washes landing = resolved).
+- **The bridge dies on SIGTERM**: `herd stop orientation-bridge`
+  completed in **1 s**, "terminated with signal 15" — where the
+  previous night's image wedged until SIGKILL. Restart clean.
+- **U-Boot slot-pick trap**: this U-Boot draws the boot menu without a
+  contiguous "Hit any key to stop autoboot" in the byte stream —
+  boot-slot.sh's old trigger missed it and the countdown fell through
+  to os1 once. Trigger widened to the menu strings themselves
+  ("U-Boot Boot Menu"/"Boot OS2 (part 6)"); second attempt picked os2.
+
+**Active power under direct mode** (rk817-battery `current_avg`,
+cross-checked against `charge_now` deltas; on battery, charger offline;
+each bracket n=60–75 over ~150 s, sampler detached on-device — see
+instrument lessons):
+
+| condition | mean |
+|---|---|
+| reader idle, frontlight 0 (ledger conditions) | **155.3 mA** |
+| shipping reference, same conditions (ledger) | 156.9 mA |
+| reader idle, frontlight 153/153 (rig illuminant) | 194.3 mA |
+| page turns every 3 s (48 turns injected, guile.epub) | **192.1 mA** |
+| idle repeat, immediately after the turn run (ABA) | 169.8 mA |
+| system floor, reader stopped (old image, same kernel) | 161.4 mA |
+
+- **Direct-mode reader idle is at parity with shipping** (155.3 vs
+  156.9 — inside the bracket noise). The direct driver idles properly:
+  EBC and GPU runtime-suspended, 0 EBC IRQs, ±15 V/VCOM off (v3p3 held),
+  cpu ~99% at 408 MHz.
+- **Turning costs +36.8 mA at 20 turns/min** (aggressive pace); a
+  normal 6–10/min pace interpolates to roughly +11–18 mA. Per-turn IRQ
+  meta: first full-page paint 43 frames, steady state **11.7
+  frames/turn average** (561 IRQs / 48 turns) — the diff/THRESHOLD hint
+  shrinks steady-state turns.
+- The elevated ABA repeat (169.8) is unattributed but consistent with
+  the idlewasher retiring wash debt in the minute after activity;
+  worth one dedicated bracket someday.
+- **Frontlight term measured twice, disagreeing**: 39.0 mA (this image,
+  B1−B1b) vs 24.1 mA (old image, reader stopped, SSH attached both
+  sides). The ledger's "open term" now has a 24–39 mA range — over its
+  15.4 mA 25-hour budget either way. ABBA owed before a single number
+  enters the ledger.
+
+**Instrument lessons (cost a first wrong reading of 235 mA):**
+
+- An **attached SSH session inflates awake brackets ~50 mA** (Wi-Fi held
+  out of powersave + per-sample wakes): 211 mA attached vs 161 mA
+  detached, same state. Detached on-device sampler, fetched after, is
+  the only honest method — matching the ledger's no-SSH condition.
+- `scaling_cur_freq` read over SSH shows the probe's own 1.8 GHz burst;
+  `time_in_state` shows the truth (~99% at 408 MHz).
+- The frontlight had been left at the rig's 153/153 from the previous
+  session (+24–39 mA) — check it before any power bracket.
+
+**State left**: os2 = wired image `28eebed0…`, service KOReader at the
+FileManager, frontlight 153/153 (rig standard), autosuspend still
+pinned `enabled=0` on p7 (direct sessions ongoing — re-enable when they
+end), injector torn down (reader stopped first; no panic — the
+destroy-under-reader ordering held). os1 untouched.
 
 ## Current state (2026-08-15)
 
@@ -13,8 +102,11 @@ rails-off configuration on the primary kernel, three consecutive resumes
 (`doc/artifacts/pinenote-ultra-r12-20260808/`); deep (~20 mA) is
 superseded as the shipping suspend.
 
-**On os2 now**: promoted image `9a08803e…` (deployed 2026-08-08,
-readback-verified), auto-suspend ON (5 min idle → ultra). The **≥3-day
+**On os2 now (since 2026-08-26)**: the `reader-direct` study image
+`28eebed0…` (wired: boot-time CLUT + rebind + card resolution + bridge
+fix; readback-verified), auto-suspend OFF (p7 pin, direct sessions
+ongoing). The promoted shipping image `9a08803e…` last held os2 up to
+2026-08-25; the shipping-image facts below describe that deployment. The **≥3-day
 unplugged ultra soak has CONCLUDED** — it ran 6.17 days and met its exit
 criteria: **170 suspend cycles, zero failures**, no forced power-off,
 and a measured standby figure at last — **5.47 mA idle (~30 days) and
