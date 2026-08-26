@@ -62,6 +62,22 @@ ENABLED at stock timers (300/3600) — the device is a working reader
 that sleeps on its own; SSH is intermittent by design again. os1
 untouched.
 
+**OPERATOR VERDICT (same night, reading on the parked device): page
+turning remains MUCH WORSE than before the driver change.** That is
+the direct-mode bail-out axis stated plainly ("a reader that regresses
+reading to gain writing is the wrong trade" —
+`doc/direct-mode-adoption.md`). Standing on the other side of the
+scale: nothing yet — D8 has never produced a number. The decision
+logic this verdict forces: run D8 next (the pen instruments landed as
+`pinenote/tools/pen/`, `make pen-check` green); if FAST mode does not
+reach pen-class latency, the trade has no other side and the campaign
+resolves to REJECT (restore the shipping driver image on os2); if it
+does, weigh iterate-vs-reject with both numbers on the table. The
+remaining iterate levers on reading quality are known and bounded:
+hand-crafted waveform rows inside the measured DC envelope, and
+per-turn hint tuning (diff-only turns trade transition dirt against
+REDRAW's flash — the operator has now rejected each end separately).
+
 ## 2026-08-26 (rig session, part 5) — the INT-first + sysrq image deploys clean; the stop is 0.484 s on glass; the serial rescue is proven and then re-modeled
 
 After the part-4 power-button recovery: os1 came up (the UART watcher
