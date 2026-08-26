@@ -15,12 +15,15 @@ of the formal experiment, because the operator wanted a feel. Results:
   from pen event to fsync-returned, logged per batch across ~14k
   batches. Whatever the hand feels is driver+glass.
 - **Operator verdicts**: "the responsiveness is extremely good" — and
-  after the rendering fix below, **"holy crap, amazing."** D8's felt
-  half is in; the formal 240 fps nib-to-ink number is still owed, but
-  the embrace side of the scale now has real weight. Combined with
-  part 6's reading verdict, the campaign is now: keep the direct
-  driver, fix reading quality on it (better optics + the
-  PHASE_SEQUENCE user-mode path are the standing directives).
+  after the rendering fix below, **"holy crap, amazing"**, then:
+  "This is absolutely insane on the pen mode! It goes WAY faster than
+  I expected to be able to hit. **This does make pursuing this path
+  worthwhile.**" D8's felt half is in and the strategic conclusion is
+  stated in the operator's own words; the formal 240 fps nib-to-ink
+  number is still owed for the record. Combined with part 6's reading
+  verdict, the campaign is now: keep the direct driver, fix reading
+  quality on it (better optics + the PHASE_SEQUENCE user-mode path
+  are the standing directives).
 - **The direct driver's fbdev is RGB565** — 16 bpp, stride 3744 — not
   the shipping driver's XR24/7488. The scribbler initially assumed
   32 bpp: ink at twice the vertical position, the lower half of every
