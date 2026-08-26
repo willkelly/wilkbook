@@ -3,6 +3,47 @@
 Last updated: 2026-08-26. Update protocol: add a dated entry at the top
 after every hardware session; entries are per-device/per-operator.
 
+## 2026-08-26 (part 13) — the shootout: the shipping driver ghosts HALF as much, same session
+
+The operator's move ended the temperature debate: the primary 7.1
+shipping-driver kernel shares base + config with the running study
+kernel, so its `rockchip_ebc.ko` + `drm_epd_helper.ko` **live-swapped
+onto the running system** — no reboot, no reflash. Two firsts: the
+7.1 shipping-driver build's FIRST PANEL ever (probe clean, PVI
+waveform through the hardware LUT, XR24/7488 — the kernel truth table
+changes: "the shipping-driver 7.1 build has never driven a panel" is
+retired), and the first same-session cross-driver ghost measurement:
+
+- **Shipping driver: +1.3…+1.4 % corrected** (module defaults and the
+  shipped nine-param set agree)
+- **Direct driver: +2.8…+3.0 %** — minutes apart, same panel, same
+  temperature, same content. **The direct driver leaves ~2× the
+  residue, as a driver property.**
+
+The re-baseline that gated this: the washed-panel bias reproduced
+(−0.47 late vs −0.49 early on the 2-page masks) — instrument drift
+excluded, so panel cooling stands as the explanation for
+within-driver drift across the evening (the thermistor logged
+24.0 → 23), while the driver gap is real. Protocol bug caught: the
+early baseline was captured with fiducials still on the glass,
+contaminating the top-region masks (−0.55 vs true ~+0.05) —
+baselines must be pure white.
+
+Suspects for the 2×, each now testable in the module loop: VCOM
+handling in direct mode, the fb→Y4 conversion pipeline, CLUT playback
+fidelity vs the hardware LUT engine.
+
+Caveat: the shipping driver on the STUDY DTB reproducibly paints a
+~250-column dark band (same place every probe; ~4 GC16 washes to
+converge away) — hrdl's DT hunk changed the EBC node. Excluded from
+the masks; the swap is an instrument, not a rescue path.
+
+**Device state at close**: back on the direct PARALLEL driver
+(hand-built, RAM only), reader running, identity table, hint 32,
+`temp_override=22`, washed. Autosuspend still pinned off. The
+shipping modules stay staged in `/root/mod-shipping/` for future
+same-session arms.
+
 ## 2026-08-26 (part 12) — the advance parallelized live: 18.4 → 11.9 ms, and the frame-period theory dies
 
 The kernel iteration loop part 11 promised is real, and it shipped a

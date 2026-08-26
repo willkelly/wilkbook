@@ -244,12 +244,17 @@ gitignored `build/`, or the reader's static address.
   cross-builds **7.1.8** clean (both DTBs, both modules linked). The
   hardware-proven kernel for the SHIPPING driver is still **7.0.11**
   (display, PREEMPT_RT, Wi-Fi/BT, gadget — 2026-07-04). 7.1.8 has run
-  on glass only in the **direct-mode study configuration** (2026-08-25:
-  hrdl's EBC driver swapped in, `linux-pinenote-hrdl-direct`, on os2);
-  the shipping-driver 7.1 build has never driven a panel, and os2
-  currently carries the study image — os1 remains the rescue path.
+  on glass in the **direct-mode study configuration** (2026-08-25:
+  hrdl's EBC driver swapped in, `linux-pinenote-hrdl-direct`, on os2),
+  and the shipping-driver 7.1 build drove a panel ONCE on 2026-08-26 —
+  its rockchip_ebc.ko live-swapped as a module onto the running study
+  kernel for the same-session ghost shootout (doc/status.md part 13;
+  probe clean, but a reproducible DT-mismatch band artifact on the
+  study DTB — an instrument, not a validated boot). os2 currently
+  carries the study image — os1 remains the rescue path.
   So: 7.1 is what the repo *builds*, 7.0.11 is what is *proven* for the
-  product, the study ran 7.1.8 once. Never state one as the other.
+  product, the study ran 7.1.8 on glass; the shipping-driver 7.1 has
+  probed a panel only as a module swap. Never state one as the other.
   `channels.scm` was pin-bumped 2026-08-26 to the 7.1-resolving
   generation, so `TIME_MACHINE=1` works again on `main` (gated on
   time-machine resolving the identical kernel derivation as ambient);

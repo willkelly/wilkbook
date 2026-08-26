@@ -142,3 +142,44 @@ on this instrument.
 Also caught live: writing a black block over fbcon's black console is
 a genuine no-op (frames=0) — the standing zero-IRQ-delta lesson, now
 with an optics-rig cameo.
+
+## Part 4 — the same-session shootout: the shipping driver ghosts half as much
+
+The operator's insight — "can we just try the kernel module from the
+pre-alpha version without rebooting?" — worked: the primary 7.1
+shipping-driver kernel (`linux-pinenote`, cached in the store) shares
+base, config, and therefore vermagic + MODVERSIONS CRCs with the
+running study kernel, so its `rockchip_ebc.ko` + `drm_epd_helper.ko`
+live-swap in. First glass ever for the 7.1 shipping-driver build:
+probe clean, PVI waveform through the hardware LUT, XR24/7488.
+
+Late-night re-baseline first (cap-baseline-late.png): the 2-page-mask
+bias reproduced (−0.47 vs −0.49 early) — instrument drift excluded, so
+the early-vs-late ghost drift within the direct driver stands as panel
+cooling (the thermistor logged 24.0 → 23 across the night). One
+protocol bug surfaced: the EARLY baseline was captured with the
+fiducial squares still displayed, contaminating the top-region masks'
+bias (−0.55 vs a true ~+0.05) — baselines must be pure white.
+
+Shipping-driver arms (same session, same panel temperature, minutes
+from the direct-driver +2.8…+3.0 numbers; stripe-cut masks, late
+baseline bias −0.61):
+
+| arm | capture | raw | corrected |
+|---|---|---|---|
+| shipping, module defaults | cap-shipping-clean-1turn.png | +0.71 | **+1.32** |
+| shipping, the shipped param set | cap-shipping-params-1turn.png | +0.79 | **+1.40** |
+
+**The direct driver leaves ~2× the shipping driver's residue** at
+matched everything. Temperature explains within-driver drift, not the
+driver gap. Surviving suspects, now with a measured target: VCOM
+handling in direct mode, the fb→Y4 conversion pipeline, CLUT playback
+fidelity vs the hardware LUT engine.
+
+Caveat that bounds this comparison: the shipping driver on the STUDY
+DTB reproducibly paints a ~250-column dark band (fb x ≈ 1130–1400,
+same place every probe; converges away only after ~4 GC16 washes) —
+hrdl's DT hunk changed the EBC node and the shipping driver's scan
+expectations differ. The band sits away from the text masks and is
+excluded from the paper mask (`stripe_cut`); its existence is why the
+module swap is an instrument, not a rescue path.
