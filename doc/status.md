@@ -48,6 +48,30 @@ reflash wiped is p6's /root, so the ebc-lab staging (tools, tables,
 module builds) needs re-staging from the repo/workstation on the next
 work session.
 
+## 2026-08-27 (part 20c) — the operator's taxonomy: ghosting vs settling
+
+Vocabulary set by the operator, now canon (CLAUDE.md vocabulary):
+
+- **Ghosting**: residue that persists AFTER settle and accumulates
+  across turns — "turning the pages as fast as possible would result
+  in horrific looking stuff." This is what the optics-rig metric
+  measures (post-settle captures). **On the canon image the operator
+  reports this "completely resolved"** — no accumulation, nothing
+  persisting across turns, fast turning stays clean.
+- **Settling**: the transient per-turn development character — a bold
+  prior element (a chapter heading) briefly shining through on the
+  next page, text looking "wavey and liney as it comes into focus" —
+  fully gone once the page settles, after which "the text looks
+  good."
+
+The two were conflated all campaign; they have different mechanisms
+(post-settle drive completeness vs mid-development intermediate
+states) and different fixes. Ghosting was the bug and is resolved to
+acceptable; settling is the remaining quality frontier, owned by the
+decode-fidelity hunt and the hint-48 re-audition. A settling METRIC
+would need per-frame video through the rig (the 240 fps phone
+protocol from the D8 artifact), not post-settle stills.
+
 ## 2026-08-27 (part 20b) — correction: os1's turn mechanism is OPEN, and hint 48 earns a re-audition
 
 The operator corrects part 18's reading: os1's ordinary page turns

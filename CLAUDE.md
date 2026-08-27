@@ -129,7 +129,15 @@ that clears ghosting; **rung** — a step on the offline-validation ladder
 order to cancel drift; **final4** — the 2026-07-19 reader image that
 hardware-validated autorotation and touch normalization; **oracle** — a
 known-good reference you can query (usually os1); **quirk:** — a pinned
-host-tool test documenting an inherited driver bug.
+host-tool test documenting an inherited driver bug; **ghosting** —
+residue that PERSISTS after a refresh settles and accumulates across
+turns (what the optics-rig metric measures, from post-settle captures);
+**settling** — the TRANSIENT per-turn development character: bold prior
+content briefly shining through, text looking wavy/liney as it comes
+into focus, all gone once the page settles. Operator taxonomy
+2026-08-27: never conflate them — ghosting was the bug (resolved to
+acceptable on the canon direct image); settling is the remaining
+quality frontier.
 
 ## How to develop here
 

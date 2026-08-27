@@ -268,3 +268,12 @@ ONE place: two independent decoders of the same wbf — our `wbf-clut`
 compilation (what the direct driver plays) vs `drm_epd_helper`'s
 in-kernel decode (what the hardware LUT plays). Decode-fidelity
 diffing is an OFFLINE hunt (host tools, no glass), queued next.
+
+## Terminology note (2026-08-27, operator taxonomy)
+
+Every "ghost" number in this artifact is measured from POST-SETTLE
+captures and is therefore **ghosting** in the repo's canonical sense:
+residue persisting after the refresh completes. None of these numbers
+measure **settling** (the transient mid-development character —
+shine-through, focus waviness); a settling metric needs per-frame
+video, not stills.
