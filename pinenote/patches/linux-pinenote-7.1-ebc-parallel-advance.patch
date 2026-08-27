@@ -50,6 +50,15 @@ time) and measured -0.6 % ghost on the optics rig; the curve
 saturates there (184 -> 20 ms bought nothing more).  Applied at mode
 set -- rebind to change.
 
+And the publish-on-call pairing, ported from the shipping stack
+(2026-08-27, part 18, operator directive): defio_delay_ms
+(rockchip_ebc, default 250, live-writable) sets a LONG deferred-io
+flush period through a driver fbdev_probe wrapper, so un-published
+damage aggregates and a page turn lands as ONE atomic transition --
+while an explicit fsync (KOReader's publish(), the pen path's
+per-batch flush) still drains immediately.  Turn/pen class selection
+falls out of who calls fsync; the timer is only the safety net.
+
 --- a/drivers/gpu/drm/rockchip/rockchip_ebc.c	1969-12-31 17:00:01.000000000 -0700
 +++ b/drivers/gpu/drm/rockchip/rockchip_ebc.c
 @@ -305,6 +305,28 @@
@@ -102,7 +111,72 @@ set -- rebind to change.
  static unsigned int rect_hint_batch = 20;
  module_param(rect_hint_batch, uint, S_IRUGO|S_IWUSR);
  MODULE_PARM_DESC(rect_hint_batch, "Batch size when reading rect_hints in ioctl");
-@@ -1011,16 +1047,14 @@
+@@ -644,9 +680,63 @@
+ 			  DRM_RENDER_ALLOW),
+ };
+ 
++#ifdef CONFIG_DRM_FBDEV_EMULATION
++/*
++ * The shipping stack's publish-on-call pairing, ported (doc/status.md
++ * 2026-08-27 part 18): a LONG deferred-io flush period so un-published
++ * damage aggregates -- a page turn lands as ONE atomic transition
++ * instead of timer-split chunks -- while an explicit fsync (KOReader's
++ * publish(), the pen path's per-batch flush) drains immediately through
++ * fb_deferred_io_fsync.  Class selection falls out of who calls fsync;
++ * the timer is only the safety net for clients that never publish.
++ */
++static struct drm_fb_helper *rockchip_ebc_defio_helper;
++
++static int defio_delay_ms = 250;
++
++static int defio_delay_ms_set(const char *val, const struct kernel_param *kp)
++{
++	int ms, ret;
++
++	ret = kstrtoint(val, 0, &ms);
++	if (ret)
++		return ret;
++	if (ms < 1 || ms > 10000)
++		return -EINVAL;
++	*(int *)kp->arg = ms;
++	if (rockchip_ebc_defio_helper)
++		rockchip_ebc_defio_helper->fbdefio.delay = msecs_to_jiffies(ms);
++	return 0;
++}
++
++static const struct kernel_param_ops defio_delay_ms_ops = {
++	.set = defio_delay_ms_set,
++	.get = param_get_int,
++};
++
++module_param_cb(defio_delay_ms, &defio_delay_ms_ops, &defio_delay_ms,
++		S_IRUGO|S_IWUSR);
++MODULE_PARM_DESC(defio_delay_ms,
++		 "deferred-io flush period in ms (explicit fsync still flushes immediately)");
++
++static int rockchip_ebc_fbdev_probe(struct drm_fb_helper *fb_helper,
++				    struct drm_fb_helper_surface_size *sizes)
++{
++	int ret = drm_fbdev_shmem_driver_fbdev_probe(fb_helper, sizes);
++
++	if (ret)
++		return ret;
++	fb_helper->fbdefio.delay = msecs_to_jiffies(defio_delay_ms);
++	rockchip_ebc_defio_helper = fb_helper;
++	return 0;
++}
++#endif
++
+ static const struct drm_driver rockchip_ebc_drm_driver = {
+ 	DRM_GEM_SHMEM_DRIVER_OPS,
+-	DRM_FBDEV_SHMEM_DRIVER_OPS,
++#ifdef CONFIG_DRM_FBDEV_EMULATION
++	.fbdev_probe = rockchip_ebc_fbdev_probe,
++#endif
+ 	.major			= 0,
+ 	.minor			= 3,
+ 	.name			= "rockchip-ebc",
+@@ -1011,16 +1101,14 @@
  			if (work_item & ROCKCHIP_EBC_WORK_ITEM_INIT) {
  				clip_ongoing_or_waiting = ebc->screen_rect;
  				memset(prelim_target, 0xff, ebc->num_pixels);
@@ -121,7 +195,7 @@ set -- rebind to change.
  				}
  				no_off_screen = false;
  				skip_advance = true;
-@@ -1043,8 +1077,7 @@
+@@ -1043,8 +1131,7 @@
  					}
  				}
  				clip_ongoing_or_waiting = ebc->screen_rect;
@@ -131,7 +205,7 @@ set -- rebind to change.
  				// Skip a single advance as we have performed one just now
  				skip_advance = true;
  				no_schedule_until_clip_empty = true;
-@@ -1089,8 +1122,7 @@
+@@ -1089,8 +1176,7 @@
  						!no_schedule_until_clip_empty &&
  							!work_item);
  			} else if (ebc->driver_mode == ROCKCHIP_EBC_DRIVER_MODE_NORMAL) {
@@ -141,7 +215,7 @@ set -- rebind to change.
  						ebc, prelim_target, hints, phase_buffer,
  						&clip_ongoing, &clip_ongoing_or_waiting,
  						early_cancellation_addition, 0,
-@@ -1184,6 +1216,12 @@
+@@ -1184,6 +1270,12 @@
  				     EBC_CONFIG_DONE_REG_CONFIG_DONE);
  			awaiting_completion = true;
  			awaiting_start = false;
@@ -154,7 +228,7 @@ set -- rebind to change.
  			if (testing < 2) {
  				regmap_write(
  					ebc->regmap, EBC_DSP_START,
-@@ -1399,10 +1437,14 @@
+@@ -1399,10 +1491,14 @@
  	int rate;
  
  	if (direct_mode) {
@@ -171,7 +245,7 @@ set -- rebind to change.
  		return rate;
  	}
  
-@@ -1484,6 +1526,11 @@
+@@ -1484,6 +1580,11 @@
  	 * sync/bp/display/fp, aka sync/start/display/end.
  	 */
  	hact_start = sdck.htotal - sdck.hsync_start;
@@ -183,6 +257,26 @@ set -- rebind to change.
  	// mode.vtotal = 1404 + 12 + 1 + 4
  	// mode.vsync_start = 1404 + 12
  	// vact_start = 5
+@@ -2469,6 +2570,19 @@
+ 	struct device *dev = &pdev->dev;
+ 	// pr_info("%s executing", __func__);
+ 
++#ifdef CONFIG_DRM_FBDEV_EMULATION
++	/*
++	 * The defio_delay_ms setter dereferences this static, and the
++	 * fbdev client's helper is freed by drm_dev_unregister() below;
++	 * the param sysfs file outlives remove() on the rmmod path.
++	 * param_attr_store() holds kernel_param_lock() around ops->set,
++	 * so clearing under the same lock closes the race.
++	 */
++	kernel_param_lock(THIS_MODULE);
++	rockchip_ebc_defio_helper = NULL;
++	kernel_param_unlock(THIS_MODULE);
++#endif
++
+ 	drm_dev_unregister(&ebc->drm);
+ 	kthread_stop(ebc->refresh_thread);
+ 	kthread_stop(ebc->temp_upd_thread);
 --- a/drivers/gpu/drm/rockchip/rockchip_ebc.h	1969-12-31 17:00:01.000000000 -0700
 +++ b/drivers/gpu/drm/rockchip/rockchip_ebc.h
 @@ -216,6 +216,15 @@
