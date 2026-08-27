@@ -24,7 +24,8 @@ CPPFLAGS := -Ishim -I$(BUILD) -I$(BUILD)/include/drm
 EXTRACTED := $(BUILD)/drivers/gpu/drm/drm_epd_helper.c \
              $(BUILD)/include/drm/drm_epd_helper.h
 
-all: $(BUILD)/wbf-info $(BUILD)/wbf-clut $(BUILD)/wbf-clut-selftest
+all: $(BUILD)/wbf-info $(BUILD)/wbf-clut $(BUILD)/wbf-clut-selftest \
+     $(BUILD)/wbf-clut-diff
 
 $(EXTRACTED) &: $(PATCH) $(EXTRACT)
 	$(PYTHON) $(EXTRACT) $(PATCH) $(BUILD) \
@@ -41,6 +42,20 @@ $(BUILD)/wbf-info: wbf-info.c $(EXTRACTED) shim/kernel-shim.h
 $(BUILD)/wbf-clut: wbf-clut.c $(EXTRACTED) shim/kernel-shim.h
 	$(CC) $(CFLAGS) $(CPPFLAGS) -I$(BUILD)/drivers/gpu/drm \
 	  -o $@ wbf-clut.c
+
+# The decode-fidelity differ (doc/status.md 2026-08-27): the verbatim
+# helper's 4BIT_PACKED view vs an independent walk of a compiled
+# CLUT0002, per (bin, slot, from, to).  Needs the per-device WBF and a
+# CLUT compiled from it:  make clut-diff WBF=... CLUT=...
+$(BUILD)/wbf-clut-diff: wbf-clut-diff.c $(EXTRACTED) shim/kernel-shim.h
+	$(CC) $(CFLAGS) $(CPPFLAGS) -I$(BUILD)/drivers/gpu/drm \
+	  -o $@ wbf-clut-diff.c
+
+.PHONY: clut-diff
+clut-diff: $(BUILD)/wbf-clut-diff
+	@test -n "$(WBF)" -a -n "$(CLUT)" || \
+	  { echo "usage: make clut-diff WBF=/path/ebc.wbf CLUT=/path/custom_wf.bin"; exit 2; }
+	$(BUILD)/wbf-clut-diff $(WBF) $(CLUT)
 
 # The same source with -DWBF_CLUT_MUTATIONS, which unlocks --mutate=...
 # knobs that each break ONE of the two reproduced upstream quirks (or the

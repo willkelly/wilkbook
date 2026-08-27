@@ -605,6 +605,36 @@ corrected tables look like on glass, and finding 1's fix is precisely the
 kind of change that needs a display in front of it.
 **Status:** ready.
 
+**2026-08-27 amendment — the collision defect is now quantified and
+attributed** (`pinenote/tools/wbf/wbf-clut-diff.c`, the decode-fidelity
+differ: the verbatim `drm_epd_helper` 4BIT_PACKED view vs an
+independent walk of the compiled CLUT, per bin/slot/from/to, on this
+device's own waveform):
+
+- **32–34 GL16/GC16 cells per temperature bin (~13 % of transitions),
+  6 DU4, 2 DU play genuinely different pulse sequences** than the
+  shipping hardware's even-even read — and every one attributes to an
+  odd 5-bit row winning the four-way cell collision, overwhelmingly
+  `from5 ∈ {3, 29}`, i.e. **4-bit gray levels 1 and 14 — the
+  near-extreme levels antialiased text edges occupy**. The class that
+  moves ink, sitting exactly where the direct driver's text residue
+  lives (doc/status.md part 13's 2× same-session gap).
+- A further pervasive class: **~75–82 % of GL16 transitions are
+  delivered with their leading neutral phases stripped**
+  (shift-equivalent: same pulses, front-loaded) — co-scheduled pixels
+  de-synchronize vs the shipping stack's aligned timeline and
+  transitions complete early. A candidate mechanism for the settling
+  ("coming into focus") character. Whether this is a fourth defect or
+  deliberate reference behavior is not yet established against
+  `wbf_to_custom.py`.
+- The trailing-suffix defect shows as the differ's length-only class
+  (INIT: all 256 cells, drives identical).
+
+These remain offline findings for the LINEAGE report, but the glass
+context has changed: the identity CLUT has now driven this panel for
+two days, and the measured 2× residue gap plus the settling character
+are consistent with, though not yet causally pinned to, these classes.
+
 ## Standing caveats
 
 - **We are ahead of, not aligned with, the lineage.** Line numbers and

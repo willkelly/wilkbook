@@ -48,6 +48,38 @@ reflash wiped is p6's /root, so the ebc-lab staging (tools, tables,
 module builds) needs re-staging from the repo/workstation on the next
 work session.
 
+## 2026-08-27 (part 23) — decode fidelity: the divergence is FOUND, attributed, and it lives at the AA-edge grays
+
+The offline hunt ran and landed in one evening
+(`pinenote/tools/wbf/wbf-clut-diff.c`, new: the verbatim helper's
+4BIT_PACKED view vs an independent kernel-semantics walk of the
+compiled CLUT, per bin/slot/from/to, with a shift-vs-content
+classifier and a 5-bit collision-winner attributor):
+
+- **CONTENT divergence — the ink-moving class**: 32–34 GL16/GC16
+  cells per bin (~13 % of transitions), 6 DU4, 2 DU, in ALL 14 bins.
+  Every one attributes to an odd 5-bit row winning the compiler's
+  four-way cell collision (upstream-register item 14's defect, now
+  quantified) — overwhelmingly rows 3 and 29: **4-bit gray levels 1
+  and 14, the near-black/near-white levels of antialiased text
+  edges**. AA edge pixels play the wrong waveform on the direct
+  driver. The ghost's fingerprint, found in the table bytes.
+- **SHIFT class**: ~75–82 % of GL16 transitions delivered with
+  leading neutral phases stripped — same pulses, front-loaded;
+  co-scheduled pixels de-synchronize and complete early vs shipping's
+  aligned timeline. Candidate mechanism for the settling character.
+- INIT: drives identical, trailing-length differences only (the
+  suffix defect's signature).
+
+**The fix is now one conditional away**: make the compiler write only
+even-even 5-bit rows into the 4-bit cells (the shipping hardware's
+exact read semantics), and optionally preserve leading neutral runs.
+That deviates deliberately from hrdl's reference (the QUIRK
+philosophy pins reference fidelity), so it lands as a documented
+divergence with the quirks retained for comparison, the clut-test
+pins re-derived, and a glass A/B (clut-swap + optics + eyes) before
+it ships as the boot one-shot's default.
+
 ## 2026-08-27 (part 22) — pen validated on the canon stack: the per-class defio design holds
 
 With `defio_delay_ms=250` live in the shipped kernel, the scribbler
