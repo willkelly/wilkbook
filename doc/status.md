@@ -48,6 +48,30 @@ reflash wiped is p6's /root, so the ebc-lab staging (tools, tables,
 module builds) needs re-staging from the repo/workstation on the next
 work session.
 
+## 2026-08-27 (part 20b) — correction: os1's turn mechanism is OPEN, and hint 48 earns a re-audition
+
+The operator corrects part 18's reading: os1's ordinary page turns
+show NO flash and look MORE seamless than ours (while taking much
+longer) — the frequent GC16s are a separate, additional behavior. The
+part-18 "os1 drives turns with GC16" claim was decoded from
+`refresh_waveform=4`, but the m-weigand lineage source (6.6.30
+checkout, same enum as 7.x) shows `refresh_waveform` governs only
+FULL refreshes; partials are `default_waveform` (also 4 = GC16 on
+os1) under `diff_mode=Y` (changed pixels only). GC16-diff-partials
+actually reproduce every operator observation without contradiction:
+no full-screen flash, old text masked by the inversion mid-development
+("seamless"), long turns, minimal ghost. Whether os1's KOReader
+instead overrides per-update to true GL16 through the mw ioctls is
+UNVERIFIED and checkable only when os1 next boots — the mechanism is
+recorded as open, not decided.
+
+Practical consequence either way: the hint 48 (GC16-partial) route
+was rejected ("gross and slow") under the night's WORST conditions —
+underdriven frames, wrong temperature bin, accumulated ghost. On the
+canon stack it deserves a re-audition: it may be the os1 transition
+look at direct-driver speed. One `rect-hints --default 48` when the
+operator wants the comparison.
+
 ## 2026-08-27 (part 18) — os1 decoded, the target spec, and the canon image
 
 While the operator read on os1 (rescue Debian, 6.12), its driver
