@@ -14,7 +14,9 @@
             pinenote-ebc-clut-source
             pinenote-ebc-clut-destination
             pinenote-ebc-clut-driver-directory
-            pinenote-ebc-clut-device))
+            pinenote-ebc-clut-device
+            pinenote-ebc-direct-params-service-type
+            pinenote-ebc-splash-service-type))
 
 ;; Services for hrdl's DIRECT-MODE rockchip_ebc (doc/direct-mode-adoption.md).
 ;;
@@ -123,8 +125,11 @@
     ;; pinenote-waveform is the service that puts ebc.wbf on the ROOT
     ;; filesystem; it already requires root-file-system and udev.  Without
     ;; this edge shepherd would start the two concurrently and the compile
-    ;; would race its own input.
-    (requirement '(pinenote-waveform))
+    ;; would race its own input.  pinenote-ebc-direct-params must precede
+    ;; the rebind because temp_override is consulted only when the probe
+    ;; re-reads temperature (doc/status.md part 15) -- which couples this
+    ;; service to that one; the direct flavor instantiates both.
+    (requirement '(pinenote-waveform pinenote-ebc-direct-params))
     (documentation "Compile this device's waveform into the CLUT hrdl's direct-mode rockchip_ebc requires (recompiling whenever the waveform or the compiler changes), then rebind the driver so the probe the initrd already failed runs again against it.  A failed rebind fails this service -- see the ordering note in this file.")
     (one-shot? #t)
     (start
@@ -152,6 +157,117 @@
    (description "Compile the device's own ebc.wbf into rockchip/custom_wf.bin for hrdl's direct-mode EBC driver, which fails probe with -EINVAL without it, then rebind the driver via sysfs so the probe runs again with the CLUT in place (the initrd's raw-load probes -- and fails -- before the root filesystem exists, every boot).  The result is derived per-device calibration data: it is produced on the device at boot and never bundled.  Rebuilt whenever the waveform, the compiler or the installed file changes, rather than compiled once if absent.")))
 
 
+;;; ===== Post-load driver parameters (doc/status.md 2026-08-26/27) =====
+;;;
+;;; The direct driver is RAW-LOADED in the initrd, so modprobe.d can never
+;;; parameterize it (the long note below); parameters are applied
+;;; post-load through /sys/module/rockchip_ebc/parameters.  The 2026-08-26
+;;; optics campaign's two validated settings ship here:
+;;;
+;;;   default_hint 32   Y4 through the GL16 slot, no REDRAW -- the measured
+;;;                     reading route (status part 10: the live hint sweep;
+;;;                     the A2/dither routes are retired for text, and the
+;;;                     driver's own default of 64 is dithered mono).  The
+;;;                     variable is read per damage, so a sysfs write
+;;;                     applies immediately.
+;;;   temp_override 22  STOPGAP for the warm-biased boundary read (parts
+;;;                     11/16: the thermistor reads exactly the 24-27 bin
+;;;                     boundary while the ghost U-curve bottoms one bin
+;;;                     colder; one bin is worth ~0.75 % ghost).  The
+;;;                     override is consulted only when the driver re-reads
+;;;                     temperature, so this service MUST run before the
+;;;                     CLUT one-shot's rebind -- the flavor wires that
+;;;                     ordering.  The principled fix is a sensor-offset
+;;;                     param upstream; this pins what was measured.
+;;;
+;;; A missing parameter node fails the service LOUDLY (unlike
+;;; pinenote-apply-ebc-params' skip-absent policy): these two exist on the
+;;; direct driver by construction, so absence means the driver changed
+;;; underneath us and the pin must be re-validated, not skipped.
+
+(define (pinenote-ebc-direct-params-shepherd-service _config)
+  (list
+   (shepherd-service
+    (provision '(pinenote-ebc-direct-params))
+    (requirement '(root-file-system))
+    (documentation "Apply the optics-campaign-validated rockchip_ebc parameters (default_hint=32, temp_override=22) through sysfs; the initrd raw-load means modprobe.d can never do it.  Runs before the CLUT rebind so temp_override reaches the probe.")
+    (one-shot? #t)
+    (start
+     #~(lambda _
+         (let ((dir "/sys/module/rockchip_ebc/parameters"))
+           (define (put name value)
+             (call-with-output-file (string-append dir "/" name)
+               (lambda (port) (display value port))))
+           (put "temp_override" "22")
+           (put "default_hint" "32")
+           #t)))
+    (stop #~(const #t)))))
+
+(define pinenote-ebc-direct-params-service-type
+  (service-type
+   (name 'pinenote-ebc-direct-params)
+   (extensions
+    (list (service-extension shepherd-root-service-type
+                             pinenote-ebc-direct-params-shepherd-service)))
+   (default-value #f)
+   (description "Apply the validated direct-mode rockchip_ebc parameters post-load through sysfs (default_hint=32 reading route, temp_override=22 temperature-bin stopgap), before the CLUT rebind so the probe reads them.")))
+
+
+;;; ===== The white boot splash (operator directive, 2026-08-27) =====
+;;;
+;;; With fbcon mapped off fb0 (the direct flavor's fbcon=map:1 kernel
+;;; argument), nothing paints the panel between the CLUT rebind and the
+;;; reader -- and whatever the glass held before the rebind stays visible.
+;;; This one-shot paints the framebuffer white after the rebind: no tty on
+;;; the panel, a white page until the reader arrives.  White is 0xff in
+;;; both fb formats this panel has worn (RGB565 and XR24), so the fill is
+;;; format-blind; the geometry is read from sysfs per the pen-session
+;;; lesson (doc/status.md 2026-08-26 part 7: assuming a format cost a
+;;; session's worth of debugging).
+
+(define (pinenote-ebc-splash-shepherd-service _config)
+  (list
+   (shepherd-service
+    (provision '(pinenote-ebc-splash))
+    (requirement '(pinenote-ebc-clut))
+    (documentation "Paint /dev/fb0 white after the CLUT rebind: with fbcon mapped off the panel there is no tty to show, so the boot surface is a white page until the reader starts.")
+    (one-shot? #t)
+    (start
+     #~(lambda _
+         (let* ((stride
+                 (call-with-input-file "/sys/class/graphics/fb0/stride"
+                   (lambda (port) (string->number
+                                   (string-trim-right (read-line port))))))
+                (height
+                 (call-with-input-file
+                     "/sys/class/graphics/fb0/virtual_size"
+                   (lambda (port)
+                     (string->number
+                      (cadr (string-split
+                             (string-trim-right (read-line port))
+                             #\,))))))
+                (row (make-string stride (integer->char 255))))
+           (call-with-output-file "/dev/fb0"
+             (lambda (port)
+               (let loop ((y 0))
+                 (when (< y height)
+                   (display row port)
+                   (loop (+ y 1))))
+               (force-output port)
+               (fsync port)))
+           #t)))
+    (stop #~(const #t)))))
+
+(define pinenote-ebc-splash-service-type
+  (service-type
+   (name 'pinenote-ebc-splash)
+   (extensions
+    (list (service-extension shepherd-root-service-type
+                             pinenote-ebc-splash-shepherd-service)))
+   (default-value #f)
+   (description "White boot splash for the direct flavor: paint /dev/fb0 white once the CLUT rebind has brought the panel up, replacing the tty that fbcon=map:1 keeps off the glass.")))
+
+
 ;;; ===== The direct-mode modprobe options (blocker 1) =====
 
 ;;; The rockchip_ebc module options for hrdl's DIRECT-MODE driver.

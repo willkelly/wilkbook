@@ -18,6 +18,32 @@ says otherwise.
 
 ## Unreleased
 
+### Direct-mode study image (not the pre-alpha)
+
+- **Page turns compute in time now.** The direct driver's screen
+  updates were arriving ~50 % slower than the panel scans whenever most
+  of the screen changed — every page turn ran its waveform out of spec
+  while pen strokes ran on time. The update computation now spreads
+  across CPU cores and full-screen refreshes hit the panel's native
+  rate (measured: 18.4 → 11.9 ms per frame, no visual difference at
+  the seams, same pen feel). `doc/status.md` 2026-08-26 part 12.
+- **The display defaults you'd otherwise set by hand now ship.** The
+  next study image boots straight into the measured reading route
+  (grayscale page turns through GL16) and the corrected temperature
+  bin (the built-in sensor reads warm at the bin boundary; the wrong
+  bin costs visibly more ghosting). Previously both had to be applied
+  over SSH after every boot. `doc/status.md` parts 10–16.
+- **No more terminal on the e-ink panel.** The boot console text used
+  to burn into the ghost ledger during boot and whenever the reader
+  stopped. The panel now shows a plain white page from driver bring-up
+  until KOReader takes over; the terminal remains available on serial.
+- **Known issue: a faint full-width band** (~1/6 of screen height,
+  ~3/4 down the page) can appear after display-timing experiments and
+  deepen with rapid page turns; repeated full refreshes fade it. Under
+  investigation — do not run `phase-seq.lua` (its reset mode crashed
+  and rebooted the device once; it is marked dangerous until a
+  UART-attended session).
+
 ### Battery and suspend
 
 - **Stopping the reader no longer silently kills auto-suspend.** The
