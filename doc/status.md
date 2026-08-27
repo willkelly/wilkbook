@@ -48,6 +48,26 @@ reflash wiped is p6's /root, so the ebc-lab staging (tools, tables,
 module builds) needs re-staging from the repo/workstation on the next
 work session.
 
+## 2026-08-27 (part 22) — pen validated on the canon stack: the per-class defio design holds
+
+With `defio_delay_ms=250` live in the shipped kernel, the scribbler
+session (FAST mode, publish-per-batch) got the operator verdict
+"looks great" — no perceptible lag versus the original pen session.
+The operator's turn/pen split is therefore fully validated end to
+end: un-published damage aggregates (turns land atomic, the wave
+gone), explicitly published damage flies (pen untouched by the 250 ms
+timer). One operational trap caught on the way: a phase-sequence
+whose `--then-normal` lands while the sequence still executes gets
+IGNORED ("Ignoring work items until zero waveform mode is left
+explicitly") and the driver stays PARKED in ZERO_WAVEFORM — the panel
+looks dead to all ordinary damage until the ZERO_WAVEFORM ioctl
+(0xC0086445, {set=1, mode=0}) leaves it explicitly. That was why the
+reader "disappeared" after the INIT repro runs. Recovery sequence now
+proven: ZW-disable ioctl → MODE → wash.
+
+**Device state**: reader running (NORMAL, hint 32, washed), pen tools
+staged in /root, UART logger standing. Autosuspend still pinned off.
+
 ## 2026-08-27 (part 21) — UART session: capture proven, the crash does not reproduce clean
 
 The UART channel is live end to end, after stepping in BOTH documented
