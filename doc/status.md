@@ -3,6 +3,45 @@
 Last updated: 2026-08-26. Update protocol: add a dated entry at the top
 after every hardware session; entries are per-device/per-operator.
 
+## 2026-08-27 (part 18) — os1 decoded, the target spec, and the canon image
+
+While the operator read on os1 (rescue Debian, 6.12), its driver
+config was pulled live and DECODED the felt comparison: os1 drives
+page turns with **GC16** (`default_waveform=4` AND
+`refresh_waveform=4`) and the driver itself full-washes every 60
+partials (`auto_refresh=Y`, `refresh_threshold=60`). That explains
+all three operator observations in one stroke — turns "MUCH MORE
+LATENT" (GC16's long flashy development), "gc16 periodically"
+(the driver's own auto_refresh, not KOReader), minimal ghost and
+"all in one go" (GC16's aggressive scrub; its inversion masks the old
+text instead of leaving it readable). **os1 is NOT the target** — it
+buys cleanliness with the two costs the operator explicitly rejects.
+
+**The target spec, in the operator's terms**: GL16-class latency, no
+periodic flashing, and no readable prior-page text during the turn's
+development (the os2 "wave"). The wave's first suspect is timer-split
+damage: the direct kernel never received the shipping stack's
+publish-on-call pairing, so the deferred-io timer (kernel default)
+can flush a page blit in chunks that start transitioning at different
+times. **Ported** (operator directive: "defio_delay_ms for page turns
+and similar, but NOT for pen"): `defio_delay_ms=250` via a driver
+fbdev_probe wrapper, mirroring the 7.0 forward-port's mechanism —
+un-published damage aggregates into one atomic turn; explicit fsync
+(KOReader publish(), the pen path's per-batch flush) drains
+immediately, so class selection falls out of who publishes. If the
+wave survives atomic damage, it is within-transition rendering and
+joins the decode-fidelity hunt.
+
+**The canon image**: `pinenote-reader-direct-PNGuixRoot-20260826.ext4`
+carrying the parallel advance (+ its four instruments +
+`defio_delay_ms`), the validated-defaults one-shot (hint 32, bin 22,
+ordered before the CLUT rebind), `fbcon=map:1` + the white-splash
+one-shot (no tty on the panel, ever), all host gates green. First cut
+`ccd8ba1a…` (pre-defio, superseded), final cut **`44a93b3c…`**,
+staged to os1's data partition for the protocol write to p6 — which
+awaits the operator's explicit go (the device is out of the rig, in
+their hands, running os1).
+
 ## 2026-08-27 (part 17) — the persistent band, the INIT hammer, and a kernel-crash reboot
 
 Closing the night, three hard facts:
