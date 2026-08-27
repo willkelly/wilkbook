@@ -8,17 +8,55 @@ means an instrument or a log said so, and anything that is division from
 a measurement is labelled as such. Depth lives in `doc/`; these entries
 are pointers, not summaries.
 
-Nothing after `v0.1.0-prealpha` has been tagged. One image has been cut
-since — the `reader-direct` study image, deployed to the author's own
-device on 2026-08-25 for the direct-mode experiment; it is not a release
-and not for testers. If you are running wilkbook today you are running
-the pre-alpha image `9a08803e…` on Linux 7.0.11, and everything under
+`v0.2.0-prealpha` (2026-08-27) is the current tag: the `reader-direct`
+image — the direct-mode driver is now the pre-alpha lineage. The
+`v0.1.0-prealpha` image `9a08803e…` on Linux 7.0.11 remains the last
+shipping-driver build. Everything under
 **Unreleased** that was proven was proven on that image unless an entry
 says otherwise.
 
 ## Unreleased
 
-### Direct-mode study image (not the pre-alpha)
+(nothing yet)
+
+## v0.2.0-prealpha — 2026-08-27
+
+**The pre-alpha moves to the direct-mode driver.** This tag cuts the
+`reader-direct` image as the new pre-alpha lineage: hrdl's direct-mode
+EBC driver with wilkbook's banded parallel screen updates, atomic page
+turns, a decode-fidelity CLUT compiler, validated display defaults
+applied at boot, a white splash instead of a console, and the same
+reader stack (KOReader, pen, Wi-Fi, key-only SSH, ultra suspend
+machinery) as v0.1.0. Operator-validated over a full evening and a
+night of instrumented measurement (`doc/status.md` 2026-08-26/27
+parts 9-24; the optics evidence in
+`doc/artifacts/pinenote-optics-turnroutes-20260826/`): page turns are
+snappy, the mid-turn "wave" of prior-page text is gone, accumulating
+ghosting is resolved to acceptable, menus no longer flash, writing
+latency is unchanged ("looks great"). Release image
+`pinenote-reader-direct-PNGuixRoot-20260826.ext4` (built 2026-08-27),
+SHA256 `7afd3f8a…` — full hash and deploy record in `doc/status.md`
+part 24.
+
+Known character and open work: a transient per-turn settling effect
+(bold prior elements briefly shining through; wavy text coming into
+focus — gone once settled); a faint full-width band summonable by
+display-timing experiments (do not use long frame pacing); the
+phase-sequence tool can crash the kernel (UART-attended only); the
+suspend/power legs have not been re-validated on this driver.
+
+### Display (the fidelity CLUT)
+
+- **The waveform tables the panel plays are now byte-exact to what the
+  original driver's hardware engine reads.** The boot-time compiler had
+  faithfully reproduced its reference's bugs: on ~13 % of grayscale
+  transitions — concentrated at the near-black/near-white levels
+  antialiased text edges use — the panel played the WRONG waveform, and
+  ~80 % of transitions ran time-shifted. Found by a new offline differ
+  (`wbf-clut-diff`, now a standing test gate), fixed as the compiler's
+  default, A/B'd live on glass the same night: operator +1.
+
+### Direct-mode driver (was: study image)
 
 - **Page turns compute in time now.** The direct driver's screen
   updates were arriving ~50 % slower than the panel scans whenever most

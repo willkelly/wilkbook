@@ -48,7 +48,41 @@ reflash wiped is p6's /root, so the ebc-lab staging (tools, tables,
 module builds) needs re-staging from the repo/workstation on the next
 work session.
 
-## 2026-08-27 (part 23) — decode fidelity: the divergence is FOUND, attributed, and it lives at the AA-edge grays
+## 2026-08-27 (part 24) — the fidelity +1 and the v0.2.0-prealpha cut
+
+The fidelity CLUT went on the operator's live device (clut-swap,
+`c1b6f4f6…`) and survived an unplanned control: a battery-death
+reboot mid-audition (the boot one-shot silently resurrected the quirk
+table — the old compiler still being in the deployed image — and the
+canon boot re-applied every default hands-off for the second time
+tonight; one command re-swapped fidelity). Verdict: **"+1 I prefer
+this"** — the byte-exact tables are the keeper.
+
+**v0.2.0-prealpha is cut**: the pre-alpha lineage moves to the
+direct-mode driver. Release image
+`pinenote-reader-direct-PNGuixRoot-20260826.ext4` (built 2026-08-27),
+SHA256
+`7afd3f8a3e08abd283250e5a2132d30c1d9dad2680362abbafe73b3ad95017cb`,
+carrying: the parallel advance + defio publish-on-call pairing +
+frame instruments (kernel patch), the fidelity-default CLUT compiler
+(every boot compiles byte-exact tables from the device's own
+waveform), the validated-defaults and white-splash one-shots,
+fbcon=map:1, and the flash-suppression profile overrides. CHANGELOG
+release section written; tag on this commit.
+
+Deploy state: STAGED-PENDING — the image stages to the data
+partition; the protocol write to p6 runs from os1 at the operator's
+convenience (the device currently runs the 44a93b3c canon image plus
+the live-swapped fidelity table, which is behaviorally identical to
+the release for everything but the boot-time compiler).
+
+Not re-validated on this driver and image lineage, standing open for
+the alpha path: suspend/power legs (ultra suspend, auto-suspend
+daemon interplay, standby numbers), the band investigation, the
+phase-seq crash, the settling-quality frontier, D6-style
+orientation/suspend sweeps on the release image.
+
+## 2026-08-27 (part 23) — decode fidelity: the divergence is FOUND, attributed, and it lives at the AA-edge grays## 2026-08-27 (part 23) — decode fidelity: the divergence is FOUND, attributed, and it lives at the AA-edge grays
 
 The offline hunt ran and landed in one evening
 (`pinenote/tools/wbf/wbf-clut-diff.c`, new: the verbatim helper's
