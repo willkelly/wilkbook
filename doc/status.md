@@ -15,9 +15,11 @@ run ever), the params one-shot beating the CLUT rebind (dmesg
 "override temperature from N to 22" at the FIRST successful probe),
 hint 32 live without any SSH touch, and — the operator's felt
 verdict — whether defio_delay_ms=250 killed the turn "wave".
-/data (autosuspend.conf enabled=0, books) and /root staging on the
-OLD image are gone with the reflash: the lab tools need re-staging
-from the repo on the next work session.
+/data is its own partition (p7) and SURVIVES the reflash —
+autosuspend.conf stays enabled=0 and the library stays put; what the
+reflash wiped is p6's /root, so the ebc-lab staging (tools, tables,
+module builds) needs re-staging from the repo/workstation on the next
+work session.
 
 ## 2026-08-27 (part 18) — os1 decoded, the target spec, and the canon image
 
