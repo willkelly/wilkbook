@@ -3,6 +3,42 @@
 Last updated: 2026-08-26. Update protocol: add a dated entry at the top
 after every hardware session; entries are per-device/per-operator.
 
+## 2026-08-27 (part 17) — the persistent band, the INIT hammer, and a kernel-crash reboot
+
+Closing the night, three hard facts:
+
+**1. The stretch's band is semi-persistent.** After reverting
+`htotal_add` to stock timing and a white + triple-GC16 reset, the
+operator still saw the band ("a little darker, ~3/4 down the page,
+~1/6 of screen height, full width" — the fb x≈1130–1400 segment),
+lighter but standing. Part 16's tradeoff worsens: the stretch leaves
+residue in that segment that ordinary washes do not clear.
+`htotal_add` is NOT usable as shipped.
+
+**2. The first-ever live PHASE_SEQUENCE run CRASHED THE KERNEL.**
+`phase-seq.lua --init --then-normal` (the panel-reset hammer, meant to
+clear the band): the ioctls returned, then the SoC REBOOTED (~158 s
+uptime confirmed after; the operator rode the boot menu down to os2).
+No pstore, no UART listener — the panic is unlogged and unattributed:
+hrdl's phase-sequence executor had never been exercised by us, and the
+parallel-advance module was loaded. The tool now carries a DANGER
+header; next execution happens only in a UART-attended driver session
+prepared for a reboot. (Silver lining: the crash was an unplanned
+cold-boot test of the wired image — hands-off recovery worked, and
+every disk-staged asset survived.)
+
+**3. Recovery was two minutes.** All session tooling lives on disk:
+after boot, rmmod/insmod from `/root/mod-parallel/` restored the
+parallel driver + bin 22 + hint 32 and the reader — the operator's
+"good page turning" config. Whether the reboot's full power cycle
+cleared the band is the operator's next observation.
+
+**Device state**: freshly booted os2, parallel driver (RAM),
+`temp_override=22`, stock scan timing, hint 32, identity table (boot
+one-shot), reader running, washed. Autosuspend conf still enabled=0
+(disk). The stretched-scan lever stays parked until the band
+mechanism is understood.
+
 ## 2026-08-27 (part 16) — the line stretch: drive time banked at −0.6 %, the gap cornered
 
 The slow-scan test found its workable lever. The dclk route is DEAD:
