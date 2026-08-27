@@ -3,6 +3,32 @@
 Last updated: 2026-08-26. Update protocol: add a dated entry at the top
 after every hardware session; entries are per-device/per-operator.
 
+## 2026-08-27 (part 14) — slow frames: +0.3 % real, a fake miracle caught, and the gap band
+
+The operator's bandwidth-starvation theory (the DDR-DVFS corruption
+lesson generalized to direct mode's standing DMA+NEON load) tested
+via `frame_period_us=33000`: the raw number looked like a miracle
+(−0.66 % corrected — better than clean) and was FAKE — the capture
+showed the ~250-column dark band back, on the DIRECT driver this
+time, poisoning the paper mask. Stripe-cut truth: **+2.50 vs +2.78**
+— a real ~0.3 % improvement from halving memory traffic, weak
+support for starvation as the ghost mechanism at full DDR clock. The
+2× gap to the shipping driver stands.
+
+**The band is a GAP-TIMING phenomenon**: same ~250 columns
+(fb x ≈ 1130–1400, plausibly one source-driver chip's segment) under
+the shipping driver at every probe AND under the direct driver at
+34 ms pacing; never seen at ≤16.7 ms. Threshold in the 5–22 ms
+inter-frame-gap range; converges away over several GC16 washes. Part
+13's "shipping-driver DT artifact" reading is RETIRED — it is the
+panel (or EBC analog path) disliking long drive gaps, whoever makes
+them. Do not ship long frame pacing without solving it.
+
+**Device state at close**: direct parallel driver (RAM only), reader
+running, hint 32, `temp_override=22`, `frame_period_us=0`, band
+mostly converged (finishes with reading washes). Autosuspend still
+pinned off — RE-ENABLE at park.
+
 ## 2026-08-26 (part 13) — the shootout: the shipping driver ghosts HALF as much, same session
 
 The operator's move ended the temperature debate: the primary 7.1

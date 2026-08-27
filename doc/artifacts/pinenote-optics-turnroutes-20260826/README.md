@@ -183,3 +183,33 @@ hrdl's DT hunk changed the EBC node and the shipping driver's scan
 expectations differ. The band sits away from the text masks and is
 excluded from the paper mask (`stripe_cut`); its existence is why the
 module swap is an instrument, not a rescue path.
+
+## Part 5 — slow frames: a small real gain, a fake miracle, and the gap band
+
+Testing the operator's bandwidth-starvation theory (the DDR-DVFS
+lesson generalized: direct mode is a standing DMA+NEON memory load)
+with `frame_period_us=33000` — same 12 ms scans, ~21 ms idle gaps,
+roughly a third the memory traffic:
+
+- Raw 2-page-mask result: −1.13 % (corrected −0.66) — an apparent
+  sign-flip to better-than-clean. **FAKE**: the capture
+  (cap-slow33-1turn.png) shows the ~250-column dark band back — on
+  the DIRECT driver this time — sitting in the paper mask and
+  dragging the ghost negative.
+- Stripe-cut truth: slow 34 ms **+2.50** corrected vs full-rate 12 ms
+  **+2.78** on the same masks. A real improvement of ~0.3 % — weak
+  support for bandwidth starvation as a ghost mechanism at full DDR
+  clock; the 2× gap to the shipping driver (+1.3…+1.4) stands.
+
+**The band is a gap-timing phenomenon, not a shipping-driver
+artifact**: it appears under the shipping driver (every probe) AND
+under the direct driver at 34 ms pacing, always the same ~250 columns
+(fb x ≈ 1130–1400 — plausibly one source-driver chip's segment), and
+never at ≤16.7 ms pacing. Threshold somewhere in the 5–22 ms
+inter-frame-gap range. Converges away over several GC16 washes.
+Consequence: frame pacing much beyond ~17 ms is NOT free — do not
+ship long gaps without solving the band.
+
+Instrument lesson repeated twice tonight: any arm whose capture shows
+the band must be measured with `stripe_cut` masks, and a dramatic
+result should be LOOKED AT before it is believed.
