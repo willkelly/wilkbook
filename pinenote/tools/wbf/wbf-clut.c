@@ -270,6 +270,24 @@ static void report_balance(const struct mode_summary *ms, int temp_index)
  * (-DWBF_CLUT_MUTATIONS is set by the host Makefile's selftest target
  * only), so the device can never be handed one by accident, and the
  * differential asserts the shipping binary REFUSES the flags. */
+/* FIDELITY MODE (default since 2026-08-27, doc/status.md part 23-24):
+ * deviate DELIBERATELY from wbf_to_custom.py so the CLUT is byte-exact
+ * to what the shipping hardware LUT engine reads:
+ *   - only even-even 5-bit rows land in the 4-bit cells (the hardware
+ *     reads 5bit[2*from][2*to]; the reference's four-way collision let
+ *     odd rows win ~13% of GL16 cells -- at gray levels 1 and 14,
+ *     where antialiased text edges live);
+ *   - the leading neutral run is preserved (the reference stripped it,
+ *     front-loading every transition and de-synchronizing co-scheduled
+ *     pixels);
+ *   - the trailing run is preserved (the reference's QUIRK 1 dropped
+ *     it unconditionally).
+ * Verified by pinenote/tools/wbf/wbf-clut-diff.c reporting ZERO
+ * divergence on a fidelity CLUT.  --reference-quirks restores the
+ * transliterated wbf_to_custom.py behaviour for the upstream
+ * differential (upstream-register item 14). */
+static int reference_quirks;
+
 #ifdef WBF_CLUT_MUTATIONS
 static int mutate_keep_suffix;		/* skip QUIRK 1's unconditional drop */
 static int mutate_collision_first_wins;	/* invert QUIRK 2's write order */
@@ -322,9 +340,10 @@ static int summarise_row(const u8 *seq, unsigned int phases,
 			len++;
 			count = 0;
 		}
-		/* Drop the leading zero-run: it only delays the sequence.
-		 * Python tests `not summary', i.e. nothing emitted yet. */
-		if (len == 0 && p == 0)
+		/* Reference behaviour drops the leading zero-run ("it only
+		 * delays the sequence"); fidelity mode keeps it so the
+		 * transition timeline matches the shipping stack's. */
+		if (reference_quirks && len == 0 && current == -1 && p == 0)
 			continue;
 		current = p;
 		count++;
@@ -337,8 +356,9 @@ static int summarise_row(const u8 *seq, unsigned int phases,
 		len++;
 	}
 
-	/* QUIRK 1 (see the header comment): summary[:-1], unconditionally. */
-	if (!mutate_keep_suffix) {
+	/* QUIRK 1 (see the header comment): summary[:-1], unconditionally
+	 * -- reference behaviour only; fidelity keeps the suffix. */
+	if (reference_quirks && !mutate_keep_suffix) {
 		if (len < 2) {
 			fprintf(stderr,
 				"FAIL: single-entry summary at src=%u dst=%u; wbf_to_custom.py raises IndexError there, so no reference behaviour exists to match\n",
@@ -381,6 +401,12 @@ static int summarise_mode(struct drm_epd_lut *lut, int mode_index,
 		unsigned int src = i % STATES, dst = i / STATES;
 		unsigned int p, a = src, b = dst;
 		struct row_summary *row = &ms->rows[ms->count];
+
+		/* Fidelity: only the even-even rows the hardware reads;
+		 * no collisions can exist.  Reference: all rows, four-way
+		 * collision per cell, last write wins (QUIRK 2). */
+		if (!reference_quirks && ((src | dst) & 1))
+			continue;
 
 		if (mutate_axis_swap) {
 			a = dst;
@@ -521,7 +547,7 @@ static int write_output(const char *path, const u8 *buf, size_t size)
 
 static void usage(const char *argv0)
 {
-	fprintf(stderr, "usage: %s [-v] [--balance-report] [--class-source=TARGET:SOURCE]... INPUT.wbf [OUTPUT.bin]\n", argv0);
+	fprintf(stderr, "usage: %s [-v] [--balance-report] [--reference-quirks] [--class-source=TARGET:SOURCE]... INPUT.wbf [OUTPUT.bin]\n", argv0);
 	fprintf(stderr,
 	        "       --balance-report prints per-bin, per-mode charge-balance\n"
 	        "       analysis of the decoded sequences; OUTPUT.bin may be\n"
@@ -636,6 +662,8 @@ int main(int argc, char **argv)
 			verbose = 1;
 		} else if (!strcmp(arg, "--balance-report")) {
 			balance_report = 1;
+		} else if (!strcmp(arg, "--reference-quirks")) {
+			reference_quirks = 1;
 		} else if (!strncmp(arg, "--class-source=", 15)) {
 			const char *spec = arg + 15;
 			const char *colon = strchr(spec, ':');

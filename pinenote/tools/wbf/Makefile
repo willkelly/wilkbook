@@ -73,7 +73,8 @@ check: $(BUILD)/wbf-info
 # Byte-identical differential against hrdl's wbf_to_custom.py.  Needs both
 # the per-device waveform (WBF=) and the reference tree (CLUT_REF=), and
 # says out loud what it skipped when either is missing.
-clut-check: $(BUILD)/wbf-clut $(BUILD)/wbf-clut-selftest $(BUILD)/wbf-info
+clut-check: $(BUILD)/wbf-clut $(BUILD)/wbf-clut-selftest $(BUILD)/wbf-info \
+            $(BUILD)/wbf-clut-diff
 	WBF="$(WBF)" \
 	  $(if $(CLUT_REF),CLUT_REF="$(CLUT_REF)",) \
 	  $(if $(CLUT_REF_BIN),CLUT_REF_BIN="$(CLUT_REF_BIN)",) \

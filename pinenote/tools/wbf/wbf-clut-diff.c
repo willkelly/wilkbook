@@ -250,6 +250,18 @@ int main(int argc, char **argv)
 			return 2;
 		}
 		if ((unsigned int)lut.temp_index != bin) {
+			if (bin == n_luts - 1) {
+				/* Upstream-register item 14, defect 3: the
+				 * helper never applies the +1 to
+				 * temp_range_count, so the reference cannot
+				 * select the file's TOP bin at all.  The
+				 * CLUT carries it (the direct driver's own
+				 * bin pick reads all bins); there is simply
+				 * no reference to diff against. */
+				printf("bin %2u SKIPPED: reference cannot reach the top temperature bin (item 14 defect 3)\n",
+				       bin);
+				continue;
+			}
 			fprintf(stderr,
 				"FAIL: temp %u C resolves to reference bin %d, CLUT bin %u -- bin boundary drift\n",
 				temp_lower, lut.temp_index, bin);

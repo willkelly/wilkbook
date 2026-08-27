@@ -362,17 +362,51 @@ else
   fi
 fi
 
+# ------------------------------------------------------- decode fidelity
+# The strongest pin this suite has: the DEFAULT compile must be
+# byte-exact to what the shipping hardware LUT engine reads -- verified
+# by wbf-clut-diff (the verbatim drm_epd_helper reference vs an
+# independent kernel-semantics walk) reporting ZERO divergence of any
+# class.  This is the 2026-08-27 fix's standing regression gate.
+clut_diff=$(dirname "$clut")/wbf-clut-diff
+if [ ! -x "$clut_diff" ]; then
+  bad "wbf-clut-diff not built beside wbf-clut -- the fidelity gate cannot run"
+else
+  diff_out=$("$clut_diff" "$WBF" "$ours" 2>&1) || true
+  if printf '%s' "$diff_out" | grep -q 'RESULT: ok' &&
+     printf '%s' "$diff_out" | grep -q ' 0 CONTENT divergent, 0 shift-equivalent, 0 length-only'; then
+    pass "fidelity: default CLUT diffs CLEAN against the verbatim helper (all classes zero)"
+  else
+    bad "fidelity: default CLUT diverges from the verbatim helper:"
+    printf '%s\n' "$diff_out" | tail -5
+  fi
+fi
+
 # ----------------------------------------------------------------- mutations
 # quirk: controls.  Each flips ONE reproduced upstream behaviour; each must
 # change the bytes.  If any of these matched, the byte-identical result
 # above would be evidence of nothing, because the quirk it names would not
 # be load-bearing.
+#
+# Since the fidelity default (2026-08-27) the quirks live only behind
+# --reference-quirks, so BOTH sides of each differential run in that
+# mode: the controls prove the reference path still reproduces the
+# upstream behaviours the register reports.
+refq=$work/reference-quirks.bin
+if ! "$clut_selftest" --reference-quirks "$WBF" "$refq" > /dev/null 2>&1    || [ ! -s "$refq" ]; then
+  bad "reference-quirks baseline compile failed"
+fi
+if cmp -s "$ours" "$refq"; then
+  bad "fidelity default is byte-identical to --reference-quirks -- the 2026-08-27 fix is not load-bearing"
+else
+  pass "fidelity default differs from --reference-quirks (the fix is load-bearing)"
+fi
 for mutation in drop-suffix-off collision-first-wins axis-swap; do
   out=$work/mut-$mutation.bin
-  if "$clut_selftest" "--mutate=$mutation" "$WBF" "$out" > /dev/null 2>&1; then
+  if "$clut_selftest" --reference-quirks "--mutate=$mutation" "$WBF" "$out" > /dev/null 2>&1; then
     if [ ! -s "$out" ]; then
       bad "quirk: --mutate=$mutation produced no output (control is vacuous)"
-    elif cmp -s "$ours" "$out"; then
+    elif cmp -s "$refq" "$out"; then
       bad "quirk: --mutate=$mutation changed nothing -- that behaviour is not load-bearing, so the differential proves less than it claims"
     else
       pass "quirk: --mutate=$mutation changes the output"
@@ -385,7 +419,7 @@ for mutation in drop-suffix-off collision-first-wins axis-swap; do
     # nonzero exit would let a renamed or deleted mutation keep printing
     # PASS while testing nothing (review, 2026-08-25), which is the same
     # vacuity these controls exist to prevent.
-    if "$clut_selftest" "--mutate=$mutation" "$WBF" "$out" 2>&1 \
+    if "$clut_selftest" --reference-quirks "--mutate=$mutation" "$WBF" "$out" 2>&1 \
          | grep -qiE 'unknown|unrecognis|unrecogniz|usage'; then
       bad "quirk: --mutate=$mutation is not a flag this binary knows -- the control is testing nothing"
     else
