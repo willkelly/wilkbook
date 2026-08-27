@@ -3,6 +3,22 @@
 Last updated: 2026-08-26. Update protocol: add a dated entry at the top
 after every hardware session; entries are per-device/per-operator.
 
+## 2026-08-27 (part 19) — DEPLOYED: os2 carries the canon image
+
+The operator's go came and the protocol ran clean from os1: slot
+check (root = p5), p6 unmounted, staged SHA verified, exact-count dd
+(445545 x 4096, 13.2 s), readback SHA match — **DEPLOY OK, os2 =
+`44a93b3c…`**. The workstation's os2 host key is purged for the new
+image's first boot. What that boot must prove, in order: the white
+splash instead of a tty (fbcon=map:1 + the splash one-shot's first
+run ever), the params one-shot beating the CLUT rebind (dmesg
+"override temperature from N to 22" at the FIRST successful probe),
+hint 32 live without any SSH touch, and — the operator's felt
+verdict — whether defio_delay_ms=250 killed the turn "wave".
+/data (autosuspend.conf enabled=0, books) and /root staging on the
+OLD image are gone with the reflash: the lab tools need re-staging
+from the repo on the next work session.
+
 ## 2026-08-27 (part 18) — os1 decoded, the target spec, and the canon image
 
 While the operator read on os1 (rescue Debian, 6.12), its driver
