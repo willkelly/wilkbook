@@ -5,6 +5,7 @@
   #:use-module (pinenote packages kernel)
   #:use-module (pinenote services ebc)
   #:use-module (pinenote services ebc-direct)
+  #:use-module (pinenote services koreader-profile)
   #:use-module (pinenote systems pinenote-reader)
   #:export (pinenote-reader-direct-operating-system))
 
@@ -149,6 +150,16 @@
              (pinenote-ebc-modprobe-service-type
               config => (pinenote-ebc-modprobe-configuration
                          (inherit config)
-                         (options %pinenote-ebc-direct-modprobe-options))))))))
+                         (options %pinenote-ebc-direct-modprobe-options)))
+             ;; Ghosting is resolved on this flavor (doc/status.md part
+             ;; 20), so UI flash promotion is no longer load-bearing:
+             ;; suppress KOReader's mandatory UI flashes and reserve the
+             ;; device layer's wash promotion for genuinely full-screen
+             ;; intents.  The shipping flavor keeps its validated 0.60.
+             (pinenote-koreader-profile-service-type
+              config => (pinenote-koreader-profile-configuration
+                         (inherit config)
+                         (avoid-flashing-ui? #t)
+                         (flash-area-fraction 0.98))))))))
 
 pinenote-reader-direct-operating-system

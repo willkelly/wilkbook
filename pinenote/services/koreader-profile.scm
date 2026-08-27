@@ -22,6 +22,8 @@
             pinenote-koreader-profile-side-margins
             pinenote-koreader-profile-flash-ui?
             pinenote-koreader-profile-flash-keyboard?
+            pinenote-koreader-profile-avoid-flashing-ui?
+            pinenote-koreader-profile-flash-area-fraction
             pinenote-koreader-profile-show-progress?
             pinenote-koreader-profile-partial-rerendering?
             pinenote-koreader-profile-header-auto-refresh-seconds
@@ -135,6 +137,23 @@
   (flash-ui? pinenote-koreader-profile-flash-ui? (default #f))
   ;; Same mechanism, once per keystroke.
   (flash-keyboard? pinenote-koreader-profile-flash-keyboard? (default #f))
+  ;; KOReader distinguishes optional UI flashes (flash_ui above) from
+  ;; "mandatory" ones certain widgets request regardless; this key
+  ;; suppresses the mandatory class too.  Found live 2026-08-27: with
+  ;; flash_ui already false, menu opens still GC16-flashed until this
+  ;; was set (doc/status.md part 20d).  Default #f preserves the
+  ;; shipping flavor's validated behavior; the DIRECT flavor overrides
+  ;; both this and flash-area-fraction (ghosting is resolved there, so
+  ;; flash promotion is no longer load-bearing).
+  (avoid-flashing-ui? pinenote-koreader-profile-avoid-flashing-ui?
+                      (default #f))
+  ;; Our own device layer's promotion threshold: flash intents covering
+  ;; at least this fraction of the panel become a full GC16 wash
+  ;; (device.lua flash_policy).  0.60 was load-bearing while ghosting
+  ;; accumulated; with ghosting resolved on the canon image the
+  ;; promotion is reserved for genuinely full-screen intents.
+  (flash-area-fraction pinenote-koreader-profile-flash-area-fraction
+                       (default 0.60))
   ;; ReaderRolling:showEngineProgress() paints a progress bar during a
   ;; crengine re-render and calls Screen:refreshFast() every 500 ms.
   ;; publish() is fsync on the fbdev fd and deferred-io tracks dirty
@@ -280,6 +299,10 @@ stable under any reordering of the record."
       ("cre_show_progress"
        . ,(pinenote-koreader-profile-show-progress? config))
       ("flash_keyboard" . ,(pinenote-koreader-profile-flash-keyboard? config))
+      ("avoid_flashing_ui"
+       . ,(pinenote-koreader-profile-avoid-flashing-ui? config))
+      ("pinenote_flash_area_fraction"
+       . ,(pinenote-koreader-profile-flash-area-fraction config))
       ("flash_ui" . ,(pinenote-koreader-profile-flash-ui? config))
       ("full_refresh_count"
        . ,(pinenote-koreader-profile-full-refresh-count config))

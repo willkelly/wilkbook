@@ -48,6 +48,32 @@ reflash wiped is p6's /root, so the ebc-lab staging (tools, tables,
 module builds) needs re-staging from the repo/workstation on the next
 work session.
 
+## 2026-08-27 (part 20d) — menu flashes: found both halves, fixed live, canonized for the direct flavor
+
+On the fresh canon image menus GC16-flashed again despite the shipped
+`flash_ui=false`. Two stacked mechanisms, both now handled:
+
+- **KOReader's "mandatory" UI flashes**: certain widgets request
+  flashes regardless of the flash-buttons toggle; the separate
+  `avoid_flashing_ui` setting suppresses that class (operator found
+  the checkbox live; it ships as a DIRECT-flavor profile override).
+- **Our own promotion policy**: device.lua promotes flash intents
+  covering ≥ `pinenote_flash_area_fraction` (0.60) of the panel to a
+  full GC16 wash. That was load-bearing while ghosting accumulated;
+  with ghosting RESOLVED (part 20) it is not, so the direct flavor
+  overrides it to 0.98 — only genuinely full-screen intents promote.
+  Applied live via the settings key + reader restart, and canonized.
+
+The shipping flavor's profile defaults are UNCHANGED (its 0.60 flash
+economy was validated on its own driver; nothing revalidated it at
+0.98). The koreader-profile service gains the two fields; the direct
+flavor carries the overrides; settings-check green.
+
+The reflash-wiped washer retune (idle_s=12, debt_min=8, hand-set on
+the old install) was deliberately NOT restored: the plugin's milder
+defaults (45 s, debt 15) fit the resolved-ghosting era; retune again
+only if reading says so.
+
 ## 2026-08-27 (part 20c) — the operator's taxonomy: ghosting vs settling
 
 Vocabulary set by the operator, now canon (CLAUDE.md vocabulary):
