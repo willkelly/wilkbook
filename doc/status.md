@@ -3,6 +3,33 @@
 Last updated: 2026-08-26. Update protocol: add a dated entry at the top
 after every hardware session; entries are per-device/per-operator.
 
+## 2026-08-27 (part 20) — FIRST BOOT VERDICT: the wave is gone, turns are snappy, ghosting acceptable
+
+The canon image's first boot validated hands-off end to end (white
+splash instead of console text, params one-shot beating the
+temperature read — dmesg "override temperature from 26 to 22" —
+hint 32 live, all one-shots green, reader up in ~60 s), and then the
+operator's felt verdict landed the night's campaign:
+
+- **"Page turns, wave is gone."** The defio publish-on-call port
+  killed the readable-old-text-overwriting-in-a-wave effect — the
+  atomic-damage hypothesis confirmed on glass, first try.
+- **"Page turns feel very snappy"** — the parallel advance + GL16
+  route at honest frame timing, felt.
+- **Ghosting "seems fixed"** — the accumulated stack (bin 22, clean
+  routing, atomic turns) lands at acceptable in real reading.
+- Remaining known character: a "coming into focus" transition effect,
+  more pronounced than os1's (whose GC16 inversion masks its own
+  development) — judged FINE by the operator; it shares a suspected
+  root with the decode-fidelity gap and stays on that hunt's list.
+
+The direct-mode embrace case is now materially stronger: writing was
+already "insane"; reading on the same driver is now judged a good
+tradeoff by the operator. Still open before any formal embrace: the
+band investigation, the phase-seq crash (both UART-attended), the
+decode-fidelity offline hunt, and the suspend/power legs on this
+image.
+
 ## 2026-08-27 (part 19) — DEPLOYED: os2 carries the canon image
 
 The operator's go came and the protocol ran clean from os1: slot
