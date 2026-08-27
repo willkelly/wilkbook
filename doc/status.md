@@ -48,6 +48,34 @@ reflash wiped is p6's /root, so the ebc-lab staging (tools, tables,
 module builds) needs re-staging from the repo/workstation on the next
 work session.
 
+## 2026-08-27 (part 21) — UART session: capture proven, the crash does not reproduce clean
+
+The UART channel is live end to end, after stepping in BOTH documented
+traps once each (workstation termios dying between stty and cat --
+hold one fd through both; then the device-side ttyS2 9600 divisor,
+doc/device-access.md trap 1 -- `stty -F /dev/ttyS2 1500000` fixed the
+NUL flood). Liveness proven by a kmsg marker arriving in the
+workstation log; loglevel raised for the repro.
+
+**The phase-seq crash does not reproduce from a clean boot**: four
+consecutive `--init --then-normal` runs on the canon image, UART
+attended, zero panics, driver healthy after each ("Ignoring work
+items until zero waveform mode is left explicitly" -- the parking
+semantics visible and correct). Last night's SoC-rebooting panic
+therefore needed the session-accumulated state it happened under
+(stretched htotal timing, redraw-delay LUT rebuilds, a dozen
+unbind/rebind and module-swap cycles) or is a rare race. Disposition:
+danger header softened to possibly-crashing, UART-attended preferred;
+not exonerated, not chased further tonight.
+
+Operational note: the four INIT runs saturate all cores (the parallel
+advance's 4-band NEON on 99 full-panel phases) -- SSH crawls while a
+sequence runs. Polish-list candidate: cap the advance at 3 bands to
+keep a core free; the frame budget has room.
+
+Those four INITs were also the reset hammer originally prescribed for
+the band -- its post-hammer state is the operator's next observation.
+
 ## 2026-08-27 (part 20d) — menu flashes: found both halves, fixed live, canonized for the direct flavor
 
 On the fresh canon image menus GC16-flashed again despite the shipped

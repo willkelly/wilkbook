@@ -16,13 +16,16 @@ the driver parks in ZERO_WAVEFORM mode -- the panel stops responding to
 ordinary damage until a MODE ioctl restores NORMAL.  --then-normal does
 that automatically; without it, this tool prints the reminder.
 
-DANGER (2026-08-27, doc/status.md part 17): the FIRST live run of this
-path -- `--init --then-normal`, on the parallel-advance module --
-CRASHED THE KERNEL hard enough to reboot the SoC (no pstore, no UART
-listener, cause unattributed: hrdl's phase-sequence executor had never
-been exercised by us, and the banded advance was loaded).  Do not run
-this tool again except in a UART-attended driver session prepared for
-a reboot.
+DANGER, downgraded but standing (doc/status.md parts 17 and 21): the
+FIRST live run of this path (`--init --then-normal`, 2026-08-27, on
+the hand-built parallel-advance module after a long experimental
+session) CRASHED THE KERNEL and rebooted the SoC.  The UART-attended
+repro the same night ran `--init` FOUR times consecutively on the
+canon image from a clean boot: zero crashes, panel and driver healthy.
+Unreproduced-from-clean-state is not exonerated -- treat runs as
+possibly-crashing (rare race or state-dependent), prefer UART-attended
+sessions, and expect heavy CPU (the parallel advance saturates all
+cores for the INIT's 99 full-panel phases; SSH crawls meanwhile).
 
 Usage: phase-seq.lua [--init] [--gc16] [--gc-target N] [--temp BIN]
                      [--delay MS] [--elm SPEC] (--elm repeatable)
