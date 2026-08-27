@@ -70,11 +70,11 @@ waveform), the validated-defaults and white-splash one-shots,
 fbcon=map:1, and the flash-suppression profile overrides. CHANGELOG
 release section written; tag on this commit.
 
-Deploy state: STAGED-PENDING — the image stages to the data
-partition; the protocol write to p6 runs from os1 at the operator's
-convenience (the device currently runs the 44a93b3c canon image plus
-the live-swapped fidelity table, which is behaviorally identical to
-the release for everything but the boot-time compiler).
+Deploy state: **DEPLOYED** — the operator booted os1 the same hour
+and the protocol ran clean (staged SHA verified, exact-count dd,
+readback match): os2 carries the release image `7afd3f8a…`. First
+boot of v0.2.0 compiles the fidelity table with the new compiler —
+the quirk-table resurrection gap is closed.
 
 Not re-validated on this driver and image lineage, standing open for
 the alpha path: suspend/power legs (ultra suspend, auto-suspend
