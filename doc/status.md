@@ -3,6 +3,45 @@
 Last updated: 2026-08-26. Update protocol: add a dated entry at the top
 after every hardware session; entries are per-device/per-operator.
 
+## 2026-08-27 (part 16) — the line stretch: drive time banked at −0.6 %, the gap cornered
+
+The slow-scan test found its workable lever. The dclk route is DEAD:
+every requested rate below 33.33 MHz snaps to a divider-capped
+31.25 MHz where the EBC goes silent — and the operator's challenge
+("where are you getting 333 MHz from?") exposed that the reasoning
+had leaned on the clock's NAME; `cpll_333m` is CPLL/3 *ancestry*
+repurposed as an adjustable divider off a ~1 GHz parent, already
+documented to run at other rates. The working lever is
+**`htotal_add`** (in the parallel-advance patch): extra SDCK cycles
+of front porch with the gate window extended through them — genuine
+per-row drive time at the stock clock.
+
+Measured: htotal_add=88 → 15.6 ms scans (shipping-equivalent
+per-phase drive) → **+2.28 % corrected vs +2.85 at stock**; 184 →
+20.2 ms → +2.23 — the curve SATURATES at 15.6. Drive time is worth
+~0.6 % and no more. Turn settle cost: ~590 ms vs ~460 (38 GL16
+phases at the slower scan) — the operator judges the tradeoff on
+glass.
+
+Also closed: **VCOM exonerated with documentation** (the TPS65185's
+NVM holds this device's recorded calibration — 1430000 µV per
+`doc/device-runbook.md` — and no driver ever writes it; both drivers
+ran it all night), and shipping's `refresh_waveform=6` decodes to
+plain **GL16** — no mode mystery.
+
+**The remaining ~0.9 % (direct +2.28 vs shipping +1.35) is cornered
+in one place**: two independent decoders of the same wbf — our
+`wbf-clut` compilation (what the direct driver plays) vs
+`drm_epd_helper`'s in-kernel decode (what the shipping hardware LUT
+plays). A decode-fidelity diff is an OFFLINE hunt (host tools, no
+glass) and is the queued next attack.
+
+**Device state at close**: reader running on the stretched config —
+parallel driver, `htotal_add=88` (15.6 ms scans verified),
+`temp_override=22`, hint 32, identity table, washed. All session
+config RAM-only; a reboot reverts to the stock image driver.
+Autosuspend still pinned off — RE-ENABLE at park.
+
 ## 2026-08-27 (part 15) — the three-way join: the belief is perfect, the residue is analog
 
 The operator asked whether we were running the DDR-era strategy —

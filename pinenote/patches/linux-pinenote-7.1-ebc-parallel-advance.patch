@@ -41,9 +41,18 @@ per phase, the sharpest surviving explanation of its 2x-cleaner
 residue), which needs dclk AND htotal moved together.  Revert by
 module reload without the parameter.
 
+A fourth instrument, the one that works (2026-08-27, part 16):
+htotal_add (rockchip_ebc) appends N SDCK cycles to each line as front
+porch with the gate window extended through them -- longer per-row
+DRIVE time at the unchanged 33.33 MHz dclk.  htotal_add=88 stretches
+the scan 12.0 -> 15.6 ms (the shipping-equivalent per-phase drive
+time) and measured -0.6 % ghost on the optics rig; the curve
+saturates there (184 -> 20 ms bought nothing more).  Applied at mode
+set -- rebind to change.
+
 --- a/drivers/gpu/drm/rockchip/rockchip_ebc.c	1969-12-31 17:00:01.000000000 -0700
 +++ b/drivers/gpu/drm/rockchip/rockchip_ebc.c
-@@ -305,6 +305,16 @@
+@@ -305,6 +305,28 @@
  module_param(dclk_select, int, 0644);
  MODULE_PARM_DESC(dclk_select, "-1: use dclk from mode, 0: 200 MHz (default), 1: 250");
  
@@ -57,10 +66,22 @@ module reload without the parameter.
 +module_param(dclk_rate_override, int, 0644);
 +MODULE_PARM_DESC(dclk_rate_override, "direct-mode dclk Hz (0 = 33.33 MHz default)");
 +
++/*
++ * Extra SDCK cycles appended to the line as FRONT PORCH, with the gate
++ * window extended through them (GD_END tracks the stretched htotal) --
++ * i.e. longer per-row DRIVE time at an unchanged dclk.  The workable
++ * slow-scan lever after the dclk route dead-ended (the cpll_333m
++ * divider caps at /32 and the EBC goes silent there anyway).
++ * Applied at mode set -- rebind to change.
++ */
++static int htotal_add = 0;
++module_param(htotal_add, int, 0644);
++MODULE_PARM_DESC(htotal_add, "extra SDCK cycles per line (0 = none)");
++
  static int temp_override = 0;
  module_param(temp_override, int, S_IRUGO|S_IWUSR);
  MODULE_PARM_DESC(temp_override, "Values > 0 override the temperature");
-@@ -316,6 +326,20 @@
+@@ -316,6 +338,20 @@
  module_param(hskew_override, int, S_IRUGO|S_IWUSR);
  MODULE_PARM_DESC(hskew_override, "Override hskew value");
  
@@ -81,7 +102,7 @@ module reload without the parameter.
  static unsigned int rect_hint_batch = 20;
  module_param(rect_hint_batch, uint, S_IRUGO|S_IWUSR);
  MODULE_PARM_DESC(rect_hint_batch, "Batch size when reading rect_hints in ioctl");
-@@ -1011,16 +1035,14 @@
+@@ -1011,16 +1047,14 @@
  			if (work_item & ROCKCHIP_EBC_WORK_ITEM_INIT) {
  				clip_ongoing_or_waiting = ebc->screen_rect;
  				memset(prelim_target, 0xff, ebc->num_pixels);
@@ -100,7 +121,7 @@ module reload without the parameter.
  				}
  				no_off_screen = false;
  				skip_advance = true;
-@@ -1043,8 +1065,7 @@
+@@ -1043,8 +1077,7 @@
  					}
  				}
  				clip_ongoing_or_waiting = ebc->screen_rect;
@@ -110,7 +131,7 @@ module reload without the parameter.
  				// Skip a single advance as we have performed one just now
  				skip_advance = true;
  				no_schedule_until_clip_empty = true;
-@@ -1089,8 +1110,7 @@
+@@ -1089,8 +1122,7 @@
  						!no_schedule_until_clip_empty &&
  							!work_item);
  			} else if (ebc->driver_mode == ROCKCHIP_EBC_DRIVER_MODE_NORMAL) {
@@ -120,7 +141,7 @@ module reload without the parameter.
  						ebc, prelim_target, hints, phase_buffer,
  						&clip_ongoing, &clip_ongoing_or_waiting,
  						early_cancellation_addition, 0,
-@@ -1184,6 +1204,12 @@
+@@ -1184,6 +1216,12 @@
  				     EBC_CONFIG_DONE_REG_CONFIG_DONE);
  			awaiting_completion = true;
  			awaiting_start = false;
@@ -133,7 +154,7 @@ module reload without the parameter.
  			if (testing < 2) {
  				regmap_write(
  					ebc->regmap, EBC_DSP_START,
-@@ -1399,10 +1425,14 @@
+@@ -1399,10 +1437,14 @@
  	int rate;
  
  	if (direct_mode) {
@@ -150,6 +171,18 @@ module reload without the parameter.
  		return rate;
  	}
  
+@@ -1484,6 +1526,11 @@
+ 	 * sync/bp/display/fp, aka sync/start/display/end.
+ 	 */
+ 	hact_start = sdck.htotal - sdck.hsync_start;
++	if (htotal_add > 0) {
++		pr_info("rockchip-ebc: stretching htotal %d -> %d sdck",
++			sdck.htotal, sdck.htotal + htotal_add);
++		sdck.htotal += htotal_add;
++	}
+ 	// mode.vtotal = 1404 + 12 + 1 + 4
+ 	// mode.vsync_start = 1404 + 12
+ 	// vact_start = 5
 --- a/drivers/gpu/drm/rockchip/rockchip_ebc.h	1969-12-31 17:00:01.000000000 -0700
 +++ b/drivers/gpu/drm/rockchip/rockchip_ebc.h
 @@ -216,6 +216,15 @@

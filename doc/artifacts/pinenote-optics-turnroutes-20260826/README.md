@@ -240,3 +240,31 @@ Post-wash signature worth knowing: prev=black for ~90 % of
 never-inked paper too (the GC16 inversion excursion is in the
 books); per-pixel hints read 0x2F where 0x20 was written
 (low-nibble flags, unexplained).
+
+## Part 7 — the line stretch: drive time banked, the gap cornered
+
+The dclk route died completely (every ask below 33.33 MHz snaps to a
+divider-capped 31.25 where the EBC is silent; the clk NAME cpll_333m
+describes CPLL/3 ancestry, not its rate — it is a repurposed
+adjustable divider off a ~1 GHz parent). The working lever is
+`htotal_add`: extra SDCK cycles as front porch with the gate window
+extended through them — real per-row drive time at the stock clock.
+
+| scan config | capture | raw | corrected |
+|---|---|---|---|
+| stock 12.0 ms (reference) | cap-par-gl16-1turn.png | +2.38 | +2.85 |
+| htotal_add=88 → 15.6 ms | cap-stretch-1turn.png | +1.81 | **+2.28** |
+| htotal_add=184 → 20.2 ms | cap-stretch20-1turn.png | +1.76 | +2.23 |
+
+Drive time is worth **~0.6 %** and saturates at the
+shipping-equivalent 15.6 ms — more buys nothing. Also closed this
+part: VCOM is exonerated with documentation (the chip's NVM holds
+this device's recorded calibration, 1430000 µV, never written by any
+driver — `doc/device-runbook.md`), and shipping's
+`refresh_waveform=6` decodes to plain **GL16** — no mode mystery.
+
+The remaining ~0.9 % to the shipping driver's +1.35 is cornered in
+ONE place: two independent decoders of the same wbf — our `wbf-clut`
+compilation (what the direct driver plays) vs `drm_epd_helper`'s
+in-kernel decode (what the hardware LUT plays). Decode-fidelity
+diffing is an OFFLINE hunt (host tools, no glass), queued next.
