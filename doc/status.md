@@ -3,6 +3,49 @@
 Last updated: 2026-08-26. Update protocol: add a dated entry at the top
 after every hardware session; entries are per-device/per-operator.
 
+## 2026-08-27 (part 15) — the three-way join: the belief is perfect, the residue is analog
+
+The operator asked whether we were running the DDR-era strategy —
+fb-belief vs glass — and we weren't: the ghost metric was
+intent-vs-glass only. The missing layer took no kernel work: **hrdl's
+direct driver ships EXTRACT_FBS live** (five userspace pointers:
+packed inner/outer/next-prev, hints, prelim/target, both phase
+planes; `0xC0286442`). `ebc-lab/belief-grab.lua` (new, with harness
+pins) dumped it two seconds after a settled ghosty turn, joined
+against the intent raws and the camera:
+
+**Every sampled ghost pixel (27,094) reads next=white, prev=black,
+inner=0, outer=0 — transition complete, history correct, nothing
+stuck, byte-identical belief to the paper regions.** The driver's
+bookkeeping and scheduling are fully exonerated; the residue the
+camera sees on those same pixels is ANALOG — the drive under-clears
+the glass.
+
+Which sharpened the surviving theory to one number: the shipping
+stack scans at ~63.7 Hz (**15.7 ms of voltage per phase**); direct
+mode scans at 83 Hz (**12.0 ms**) — ~24 % less charge on every one
+of GL16's 38 phases. Frame PACING can't test this (gaps deliver no
+drive — why the pacing sweep was ghost-neutral); only a slower SCAN
+does. A `dclk_rate_override` param went into the module loop to try
+it: the PLL quantizes (asked 25.5 MHz, got 31.25), and at 31.25 MHz
+the EBC goes SILENT — probe clean, zero frame IRQs, no error, revert
+by reload. The slow-scan test therefore needs dclk and htotal moved
+TOGETHER (real timing engineering, the top item for the next driver
+session; the param ships in the patch with its hazard documented).
+
+Also banked: post-wash belief shows prev=black for ~90 % of
+never-inked paper too — the GC16 global's inversion excursion is in
+the books, a useful signature for future joins. The per-pixel hints
+read 0x2F where 0x20 was written (low-nibble flags, unexplained,
+registered).
+
+**Device state at close**: direct parallel driver at stock dclk
+(11.9 ms frames verified), reader running, hint 32,
+`temp_override=22`, identity table, washed. Autosuspend still pinned
+off — RE-ENABLE at park. Shipping modules staged in
+`/root/mod-shipping/`, belief dumps and the night's captures in the
+committed artifact.
+
 ## 2026-08-27 (part 14) — slow frames: +0.3 % real, a fake miracle caught, and the gap band
 
 The operator's bandwidth-starvation theory (the DDR-DVFS corruption

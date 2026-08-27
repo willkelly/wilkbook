@@ -31,9 +31,36 @@ Two instruments ride along, both runtime-writable module params:
   - advance_bands (rockchip_ebc_blit_neon): 0 = auto (a band per CPU,
     max 4), N forces N bands.  The banding-correctness A/B instrument.
 
+A third instrument, added 2026-08-27: dclk_rate_override
+(rockchip_ebc) sets the direct-mode dclk in Hz at mode set (0 = the
+33.33 MHz default).  HAZARD: the EBC pipeline goes silent at
+off-design rates without matching timing adjustments (31.25 MHz:
+probe clean, zero frame IRQs, no error) -- it exists to support the
+slow-scan drive-energy work (the shipping stack scans ~24 % slower
+per phase, the sharpest surviving explanation of its 2x-cleaner
+residue), which needs dclk AND htotal moved together.  Revert by
+module reload without the parameter.
+
 --- a/drivers/gpu/drm/rockchip/rockchip_ebc.c	1969-12-31 17:00:01.000000000 -0700
 +++ b/drivers/gpu/drm/rockchip/rockchip_ebc.c
-@@ -316,6 +316,20 @@
+@@ -305,6 +305,16 @@
+ module_param(dclk_select, int, 0644);
+ MODULE_PARM_DESC(dclk_select, "-1: use dclk from mode, 0: 200 MHz (default), 1: 250");
+ 
++/*
++ * Direct-mode dclk rate in Hz (0 = the default 33.33 MHz).  The
++ * drive-energy lever: the scan period IS the per-phase voltage
++ * application time, and the shipping stack scanned ~24 % slower than
++ * direct mode's default.  Applied at mode set -- rebind to change.
++ */
++static int dclk_rate_override = 0;
++module_param(dclk_rate_override, int, 0644);
++MODULE_PARM_DESC(dclk_rate_override, "direct-mode dclk Hz (0 = 33.33 MHz default)");
++
+ static int temp_override = 0;
+ module_param(temp_override, int, S_IRUGO|S_IWUSR);
+ MODULE_PARM_DESC(temp_override, "Values > 0 override the temperature");
+@@ -316,6 +326,20 @@
  module_param(hskew_override, int, S_IRUGO|S_IWUSR);
  MODULE_PARM_DESC(hskew_override, "Override hskew value");
  
@@ -54,7 +81,7 @@ Two instruments ride along, both runtime-writable module params:
  static unsigned int rect_hint_batch = 20;
  module_param(rect_hint_batch, uint, S_IRUGO|S_IWUSR);
  MODULE_PARM_DESC(rect_hint_batch, "Batch size when reading rect_hints in ioctl");
-@@ -1011,16 +1025,14 @@
+@@ -1011,16 +1035,14 @@
  			if (work_item & ROCKCHIP_EBC_WORK_ITEM_INIT) {
  				clip_ongoing_or_waiting = ebc->screen_rect;
  				memset(prelim_target, 0xff, ebc->num_pixels);
@@ -73,7 +100,7 @@ Two instruments ride along, both runtime-writable module params:
  				}
  				no_off_screen = false;
  				skip_advance = true;
-@@ -1043,8 +1055,7 @@
+@@ -1043,8 +1065,7 @@
  					}
  				}
  				clip_ongoing_or_waiting = ebc->screen_rect;
@@ -83,7 +110,7 @@ Two instruments ride along, both runtime-writable module params:
  				// Skip a single advance as we have performed one just now
  				skip_advance = true;
  				no_schedule_until_clip_empty = true;
-@@ -1089,8 +1100,7 @@
+@@ -1089,8 +1110,7 @@
  						!no_schedule_until_clip_empty &&
  							!work_item);
  			} else if (ebc->driver_mode == ROCKCHIP_EBC_DRIVER_MODE_NORMAL) {
@@ -93,7 +120,7 @@ Two instruments ride along, both runtime-writable module params:
  						ebc, prelim_target, hints, phase_buffer,
  						&clip_ongoing, &clip_ongoing_or_waiting,
  						early_cancellation_addition, 0,
-@@ -1184,6 +1194,12 @@
+@@ -1184,6 +1204,12 @@
  				     EBC_CONFIG_DONE_REG_CONFIG_DONE);
  			awaiting_completion = true;
  			awaiting_start = false;
@@ -106,6 +133,23 @@ Two instruments ride along, both runtime-writable module params:
  			if (testing < 2) {
  				regmap_write(
  					ebc->regmap, EBC_DSP_START,
+@@ -1399,10 +1425,14 @@
+ 	int rate;
+ 
+ 	if (direct_mode) {
+-		rate = clk_set_rate(ebc->cpll_333m, 33333334);
++		int target = dclk_rate_override > 0 ? dclk_rate_override :
++			     33333334;
++		rate = clk_set_rate(ebc->cpll_333m, target);
+ 		if (rate < 0)
+ 			return rate;
+-		rate = clk_set_rate(ebc->dclk, 34000000);
++		rate = clk_set_rate(ebc->dclk,
++				    dclk_rate_override > 0 ? target :
++				    34000000);
+ 		return rate;
+ 	}
+ 
 --- a/drivers/gpu/drm/rockchip/rockchip_ebc.h	1969-12-31 17:00:01.000000000 -0700
 +++ b/drivers/gpu/drm/rockchip/rockchip_ebc.h
 @@ -216,6 +216,15 @@

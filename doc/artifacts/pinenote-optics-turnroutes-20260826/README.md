@@ -213,3 +213,30 @@ ship long gaps without solving the band.
 Instrument lesson repeated twice tonight: any arm whose capture shows
 the band must be measured with `stripe_cut` masks, and a dramatic
 result should be LOOKED AT before it is believed.
+
+## Part 6 — the three-way join: belief perfect, residue analog
+
+The DDR-era strategy revived on the operator's prompt: intent (the
+displayed raws) vs the DRIVER'S BELIEF (EXTRACT_FBS, live in hrdl's
+driver: packed inner/outer/next-prev + hints + prelim/target;
+`ebc-lab/belief-grab.lua`) vs glass (cap-belief-join.png, measured
++0.96 raw at the moment of the dump).
+
+In the a_only ghost regions, ALL 27,094 sampled pixels:
+`next_prev=0xF0` (white now, black before — the true history),
+`inner=0`, `outer=0` (idle, complete). Identical to paper. No stuck
+transitions, no WAITING parkings, no bookkeeping drift. **The
+residue is analog: the drive under-clears the glass.**
+
+Sharpest surviving theory: per-phase drive TIME — shipping scans
+15.7 ms/phase (63.7 Hz), direct 12.0 ms (83 Hz), ~24 % less charge
+per phase; pacing gaps deliver no drive (why the pacing sweep was
+neutral) — only a slower scan tests it. `dclk_rate_override` (in the
+parallel-advance patch) tried: PLL quantizes to 31.25 MHz and the
+EBC goes silent there (probe clean, zero frame IRQs) — the slow-scan
+test needs dclk + htotal moved together.
+
+Post-wash signature worth knowing: prev=black for ~90 % of
+never-inked paper too (the GC16 inversion excursion is in the
+books); per-pixel hints read 0x2F where 0x20 was written
+(low-nibble flags, unexplained).

@@ -26,6 +26,11 @@ function M.drm_iowr(nr, size) return M.drm_ioc(3, nr, size) end
 function M.drm_iow(nr, size) return M.drm_ioc(1, nr, size) end
 
 M.MODE_IOCTL = M.drm_iowr(0x04, 8)
+-- EXTRACT_FBS: five u64 userspace pointers (packed inner/outer/nextprev,
+-- hints, prelim/target, phase1, phase2); NULLs skipped.  The direct
+-- driver ships this live -- the belief half of the
+-- intent-vs-belief-vs-glass three-way join (doc/status.md part 15).
+M.EXTRACT_FBS_IOCTL = M.drm_iowr(0x02, 40)
 M.RECT_HINTS_IOCTL = M.drm_iow(0x03, 16)
 M.GLOBAL_REFRESH_IOCTL = M.drm_iowr(0x00, 1)
 

@@ -34,6 +34,9 @@ report(lib.PS_SIZE == 14224, "phase-sequence struct is 14224 bytes")
 report(lib.PHASE_SEQUENCE_IOCTL == 0x77906446,
     "PHASE_SEQUENCE ioctl is 0x77906446",
     string.format("0x%08X", lib.PHASE_SEQUENCE_IOCTL))
+report(lib.EXTRACT_FBS_IOCTL == 0xC0286442,
+    "EXTRACT_FBS ioctl is 0xC0286442 (5 u64 pointers)",
+    string.format("0x%08X", lib.EXTRACT_FBS_IOCTL))
 
 -- ------------------------------------------------------- rect hints
 do
@@ -185,7 +188,8 @@ do
         local f = io.open(p, "r"); local s = f:read("*a"); f:close(); return s
     end
     for _, p in ipairs({ "ebclib.lua", "rect-hints.lua", "phase-seq.lua",
-                         "page-flip.lua", "wipe-flip.lua", "frame-clock.lua" }) do
+                         "page-flip.lua", "wipe-flip.lua", "frame-clock.lua",
+                     "belief-grab.lua" }) do
         report(not slurp(p):match("/dev/dri/card%d"),
             p .. " carries no DRM card-index literal")
     end
@@ -202,7 +206,8 @@ do
 end
 
 for _, p in ipairs({ "ebclib.lua", "rect-hints.lua", "phase-seq.lua",
-                     "page-flip.lua", "wipe-flip.lua", "frame-clock.lua" }) do
+                     "page-flip.lua", "wipe-flip.lua", "frame-clock.lua",
+                     "belief-grab.lua" }) do
     report(loadfile(p) ~= nil, p .. " compiles")
 end
 
