@@ -1,6 +1,15 @@
 # PineNote power management: evidence first
 
-**Current state (2026-08-15).** What is hardware-proven, in one place:
+**Current state through 2026-08-15.** The measurement record below remains
+valid. On 2026-08-31 the accepted suspend implementation moved from the
+standalone `pinenote-autosuspend` daemon into the packaged, supervised
+`pinenote-platform-controls` broker; KOReader now owns idle timing and screen
+preparation, while the broker is the sole `/sys/power/state` writer. The
+Phase 2 hardware record is at the top of `doc/status.md`, with its archived
+acceptance narrative in
+`doc/artifacts/pinenote-platform-controls-v1-20260831/README.md`.
+
+What was hardware-proven by 2026-08-15:
 
 - **Ultra suspend is in production** (2026-08-08, R12): hrdl's rails-off
   configuration adopted whole on the primary kernel

@@ -1,0 +1,110 @@
+#!/bin/sh
+set -eu
+
+action=${1:-}
+run_dir=${PINENOTE_WIFI_RUN_DIR:-/run/wilkbook-power}
+proc_root=${PINENOTE_WIFI_PROC_ROOT:-/proc}
+sys_root=${PINENOTE_WIFI_SYS_ROOT:-/sys}
+conf=${PINENOTE_WIFI_CONF:-/data/wifi/wlan0.conf}
+pidfile="$run_dir/wpa_supplicant-wlan0.pid"
+state="$run_dir/wifi.state"
+iface=wlan0
+mkdir -p "$run_dir"
+
+wpa_supplicant_bin=${PINENOTE_WIFI_WPA_SUPPLICANT:-/run/current-system/profile/sbin/wpa_supplicant}
+rfkill_bin=${PINENOTE_WIFI_RFKILL:-/run/current-system/profile/sbin/rfkill}
+dhcpcd_bin=${PINENOTE_WIFI_DHCPCD:-/run/current-system/profile/sbin/dhcpcd}
+if [ ! -x "$wpa_supplicant_bin" ]; then wpa_supplicant_bin=$(command -v wpa_supplicant 2>/dev/null || true); fi
+if [ ! -x "$rfkill_bin" ]; then rfkill_bin=$(command -v rfkill 2>/dev/null || true); fi
+if [ ! -x "$dhcpcd_bin" ]; then dhcpcd_bin=$(command -v dhcpcd 2>/dev/null || true); fi
+
+matching_pid() {
+    pid=$1
+    case "$pid" in ''|*[!0-9]*) return 1;; esac
+    [ -r "$proc_root/$pid/cmdline" ] || return 1
+    cmd=$(tr '\000' ' ' < "$proc_root/$pid/cmdline")
+    case "$cmd" in
+        *wpa_supplicant*"-i $iface"*"-c $conf"*|*wpa_supplicant*"-i$iface"*"-c$conf"*) return 0;;
+        *) return 1;;
+    esac
+}
+
+valid_pid() {
+    [ -r "$pidfile" ] || return 1
+    matching_pid "$(sed -n '1p' "$pidfile")"
+}
+
+# The stock image starts one supplicant without -P.  During validation we
+# adopt it only when there is exactly one process whose interface and config
+# both match our ownership contract.  Ambiguity is a hard refusal: launching
+# another daemon or guessing which process to signal would both be unsafe.
+adopt_pid() {
+    [ ! -e "$pidfile" ] || return 1
+    found=
+    for process in "$proc_root"/[0-9]*; do
+        candidate=${process##*/}
+        matching_pid "$candidate" || continue
+        [ -z "$found" ] || {
+            echo "pinenote-wifi: multiple matching supplicants; refusing ownership" >&2
+            return 1
+        }
+        found=$candidate
+    done
+    [ -n "$found" ] || return 1
+    printf '%s\n' "$found" > "$pidfile"
+    pid=$found
+    echo "pinenote-wifi: adopted existing supplicant pid=$pid" >&2
+}
+
+wifi_on() {
+    valid_pid || adopt_pid || return 1
+    [ -e "$sys_root/class/net/$iface" ]
+}
+
+case "$action" in
+status)
+    if wifi_on; then echo "on pid=$pid"; exit 0; fi
+    echo off; exit 1
+    ;;
+on)
+    if wifi_on; then echo "pinenote-wifi: already on pid=$pid"; exit 0; fi
+    [ -f "$conf" ] || { echo "pinenote-wifi: missing $conf" >&2; exit 1; }
+    if [ -e "$pidfile" ]; then
+        echo "pinenote-wifi: removing stale or foreign pid file" >&2
+        rm -f "$pidfile"
+    fi
+    [ -z "$rfkill_bin" ] || "$rfkill_bin" unblock wifi || true
+    i=0
+    while [ ! -e "$sys_root/class/net/$iface" ] && [ "$i" -lt 50 ]; do
+        sleep 0.2; i=$((i + 1))
+    done
+    [ -e "$sys_root/class/net/$iface" ] || { echo "pinenote-wifi: wlan0 unavailable" >&2; exit 1; }
+    [ -n "$wpa_supplicant_bin" ] || { echo "pinenote-wifi: wpa_supplicant unavailable" >&2; exit 1; }
+    "$wpa_supplicant_bin" -B -P "$pidfile" -i "$iface" -c "$conf"
+    valid_pid || { echo "pinenote-wifi: supplicant pid validation failed" >&2; exit 1; }
+    if [ -n "$dhcpcd_bin" ]; then
+        "$dhcpcd_bin" -n "$iface" >/dev/null 2>&1 || "$dhcpcd_bin" -b "$iface" >/dev/null 2>&1 || true
+    fi
+    printf 'on\n' > "$state"
+    echo "pinenote-wifi: on pid=$pid"
+    ;;
+off)
+    if valid_pid; then
+        printf 'on\n' > "$state"
+        if [ "${PINENOTE_WIFI_NO_KILL:-0}" != 1 ]; then
+            kill "$pid"
+            i=0
+            while [ -e "$proc_root/$pid" ] && [ "$i" -lt 50 ]; do sleep 0.1; i=$((i + 1)); done
+            [ -e "$proc_root/$pid" ] && { echo "pinenote-wifi: supplicant did not exit" >&2; exit 1; }
+        fi
+        rm -f "$pidfile"
+    else
+        [ ! -e "$pidfile" ] || echo "pinenote-wifi: refusing to signal unvalidated pid file" >&2
+        rm -f "$pidfile"
+        printf 'off\n' > "$state"
+    fi
+    [ -z "$rfkill_bin" ] || "$rfkill_bin" block wifi || true
+    echo "pinenote-wifi: off"
+    ;;
+*) echo "usage: pinenote-wifi-control on|off|status" >&2; exit 2;;
+esac

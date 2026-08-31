@@ -25,7 +25,11 @@ device contents. The rootfs helpers operate on host-side image files: extract
 the single ext4 partition from Guix's raw image intermediate, label it
 `PNGuixRoot`, normalize the embedded extlinux root argument, reject artifacts
 that still look like partitioned disks, and stage a rootfs-matched boot bundle
-from the same image.
+from the same image.  The reader rootfs inspection also resolves the baked
+platform-controls package and generated Shepherd services, verifies
+reader-session's broker/device ordering, and rejects the legacy autosuspend
+service; source-only wiring checks are not a substitute for this closure-level
+gate.
 
 `inspect-kernel-source.sh KERNEL_SOURCE RESOLVED_CONFIG` statically checks the
 patched PineNote kernel source plus a separately build-produced `.config`,
@@ -49,11 +53,12 @@ KOREADER_DEVICE_LUA` is the fail-closed **offline** suspend gate. It requires
 exact kernel suspend/debug config, rejects enabled hidden activation, and proves the compiled
 DT has one exact policy-free root compatibility node, no CPU idle states, and
 effectively enabled wake declarations exactly matching the verified cover
-switch and RK817 PMIC identities. It requires `suspend_policy.lua` to contain
-only `return false`, then runs `validate-pinenote-suspend-policy.lua` under a timeout. The harness
-loads `device.lua` twice in a restricted environment with injected false/true
-policy values and requires the returned class's `canSuspend` function to follow
-both. `make suspend-check` runs positive and adversarial fixtures. Passing does
+switch and RK817 PMIC identities. It keeps the now-dormant
+`suspend_policy.lua` pinned to `return false`, then runs
+`validate-pinenote-suspend-policy.lua` under a timeout. The harness loads
+`device.lua` in a restricted environment and requires the returned class to
+expose the hardware-accepted broker path without importing the legacy policy.
+`make suspend-check` runs positive and adversarial fixtures. Passing does
 not prove boot firmware, DDR retention, runtime wake policy, physical wake
 routing, EBC power rails, resume, or suspend current.
 

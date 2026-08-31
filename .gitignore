@@ -18,3 +18,7 @@ __pycache__/
 # per-checkout build flags (e.g. WILKBOOK_VERY_INSECURE_FOR_CONVENIENCE);
 # never committed -- see pinenote/insecure.scm
 /local.mk
+
+# per-device PineNote backups contain irreplaceable factory calibration
+# and must never be committed
+/device-backups/
