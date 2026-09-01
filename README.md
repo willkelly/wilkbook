@@ -31,9 +31,10 @@ Three words you will meet immediately: **os1/os2** — the two OS slots
 partition ever written); **on glass** — on the physical e-ink panel;
 **rung** — a step on the offline validation ladder (`doc/testing.md`).
 
-Built by one human and a lot of AI, validated on exactly one device, and
-public so other PineNote people can take the useful parts. Which brings
-us to:
+Built by one human and a lot of AI — plus, since 2026-08-31, a first
+outside contributor with their own PineNote — validated on two devices
+total, and public so other PineNote people can take the useful parts.
+Which brings us to:
 
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -61,11 +62,13 @@ yourself exactly which kind of insane you are:
   session. If the phrase "AI-generated kernel patches on my eMMC" just
   set off a small alarm in your head: GOOD. That alarm is CORRECT.
   Consult it often.
-- **HARDLY TESTED means HARDLY TESTED.** Every measured number, every
-  "proven on glass" claim, comes from ONE PineNote v1.2. One. There is
-  no fleet. There is no QA lab. **NO SECOND PERSON HAS EVER INSTALLED
-  THIS.** `doc/install.md` admits it in its first paragraph, because
-  honesty is cheaper than support.
+- **HARDLY TESTED means HARDLY TESTED.** Nearly every measured number,
+  nearly every "proven on glass" claim, comes from ONE PineNote v1.2.
+  There is no fleet. There is no QA lab. As of 2026-08-31 exactly ONE
+  second person has ever installed this (on a second PineNote v1.2 —
+  `doc/status.md`), which makes the count TWO devices, not a
+  track record. `doc/install.md` says so in its first paragraph,
+  because honesty is cheaper than support.
 - **YOU WILL BE RUNNING `dd` AGAINST YOUR TABLET'S eMMC.** Deployment
   writes a rootfs onto a device that is *notoriously awkward* to
   reflash. The protocol is paranoid — hash before, hash after,

@@ -5,14 +5,18 @@ already verify, a UART already works, and you already know which slot you
 are on. This page is what has to be true *before* that protocol applies —
 the path from "I have a PineNote and this repo" to "os2 boots my build".
 
-**No second person has done this.** Every hardware claim in this repo
-comes from one PineNote v1.2 and one operator (`doc/status.md`, entries
-are labelled per device/operator). This page is derived from the repo's
-own code and procedures; it is not the record of a replayed install.
-Where the repo genuinely does not answer something, it is marked
-**open** rather than smoothed over. Read the disclaimer in `README.md`
-first: this writes to a partition on a device most people cannot easily
-re-flash.
+**A second person has now done this.** On 2026-08-31 a second operator
+(rpedde) completed the whole path on their own PineNote — independent
+backups, image built from the repo, staged write from stock os1 with
+readback verification, cold boots, and a full suspend/wake acceptance
+matrix (`doc/status.md`, entries are labelled per device/operator).
+Until then every hardware claim in this repo came from one device and
+one operator. This page was derived from the repo's own code and
+procedures rather than from a replayed install, and it has not yet been
+reconciled line-by-line against that second install; where the repo
+genuinely does not answer something, it is marked **open** rather than
+smoothed over. Read the disclaimer in `README.md` first: this writes to
+a partition on a device most people cannot easily re-flash.
 
 ## 1. What you need
 

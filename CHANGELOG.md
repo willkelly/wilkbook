@@ -17,7 +17,41 @@ says otherwise.
 
 ## Unreleased
 
-(nothing yet)
+### Suspend and wake: the platform-controls broker (first outside contribution)
+
+- **Sleep is now a conversation with the reader instead of a rug-pull**
+  (PR #41, rpedde — hardware-accepted on their own PineNote,
+  2026-08-31, `doc/status.md`). Power button, cover close, the menu's
+  Sleep item, and KOReader's AutoSuspend all reach one acknowledged
+  path: KOReader checkpoints your place, paints its sleep screen, and
+  quarantines input *before* the supervised broker writes the suspend.
+  If the reader can't answer within ten seconds, a fallback SUSPEND
+  frame is painted and the device sleeps anyway.
+- **What a tester will notice**: a real sleep screen (screensaver
+  support, including custom images); frontlight level *and* warmth come
+  back exactly after wake and survive a reader restart; the frontlight
+  toggle no longer forgets your brightness; Wi-Fi has an on/off toggle
+  in KOReader and honors its "restore Wi-Fi after resume" setting;
+  Power Off in the menu actually powers off.
+- **Policy changes, accepted deliberately**: the idle timeout is now
+  KOReader's AutoSuspend setting (default 15 min, user-settable in the
+  UI) instead of the fixed 5-minute daemon; a device on the charger no
+  longer auto-sleeps (set `suspend_while_charging=1` in
+  `autosuspend.conf` to restore the old behavior). `enabled=0` in
+  `/data/wilkbook/autosuspend.conf` still pauses everything, re-read
+  continuously; an old `idle=` line is logged once and ignored.
+- The RTC safety backstop, deep/ultra suspend machinery, and the
+  single-writer rule for `/sys/power/state` are preserved; a button
+  wake now also clears the still-armed backstop alarm. The standalone
+  autosuspend daemon is retired from the reader flavors.
+- Ron's acceptance run doubled as two independent firsts: the first
+  completed second-person install (`doc/install.md` is no longer
+  unverified), and the first validated cold boots of the
+  shipping-driver 7.1.8 reader image on glass.
+- Not yet on any deployed wilkbook device: the v0.2.0 image on os2
+  predates this and still runs the old daemon; the broker rides the
+  next built image. The broker + direct-driver combination has not had
+  a hardware session yet.
 
 ## v0.2.0-prealpha — 2026-08-27
 
