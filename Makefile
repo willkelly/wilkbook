@@ -74,7 +74,7 @@ FIXTURE ?= os1-used
 FLAVORS = minimal slim networked dev usb-console usb-console-linux-6-6 reader reader-debug reader-direct
 
 .PHONY: help packages kernel kernel-drv reader-system-drv qemu-smoke qemu-virt qemu-virt-check qemu-pageturn-campaign refresh-episodes-check refresh-trigger-check \
-         check-host wbf-check wbf-notice clut-check ebc-logic-check ebc-barrier-check rastersim-check koreader-input-check orientation-check optics-check optics-audit-dataset power-check rockchip-pm-check activation-positive-check suspend-check \
+         check-host wbf-check wbf-notice clut-check ebc-logic-check ebc-barrier-check rastersim-check koreader-input-check orientation-check platform-controls-check optics-check optics-audit-dataset power-check rockchip-pm-check activation-positive-check suspend-check \
         battery-dtb-check time-machine-check gexp-modules-check \
         timezone-check kernel-version-check library-check \
         manuals-check ultra-coupling-check timesync-check \
@@ -105,6 +105,7 @@ help:
 	@echo "  rastersim-check   raster/waveform simulation checks ([WBF=..])"
 	@echo "  koreader-input-check  KOReader input, touch, and virtual-node lifecycle tests"
 	@echo "  orientation-check SC7A20 classifier and uinput bridge tests"
+	@echo "  platform-controls-check acknowledged suspend broker and production service integration"
 	@echo "  optics-check      deterministic recorder/bundle/analysis tests (incl. the evidence-audit passes)"
 	@echo "  optics-audit-dataset  re-check the 2026-07-12 evidence audit against doc/datasets (stdlib only)"
 	@echo "  power-check       fake-root tests for the read-only Guile power recorder; auto-suspend post-wake policy"
@@ -329,7 +330,7 @@ refresh-trigger-check:
 # rather than restating it, so a suite added here is picked up automatically
 # instead of quietly missing from CI.
 CHECK_HOST_TARGETS = clut-check ebc-logic-check ebc-barrier-check rastersim-check \
-        koreader-input-check orientation-check optics-check power-check \
+        koreader-input-check orientation-check platform-controls-check optics-check power-check \
         rockchip-pm-check activation-positive-check suspend-check \
         library-check koreader-profile-check manuals-check ultra-coupling-check \
         battery-dtb-check time-machine-check gexp-modules-check \
@@ -449,6 +450,9 @@ koreader-input-check:
 orientation-check:
 	$(call guix-shell,luajit) $(MAKE) -C pinenote/tools/orientation check
 
+platform-controls-check:
+	$(call guix-shell,luajit) $(MAKE) -C pinenote/tools/platform-controls check
+
 # E-ink optical-defect detectors (optics harness analysis core). Deterministic
 # validation of the flash/ghost/settle/double-flash classifiers against
 # synthetic clips with known injected defects; no camera, no device. Also
@@ -548,7 +552,7 @@ rockchip-pm-check:
 	$(call guix-shell,dtc gcc-toolchain git python) $(MAKE) -C pinenote/tools/rockchip-pm check
 
 # Deliberately composite: the positive fake scenarios may pass only alongside
-# the unchanged production hard-off gate. Nothing here can write power state.
+# the production suspend gate. Nothing here can write power state.
 activation-positive-check:
 	$(call guix-shell,dtc gcc-toolchain git python luajit) sh -c 'set -e; \
 	  $(MAKE) -C pinenote/tools/power power-capabilities-check; \
@@ -558,7 +562,7 @@ activation-positive-check:
 	  sh pinenote/scripts/preflight/test-inspect-pinenote-suspend-gates.sh'
 
 # Fail-closed suspend qualification checks. These prove only static config,
-# approved DT wake capability, and restricted KOReader policy evaluation.
+# approved DT wake capability, and restricted KOReader device evaluation.
 # Pin the exact channel set this tree builds against.  channels.scm IS the
 # reproducibility claim: `guix time-machine -C channels.scm -- ...` rebuilds
 # the identical closure on any machine, which is the one thing a rolling

@@ -42,30 +42,46 @@ local PineNotePowerD = BasePowerD:new{
 
     hw_cool_max = 255,
     hw_warm_max = 255,
+    hw_intensity = 0,
     fl_warmth = 0,
 }
 
 function PineNotePowerD:init()
     self.hw_cool_max = readNumber(COOL .. "/max_brightness") or 255
     self.hw_warm_max = readNumber(WARM .. "/max_brightness") or 255
-    -- Reflect whatever is currently set (e.g. from a previous session).
+    -- Reconstruct the aggregate level and warmth from both PWM strings.  A
+    -- mixed light may have a low cool value while still being at full overall
+    -- intensity, so neither channel alone is an intensity reading.
     local cool = readNumber(COOL .. "/actual_brightness")
         or readNumber(COOL .. "/brightness") or 0
-    self.fl_intensity = math.floor(cool / self.hw_cool_max * self.fl_max + 0.5)
+    local warm = readNumber(WARM .. "/actual_brightness")
+        or readNumber(WARM .. "/brightness") or 0
+    local cool_level = cool / self.hw_cool_max
+    local warm_level = warm / self.hw_warm_max
+    local total = cool_level + warm_level
+    self.hw_intensity = math.floor(math.min(total, 1) * self.fl_max + 0.5)
+    self.fl_intensity = self.hw_intensity
+    self.fl_warmth = total > 0
+        and math.floor(warm_level / total * self.fl_warmth_max + 0.5)
+        or self.fl_warmth_min
 end
 
 function PineNotePowerD:frontlightIntensityHW()
-    return self.fl_intensity
+    return self.hw_intensity
+end
+
+function PineNotePowerD:isFrontlightOnHW()
+    return self.hw_intensity > self.fl_min
 end
 
 function PineNotePowerD:frontlightWarmthHW()
     return self.fl_warmth
 end
 
-function PineNotePowerD:_applyLight()
+function PineNotePowerD:_applyLight(intensity)
     -- Warmth cross-fades between the two strings: at warmth 0 only the
     -- cool string is lit, at 100 only the warm one.
-    local level = self.fl_intensity / self.fl_max
+    local level = intensity / self.fl_max
     local warmth = (self.fl_warmth or 0) / self.fl_warmth_max
     local cool = math.floor(level * (1 - warmth) * self.hw_cool_max + 0.5)
     local warm = math.floor(level * warmth * self.hw_warm_max + 0.5)
@@ -76,13 +92,18 @@ function PineNotePowerD:_applyLight()
 end
 
 function PineNotePowerD:setIntensityHW(intensity)
-    self.fl_intensity = intensity or self.fl_intensity
-    self:_applyLight()
+    -- BasePowerD keeps fl_intensity as the last requested nonzero level when
+    -- toggling off, so that the next toggle can restore it.  Track the level
+    -- actually written to hardware separately instead of destroying that
+    -- remembered value with the temporary zero.
+    self.hw_intensity = intensity or self.fl_intensity
+    self:_applyLight(self.hw_intensity)
+    self:_decideFrontlightState()
 end
 
 function PineNotePowerD:setWarmthHW(warmth)
     self.fl_warmth = warmth or self.fl_warmth
-    self:_applyLight()
+    self:_applyLight(self.hw_intensity)
 end
 
 function PineNotePowerD:getCapacityHW()
@@ -105,6 +126,18 @@ function PineNotePowerD:isChargingHW()
     local status = f:read("*line")
     f:close()
     return status == "Charging"
+end
+
+function PineNotePowerD:beforeSuspend()
+    -- The broker owns the physical light save/off/restore transaction.  Here
+    -- KOReader checkpoints, broadcasts Suspend, and quarantines input before
+    -- PineNote:suspend writes its `ready ID` acknowledgement.
+    self.device:_beforeSuspend()
+end
+
+function PineNotePowerD:afterResume()
+    self:invalidateCapacityCache()
+    self.device:_afterResume()
 end
 
 return PineNotePowerD

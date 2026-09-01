@@ -15,7 +15,7 @@ end
 local device_source = device_file:read("*a")
 device_file:close()
 
-local function evaluate(policy_value)
+local function evaluate()
     local policy_requires = 0
     local Generic = {}
 
@@ -26,7 +26,7 @@ local function evaluate(policy_value)
     local function restricted_require(name)
         if name == "device/pinenote/suspend_policy" then
             policy_requires = policy_requires + 1
-            return policy_value
+            return false
         end
         if name == "device/generic/device" then
             return Generic
@@ -79,8 +79,8 @@ local function evaluate(policy_value)
     if not loaded then
         fail("restricted device evaluation failed: " .. tostring(class_or_error))
     end
-    if policy_requires ~= 1 then
-        fail("device source requested suspend policy " .. policy_requires .. " times")
+    if policy_requires ~= 0 then
+        fail("production device still requested the legacy suspend policy")
     end
     if type(class_or_error) ~= "table" then
         fail("device source did not return a table")
@@ -93,11 +93,10 @@ local function evaluate(policy_value)
     if not called then
         fail("returned canSuspend function failed: " .. tostring(value))
     end
-    if value ~= policy_value then
-        fail("returned canSuspend does not follow injected suspend policy")
+    if value ~= true then
+        fail("returned canSuspend does not expose the accepted broker path")
     end
 end
 
-evaluate(false)
-evaluate(true)
-print("PASS: restricted PineNote suspend policy evaluation follows both injected values")
+evaluate()
+print("PASS: restricted PineNote evaluation exposes the hardware-accepted broker path")

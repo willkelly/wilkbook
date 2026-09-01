@@ -10,15 +10,16 @@
   #:use-module (pinenote packages fonts)
   #:use-module (pinenote packages koreader)
   #:use-module (pinenote packages orientation)
+  #:use-module (pinenote packages platform-controls)
   #:use-module (pinenote services orientation)
   #:use-module (pinenote services koreader-profile)
   #:use-module (pinenote services reader-session)
+  #:use-module (pinenote services platform-controls)
   #:use-module (pinenote services dmc)
   #:use-module (pinenote services library)
   #:use-module (pinenote services manuals)
   #:use-module (pinenote services frontlight)
   #:use-module (pinenote services ddr-boost)
-  #:use-module (pinenote services autosuspend)
   #:use-module (pinenote services ssh-keys)
   #:use-module (pinenote services timesync)
   #:use-module (pinenote services usb-gadget)
@@ -52,6 +53,7 @@ root ALL=(ALL) ALL
 ;; exactly the packages that are on the device and nothing else.
 (define %pinenote-reader-packages
   (append (list koreader-bin pinenote-orientation-bridge
+                pinenote-platform-controls
                 ;; wpa_supplicant + wpa_cli in the profile: pinenote-wifi
                 ;; execs them, and Phase 2's KOReader Wi-Fi UI will drive
                 ;; wpa_cli against the same conf.
@@ -101,14 +103,12 @@ root ALL=(ALL) ALL
                           (pinenote-manuals-configuration
                            (packages (pinenote-fix-package-list
                                       %pinenote-reader-packages))))
+                 ;; The acknowledged suspend broker must create its named
+                 ;; uinput device before reader-session starts.  It owns all
+                 ;; physical/cover triggers and every /sys/power/state write;
+                 ;; KOReader owns idle policy and screen preparation.
+                 (service pinenote-platform-controls-service-type)
                  (service pinenote-reader-session-service-type)
-                 ;; Sleep to deep after inactivity: ~7x on measured power
-                 ;; (172 mA awake vs 19.3 mA deep, 2026-08-02).  Wake is by
-                 ;; power button, hardware-proven, with an RTC backstop
-                 ;; armed every cycle so a wake regression cannot strand
-                 ;; the device.  Runtime-tunable via
-                 ;; /var/lib/pinenote/autosuspend.conf.
-                 (service pinenote-autosuspend-service-type)
                 ;; Wi-Fi (doc/networking.md): associate from an out-of-band
                 ;; credential file on the persistent data partition (no-op
                 ;; when absent), and lease with dhcpcd.  Credentials are

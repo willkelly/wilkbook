@@ -184,8 +184,8 @@ UART or a human at the menu.
 - **Auto-suspend makes SSH intermittent**: the device is only reachable
   for the idle window after the last input, and Wi-Fi re-association eats
   several seconds of it after each wake. To work on the device, first
-  write `enabled=0` to `/var/lib/pinenote/autosuspend.conf` (re-read
-  before every idle wait; no restart needed).
+  write `enabled=0` to `/var/lib/pinenote/autosuspend.conf` (the
+  platform-controls broker re-reads it continuously; no restart needed).
 - **Wake it with the power button, not by waiting for the RTC.** Since
   2026-08-07 an RTC-backstop wake re-suspends after ~20 s (nobody is
   present when the alarm fires — `doc/power-management.md`, "The idle

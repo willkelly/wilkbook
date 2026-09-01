@@ -64,40 +64,22 @@ printf '%s\n' '-- return false' 'return false' >"$tmpdir/comment-policy.lua"
 printf 'return "false"\n' >"$tmpdir/string-policy.lua"
 printf '%s\n' 'return false' 'return true' >"$tmpdir/later-override-policy.lua"
 
-cat >"$tmpdir/comment-computed-enable.lua" <<'EOF'
---[[
-local suspend_qualified = require("device/pinenote/suspend_policy")
-    canSuspend = suspend_qualified and yes or no,
-]]
+cat >"$tmpdir/legacy-policy-import.lua" <<'EOF'
 local Generic = require("device/generic/device")
 local suspend_qualified = require("device/pinenote/suspend_policy")
 return Generic:extend{
-    ["can" .. "Suspend"] = function() return true end,
+    canSuspend = function() return true end,
 }
 EOF
-cat >"$tmpdir/string-computed-enable.lua" <<'EOF'
-local expected = [[local suspend_qualified = require("device/pinenote/suspend_policy")
-    canSuspend = suspend_qualified and yes or no,]]
+cat >"$tmpdir/disabled-suspend.lua" <<'EOF'
 local Generic = require("device/generic/device")
-local suspend_qualified = require("device/pinenote/suspend_policy")
-return Generic:extend{
-    ["can" .. "Suspend"] = function() return true end,
-}
-EOF
-cat >"$tmpdir/later-computed-override.lua" <<'EOF'
-local Generic = require("device/generic/device")
-local suspend_qualified = require("device/pinenote/suspend_policy")
-local PineNote = Generic:extend{
-    canSuspend = suspend_qualified and yes or no,
-}
-PineNote["can" .. "Suspend"] = function() return true end
-return PineNote
-EOF
-cat >"$tmpdir/ignored-policy.lua" <<'EOF'
-local Generic = require("device/generic/device")
-local suspend_qualified = require("device/pinenote/suspend_policy")
 return Generic:extend{
     canSuspend = function() return false end,
+}
+EOF
+cat >"$tmpdir/missing-suspend.lua" <<'EOF'
+local Generic = require("device/generic/device")
+return Generic:extend{
 }
 EOF
 
@@ -412,10 +394,9 @@ expect_reject 'enabled policy' "$tmpdir/good.config" "$tmpdir/good.dtb" "$tmpdir
 expect_reject 'comment policy spoof' "$tmpdir/good.config" "$tmpdir/good.dtb" "$tmpdir/comment-policy.lua" "$repo_device"
 expect_reject 'string policy spoof' "$tmpdir/good.config" "$tmpdir/good.dtb" "$tmpdir/string-policy.lua" "$repo_device"
 expect_reject 'later-override policy spoof' "$tmpdir/good.config" "$tmpdir/good.dtb" "$tmpdir/later-override-policy.lua" "$repo_device"
-expect_reject 'comment-hidden expected lines with computed enablement' "$tmpdir/good.config" "$tmpdir/good.dtb" "$repo_policy" "$tmpdir/comment-computed-enable.lua"
-expect_reject 'string-hidden expected lines with computed enablement' "$tmpdir/good.config" "$tmpdir/good.dtb" "$repo_policy" "$tmpdir/string-computed-enable.lua"
-expect_reject 'later computed canSuspend override' "$tmpdir/good.config" "$tmpdir/good.dtb" "$repo_policy" "$tmpdir/later-computed-override.lua"
-expect_reject 'ignored suspend policy with hardcoded disabled value' "$tmpdir/good.config" "$tmpdir/good.dtb" "$repo_policy" "$tmpdir/ignored-policy.lua"
+expect_reject 'production import of the dormant legacy policy' "$tmpdir/good.config" "$tmpdir/good.dtb" "$repo_policy" "$tmpdir/legacy-policy-import.lua"
+expect_reject 'production canSuspend returning false' "$tmpdir/good.config" "$tmpdir/good.dtb" "$repo_policy" "$tmpdir/disabled-suspend.lua"
+expect_reject 'production device without canSuspend' "$tmpdir/good.config" "$tmpdir/good.dtb" "$repo_policy" "$tmpdir/missing-suspend.lua"
 for module in ebc_barrier ebc_sleep_frame power_capabilities power_coordinator; do
   expect_reject "production device dormant $module reference" "$tmpdir/good.config" "$tmpdir/good.dtb" "$repo_policy" "$tmpdir/import-$module.lua"
 done
