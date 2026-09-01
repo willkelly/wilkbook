@@ -28,8 +28,9 @@ attribution before restoring EBC, input, frontlight, idlewasher, and the final
 non-blocking Wi-Fi handoff, then notifies the reader with that attribution. It
 proves exact ordering, a durable prepared/failure-record boundary, permanent
 poisoning after any failed stage or restore, and remains dormant and unimported.
-Run both as part of `make activation-positive-check`; that composite
-target also reruns the production activation-hard-off suspend preflight.
+Run both as part of `make activation-positive-check`; that composite also
+reruns the production suspend preflight. These isolated modules remain dormant;
+the accepted production path is the separately supervised platform broker.
 
 `power-snapshot.scm` records a versioned S-expression from an explicit root
 (default `/`) and compares saved snapshots.  It uses only base Guile, never

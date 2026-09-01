@@ -30,6 +30,16 @@ symlink_target() {
   image_stat "$1" | sed -n 's/^Fast link dest: "\(.*\)"$/\1/p'
 }
 
+unique_store_path() {
+  pattern=$1
+  description=$2
+  matches=$(printf '%s\n' "$store_listing" | awk '{ print $NF }' | grep -- "$pattern" || true)
+  count=$(printf '%s\n' "$matches" | sed '/^$/d' | wc -l)
+  [ "$count" -eq 1 ] || \
+    fail "expected exactly one $description in the image store, found $count"
+  printf '/gnu/store/%s\n' "$matches"
+}
+
 if [ "$#" -ne 1 ]; then
   usage
   exit 2
@@ -103,8 +113,12 @@ case "$system_store" in
   /gnu/store/*-system) ;;
   *) fail "persistent system generation has invalid store target: $system_store" ;;
 esac
+store_listing=$(debugfs -R 'ls -l /gnu/store' "$rootfs_image" 2>/dev/null) || \
+  fail "could not list the image's Guix store"
 require_image_path "$system_store/profile/bin/pinenote-ebc-sleep-frame-test" \
   "packaged EBC sleep-frame test"
+require_image_path "$system_store/profile/bin/pinenote-wifi-control" \
+  "packaged PineNote Wi-Fi control"
 
 tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/inspect-rootfs-image.XXXXXX") || \
   fail "could not create temporary inspection directory"
@@ -127,6 +141,60 @@ case "$barrier_target" in
   *) fail "packaged EBC sleep-frame test has invalid target: $barrier_target" ;;
 esac
 require_image_path "$barrier_target" "packaged EBC sleep-frame executable"
+
+debugfs -R "dump $system_store/profile/bin/pinenote-wifi-control $tmpdir/wifi-link" \
+  "$rootfs_image" >/dev/null 2>&1 || fail "could not resolve packaged PineNote Wi-Fi control"
+wifi_target=$(tr -d '\n' <"$tmpdir/wifi-link")
+case "$wifi_target" in
+  /gnu/store/*-pinenote-platform-controls-*/bin/pinenote-wifi-control) ;;
+  *) fail "packaged PineNote Wi-Fi control has invalid target: $wifi_target" ;;
+esac
+platform_controls_store=${wifi_target%/bin/pinenote-wifi-control}
+require_image_path "$wifi_target" "packaged PineNote Wi-Fi executable"
+require_image_path "$platform_controls_store/share/pinenote-platform-controls/pinenote-power-broker.lua" \
+  "packaged suspend broker"
+require_image_path "$platform_controls_store/share/pinenote-platform-controls/broker_protocol.lua" \
+  "packaged suspend broker protocol"
+
+platform_service=$(unique_store_path \
+  '-shepherd-pinenote-platform-controls\.scm$' \
+  "generated pinenote-platform-controls Shepherd service")
+reader_service=$(unique_store_path \
+  '-shepherd-reader-session\.scm$' \
+  "generated reader-session Shepherd service")
+if printf '%s\n' "$store_listing" | awk '{ print $NF }' | \
+     grep -q -- '-shepherd-pinenote-autosuspend\.scm$'; then
+  fail "legacy pinenote-autosuspend Shepherd service is present in the reader image"
+fi
+pass "legacy pinenote-autosuspend Shepherd service is absent"
+
+debugfs -R "dump $platform_service $tmpdir/platform-service.scm" \
+  "$rootfs_image" >/dev/null 2>&1 || fail "could not extract generated platform-controls service"
+debugfs -R "dump $reader_service $tmpdir/reader-service.scm" \
+  "$rootfs_image" >/dev/null 2>&1 || fail "could not extract generated reader-session service"
+
+for token in \
+  '(quote (pinenote-platform-controls))' \
+  '#:respawn? (quote #t)' \
+  '/var/log/pinenote-platform-controls.log' \
+  'WILKBOOK_KOREADER_ROOT=' \
+  'WILKBOOK_WIFI_CONTROL=' \
+  'pinenote-power-broker.lua' \
+  'uinput'; do
+  grep -F -q -- "$token" "$tmpdir/platform-service.scm" || \
+    fail "generated platform-controls service lacks required token: $token"
+done
+pass "generated platform-controls service supervises the packaged broker"
+
+for token in \
+  'pinenote-platform-controls' \
+  '/run/wilkbook-power/ready' \
+  'wilkbook-power-control' \
+  'pinenote-platform-controls did not become ready'; do
+  grep -F -q -- "$token" "$tmpdir/reader-service.scm" || \
+    fail "generated reader-session service lacks Phase 2 token: $token"
+done
+pass "generated reader-session waits for the platform-controls service and input device"
 
 debugfs -R "dump $system_store/profile/bin/koreader $tmpdir/koreader-link" \
   "$rootfs_image" >/dev/null 2>&1 || fail "could not resolve packaged KOReader"
@@ -158,5 +226,18 @@ for module in ebc_barrier ebc_sleep_frame power_capabilities power_coordinator; 
   fi
 done
 pass "packaged production device references no dormant power module"
+
+for token in \
+  'wilkbook-power-control' \
+  '/run/wilkbook-power/request' \
+  '/run/current-system/profile/bin/pinenote-wifi-control' \
+  'canSuspend = suspend_qualified and yes or no'; do
+  grep -F -q -- "$token" "$tmpdir/device.lua" || \
+    fail "packaged production device lacks Phase 2 token: $token"
+done
+if grep -F -q -- 'WILKBOOK_PINENOTE_VALIDATION' "$tmpdir/device.lua"; then
+  fail "packaged production device still consumes the Phase 1 validation gate"
+fi
+pass "packaged production device uses the acknowledged broker and packaged Wi-Fi helper"
 
 sha256sum "$rootfs_image"

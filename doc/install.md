@@ -224,8 +224,9 @@ them):
 - `wilkbook/autosuspend.conf` — **optional, and the single easiest way
   to end up with a device that never sleeps.** Writing `enabled=0` here
   pauses auto-suspend for first-boot debugging; **whoever writes it owns
-  undoing it** (`enabled=1`, or delete the file — re-read before every
-  idle wait, no reboot). Skip it and suspend works out of the box.
+  undoing it** (`enabled=1`, or delete the file — the platform-controls
+  broker re-reads it continuously, with no reboot). Skip it and suspend
+  works out of the box.
   What it controls: auto-suspend sleeps the device to
   ultra suspend (rails-off; **5.47 mA idle standby measured** across a
   6.17-day unplugged soak, 170 cycles and zero failures, 2026-08-15)
@@ -297,13 +298,12 @@ Stated plainly, because the alternative is implying a tested path.
   survives reflashes) and `cat /var/lib/pinenote/autosuspend.conf` (the
   runtime one, read *second*, so it wins for the current boot). Either
   containing `enabled=0` pauses everything. Set `enabled=1` or delete
-  the file; it is re-read before every idle wait, so no restart is
+  the file; the platform-controls broker re-reads it continuously, so no restart is
   needed. **This is the most likely first-boot symptom**, because an
   earlier version of this page recommended creating that file with
   `enabled=0` and never said to undo it. `herd status
-  pinenote-autosuspend` showing the daemon *running* is not evidence it
-  is enabled — a paused daemon runs normally and, as of 2026-08-09, does
-  not say so in its startup log (GitHub issue #7).
+  pinenote-platform-controls` showing the broker *running* is not evidence
+  suspend is enabled; the runtime configuration remains authoritative.
 - **The SSH host-key fingerprint changes once**, at the first boot of an
   image carrying the host-key sync, and is stable across reflashes after
   that. Pin it in your ledger *then*, not before (`doc/networking.md`

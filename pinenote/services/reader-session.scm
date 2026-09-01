@@ -25,6 +25,7 @@
 
 (define %orientation-ready "/run/wilkbook-orientation.ready")
 (define %orientation-consumer "/run/wilkbook-orientation.consumer")
+(define %power-controls-ready "/run/wilkbook-power/ready")
 
 ;; Blank the panel to clean white and run one global refresh, so the
 ;; boot console text does not linger on the e-ink (which retains it
@@ -126,6 +127,7 @@ end
     ;; Like pinenote-dmc, the one-shot exits success even when it does
     ;; nothing, so it can delay the reader but never block it.
     (requirement '(udev user-processes orientation-bridge
+                   pinenote-platform-controls
                    pinenote-waveform pinenote-ebc-params
                    pinenote-dmc pinenote-library))
     (documentation "KOReader running natively on the e-ink framebuffer.")
@@ -143,6 +145,19 @@ end
                               (lambda (port)
                                 (eq? (read port)
                                      'wilkbook-orientation)))
+                            (loop (+ n 1)))
+                        (loop (+ n 1)))))))
+         (define (power-control-node-ready?)
+           (let loop ((n 0))
+             (and (< n 64)
+                  (let ((name (string-append "/sys/class/input/event"
+                                             (number->string n)
+                                             "/device/name")))
+                    (if (file-exists? name)
+                        (or (call-with-input-file name
+                              (lambda (port)
+                                (eq? (read port)
+                                     'wilkbook-power-control)))
                             (loop (+ n 1)))
                         (loop (+ n 1)))))))
          ;; don't race the fb node on a slow module load; respawn
@@ -163,6 +178,18 @@ end
          (unless (and (file-exists? #$%orientation-ready)
                       (orientation-node-ready?))
            (error "wilkbook-orientation did not become ready"))
+         ;; Shepherd considers a forked service started before its process has
+         ;; necessarily completed UI_DEV_CREATE.  Do not launch the production
+         ;; driver until both the broker marker and named input node exist.
+         (let loop ((tries 0))
+           (unless (or (and (file-exists? #$%power-controls-ready)
+                            (power-control-node-ready?))
+                       (>= tries 50))
+             (usleep 200000)
+             (loop (+ tries 1))))
+         (unless (and (file-exists? #$%power-controls-ready)
+                      (power-control-node-ready?))
+           (error "pinenote-platform-controls did not become ready"))
          ;; This marker belongs to the evdev fd opened by one KOReader
          ;; process. Removing it pauses the bridge until the new reader opens
          ;; the named node and recreates the marker.

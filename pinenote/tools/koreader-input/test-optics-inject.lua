@@ -174,6 +174,8 @@ local devices = {
     [0] = "wilkbook-optics",
     [7] = "wilkbook-orientation",
     [8] = "wilkbook-orientation", -- spoofed name, wrong/missing virtual ID
+    [9] = "wilkbook-power-control",
+    [10] = "wilkbook-power-control", -- spoofed name, wrong/missing virtual ID
     [1] = "cyttsp5",
     [2] = "w9013 2D1F:0095 Stylus",
     [3] = "w9013 2D1F:0095",       -- the pen's 2nd interface: must NOT match
@@ -185,6 +187,13 @@ for n, name in pairs(devices) do
     os.execute(string.format("mkdir -p '%s/event%d/device'", base, n))
     local f = assert(io.open(string.format("%s/event%d/device/name", base, n), "w"))
     f:write(name, "\n")
+    f:close()
+end
+os.execute(string.format("mkdir -p '%s/event9/device/id'", base))
+for field, value in pairs({ bustype = "0006", vendor = "1209",
+                            product = "0003", version = "0001" }) do
+    local f = assert(io.open(string.format("%s/event9/device/id/%s", base, field), "w"))
+    f:write(value, "\n")
     f:close()
 end
 os.execute(string.format("mkdir -p '%s/event7/device/id'", base))
@@ -208,6 +217,7 @@ local expected = {
     { "pwrkey",        "/dev/input/event5" },
     { "gpiokeys",      "/dev/input/event6" },
     { "gsensor",       "/dev/input/event7" },
+    { "power_control", "/dev/input/event9" },
 }
 local expected_set = {}
 for _, e in ipairs(expected) do
@@ -228,9 +238,9 @@ local required = {}
 PineNote._registerRequiredInputDevices({
     setRequiredDevice = function(path) required[#required + 1] = path end,
 }, found)
-report(#required == 2 and required[1] == found.optics_inject
-       and required[2] == found.gsensor,
-       "production init registers optics and orientation as required",
+report(#required == 3 and required[1] == found.optics_inject
+       and required[2] == found.gsensor and required[3] == found.power_control,
+       "production init registers optics, orientation, and power control as required",
        table.concat(required, ","))
 
 ------------------------------------------------------------------------

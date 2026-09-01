@@ -82,7 +82,7 @@ def fail(message):
 
 policy = Path(sys.argv[1]).read_bytes()
 if policy != b"return false\n":
-    fail("suspend policy must contain exactly 'return false' followed by one newline")
+    fail("legacy dormant suspend policy must remain exactly 'return false' followed by one newline")
 
 device = Path(sys.argv[2]).read_bytes()
 for module in (
@@ -97,7 +97,7 @@ PY
 pass "production device source references no dormant power module"
 
 if ! timeout 5s luajit "$policy_harness" "$device_lua"; then
-  fail "restricted PineNote suspend policy evaluation failed or timed out"
+  fail "restricted PineNote production-suspend evaluation failed or timed out"
 fi
 
 tmp=$(mktemp "${TMPDIR:-/tmp}/inspect-pinenote-suspend-gates.XXXXXX") ||

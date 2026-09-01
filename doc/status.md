@@ -1,7 +1,60 @@
 # Hardware status
 
-Last updated: 2026-08-26. Update protocol: add a dated entry at the top
+Last updated: 2026-08-31. Update protocol: add a dated entry at the top
 after every hardware session; entries are per-device/per-operator.
+
+## 2026-08-31 (rpedde PineNote) — Phase 2 packaged platform controls accepted on hardware
+
+The Phase 2 reader rootfs was written from stock Debian os1 to the inactive
+os2 partition with `write-os2-verified.sh`.  The staged file and complete
+436140-block readback both matched SHA-256
+`21f6c8be5bc5b4434ae73d60320d64d7afb842854367f264062954d27943279b`
+(`pinenote-reader-PNGuixRoot-20260831.ext4`, 1,786,429,440 bytes).  Both the
+local backup and two independent copies on `lithium` passed `SHA256SUMS` and
+`LOCAL-SHA256SUMS` before the write.  os1 and the waveform, bootloader,
+environment, logo, data, and partition-table regions were not written.
+
+Two cold boots selected os2 from the visible U-Boot menu.  Both mounted
+`PNGuixRoot` from `/dev/mmcblk0p6` under Linux 7.1.8.  On the final no-repair
+boot, `pinenote-platform-controls` reached ready five seconds before
+`reader-session`; exactly one broker, reader, immutable-identity
+`wilkbook-power-control` node, and owned `wpa_supplicant` existed.  The reader
+required the platform-controls service, the legacy `pinenote-autosuspend`
+service did not exist, no early validation patch was installed, and no Phase
+1 overlay process was running.
+
+Hardware acceptance passed:
+
+- Killing the validated broker PID made the required input device disappear;
+  Shepherd respawned the broker and KOReader exited with code 1, then both
+  recovered behind one recreated input node.
+- Charging (`rk817-charger/online=1`) rejected a physical power tap before
+  reader preparation; the screen, frontlight, reader, and RTC state did not
+  change.
+- Physical power, cover, KOReader menu Sleep, and one-minute AutoSuspend all
+  entered deep suspend once through acknowledged requests and recovered the
+  display, 153/153 mixed frontlight, input, and Wi-Fi policy.  AutoSuspend was
+  restored and persisted at 900 seconds after the test.
+- With automatic Wi-Fi restore initially off, the first button cycle correctly
+  left Wi-Fi off.  After enabling the preference, later cycles restored one
+  owned supplicant automatically.
+- With KOReader deliberately stopped, a physical tap timed out after ten
+  seconds, used `fallback=true`, painted the text fallback banner, suspended
+  once, and recovered; restarting `reader-session` cleanly repainted KOReader.
+- A runtime-only `backstop=30` override proved RTC wake, the 20-second
+  unattended re-suspend loop, and a final button-classified wake.  The override
+  was removed and the RTC alarm was clear afterward; the production default
+  remains 3600 seconds.
+- KOReader Power Off reached `reboot: Power down` after cleanly unmounting data
+  and remounting os2 read-only.  A subsequent cold boot needed no rollback or
+  repair and reproduced the correct service ordering and cardinality.
+
+One visual observation remains recorded: the first menu-Sleep resume briefly
+showed garbled data before KOReader's full refresh restored a clean screen.
+The immediately repeated menu-Sleep cycle was clean, all other cycles were
+clean, and neither the broker nor kernel logged an EBC error or timeout.  Treat
+this as a non-reproducing observation for soak tracking, not as erased
+evidence.
 
 ## 2026-08-26 (rig session, part 6) — the landmine image: both operational traps fixed, deployed, and proven on glass
 

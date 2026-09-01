@@ -11,7 +11,10 @@ timer as fallback; full refreshes use the driver's global-refresh ioctl.
 
 local Generic = require("device/generic/device")
 local logger = require("logger")
-local suspend_qualified = require("device/pinenote/suspend_policy")
+-- The acknowledged broker path completed its hardware acceptance matrix on
+-- 2026-08-31.  The broker is now a required, supervised boot service, so the
+-- packaged driver can expose suspend without a runtime validation overlay.
+local suspend_qualified = true
 
 local ffi = require("ffi")
 local bit = require("bit")
@@ -73,6 +76,19 @@ local function findInputDevices(sysfs_base)
                    and id("product") == "0002" and id("version") == "0001" then
                     found.gsensor = node
                 end
+            elseif name == "wilkbook-power-control" then
+                local id_base = string.format("%s/event%d/device/id/", sysfs_base, n)
+                local function id(field)
+                    local id_file = io.open(id_base .. field, "r")
+                    if not id_file then return nil end
+                    local value = id_file:read("*line")
+                    id_file:close()
+                    return value
+                end
+                if id("bustype") == "0006" and id("vendor") == "1209"
+                   and id("product") == "0003" and id("version") == "0001" then
+                    found.power_control = node
+                end
             -- QEMU virt visual loop (offline testing ladder): scripted
             -- input arrives via virtio-input devices.  Only ever present
             -- inside the VM; harmless to look for on hardware.
@@ -86,7 +102,7 @@ local function findInputDevices(sysfs_base)
     return found
 end
 
--- Both virtual devices are owned by services outside KOReader. Their loss
+-- These virtual devices are owned by services outside KOReader. Their loss
 -- means the process must restart and enumerate their replacement nodes.
 local function registerRequiredInputDevices(input_backend, devs)
     if devs.optics_inject then
@@ -94,6 +110,9 @@ local function registerRequiredInputDevices(input_backend, devs)
     end
     if devs.gsensor then
         input_backend.setRequiredDevice(devs.gsensor)
+    end
+    if devs.power_control then
+        input_backend.setRequiredDevice(devs.power_control)
     end
 end
 
@@ -239,6 +258,12 @@ end
 
 local PineNote = Generic:extend{
     model = "PineNote",
+    -- Generic waits 15 seconds before invoking Device:suspend, while the
+    -- broker's physical-trigger preparation deadline is intentionally 10.
+    -- EBC completion is enforced separately by the barrier, so three seconds
+    -- is enough for KOReader's forced screensaver repaint and leaves ample
+    -- time to deliver the ready acknowledgement.
+    suspend_wait_timeout = 3,
     isPineNote = yes,
     isTouchDevice = yes, -- the pen drives the touch input path (wacom protocol)
     hasKeys = yes,
@@ -250,9 +275,13 @@ local PineNote = Generic:extend{
     hasColorScreen = no,
     canReboot = yes,
     canPowerOff = yes,
-    canSuspend = suspend_qualified and yes or no, -- not validated on this kernel yet
+    canSuspend = suspend_qualified and yes or no, -- accepted broker path, 2026-08-31
     hasOTAUpdates = no,
+    -- The Guix KOReader bundle intentionally omits lj-wpaclient.  We provide
+    -- a radio toggle and restore path, but not KOReader's AP-list manager,
+    -- whose wpa_supplicant backend would require that optional Lua module.
     hasWifiManager = no,
+    hasWifiRestore = yes,
     display_dpi = 227,
     -- Not a duplicate of the seeded home_dir setting.  This is what
     -- filemanagerutil.getDefaultDir() returns, and what
@@ -426,6 +455,19 @@ function PineNote:init()
             -- from the pen barrel.
             [158] = "RPgBack", -- KEY_BACK  (eraser-side long press)
             [159] = "RPgFwd",  -- KEY_FORWARD (pen-side long press)
+            [142] = "BrokerSleep", -- KEY_SLEEP from the production broker
+            [143] = "BrokerWake",  -- KEY_WAKEUP from the production broker
+        },
+        -- Direct power-management events must bypass ordinary KeyPress/
+        -- KeyRelease wrapping while awake.  The inhibited-input handler also
+        -- runs this adapter, so the same mapping handles broker wakeup.
+        event_map_adapter = {
+            BrokerSleep = function(ev)
+                if ev.value == 1 then return "Suspend" end
+            end,
+            BrokerWake = function(ev)
+                if ev.value == 1 then return "Resume" end
+            end,
         },
         wacom_protocol = true,
         -- Pure-LuaJIT evdev backend (the desktop release bundle does not
@@ -437,7 +479,7 @@ function PineNote:init()
     local devs = findInputDevices()
     if devs.pen then self.input:open(devs.pen, "w9013 pen digitizer") end
     if devs.touch then self.input:open(devs.touch, "cyttsp5 touchscreen") end
-    -- The power key belongs to the autosuspend daemon; KOReader must not
+    -- The power key belongs to the platform-controls broker; KOReader must not
     -- open it (2026-08-06).  Upstream UIManager registers a Power handler
     -- unconditionally (onPowerEvent ignores canSuspend), so every press
     -- fired a full-screen refreshFull that raced the daemon's
@@ -454,6 +496,10 @@ function PineNote:init()
     if devs.optics_inject then
         self.input:open(devs.optics_inject, "wilkbook-optics injector")
     end
+    if not devs.power_control then
+        error("PineNote: supervised wilkbook-power-control input device is required")
+    end
+    self.input:open(devs.power_control, "wilkbook power control")
     local evdev = require("ffi/input_evdev")
     if devs.gsensor then
         self.input:open(devs.gsensor, "wilkbook-orientation")
@@ -634,11 +680,78 @@ function PineNote:toggleGSensor(toggle)
 end
 
 function PineNote:powerOff()
-    os.execute("poweroff")
+    -- GNU Shepherd's halt powers off by default and does not implement the
+    -- util-linux/systemd-compatible -p option.
+    os.execute("/run/current-system/profile/sbin/halt")
 end
 
 function PineNote:reboot()
-    os.execute("reboot")
+    os.execute("/run/current-system/profile/sbin/reboot")
+end
+
+function PineNote:supportsScreensaver()
+    return true
+end
+
+local suspend_sequence = 0
+function PineNote:suspend()
+    suspend_sequence = suspend_sequence + 1
+    local request_id = string.format("%d-%d", os.time(), suspend_sequence)
+    local path = "/run/wilkbook-power/request"
+    local fd = C.open(path, bit.bor(C.O_WRONLY, C.O_NONBLOCK, C.O_CLOEXEC))
+    if fd == -1 then
+        logger.warn("PineNote: suspend broker unavailable; cancelling suspend")
+        require("ui/uimanager"):nextTick(function() self:onPowerEvent("Resume") end)
+        return false
+    end
+    local line = "ready " .. request_id .. "\n"
+    local written = C.write(fd, line, #line)
+    C.close(fd)
+    if tonumber(written) ~= #line then
+        logger.warn("PineNote: incomplete suspend broker request; cancelling suspend")
+        require("ui/uimanager"):nextTick(function() self:onPowerEvent("Resume") end)
+        return false
+    end
+    return true
+end
+
+function PineNote:initNetworkManager(NetworkMgr)
+    local helper = "/run/current-system/profile/bin/pinenote-wifi-control"
+    -- Keep the archived Phase 1 overlay usable for historical recovery;
+    -- production images always take the packaged path above.
+    local packaged = io.open(helper, "r")
+    if packaged then
+        packaged:close()
+    else
+        helper = "/data/wilkbook/validation/platform-controls-v1/bin/pinenote-wifi-control"
+    end
+    local function run(action)
+        return os.execute(helper .. " " .. action) == 0
+    end
+    function NetworkMgr:turnOffWifi(complete_callback)
+        local ok = run("off")
+        if ok and complete_callback then complete_callback() end
+        return ok
+    end
+    function NetworkMgr:turnOnWifi(complete_callback)
+        local ok = run("on")
+        if ok and complete_callback then complete_callback() end
+        return ok
+    end
+    function NetworkMgr:restoreWifiAsync()
+        self:turnOnWifi()
+    end
+    function NetworkMgr:getNetworkInterfaceName() return "wlan0" end
+    function NetworkMgr:isWifiOn() return run("status") end
+    NetworkMgr.isConnected = NetworkMgr.ifHasAnAddress
+end
+
+function PineNote:setEventHandlers(uimgr)
+    -- NetworkListener observes these ordinary Suspend/Resume broadcasts and
+    -- honors KOReader's auto_restore_wifi preference.  Do not impose a
+    -- platform-specific restore policy here.
+    uimgr.event_handlers.Suspend = function() self:onPowerEvent("Suspend") end
+    uimgr.event_handlers.Resume = function() self:onPowerEvent("Resume") end
 end
 
 -- Battery sysfs node differs between kernels; probe once.

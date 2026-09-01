@@ -188,8 +188,8 @@ boots. Paths relative to the partition root:
   minutes in and each nap costs a physical button press). **If you write
   it, you must undo it** — a device with this file at `enabled=0` never
   sleeps, shows no suspend banner, and burns ~157 mA forever. Undo with
-  `enabled=1`, or just delete the file; the daemon re-reads it before
-  every idle wait, so no reboot is needed. Skip this bullet entirely and
+  `enabled=1`, or just delete the file; the platform-controls broker
+  re-reads it continuously, so no reboot is needed. Skip this bullet and
   suspend works out of the box — the recommended path.
 
 **3. Write os2.** Copy the extracted rootfs, its SHA-256, and
