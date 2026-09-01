@@ -620,9 +620,11 @@ def structural(repo, service):
 
     check("service: the CLUT installer is a shepherd one-shot",
           "(one-shot? #t)" in scm)
-    check("service: it is ordered after pinenote-waveform",
-          "(requirement '(pinenote-waveform))" in scm,
-          "without the edge shepherd races the compile against its own input")
+    check("service: it is ordered after pinenote-waveform and the params one-shot",
+          "(requirement '(pinenote-waveform pinenote-ebc-direct-params))" in scm,
+          "without the waveform edge shepherd races the compile against its"
+          " own input; without the params edge the rebind runs before"
+          " temp_override/default_hint land (doc/status.md 2026-08-27)")
     check("service: it is not an activation snippet",
           "activation-service-type" not in scm,
           "activation runs before the filesystems this writes to are ready")

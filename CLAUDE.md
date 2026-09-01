@@ -35,8 +35,7 @@ code review — before a single reboot. That's the standard.
   PM, ultra rails-off suspend) — the inventory lives in `doc/kernel-forward-port.md`.
 - `pinenote/services/`, `pinenote/images/`, `pinenote/systems/` — Guix
   system services, initrd, and flavor entrypoints.
-- `pinenote/tools/` — thirteen host-side test and diagnostic tools; the
-- `pinenote/tools/` — fourteen host-side test and diagnostic tools; the
+- `pinenote/tools/` — fifteen host-side test and diagnostic tools; the
   table in `doc/testing.md` says what each covers. The core display trio
   (`wbf`, `ebc-logic`, `rastersim`) compiles the *verbatim* driver source
   out of the patch and tests it on your workstation.
@@ -68,8 +67,10 @@ code review — before a single reboot. That's the standard.
 - `doc/install.md` — what has to be true *before* the write protocol
   applies, for an operator installing on their own device: cable,
   backups, waveform/VCOM, data-partition staging, root posture, and the
-  open questions about a first boot. Unverified by construction — no
-  second person has done it.
+  open questions about a first boot. Verified at last: a second person
+  (rpedde) completed the whole path on their own device 2026-08-31 —
+  backups, staged write from stock os1, cold boots
+  (`doc/status.md`).
 - `doc/device-access.md` — how to reach and safely use the device: os1
   oracle, ACM console, UART, SSH, post-mortem harvest, and their traps.
 - `doc/kernel-forward-port.md` — how to refresh the patches for a new
@@ -129,7 +130,15 @@ that clears ghosting; **rung** — a step on the offline-validation ladder
 order to cancel drift; **final4** — the 2026-07-19 reader image that
 hardware-validated autorotation and touch normalization; **oracle** — a
 known-good reference you can query (usually os1); **quirk:** — a pinned
-host-tool test documenting an inherited driver bug.
+host-tool test documenting an inherited driver bug; **ghosting** —
+residue that PERSISTS after a refresh settles and accumulates across
+turns (what the optics-rig metric measures, from post-settle captures);
+**settling** — the TRANSIENT per-turn development character: bold prior
+content briefly shining through, text looking wavy/liney as it comes
+into focus, all gone once the page settles. Operator taxonomy
+2026-08-27: never conflate them — ghosting was the bug (resolved to
+acceptable on the canon direct image); settling is the remaining
+quality frontier.
 
 ## How to develop here
 
@@ -180,8 +189,10 @@ console discipline, UART settings, post-mortem harvest — are in
 
 ## Committing
 
-Two-person repo (as of 2026-08). **Two remotes, two different rules
-(2026-08-15):**
+Two-person repo with outside contributors (as of 2026-08-31 the first
+outside PR — rpedde's platform-controls broker, hardware-validated on
+their own PineNote — is merged; hardware truth is now genuinely
+multi-device). **Two remotes, two different rules (2026-08-15):**
 
 - **`github` is upstream and is PR-only.** Never push to
   `github main`. Everything reaches it through a pull request, whatever
@@ -244,12 +255,23 @@ gitignored `build/`, or the reader's static address.
   cross-builds **7.1.8** clean (both DTBs, both modules linked). The
   hardware-proven kernel for the SHIPPING driver is still **7.0.11**
   (display, PREEMPT_RT, Wi-Fi/BT, gadget — 2026-07-04). 7.1.8 has run
-  on glass only in the **direct-mode study configuration** (2026-08-25:
-  hrdl's EBC driver swapped in, `linux-pinenote-hrdl-direct`, on os2);
-  the shipping-driver 7.1 build has never driven a panel, and os2
-  currently carries the study image — os1 remains the rescue path.
+  on glass in the **direct-mode study configuration** (2026-08-25:
+  hrdl's EBC driver swapped in, `linux-pinenote-hrdl-direct`, on os2),
+  and the shipping-driver 7.1 build drove a panel ONCE on 2026-08-26 —
+  its rockchip_ebc.ko live-swapped as a module onto the running study
+  kernel for the same-session ghost shootout (doc/status.md part 13;
+  probe clean, but a reproducible DT-mismatch band artifact on the
+  study DTB — an instrument, not a validated boot). os2 currently
+  carries the study image — os1 remains the rescue path.
+  **Update 2026-08-31 (rpedde's device, PR #41)**: the shipping-driver
+  7.1.8 reader image cold-booted twice on a SECOND operator's PineNote
+  and ran a full suspend/wake acceptance matrix — the shipping-driver
+  7.1 is now a validated boot, on that device. Our own glass record for
+  it is still only the module swap.
   So: 7.1 is what the repo *builds*, 7.0.11 is what is *proven* for the
-  product, the study ran 7.1.8 once. Never state one as the other.
+  product on OUR device, the study ran 7.1.8 on glass, and rpedde's
+  device validated the shipping-driver 7.1.8 boot. Never state one as
+  the other.
   `channels.scm` was pin-bumped 2026-08-26 to the 7.1-resolving
   generation, so `TIME_MACHINE=1` works again on `main` (gated on
   time-machine resolving the identical kernel derivation as ambient);
@@ -289,13 +311,25 @@ gitignored `build/`, or the reader's static address.
   supply with the supply of the thing driving it. Still open, and now
   the only surviving candidate: whether the PMU can latch the edge with
   `pmuio1`/`pmuio2` down (alive-domain detection).
-  `doc/artifacts/pinenote-input-clocks-20260824/`. Auto-suspend (5 min idle) is live, so **SSH to the
-  reader is intermittent** — write `enabled=0` to
+  `doc/artifacts/pinenote-input-clocks-20260824/`. Auto-suspend makes
+  **SSH to the reader intermittent** — write `enabled=0` to
   **`/data/wilkbook/autosuspend.conf`** before working on it
   (`doc/device-access.md`). That path was recorded here as
   `/var/lib/pinenote/autosuspend.conf` until 2026-08-24; that file does
-  not exist on the device. Still unexplained: the TPS `ENABLE` 2f→20
-  delta after suspend, and one 13.09 mA idle segment in the soak.
+  not exist on the device. **The suspend OWNER changed 2026-08-31
+  (PR #41, rpedde)**: the tree's reader flavors now run the supervised
+  `pinenote-platform-controls` broker — the sole `/sys/power/state`
+  writer, handling power button/cover/RTC through an acknowledged
+  KOReader handshake — and KOReader owns idle timing (AutoSuspend,
+  default 15 min, user-settable) instead of the 5-min standalone
+  daemon. Charging inhibits suspend by default
+  (`suspend_while_charging=1` opts out); `enabled=0` still pauses
+  everything (the broker re-reads it continuously). Hardware-accepted
+  on rpedde's device (shipping flavor); the v0.2.0 image on OUR os2
+  predates it and still runs the 5-min daemon, and the broker +
+  direct-driver combination has had no hardware session. Still
+  unexplained: the TPS `ENABLE` 2f→20 delta after suspend, and one
+  13.09 mA idle segment in the soak.
 - **Power**: awake reader idle ~157 mA after the vdd_cpu auto-PFM fix
   (was ~174); suspend 4.64 mA ultra in a quiet bracket, **5.47 mA as
   idle standby** once the hourly backstop is included (deep's ~20 mA is

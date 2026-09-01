@@ -253,7 +253,13 @@ for n = 0, 31 do
         if fd >= 0 then inputs[#inputs + 1] = { fd = fd, power = name == "rk805 pwrkey" } end
     end
 end
-if #inputs == 0 then error("no power/cover input devices") end
+-- On PineNote hardware rk805 pwrkey and gpio-keys always exist.  QEMU virt
+-- (offline ladder rung 4) has neither -- its power button sits on a PL061
+-- the kernel config does not carry -- and physical triggers are severable:
+-- KOReader-acknowledged suspend needs only the request FIFO and the uinput
+-- device.  Run degraded rather than crash-loop, which would hold
+-- reader-session (and so the reader itself) down over a missing button.
+if #inputs == 0 then log("no power/cover input devices; physical triggers disabled") end
 local uinput = assert(create_uinput(), "cannot create wilkbook-power-control")
 C.mkfifo(REQUEST, 384) -- 0600; EEXIST is expected after restart.
 local request_fd = C.open(REQUEST, bit.bor(O_RDWR, O_NONBLOCK)); assert(request_fd >= 0, "cannot open request FIFO")

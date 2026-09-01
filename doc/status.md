@@ -56,6 +56,766 @@ clean, and neither the broker nor kernel logged an EBC error or timeout.  Treat
 this as a non-reproducing observation for soak tracking, not as erased
 evidence.
 
+## 2026-08-27 (part 20) — FIRST BOOT VERDICT: the wave is gone, turns are snappy, ghosting acceptable
+
+The canon image's first boot validated hands-off end to end (white
+splash instead of console text, params one-shot beating the
+temperature read — dmesg "override temperature from 26 to 22" —
+hint 32 live, all one-shots green, reader up in ~60 s), and then the
+operator's felt verdict landed the night's campaign:
+
+- **"Page turns, wave is gone."** The defio publish-on-call port
+  killed the readable-old-text-overwriting-in-a-wave effect — the
+  atomic-damage hypothesis confirmed on glass, first try.
+- **"Page turns feel very snappy"** — the parallel advance + GL16
+  route at honest frame timing, felt.
+- **Ghosting "seems fixed"** — the accumulated stack (bin 22, clean
+  routing, atomic turns) lands at acceptable in real reading.
+- Remaining known character: a "coming into focus" transition effect,
+  more pronounced than os1's (whose GC16 inversion masks its own
+  development) — judged FINE by the operator; it shares a suspected
+  root with the decode-fidelity gap and stays on that hunt's list.
+
+The direct-mode embrace case is now materially stronger: writing was
+already "insane"; reading on the same driver is now judged a good
+tradeoff by the operator. Still open before any formal embrace: the
+band investigation, the phase-seq crash (both UART-attended), the
+decode-fidelity offline hunt, and the suspend/power legs on this
+image.
+
+## 2026-08-27 (part 19) — DEPLOYED: os2 carries the canon image
+
+The operator's go came and the protocol ran clean from os1: slot
+check (root = p5), p6 unmounted, staged SHA verified, exact-count dd
+(445545 x 4096, 13.2 s), readback SHA match — **DEPLOY OK, os2 =
+`44a93b3c…`**. The workstation's os2 host key is purged for the new
+image's first boot. What that boot must prove, in order: the white
+splash instead of a tty (fbcon=map:1 + the splash one-shot's first
+run ever), the params one-shot beating the CLUT rebind (dmesg
+"override temperature from N to 22" at the FIRST successful probe),
+hint 32 live without any SSH touch, and — the operator's felt
+verdict — whether defio_delay_ms=250 killed the turn "wave".
+/data is its own partition (p7) and SURVIVES the reflash —
+autosuspend.conf stays enabled=0 and the library stays put; what the
+reflash wiped is p6's /root, so the ebc-lab staging (tools, tables,
+module builds) needs re-staging from the repo/workstation on the next
+work session.
+
+## 2026-08-27 (part 24) — the fidelity +1 and the v0.2.0-prealpha cut
+
+The fidelity CLUT went on the operator's live device (clut-swap,
+`c1b6f4f6…`) and survived an unplanned control: a battery-death
+reboot mid-audition (the boot one-shot silently resurrected the quirk
+table — the old compiler still being in the deployed image — and the
+canon boot re-applied every default hands-off for the second time
+tonight; one command re-swapped fidelity). Verdict: **"+1 I prefer
+this"** — the byte-exact tables are the keeper.
+
+**v0.2.0-prealpha is cut**: the pre-alpha lineage moves to the
+direct-mode driver. Release image
+`pinenote-reader-direct-PNGuixRoot-20260826.ext4` (built 2026-08-27),
+SHA256
+`7afd3f8a3e08abd283250e5a2132d30c1d9dad2680362abbafe73b3ad95017cb`,
+carrying: the parallel advance + defio publish-on-call pairing +
+frame instruments (kernel patch), the fidelity-default CLUT compiler
+(every boot compiles byte-exact tables from the device's own
+waveform), the validated-defaults and white-splash one-shots,
+fbcon=map:1, and the flash-suppression profile overrides. CHANGELOG
+release section written; tag on this commit.
+
+Deploy state: **DEPLOYED** — the operator booted os1 the same hour
+and the protocol ran clean (staged SHA verified, exact-count dd,
+readback match): os2 carries the release image `7afd3f8a…`. First
+boot of v0.2.0 compiles the fidelity table with the new compiler —
+the quirk-table resurrection gap is closed.
+
+Not re-validated on this driver and image lineage, standing open for
+the alpha path: suspend/power legs (ultra suspend, auto-suspend
+daemon interplay, standby numbers), the band investigation, the
+phase-seq crash, the settling-quality frontier, D6-style
+orientation/suspend sweeps on the release image.
+
+## 2026-08-27 (part 23) — decode fidelity: the divergence is FOUND, attributed, and it lives at the AA-edge grays## 2026-08-27 (part 23) — decode fidelity: the divergence is FOUND, attributed, and it lives at the AA-edge grays
+
+The offline hunt ran and landed in one evening
+(`pinenote/tools/wbf/wbf-clut-diff.c`, new: the verbatim helper's
+4BIT_PACKED view vs an independent kernel-semantics walk of the
+compiled CLUT, per bin/slot/from/to, with a shift-vs-content
+classifier and a 5-bit collision-winner attributor):
+
+- **CONTENT divergence — the ink-moving class**: 32–34 GL16/GC16
+  cells per bin (~13 % of transitions), 6 DU4, 2 DU, in ALL 14 bins.
+  Every one attributes to an odd 5-bit row winning the compiler's
+  four-way cell collision (upstream-register item 14's defect, now
+  quantified) — overwhelmingly rows 3 and 29: **4-bit gray levels 1
+  and 14, the near-black/near-white levels of antialiased text
+  edges**. AA edge pixels play the wrong waveform on the direct
+  driver. The ghost's fingerprint, found in the table bytes.
+- **SHIFT class**: ~75–82 % of GL16 transitions delivered with
+  leading neutral phases stripped — same pulses, front-loaded;
+  co-scheduled pixels de-synchronize and complete early vs shipping's
+  aligned timeline. Candidate mechanism for the settling character.
+- INIT: drives identical, trailing-length differences only (the
+  suffix defect's signature).
+
+**The fix is now one conditional away**: make the compiler write only
+even-even 5-bit rows into the 4-bit cells (the shipping hardware's
+exact read semantics), and optionally preserve leading neutral runs.
+That deviates deliberately from hrdl's reference (the QUIRK
+philosophy pins reference fidelity), so it lands as a documented
+divergence with the quirks retained for comparison, the clut-test
+pins re-derived, and a glass A/B (clut-swap + optics + eyes) before
+it ships as the boot one-shot's default.
+
+## 2026-08-27 (part 22) — pen validated on the canon stack: the per-class defio design holds
+
+With `defio_delay_ms=250` live in the shipped kernel, the scribbler
+session (FAST mode, publish-per-batch) got the operator verdict
+"looks great" — no perceptible lag versus the original pen session.
+The operator's turn/pen split is therefore fully validated end to
+end: un-published damage aggregates (turns land atomic, the wave
+gone), explicitly published damage flies (pen untouched by the 250 ms
+timer). One operational trap caught on the way: a phase-sequence
+whose `--then-normal` lands while the sequence still executes gets
+IGNORED ("Ignoring work items until zero waveform mode is left
+explicitly") and the driver stays PARKED in ZERO_WAVEFORM — the panel
+looks dead to all ordinary damage until the ZERO_WAVEFORM ioctl
+(0xC0086445, {set=1, mode=0}) leaves it explicitly. That was why the
+reader "disappeared" after the INIT repro runs. Recovery sequence now
+proven: ZW-disable ioctl → MODE → wash.
+
+**Device state**: reader running (NORMAL, hint 32, washed), pen tools
+staged in /root, UART logger standing. Autosuspend still pinned off.
+
+## 2026-08-27 (part 21) — UART session: capture proven, the crash does not reproduce clean
+
+The UART channel is live end to end, after stepping in BOTH documented
+traps once each (workstation termios dying between stty and cat --
+hold one fd through both; then the device-side ttyS2 9600 divisor,
+doc/device-access.md trap 1 -- `stty -F /dev/ttyS2 1500000` fixed the
+NUL flood). Liveness proven by a kmsg marker arriving in the
+workstation log; loglevel raised for the repro.
+
+**The phase-seq crash does not reproduce from a clean boot**: four
+consecutive `--init --then-normal` runs on the canon image, UART
+attended, zero panics, driver healthy after each ("Ignoring work
+items until zero waveform mode is left explicitly" -- the parking
+semantics visible and correct). Last night's SoC-rebooting panic
+therefore needed the session-accumulated state it happened under
+(stretched htotal timing, redraw-delay LUT rebuilds, a dozen
+unbind/rebind and module-swap cycles) or is a rare race. Disposition:
+danger header softened to possibly-crashing, UART-attended preferred;
+not exonerated, not chased further tonight.
+
+Operational note: the four INIT runs saturate all cores (the parallel
+advance's 4-band NEON on 99 full-panel phases) -- SSH crawls while a
+sequence runs. Polish-list candidate: cap the advance at 3 bands to
+keep a core free; the frame budget has room.
+
+Those four INITs were also the reset hammer originally prescribed for
+the band -- its post-hammer state is the operator's next observation.
+
+## 2026-08-27 (part 20d) — menu flashes: found both halves, fixed live, canonized for the direct flavor
+
+On the fresh canon image menus GC16-flashed again despite the shipped
+`flash_ui=false`. Two stacked mechanisms, both now handled:
+
+- **KOReader's "mandatory" UI flashes**: certain widgets request
+  flashes regardless of the flash-buttons toggle; the separate
+  `avoid_flashing_ui` setting suppresses that class (operator found
+  the checkbox live; it ships as a DIRECT-flavor profile override).
+- **Our own promotion policy**: device.lua promotes flash intents
+  covering ≥ `pinenote_flash_area_fraction` (0.60) of the panel to a
+  full GC16 wash. That was load-bearing while ghosting accumulated;
+  with ghosting RESOLVED (part 20) it is not, so the direct flavor
+  overrides it to 0.98 — only genuinely full-screen intents promote.
+  Applied live via the settings key + reader restart, and canonized.
+
+The shipping flavor's profile defaults are UNCHANGED (its 0.60 flash
+economy was validated on its own driver; nothing revalidated it at
+0.98). The koreader-profile service gains the two fields; the direct
+flavor carries the overrides; settings-check green.
+
+The reflash-wiped washer retune (idle_s=12, debt_min=8, hand-set on
+the old install) was deliberately NOT restored: the plugin's milder
+defaults (45 s, debt 15) fit the resolved-ghosting era; retune again
+only if reading says so.
+
+## 2026-08-27 (part 20c) — the operator's taxonomy: ghosting vs settling
+
+Vocabulary set by the operator, now canon (CLAUDE.md vocabulary):
+
+- **Ghosting**: residue that persists AFTER settle and accumulates
+  across turns — "turning the pages as fast as possible would result
+  in horrific looking stuff." This is what the optics-rig metric
+  measures (post-settle captures). **On the canon image the operator
+  reports this "completely resolved"** — no accumulation, nothing
+  persisting across turns, fast turning stays clean.
+- **Settling**: the transient per-turn development character — a bold
+  prior element (a chapter heading) briefly shining through on the
+  next page, text looking "wavey and liney as it comes into focus" —
+  fully gone once the page settles, after which "the text looks
+  good."
+
+The two were conflated all campaign; they have different mechanisms
+(post-settle drive completeness vs mid-development intermediate
+states) and different fixes. Ghosting was the bug and is resolved to
+acceptable; settling is the remaining quality frontier, owned by the
+decode-fidelity hunt and the hint-48 re-audition. A settling METRIC
+would need per-frame video through the rig (the 240 fps phone
+protocol from the D8 artifact), not post-settle stills.
+
+## 2026-08-27 (part 20b) — correction: os1's turn mechanism is OPEN, and hint 48 earns a re-audition
+
+The operator corrects part 18's reading: os1's ordinary page turns
+show NO flash and look MORE seamless than ours (while taking much
+longer) — the frequent GC16s are a separate, additional behavior. The
+part-18 "os1 drives turns with GC16" claim was decoded from
+`refresh_waveform=4`, but the m-weigand lineage source (6.6.30
+checkout, same enum as 7.x) shows `refresh_waveform` governs only
+FULL refreshes; partials are `default_waveform` (also 4 = GC16 on
+os1) under `diff_mode=Y` (changed pixels only). GC16-diff-partials
+actually reproduce every operator observation without contradiction:
+no full-screen flash, old text masked by the inversion mid-development
+("seamless"), long turns, minimal ghost. Whether os1's KOReader
+instead overrides per-update to true GL16 through the mw ioctls is
+UNVERIFIED and checkable only when os1 next boots — the mechanism is
+recorded as open, not decided.
+
+Practical consequence either way: the hint 48 (GC16-partial) route
+was rejected ("gross and slow") under the night's WORST conditions —
+underdriven frames, wrong temperature bin, accumulated ghost. On the
+canon stack it deserves a re-audition: it may be the os1 transition
+look at direct-driver speed. One `rect-hints --default 48` when the
+operator wants the comparison.
+
+## 2026-08-27 (part 18) — os1 decoded, the target spec, and the canon image
+
+While the operator read on os1 (rescue Debian, 6.12), its driver
+config was pulled live and DECODED the felt comparison: os1 drives
+page turns with **GC16** (`default_waveform=4` AND
+`refresh_waveform=4`) and the driver itself full-washes every 60
+partials (`auto_refresh=Y`, `refresh_threshold=60`). That explains
+all three operator observations in one stroke — turns "MUCH MORE
+LATENT" (GC16's long flashy development), "gc16 periodically"
+(the driver's own auto_refresh, not KOReader), minimal ghost and
+"all in one go" (GC16's aggressive scrub; its inversion masks the old
+text instead of leaving it readable). **os1 is NOT the target** — it
+buys cleanliness with the two costs the operator explicitly rejects.
+
+**The target spec, in the operator's terms**: GL16-class latency, no
+periodic flashing, and no readable prior-page text during the turn's
+development (the os2 "wave"). The wave's first suspect is timer-split
+damage: the direct kernel never received the shipping stack's
+publish-on-call pairing, so the deferred-io timer (kernel default)
+can flush a page blit in chunks that start transitioning at different
+times. **Ported** (operator directive: "defio_delay_ms for page turns
+and similar, but NOT for pen"): `defio_delay_ms=250` via a driver
+fbdev_probe wrapper, mirroring the 7.0 forward-port's mechanism —
+un-published damage aggregates into one atomic turn; explicit fsync
+(KOReader publish(), the pen path's per-batch flush) drains
+immediately, so class selection falls out of who publishes. If the
+wave survives atomic damage, it is within-transition rendering and
+joins the decode-fidelity hunt.
+
+**The canon image**: `pinenote-reader-direct-PNGuixRoot-20260826.ext4`
+carrying the parallel advance (+ its four instruments +
+`defio_delay_ms`), the validated-defaults one-shot (hint 32, bin 22,
+ordered before the CLUT rebind), `fbcon=map:1` + the white-splash
+one-shot (no tty on the panel, ever), all host gates green. First cut
+`ccd8ba1a…` (pre-defio, superseded), final cut **`44a93b3c…`**,
+staged to os1's data partition for the protocol write to p6 — which
+awaits the operator's explicit go (the device is out of the rig, in
+their hands, running os1).
+
+## 2026-08-27 (part 17) — the persistent band, the INIT hammer, and a kernel-crash reboot
+
+Closing the night, three hard facts:
+
+**1. The stretch's band is semi-persistent.** After reverting
+`htotal_add` to stock timing and a white + triple-GC16 reset, the
+operator still saw the band ("a little darker, ~3/4 down the page,
+~1/6 of screen height, full width" — the fb x≈1130–1400 segment),
+lighter but standing. Part 16's tradeoff worsens: the stretch leaves
+residue in that segment that ordinary washes do not clear.
+`htotal_add` is NOT usable as shipped.
+
+**2. The first-ever live PHASE_SEQUENCE run CRASHED THE KERNEL.**
+`phase-seq.lua --init --then-normal` (the panel-reset hammer, meant to
+clear the band): the ioctls returned, then the SoC REBOOTED (~158 s
+uptime confirmed after; the operator rode the boot menu down to os2).
+No pstore, no UART listener — the panic is unlogged and unattributed:
+hrdl's phase-sequence executor had never been exercised by us, and the
+parallel-advance module was loaded. The tool now carries a DANGER
+header; next execution happens only in a UART-attended driver session
+prepared for a reboot. (Silver lining: the crash was an unplanned
+cold-boot test of the wired image — hands-off recovery worked, and
+every disk-staged asset survived.)
+
+**3. Recovery was two minutes.** All session tooling lives on disk:
+after boot, rmmod/insmod from `/root/mod-parallel/` restored the
+parallel driver + bin 22 + hint 32 and the reader — the operator's
+"good page turning" config. Whether the reboot's full power cycle
+cleared the band is the operator's next observation.
+
+**Device state**: freshly booted os2, parallel driver (RAM),
+`temp_override=22`, stock scan timing, hint 32, identity table (boot
+one-shot), reader running, washed. Autosuspend conf still enabled=0
+(disk). The stretched-scan lever stays parked until the band
+mechanism is understood.
+
+## 2026-08-27 (part 16) — the line stretch: drive time banked at −0.6 %, the gap cornered
+
+The slow-scan test found its workable lever. The dclk route is DEAD:
+every requested rate below 33.33 MHz snaps to a divider-capped
+31.25 MHz where the EBC goes silent — and the operator's challenge
+("where are you getting 333 MHz from?") exposed that the reasoning
+had leaned on the clock's NAME; `cpll_333m` is CPLL/3 *ancestry*
+repurposed as an adjustable divider off a ~1 GHz parent, already
+documented to run at other rates. The working lever is
+**`htotal_add`** (in the parallel-advance patch): extra SDCK cycles
+of front porch with the gate window extended through them — genuine
+per-row drive time at the stock clock.
+
+Measured: htotal_add=88 → 15.6 ms scans (shipping-equivalent
+per-phase drive) → **+2.28 % corrected vs +2.85 at stock**; 184 →
+20.2 ms → +2.23 — the curve SATURATES at 15.6. Drive time is worth
+~0.6 % and no more. Turn settle cost: ~590 ms vs ~460 (38 GL16
+phases at the slower scan) — the operator judges the tradeoff on
+glass.
+
+Also closed: **VCOM exonerated with documentation** (the TPS65185's
+NVM holds this device's recorded calibration — 1430000 µV per
+`doc/device-runbook.md` — and no driver ever writes it; both drivers
+ran it all night), and shipping's `refresh_waveform=6` decodes to
+plain **GL16** — no mode mystery.
+
+**The remaining ~0.9 % (direct +2.28 vs shipping +1.35) is cornered
+in one place**: two independent decoders of the same wbf — our
+`wbf-clut` compilation (what the direct driver plays) vs
+`drm_epd_helper`'s in-kernel decode (what the shipping hardware LUT
+plays). A decode-fidelity diff is an OFFLINE hunt (host tools, no
+glass) and is the queued next attack.
+
+**Device state at close**: reader running on the stretched config —
+parallel driver, `htotal_add=88` (15.6 ms scans verified),
+`temp_override=22`, hint 32, identity table, washed. All session
+config RAM-only; a reboot reverts to the stock image driver.
+Autosuspend still pinned off — RE-ENABLE at park.
+
+## 2026-08-27 (part 15) — the three-way join: the belief is perfect, the residue is analog
+
+The operator asked whether we were running the DDR-era strategy —
+fb-belief vs glass — and we weren't: the ghost metric was
+intent-vs-glass only. The missing layer took no kernel work: **hrdl's
+direct driver ships EXTRACT_FBS live** (five userspace pointers:
+packed inner/outer/next-prev, hints, prelim/target, both phase
+planes; `0xC0286442`). `ebc-lab/belief-grab.lua` (new, with harness
+pins) dumped it two seconds after a settled ghosty turn, joined
+against the intent raws and the camera:
+
+**Every sampled ghost pixel (27,094) reads next=white, prev=black,
+inner=0, outer=0 — transition complete, history correct, nothing
+stuck, byte-identical belief to the paper regions.** The driver's
+bookkeeping and scheduling are fully exonerated; the residue the
+camera sees on those same pixels is ANALOG — the drive under-clears
+the glass.
+
+Which sharpened the surviving theory to one number: the shipping
+stack scans at ~63.7 Hz (**15.7 ms of voltage per phase**); direct
+mode scans at 83 Hz (**12.0 ms**) — ~24 % less charge on every one
+of GL16's 38 phases. Frame PACING can't test this (gaps deliver no
+drive — why the pacing sweep was ghost-neutral); only a slower SCAN
+does. A `dclk_rate_override` param went into the module loop to try
+it: the PLL quantizes (asked 25.5 MHz, got 31.25), and at 31.25 MHz
+the EBC goes SILENT — probe clean, zero frame IRQs, no error, revert
+by reload. The slow-scan test therefore needs dclk and htotal moved
+TOGETHER (real timing engineering, the top item for the next driver
+session; the param ships in the patch with its hazard documented).
+
+Also banked: post-wash belief shows prev=black for ~90 % of
+never-inked paper too — the GC16 global's inversion excursion is in
+the books, a useful signature for future joins. The per-pixel hints
+read 0x2F where 0x20 was written (low-nibble flags, unexplained,
+registered).
+
+**Device state at close**: direct parallel driver at stock dclk
+(11.9 ms frames verified), reader running, hint 32,
+`temp_override=22`, identity table, washed. Autosuspend still pinned
+off — RE-ENABLE at park. Shipping modules staged in
+`/root/mod-shipping/`, belief dumps and the night's captures in the
+committed artifact.
+
+## 2026-08-27 (part 14) — slow frames: +0.3 % real, a fake miracle caught, and the gap band
+
+The operator's bandwidth-starvation theory (the DDR-DVFS corruption
+lesson generalized to direct mode's standing DMA+NEON load) tested
+via `frame_period_us=33000`: the raw number looked like a miracle
+(−0.66 % corrected — better than clean) and was FAKE — the capture
+showed the ~250-column dark band back, on the DIRECT driver this
+time, poisoning the paper mask. Stripe-cut truth: **+2.50 vs +2.78**
+— a real ~0.3 % improvement from halving memory traffic, weak
+support for starvation as the ghost mechanism at full DDR clock. The
+2× gap to the shipping driver stands.
+
+**The band is a GAP-TIMING phenomenon**: same ~250 columns
+(fb x ≈ 1130–1400, plausibly one source-driver chip's segment) under
+the shipping driver at every probe AND under the direct driver at
+34 ms pacing; never seen at ≤16.7 ms. Threshold in the 5–22 ms
+inter-frame-gap range; converges away over several GC16 washes. Part
+13's "shipping-driver DT artifact" reading is RETIRED — it is the
+panel (or EBC analog path) disliking long drive gaps, whoever makes
+them. Do not ship long frame pacing without solving it.
+
+**Device state at close**: direct parallel driver (RAM only), reader
+running, hint 32, `temp_override=22`, `frame_period_us=0`, band
+mostly converged (finishes with reading washes). Autosuspend still
+pinned off — RE-ENABLE at park.
+
+## 2026-08-26 (part 13) — the shootout: the shipping driver ghosts HALF as much, same session
+
+The operator's move ended the temperature debate: the primary 7.1
+shipping-driver kernel shares base + config with the running study
+kernel, so its `rockchip_ebc.ko` + `drm_epd_helper.ko` **live-swapped
+onto the running system** — no reboot, no reflash. Two firsts: the
+7.1 shipping-driver build's FIRST PANEL ever (probe clean, PVI
+waveform through the hardware LUT, XR24/7488 — the kernel truth table
+changes: "the shipping-driver 7.1 build has never driven a panel" is
+retired), and the first same-session cross-driver ghost measurement:
+
+- **Shipping driver: +1.3…+1.4 % corrected** (module defaults and the
+  shipped nine-param set agree)
+- **Direct driver: +2.8…+3.0 %** — minutes apart, same panel, same
+  temperature, same content. **The direct driver leaves ~2× the
+  residue, as a driver property.**
+
+The re-baseline that gated this: the washed-panel bias reproduced
+(−0.47 late vs −0.49 early on the 2-page masks) — instrument drift
+excluded, so panel cooling stands as the explanation for
+within-driver drift across the evening (the thermistor logged
+24.0 → 23), while the driver gap is real. Protocol bug caught: the
+early baseline was captured with fiducials still on the glass,
+contaminating the top-region masks (−0.55 vs true ~+0.05) —
+baselines must be pure white.
+
+Suspects for the 2×, each now testable in the module loop: VCOM
+handling in direct mode, the fb→Y4 conversion pipeline, CLUT playback
+fidelity vs the hardware LUT engine.
+
+Caveat: the shipping driver on the STUDY DTB reproducibly paints a
+~250-column dark band (same place every probe; ~4 GC16 washes to
+converge away) — hrdl's DT hunk changed the EBC node. Excluded from
+the masks; the swap is an instrument, not a rescue path.
+
+**Device state at close**: back on the direct PARALLEL driver
+(hand-built, RAM only), reader running, identity table, hint 32,
+`temp_override=22`, washed. Autosuspend still pinned off. The
+shipping modules stay staged in `/root/mod-shipping/` for future
+same-session arms.
+
+## 2026-08-26 (part 12) — the advance parallelized live: 18.4 → 11.9 ms, and the frame-period theory dies
+
+The kernel iteration loop part 11 promised is real, and it shipped a
+driver improvement the same night. A full out-of-Guix cross build of
+the study kernel (same source derivation, same config recipe) produced
+modules the running 7.1.8 accepted first try — vermagic and
+MODVERSIONS CRCs matched — so the cycle became: edit → ~15 s
+incremental rebuild → scp → rmmod/insmod → measure. Setup and traps in
+`~/src/wilkbook-kernel-lab` (workstation-local, not committed).
+
+**The banded parallel NORMAL advance**
+(`pinenote/patches/linux-pinenote-7.1-ebc-parallel-advance.patch`,
+wired into `linux-pinenote-hrdl-direct`, source gate green): the
+advance splits into row-disjoint horizontal bands on
+`system_unbound_wq` workers, caller takes the last band, per-band
+kernel-NEON sections (the callers' `scoped_ksimd()` wrappers had to
+go — the dispatcher sleeps), clip reduction merged by rect union.
+FAST/pen untouched. On glass, live-swapped: **full-panel frames
+18.4 → 11.9 ms** (the panel's scan period — timing-correct for the
+first time), small-clip timing unchanged, **no band-seam artifacts**,
+and the ghost metric **identical between 1 and 4 bands** at matched
+conditions — banding costs nothing.
+
+**And the frame-period theory is refuted.** Two new instruments rode
+along (`frame_period_us` — pacing, runtime-writable;
+`advance_bands` — force band count) and the matched-condition matrix
+says 12 ms, ~16.7 ms paced, and ~17.1 ms single-threaded all ghost
+the same (+2.83…+2.96 corrected, bin pinned). Part 11's "turns run
+1.5× out of the waveform timing contract" was true as TIMING but
+irrelevant as QUALITY: the stretched-era +1.72 was a WARMER PANEL
+hours earlier. Between-session ghost numbers drift ~1 % with panel
+temperature across an evening — same-session comparison is the only
+honest kind, which now firmly includes the shipping-vs-direct
+question. (`hskew_override` was also tested and does not change the
+frame period.)
+
+What the parallel advance is FOR, then: not ghost — determinism and
+headroom. Frames no longer stretch under load, turns and pen can
+coexist without the advance falling behind, and the frame period is
+now a chosen number rather than an accident of CPU speed.
+
+**Device state at close**: reader running ON THE HAND-BUILT MODULES
+(RAM only — a reboot reverts to the image's stock compute-stretch
+driver; nothing on disk changed), auto bands (4 for turns),
+`frame_period_us=0`, `temp_override=22` pinned at insmod, identity
+table, hint 32, washed. Autosuspend still pinned off. The image
+itself does not yet carry the patch — next `make` of the study image
+picks it up from kernel.scm.
+
+## 2026-08-26 (part 11) — the frame clock: turns run 1.5× slow, and the panel wants a colder bin
+
+The operator's challenge to part 10's wash-cadence conclusion — "we
+don't flash on the shipped driver and don't see the same ghosting" —
+was correct, and chasing it found two driver-level defects in one
+sitting (`ebc-lab/frame-clock.lua`, new; measurements in the part-10
+artifact's Part 2):
+
+**1. The direct driver's full-panel frames run 18.4 ms — 54 Hz
+against the panel's true 12.0 ms scan (83 Hz).** Compute-bound: a
+200×200 block and a 1872×660 half-clip both clock exactly 12.0
+ms/frame, so the kernel NEON advance is the long pole for clips much
+beyond half-panel — and a page turn is ~90 % of the panel, so EVERY
+turn runs its waveform ~1.5× out of the vendor timing contract while
+pen strokes stay on it (why writing is "insane" and turns degraded;
+D9's 23.1 ms userspace advance was the same wall). CPU frequency is
+exonerated — 27/40 wash samples at the 1.8 GHz max. The fix direction
+is parallelizing/optimizing the advance (row-parallel work, three
+idle cores), iterable live: rockchip_ebc is a MODULE.
+
+**2. The stretch was partially masking an underdrive.** A
+contract-rate half-clip turn ghosts MORE than the stretched full-page
+turn (+3.48 % vs +2.06 % on identical masks) — at correct timing GL16
+underdrives, and the temperature sweep found why: the TPS65185
+thermistor read exactly 24.0 °C (a bin boundary) and the driver picked
+24–27, but the ghost U-curve bottoms at the **21–24 bin** (+2.66 %;
+18–21 overshoots back to +3.36). One bin ≈ 0.75 % ghost.
+`temp_override` takes effect only on a temperature re-read
+(rebind/probe — the dmesg "override temperature" line is the
+receipt); a bare param write does nothing. Even at the optimal bin a
+contract-rate turn trails the stretched one, so the underdrive
+exceeds one bin — VCOM programming, CLUT playback fidelity vs the
+hardware LUT engine, and source-driver timing are the surviving
+suspects for the remaining gap to the shipping driver, and putting
+the SHIPPING image under this same instrument is now the decisive
+next measurement.
+
+Instrument notes: loop repeatability ±0.1 % on back-to-back arms; two
+poisoned runs caught and excluded (KOReader repainting mid-arm — stop
+the reader for optics arms; and `A && B & C` backgrounding `A && B`
+so the arm never ran and the capture measured the washed book page).
+
+**Device state at close**: reader running, identity table, default
+hint 32, `temp_override=22` live (21–24 bin, the measured optimum —
+session-scoped, gone on reboot), freshly washed, autosuspend still
+pinned off. The Brio remains rigged and calibrated.
+
+## 2026-08-26 (part 10) — the optics loop closes: the camera adjudicates the turn-route war
+
+The operator's mid-session idea — "optics rig it so you can detect
+ghosting" — went from proposal to working instrument to a decided
+route war in one sitting. The Brio moved into the rig; fiducial
+registration (four 80 px corner squares, centroid extraction, ImageMagick
+perspective warp into fb space) validated at **2.6 px** on the
+center-dot control; and a differential ghost metric (mean capture luma
+over former-ink vs paper masks, exposure-invariant, baseline-corrected
+for the ±0.5–1 % lighting-gradient floor) measured five routes with no
+human eyes in the loop. Harness committed as
+`pinenote/tools/optics-rig/`; real antialiased typeset pages
+(DejaVu-Serif at 227 dpi, Moby Dick) as payload.
+
+**Part 9's A2 conclusion did not survive the instrument or the
+operator's reading eyes.** The evening's arc, all on the swapped and
+then restored identity table, KOReader live plus lab arms:
+
+- Hint 48 (GC16 partial) as a route: "really gross", "everything is
+  just way slower" — out.
+- Two-pass redraw (`redraw_delay`, prelim-then-GL16): the MODE ioctl
+  only queues `CHANGE_LUT`; the WAITING rows are rebuilt lazily on the
+  next refresh-thread wake, so the set appears dead until damage
+  arrives (query showed 0 until a poke). Enabled at 42 then 200
+  frames: no visible difference to the operator — parked.
+- The operator's own two-stage proposal — **wipe white through DU,
+  then draw through GL16, so every turn passes through white** — was
+  REFUTED by measurement at every horizon: single turn +2.44 % vs
+  plain GL16's +1.72 %; 8-turn alternation +2.55 % vs +2.19 %;
+  4-distinct-page union chain +1.31 % vs +1.04 % (all
+  baseline-corrected). Mechanism: in a plain turn old ink gets GL16's
+  full 38-phase drive to white; the wipe replaces that with a 12-phase
+  DU shove and the draw then no-ops white-over-white. A GC16-quality
+  wipe measured the same (+2.53 %). The wipe DOWNGRADES the clearing
+  waveform. `wipe-flip.lua` (the arm driver) is committed with the
+  refutation in its header.
+- **Plain GL16 partials (hint 32) are the cleanest route this driver
+  has**, and GL16 ghost SATURATES (~2 %) rather than compounding —
+  8 turns added only ~0.5 % over 1 turn.
+- The menu's "degradation" is a **negative ghost**: a half-panel
+  black rect driven back to white measures **−2 %** — the region
+  OVERSHOOTS BRIGHTER than surrounding paper, leaving a visible
+  rectangle edge. Large-area drives overshoot; structured ±2 % steps
+  are what eyes flag, in either direction.
+
+**Where the route war lands** (operator-confirmed live): default
+hint 32, wash-on-debt. Part 9's "horrible GL16 ghosting" was
+accumulated unpaid debt judged on a dirty panel — from a washed
+slate the operator called the same route "much better", and the
+"much more ghosting" that followed was the debt rebuilding plus the
+menu overshoot. The A2/dither routes are retired for reading (the
+"little holes" verdict on dithered glyphs); A2 remains the pen/UI
+lever. What plain GL16 still owes: a wash cadence that pays debt
+during engaged reading (KOReader full-refresh-every-N-pages + the
+idle washer + UI-overlay-close treatment — the flashes were
+load-bearing all along), then per-region RECT_HINTS routing.
+
+Session traps recorded: at hint 64 the "menu flash" the operator saw
+was A2 slamming a big UI rect, not a wash — KOReader's flash toggle
+was rightly innocent; `ffmpeg` without `-y` silently reuses the prior
+capture (one arm measured the baseline twice); an ImageMagick operator
+outside parentheses applies to every loaded image (a mask came out
+82 % instead of 1 %); the device carries no system `luajit`
+(KOReader's bundled one is the interpreter for everything staged).
+
+**Device state at close**: reader running on the IDENTITY table
+(clut-swap restored it), default hint 32, `redraw_delay` param at 200
+(inert at hint 32), mode NORMAL, freshly washed. Session-scoped as
+ever: a reboot reverts to the boot one-shot identity table and the
+module default hint (param default is 64 — dithered mono — NOT the
+160 this file previously assumed; unverified which the service stack
+then overrides). Autosuspend still pinned off. The Brio is in the rig
+with a valid calibration in the session scratchpad — recalibrate on
+any rig move.
+
+## 2026-08-26 (part 9) — the ghost is grayscale: A2 routing fixes page turns, live
+
+First full run of the ebc-lab iteration loop — a CLUT variant compiled
+on the workstation, swapped onto the running device, and judged through
+five live hint changes under an unmodified KOReader, no image write.
+The result is a validated product recipe for direct-mode page turns.
+
+**Setup**: fresh boot (identity CLUT via the boot one-shot, hands-off
+probe at 12.3 s), then `clut-swap.sh` installed a `--class-source=DU:A2`
+table (`556388ec…`) — A2 (10 phases, 6 rows, run length 1) in the DU
+slot, every other slot byte-identity. First hardware use of
+`clut-swap.sh`, `page-flip.lua`, and the lab's GLOBAL_REFRESH one-liner;
+`rect-hints.lua --default` drove the whole sweep live under the reader.
+
+**Synthetic flips** (page-flip.lua, 12 flips at 2 s, mono blocks):
+hint 0 → A2: crisp swaps, "not really" any ghosting, 20–28 IRQs/flip
+(~two defio waves × A2's 10 phases). Hint 160 → GL16: 42–60 IRQs,
+minor artifacting and lingering ghost — but **still far better than
+KOReader's turns**, which killed the "it's the waveform table" theory
+on the spot: same driver, same routing, same table, mono content is
+fine.
+
+**Live KOReader hint sweep** (operator turning real pages):
+
+| default hint | route | verdict |
+|---|---|---|
+| 160 (Y4+REDRAW) | GL16 | horrible ghosting (baseline) |
+| 32 (Y4) | GL16 | identical — **REDRAW exonerated** |
+| 0 (Y1 threshold) | A2 | **ghosting gone**, text readable, no antialias |
+| 64 (Y1 dither) | A2 | text nice; dither visible on images; heavy images ghost (A2's drive is too weak to scrub dense content) |
+| 80 (Y2 dither) | DU4 | worse: lots of ghost AND slow settle — DU4 is out |
+
+So the horrible page-turn ghosting is **GL16 × antialiased grayscale
+text**, specifically — not the table bytes (mono blocks through GL16
+are near-clean), not the REDRAW flag, not the damage path. Why this
+driver's Y4 transitions ghost where the shipping driver ran the same
+GL16 lineage cleanly is now a research question, not a product blocker.
+
+**The wash lever closes the loop**: one GLOBAL_REFRESH (fired from the
+lab via ebclib) scrubbed the full-page-image ghost completely.
+Operator: "the wash cleared it. Idle washer is fine for the current
+situation. Text page turns are much nicer. Whatever the config is now
+is good."
+
+**The validated recipe** (the commercial fast-mode pattern): default
+hint 64 (dithered mono via A2) for turns + wash-on-debt for ghost
+management (idle washer suffices today) + per-region Y4 routing for
+images later, via the RECT_HINTS plumbing this session proved live.
+
+**Device state at close**: SESSION-SCOPED config live on os2 — A2-in-DU
+table + driver default hint 64. A reboot reverts both (identity CLUT,
+hint 160) and brings the ghosting back; persistence needs the one-shot
+and the hint default wired into the image. Reader running, autosuspend
+still pinned off. Trap for future lab work: no system `luajit` on the
+image — use KOReader's bundled one
+(`…-koreader-bin-…/lib/koreader/luajit`).
+
+## 2026-08-26 (part 8) — D8 CLOSED: 20 ms to ink in FAST, 40–60 ms in NORMAL, both pen-class
+
+The formal half of D8, from two 240 fps phone clips analyzed
+frame-by-frame (`doc/artifacts/pinenote-d8-pen-latency-20260826/`):
+
+| | FAST | NORMAL |
+|---|---|---|
+| software (event→fsync) | 0.3 ms | 0.3 ms |
+| nib → first ink | **~20 ms** (17–25) | **~40–60 ms** |
+| ink → fully dark | ~100 ms | ~250–290 ms |
+
+**The embrace threshold is met with margin** — and the surprise is
+NORMAL: the CLUT engine alone is inside pen-class, which is why the
+operator reported NORMAL "feels pretty much the same to write on."
+Both modes sit at/under the ~50–70 ms threshold hands can feel; FAST
+is 2× to first ink and ~3× to solid, and earns its keep at the
+margins (one NORMAL strike showed ink-free glass 90 ms after the nib
+left; one light tap left no ink at all). Physics cross-checks land:
+FAST first-visibility at 1–2 phases of its ~36 ms table-free drive;
+NORMAL's ~250–290 ms development matches GL16's ~260 ms sequence.
+
+**Product reframe this enables**: NORMAL — the same waveform lineage
+the shipping driver renders with, full grayscale — can carry both
+reading and writing; FAST becomes an opt-in sketch mode instead of a
+required posture. No mode management in the default experience. What
+direct mode still owes the reader is page-turn TRANSITION quality
+(the standing optics + PHASE_SEQUENCE workstreams), not rendering
+fidelity or pen latency. With part 7's felt verdicts and tonight's
+numbers, every D-rung of the embrace gate that can pass has passed.
+
+Analyst traps recorded in the artifact README: Samsung edit lists
+decode as DIFFERENT timelines through ffmpeg's `-i` vs lavfi `movie=`
+paths (frame indices silently disagree — cost three misaligned
+analyses); the dts-warning splice points bound where 4.17 ms/frame is
+true; and an ROI must match the mark's size (a 36×36 box hides an
+8 px dot).
+
+## 2026-08-26 (part 7) — first pen session: "holy crap, amazing"
+
+The D8 instruments went on glass the same hour they were built, ahead
+of the formal experiment, because the operator wanted a feel. Results:
+
+- **`ebc-mode.lua` drove the direct driver's MODE and RECT_HINTS
+  ioctls on hardware for the first time** — FAST mode confirmed live
+  (`mode=1`), default hint set to 0 (Y1+THRESHOLD, REDRAW off).
+- **The scribbler's software path is essentially free: 0.2–1.5 ms**
+  from pen event to fsync-returned, logged per batch across ~14k
+  batches. Whatever the hand feels is driver+glass.
+- **Operator verdicts**: "the responsiveness is extremely good" — and
+  after the rendering fix below, **"holy crap, amazing"**, then:
+  "This is absolutely insane on the pen mode! It goes WAY faster than
+  I expected to be able to hit. **This does make pursuing this path
+  worthwhile.**" D8's felt half is in and the strategic conclusion is
+  stated in the operator's own words; the formal 240 fps nib-to-ink
+  number is still owed for the record. Combined with part 6's reading
+  verdict, the campaign is now: keep the direct driver, fix reading
+  quality on it (better optics + the PHASE_SEQUENCE user-mode path
+  are the standing directives).
+- **The direct driver's fbdev is RGB565** — 16 bpp, stride 3744 — not
+  the shipping driver's XR24/7488. The scribbler initially assumed
+  32 bpp: ink at twice the vertical position, the lower half of every
+  stroke written past the end of the buffer, calibration squares drawn
+  sheared or entirely off-buffer. Diagnosed live from
+  `/sys/class/graphics/fb0`; the tool now reads geometry from sysfs at
+  startup (harness-pinned for both formats).
+- **Touch mapping needs NO transform**: the operator traced the glass
+  perimeter and the mapped coordinates walked the framebuffer
+  perimeter exactly — digitizer and panel share landscape-native axes
+  (physical-portrait top-left = fb bottom-left, corners to corners).
+- **Latent bug found by the same mistake**: `autosuspend.lua`'s sleep
+  banner hardcodes the 32 bpp geometry, so on the direct image the
+  banner draws sheared half-tone garbage into the top half of the
+  panel (unnoticed until now because nobody looked at a sleeping study
+  device). Needs the same sysfs-geometry fix; filed.
+
 ## 2026-08-26 (rig session, part 6) — the landmine image: both operational traps fixed, deployed, and proven on glass
 
 Follow-up to part 5's two landmines, same night. The `3405a1c9…` image
@@ -114,6 +874,22 @@ re-applied (idle_s=12, debt_min=8), frontlight 153/153, autosuspend
 ENABLED at stock timers (300/3600) — the device is a working reader
 that sleeps on its own; SSH is intermittent by design again. os1
 untouched.
+
+**OPERATOR VERDICT (same night, reading on the parked device): page
+turning remains MUCH WORSE than before the driver change.** That is
+the direct-mode bail-out axis stated plainly ("a reader that regresses
+reading to gain writing is the wrong trade" —
+`doc/direct-mode-adoption.md`). Standing on the other side of the
+scale: nothing yet — D8 has never produced a number. The decision
+logic this verdict forces: run D8 next (the pen instruments landed as
+`pinenote/tools/pen/`, `make pen-check` green); if FAST mode does not
+reach pen-class latency, the trade has no other side and the campaign
+resolves to REJECT (restore the shipping driver image on os2); if it
+does, weigh iterate-vs-reject with both numbers on the table. The
+remaining iterate levers on reading quality are known and bounded:
+hand-crafted waveform rows inside the measured DC envelope, and
+per-turn hint tuning (diff-only turns trade transition dirt against
+REDRAW's flash — the operator has now rejected each end separately).
 
 ## 2026-08-26 (rig session, part 5) — the INT-first + sysrq image deploys clean; the stop is 0.484 s on glass; the serial rescue is proven and then re-modeled
 

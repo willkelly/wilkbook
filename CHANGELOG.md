@@ -8,15 +8,113 @@ means an instrument or a log said so, and anything that is division from
 a measurement is labelled as such. Depth lives in `doc/`; these entries
 are pointers, not summaries.
 
-Nothing after `v0.1.0-prealpha` has been tagged. One image has been cut
-since — the `reader-direct` study image, deployed to the author's own
-device on 2026-08-25 for the direct-mode experiment; it is not a release
-and not for testers. If you are running wilkbook today you are running
-the pre-alpha image `9a08803e…` on Linux 7.0.11, and everything under
+`v0.2.0-prealpha` (2026-08-27) is the current tag: the `reader-direct`
+image — the direct-mode driver is now the pre-alpha lineage. The
+`v0.1.0-prealpha` image `9a08803e…` on Linux 7.0.11 remains the last
+shipping-driver build. Everything under
 **Unreleased** that was proven was proven on that image unless an entry
 says otherwise.
 
 ## Unreleased
+
+### Suspend and wake: the platform-controls broker (first outside contribution)
+
+- **Sleep is now a conversation with the reader instead of a rug-pull**
+  (PR #41, rpedde — hardware-accepted on their own PineNote,
+  2026-08-31, `doc/status.md`). Power button, cover close, the menu's
+  Sleep item, and KOReader's AutoSuspend all reach one acknowledged
+  path: KOReader checkpoints your place, paints its sleep screen, and
+  quarantines input *before* the supervised broker writes the suspend.
+  If the reader can't answer within ten seconds, a fallback SUSPEND
+  frame is painted and the device sleeps anyway.
+- **What a tester will notice**: a real sleep screen (screensaver
+  support, including custom images); frontlight level *and* warmth come
+  back exactly after wake and survive a reader restart; the frontlight
+  toggle no longer forgets your brightness; Wi-Fi has an on/off toggle
+  in KOReader and honors its "restore Wi-Fi after resume" setting;
+  Power Off in the menu actually powers off.
+- **Policy changes, accepted deliberately**: the idle timeout is now
+  KOReader's AutoSuspend setting (default 15 min, user-settable in the
+  UI) instead of the fixed 5-minute daemon; a device on the charger no
+  longer auto-sleeps (set `suspend_while_charging=1` in
+  `autosuspend.conf` to restore the old behavior). `enabled=0` in
+  `/data/wilkbook/autosuspend.conf` still pauses everything, re-read
+  continuously; an old `idle=` line is logged once and ignored.
+- The RTC safety backstop, deep/ultra suspend machinery, and the
+  single-writer rule for `/sys/power/state` are preserved; a button
+  wake now also clears the still-armed backstop alarm. The standalone
+  autosuspend daemon is retired from the reader flavors.
+- Ron's acceptance run doubled as two independent firsts: the first
+  completed second-person install (`doc/install.md` is no longer
+  unverified), and the first validated cold boots of the
+  shipping-driver 7.1.8 reader image on glass.
+- Not yet on any deployed wilkbook device: the v0.2.0 image on os2
+  predates this and still runs the old daemon; the broker rides the
+  next built image. The broker + direct-driver combination has not had
+  a hardware session yet.
+
+## v0.2.0-prealpha — 2026-08-27
+
+**The pre-alpha moves to the direct-mode driver.** This tag cuts the
+`reader-direct` image as the new pre-alpha lineage: hrdl's direct-mode
+EBC driver with wilkbook's banded parallel screen updates, atomic page
+turns, a decode-fidelity CLUT compiler, validated display defaults
+applied at boot, a white splash instead of a console, and the same
+reader stack (KOReader, pen, Wi-Fi, key-only SSH, ultra suspend
+machinery) as v0.1.0. Operator-validated over a full evening and a
+night of instrumented measurement (`doc/status.md` 2026-08-26/27
+parts 9-24; the optics evidence in
+`doc/artifacts/pinenote-optics-turnroutes-20260826/`): page turns are
+snappy, the mid-turn "wave" of prior-page text is gone, accumulating
+ghosting is resolved to acceptable, menus no longer flash, writing
+latency is unchanged ("looks great"). Release image
+`pinenote-reader-direct-PNGuixRoot-20260826.ext4` (built 2026-08-27),
+SHA256 `7afd3f8a…` — full hash and deploy record in `doc/status.md`
+part 24.
+
+Known character and open work: a transient per-turn settling effect
+(bold prior elements briefly shining through; wavy text coming into
+focus — gone once settled); a faint full-width band summonable by
+display-timing experiments (do not use long frame pacing); the
+phase-sequence tool can crash the kernel (UART-attended only); the
+suspend/power legs have not been re-validated on this driver.
+
+### Display (the fidelity CLUT)
+
+- **The waveform tables the panel plays are now byte-exact to what the
+  original driver's hardware engine reads.** The boot-time compiler had
+  faithfully reproduced its reference's bugs: on ~13 % of grayscale
+  transitions — concentrated at the near-black/near-white levels
+  antialiased text edges use — the panel played the WRONG waveform, and
+  ~80 % of transitions ran time-shifted. Found by a new offline differ
+  (`wbf-clut-diff`, now a standing test gate), fixed as the compiler's
+  default, A/B'd live on glass the same night: operator +1.
+
+### Direct-mode driver (was: study image)
+
+- **Page turns compute in time now.** The direct driver's screen
+  updates were arriving ~50 % slower than the panel scans whenever most
+  of the screen changed — every page turn ran its waveform out of spec
+  while pen strokes ran on time. The update computation now spreads
+  across CPU cores and full-screen refreshes hit the panel's native
+  rate (measured: 18.4 → 11.9 ms per frame, no visual difference at
+  the seams, same pen feel). `doc/status.md` 2026-08-26 part 12.
+- **The display defaults you'd otherwise set by hand now ship.** The
+  next study image boots straight into the measured reading route
+  (grayscale page turns through GL16) and the corrected temperature
+  bin (the built-in sensor reads warm at the bin boundary; the wrong
+  bin costs visibly more ghosting). Previously both had to be applied
+  over SSH after every boot. `doc/status.md` parts 10–16.
+- **No more terminal on the e-ink panel.** The boot console text used
+  to burn into the ghost ledger during boot and whenever the reader
+  stopped. The panel now shows a plain white page from driver bring-up
+  until KOReader takes over; the terminal remains available on serial.
+- **Known issue: a faint full-width band** (~1/6 of screen height,
+  ~3/4 down the page) can appear after display-timing experiments and
+  deepen with rapid page turns; repeated full refreshes fade it. Under
+  investigation — do not run `phase-seq.lua` (its reset mode crashed
+  and rebooted the device once; it is marked dangerous until a
+  UART-attended session).
 
 ### Battery and suspend
 

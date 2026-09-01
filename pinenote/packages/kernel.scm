@@ -239,7 +239,14 @@ for the panel-corruption investigations.")))
         (append (origin-patches (package-source %linux-pinenote-base))
                 %linux-pinenote-patches
                 (list (local-file
-                       "../patches/linux-pinenote-7.1-hrdl-direct-mode.patch"))))))
+                       "../patches/linux-pinenote-7.1-hrdl-direct-mode.patch")
+                      ;; Ours, on top of hrdl's: the banded parallel
+                      ;; NORMAL advance (full-panel frames 18.4 -> 11.9
+                      ;; ms, glass-proven 2026-08-26 via live module
+                      ;; swap) plus the frame_period_us / advance_bands
+                      ;; instruments.  See the patch header.
+                      (local-file
+                       "../patches/linux-pinenote-7.1-ebc-parallel-advance.patch"))))))
     (synopsis "PineNote kernel with hrdl's direct-mode EBC driver (study)")
     (description
      "The linux-pinenote kernel with our EBC driver replaced by hrdl's

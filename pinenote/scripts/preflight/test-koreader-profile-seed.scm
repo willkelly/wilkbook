@@ -49,7 +49,8 @@
   (string-append "    [\"" key "\"] = " value ",\n"))
 
 (define %keys-with-fonts
-  '("closed_rotation_mode"
+  '("avoid_flashing_ui"
+    "closed_rotation_mode"
     "copt_b_page_margin"
     "copt_font_size"
     "copt_h_page_margins"
@@ -66,6 +67,7 @@
     "home_dir"
     "lock_rotation"
     "monospace_font"
+    "pinenote_flash_area_fraction"
     "quickstart_shown_version"
     "refresh_on_pages_with_images"
     "screensaver_type"))
@@ -80,6 +82,11 @@
     ("flash_ui" . "false")
     ("flash_keyboard" . "false")
     ("cre_header_auto_refresh" . "0")
+    ;; The SHIPPING flavor's flash promotion stays at its validated
+    ;; behavior: mandatory UI flashes on, promotion threshold 0.60.
+    ;; Only the direct flavor overrides these (ghosting resolved there).
+    ("avoid_flashing_ui" . "false")
+    ("pinenote_flash_area_fraction" . "0.6")
     ("coverbrowser_initial_default_setup_done" . "true")
     ("full_refresh_count" . "0")
     ("refresh_on_pages_with_images" . "false")

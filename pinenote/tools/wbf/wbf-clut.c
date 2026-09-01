@@ -85,10 +85,28 @@ enum wf_idx {
 };
 #define WF_REAL 5	/* WF_IDLE is last and carries no table */
 
+/* Source-only classes: real modes in the wbf that the CLUT format has
+ * no slot for, usable on the SOURCE side of --class-source to load
+ * their sequences into one of the five real slots.  The headline user
+ * (2026-08-26): GLD16 -- the REGAL-family anti-ghost table the
+ * SHIPPING driver turned pages with (refresh_waveform=6) -- into the
+ * GL16 slot, so direct-mode Y4 page turns drive the same table.  A2
+ * (10 phases on this panel) is the classic fast mono UI waveform.
+ * On mode_version 0x19 these are distinct mode indices (GL16=3,
+ * GLR16=4, GLD16=5, A2=6 -- wbf-info); on a panel whose wbf lacks
+ * one, resolution fails loudly at compile time, and only when the
+ * class is actually referenced. */
+enum {
+	WF_SRC_A2 = WF_REAL,
+	WF_SRC_GLR16,
+	WF_SRC_GLD16,
+};
+#define WF_NAMES (WF_SRC_GLD16 + 1)
+
 static const struct {
 	const char *name;
 	enum drm_epd_waveform waveform;
-} wf_table[WF_REAL] = {
+} wf_table[WF_NAMES] = {
 	[WF_DU]   = { "DU",   DRM_EPD_WF_DU },
 	[WF_DU4]  = { "DU4",  DRM_EPD_WF_DU4 },
 	[WF_GL16] = { "GL16", DRM_EPD_WF_GL16 },
@@ -96,6 +114,9 @@ static const struct {
 	/* wbf_to_custom.py reads INIT from mode index 0, which is what the
 	 * driver calls RESET.  Both resolve to 0 for mode_version 0x19. */
 	[WF_INIT] = { "INIT", DRM_EPD_WF_RESET },
+	[WF_SRC_A2]    = { "A2",    DRM_EPD_WF_A2 },
+	[WF_SRC_GLR16] = { "GLR16", DRM_EPD_WF_GLR16 },
+	[WF_SRC_GLD16] = { "GLD16", DRM_EPD_WF_GLD16 },
 };
 
 /* --class-source=TARGET:SOURCE remaps which decoded mode's sequences a
@@ -116,7 +137,7 @@ static int wf_by_name(const char *name, size_t len)
 {
 	int w;
 
-	for (w = 0; w < WF_REAL; w++)
+	for (w = 0; w < WF_NAMES; w++)
 		if (strlen(wf_table[w].name) == len &&
 		    !strncmp(wf_table[w].name, name, len))
 			return w;
@@ -249,6 +270,24 @@ static void report_balance(const struct mode_summary *ms, int temp_index)
  * (-DWBF_CLUT_MUTATIONS is set by the host Makefile's selftest target
  * only), so the device can never be handed one by accident, and the
  * differential asserts the shipping binary REFUSES the flags. */
+/* FIDELITY MODE (default since 2026-08-27, doc/status.md part 23-24):
+ * deviate DELIBERATELY from wbf_to_custom.py so the CLUT is byte-exact
+ * to what the shipping hardware LUT engine reads:
+ *   - only even-even 5-bit rows land in the 4-bit cells (the hardware
+ *     reads 5bit[2*from][2*to]; the reference's four-way collision let
+ *     odd rows win ~13% of GL16 cells -- at gray levels 1 and 14,
+ *     where antialiased text edges live);
+ *   - the leading neutral run is preserved (the reference stripped it,
+ *     front-loading every transition and de-synchronizing co-scheduled
+ *     pixels);
+ *   - the trailing run is preserved (the reference's QUIRK 1 dropped
+ *     it unconditionally).
+ * Verified by pinenote/tools/wbf/wbf-clut-diff.c reporting ZERO
+ * divergence on a fidelity CLUT.  --reference-quirks restores the
+ * transliterated wbf_to_custom.py behaviour for the upstream
+ * differential (upstream-register item 14). */
+static int reference_quirks;
+
 #ifdef WBF_CLUT_MUTATIONS
 static int mutate_keep_suffix;		/* skip QUIRK 1's unconditional drop */
 static int mutate_collision_first_wins;	/* invert QUIRK 2's write order */
@@ -301,9 +340,10 @@ static int summarise_row(const u8 *seq, unsigned int phases,
 			len++;
 			count = 0;
 		}
-		/* Drop the leading zero-run: it only delays the sequence.
-		 * Python tests `not summary', i.e. nothing emitted yet. */
-		if (len == 0 && p == 0)
+		/* Reference behaviour drops the leading zero-run ("it only
+		 * delays the sequence"); fidelity mode keeps it so the
+		 * transition timeline matches the shipping stack's. */
+		if (reference_quirks && len == 0 && current == -1 && p == 0)
 			continue;
 		current = p;
 		count++;
@@ -316,8 +356,9 @@ static int summarise_row(const u8 *seq, unsigned int phases,
 		len++;
 	}
 
-	/* QUIRK 1 (see the header comment): summary[:-1], unconditionally. */
-	if (!mutate_keep_suffix) {
+	/* QUIRK 1 (see the header comment): summary[:-1], unconditionally
+	 * -- reference behaviour only; fidelity keeps the suffix. */
+	if (reference_quirks && !mutate_keep_suffix) {
 		if (len < 2) {
 			fprintf(stderr,
 				"FAIL: single-entry summary at src=%u dst=%u; wbf_to_custom.py raises IndexError there, so no reference behaviour exists to match\n",
@@ -360,6 +401,12 @@ static int summarise_mode(struct drm_epd_lut *lut, int mode_index,
 		unsigned int src = i % STATES, dst = i / STATES;
 		unsigned int p, a = src, b = dst;
 		struct row_summary *row = &ms->rows[ms->count];
+
+		/* Fidelity: only the even-even rows the hardware reads;
+		 * no collisions can exist.  Reference: all rows, four-way
+		 * collision per cell, last write wins (QUIRK 2). */
+		if (!reference_quirks && ((src | dst) & 1))
+			continue;
 
 		if (mutate_axis_swap) {
 			a = dst;
@@ -500,7 +547,7 @@ static int write_output(const char *path, const u8 *buf, size_t size)
 
 static void usage(const char *argv0)
 {
-	fprintf(stderr, "usage: %s [-v] [--balance-report] [--class-source=TARGET:SOURCE]... INPUT.wbf [OUTPUT.bin]\n", argv0);
+	fprintf(stderr, "usage: %s [-v] [--balance-report] [--reference-quirks] [--class-source=TARGET:SOURCE]... INPUT.wbf [OUTPUT.bin]\n", argv0);
 	fprintf(stderr,
 	        "       --balance-report prints per-bin, per-mode charge-balance\n"
 	        "       analysis of the decoded sequences; OUTPUT.bin may be\n"
@@ -600,7 +647,7 @@ int main(int argc, char **argv)
 	struct drm_epd_lut_file file = { 0 };
 	struct drm_epd_lut lut = { 0 };
 	struct drm_device dev = { 0 };
-	struct mode_summary ms[WF_REAL] = { 0 };
+	struct mode_summary ms[WF_NAMES] = { 0 };
 	const struct pvi_wbf_file_header *h;
 	const char *in_path = NULL, *out_path = NULL;
 	unsigned int n_luts, t;
@@ -615,6 +662,8 @@ int main(int argc, char **argv)
 			verbose = 1;
 		} else if (!strcmp(arg, "--balance-report")) {
 			balance_report = 1;
+		} else if (!strcmp(arg, "--reference-quirks")) {
+			reference_quirks = 1;
 		} else if (!strncmp(arg, "--class-source=", 15)) {
 			const char *spec = arg + 15;
 			const char *colon = strchr(spec, ':');
@@ -630,8 +679,14 @@ int main(int argc, char **argv)
 			src = wf_by_name(colon + 1, strlen(colon + 1));
 			if (tgt < 0 || src < 0) {
 				fprintf(stderr,
-					"FAIL: unknown class in '%s' (DU, DU4, GL16, GC16, INIT)\n",
+					"FAIL: unknown class in '%s' (targets: DU, DU4, GL16, GC16, INIT; sources also: A2, GLR16, GLD16)\n",
 					spec);
+				return 2;
+			}
+			if (tgt >= WF_REAL) {
+				fprintf(stderr,
+					"FAIL: %s is source-only -- the CLUT has no slot for it\n",
+					wf_table[tgt].name);
 				return 2;
 			}
 			class_source[tgt] = src;
@@ -709,7 +764,7 @@ int main(int argc, char **argv)
 		return 1;
 	}
 
-	for (w = 0; w < WF_REAL; w++) {
+	for (w = 0; w < WF_NAMES; w++) {
 		ms[w].rows = calloc(ROWS, sizeof(*ms[w].rows));
 		if (!ms[w].rows) {
 			fprintf(stderr, "FAIL: out of memory\n");
@@ -729,10 +784,22 @@ int main(int argc, char **argv)
 	for (t = 0; t < n_luts; t++) {
 		u8 *lut_out = out + FILE_HEADER + (size_t)t * LUT_BYTES;
 
-		for (w = 0; w < WF_REAL; w++) {
-			int mode_index = pvi_wbf_get_mode_index(
-				&file, wf_table[w].waveform);
+		for (w = 0; w < WF_NAMES; w++) {
+			int mode_index, referenced = (w < WF_REAL), i;
 
+			/* A source-only class is decoded only when some
+			 * slot actually draws from it, so a wbf that
+			 * lacks the mode still compiles the identity
+			 * table -- and fails loudly the moment the
+			 * experiment flag asks for the missing mode. */
+			for (i = 0; i < WF_REAL; i++)
+				if (class_source[i] == w)
+					referenced = 1;
+			if (!referenced)
+				continue;
+
+			mode_index = pvi_wbf_get_mode_index(
+				&file, wf_table[w].waveform);
 			if (mode_index < 0) {
 				fprintf(stderr, "FAIL: no mode index for %s\n",
 					wf_table[w].name);

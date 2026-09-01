@@ -185,6 +185,49 @@ else
   bad "--class-source=GL16:GC16 exited nonzero"
 fi
 
+# Source-only classes (2026-08-26): real wbf modes the CLUT format has
+# no slot for, loadable INTO a slot.  Two pins carry findings, not just
+# plumbing:
+#   * A2 into the DU slot compiles and differs -- the fast-mono-UI
+#     lever (6 non-neutral rows on this panel).
+#   * GLD16 into the GL16 slot compiles and is BYTE-IDENTICAL to the
+#     identity table on this panel -- the observation that REFUTED the
+#     "shipping turns were REGAL" theory (doc/status.md 2026-08-26):
+#     whatever refresh_waveform=6 selected, it was this same table.
+#     If a future wbf pull breaks this identity, that is a finding
+#     about the panel, not a tool bug -- re-read the theory before
+#     re-pinning.
+if "$clut" -v --class-source=DU:A2 "$WBF" "$work/cs-a2.bin" > "$work/cs-a2.log" 2>&1; then
+  if cmp -s "$ours" "$work/cs-a2.bin"; then
+    bad "--class-source=DU:A2 produced identical bytes -- the remap did nothing"
+  else
+    pass "--class-source=DU:A2 changes the output (the fast-mono-UI lever)"
+  fi
+  if grep -q "mode=DU from=A2" "$work/cs-a2.log"; then
+    pass "-v reports the DU slot sourcing A2"
+  else
+    bad "-v does not report the A2 remap"
+  fi
+else
+  bad "--class-source=DU:A2 exited nonzero"
+fi
+
+if "$clut" --class-source=GL16:GLD16 "$WBF" "$work/cs-gld16.bin" >/dev/null 2>&1; then
+  if cmp -s "$ours" "$work/cs-gld16.bin"; then
+    pass "GLD16 into the GL16 slot is byte-identical on this panel (the REGAL refutation, pinned)"
+  else
+    bad "GLD16 table now DIFFERS from GL16 on this panel -- a finding, not a failure; re-read the theory"
+  fi
+else
+  bad "--class-source=GL16:GLD16 exited nonzero"
+fi
+
+if "$clut" --class-source=A2:GL16 "$WBF" "$work/cs-srconly.bin" >/dev/null 2>&1; then
+  bad "a source-only class was accepted as a TARGET"
+else
+  pass "--class-source=A2:GL16 is refused (A2 is source-only)"
+fi
+
 if "$clut" --class-source=GL16:NOPE "$WBF" "$work/cs-bad.bin" >/dev/null 2>&1; then
   bad "--class-source with an unknown class was accepted"
 else
@@ -319,17 +362,51 @@ else
   fi
 fi
 
+# ------------------------------------------------------- decode fidelity
+# The strongest pin this suite has: the DEFAULT compile must be
+# byte-exact to what the shipping hardware LUT engine reads -- verified
+# by wbf-clut-diff (the verbatim drm_epd_helper reference vs an
+# independent kernel-semantics walk) reporting ZERO divergence of any
+# class.  This is the 2026-08-27 fix's standing regression gate.
+clut_diff=$(dirname "$clut")/wbf-clut-diff
+if [ ! -x "$clut_diff" ]; then
+  bad "wbf-clut-diff not built beside wbf-clut -- the fidelity gate cannot run"
+else
+  diff_out=$("$clut_diff" "$WBF" "$ours" 2>&1) || true
+  if printf '%s' "$diff_out" | grep -q 'RESULT: ok' &&
+     printf '%s' "$diff_out" | grep -q ' 0 CONTENT divergent, 0 shift-equivalent, 0 length-only'; then
+    pass "fidelity: default CLUT diffs CLEAN against the verbatim helper (all classes zero)"
+  else
+    bad "fidelity: default CLUT diverges from the verbatim helper:"
+    printf '%s\n' "$diff_out" | tail -5
+  fi
+fi
+
 # ----------------------------------------------------------------- mutations
 # quirk: controls.  Each flips ONE reproduced upstream behaviour; each must
 # change the bytes.  If any of these matched, the byte-identical result
 # above would be evidence of nothing, because the quirk it names would not
 # be load-bearing.
+#
+# Since the fidelity default (2026-08-27) the quirks live only behind
+# --reference-quirks, so BOTH sides of each differential run in that
+# mode: the controls prove the reference path still reproduces the
+# upstream behaviours the register reports.
+refq=$work/reference-quirks.bin
+if ! "$clut_selftest" --reference-quirks "$WBF" "$refq" > /dev/null 2>&1    || [ ! -s "$refq" ]; then
+  bad "reference-quirks baseline compile failed"
+fi
+if cmp -s "$ours" "$refq"; then
+  bad "fidelity default is byte-identical to --reference-quirks -- the 2026-08-27 fix is not load-bearing"
+else
+  pass "fidelity default differs from --reference-quirks (the fix is load-bearing)"
+fi
 for mutation in drop-suffix-off collision-first-wins axis-swap; do
   out=$work/mut-$mutation.bin
-  if "$clut_selftest" "--mutate=$mutation" "$WBF" "$out" > /dev/null 2>&1; then
+  if "$clut_selftest" --reference-quirks "--mutate=$mutation" "$WBF" "$out" > /dev/null 2>&1; then
     if [ ! -s "$out" ]; then
       bad "quirk: --mutate=$mutation produced no output (control is vacuous)"
-    elif cmp -s "$ours" "$out"; then
+    elif cmp -s "$refq" "$out"; then
       bad "quirk: --mutate=$mutation changed nothing -- that behaviour is not load-bearing, so the differential proves less than it claims"
     else
       pass "quirk: --mutate=$mutation changes the output"
@@ -342,7 +419,7 @@ for mutation in drop-suffix-off collision-first-wins axis-swap; do
     # nonzero exit would let a renamed or deleted mutation keep printing
     # PASS while testing nothing (review, 2026-08-25), which is the same
     # vacuity these controls exist to prevent.
-    if "$clut_selftest" "--mutate=$mutation" "$WBF" "$out" 2>&1 \
+    if "$clut_selftest" --reference-quirks "--mutate=$mutation" "$WBF" "$out" 2>&1 \
          | grep -qiE 'unknown|unrecognis|unrecogniz|usage'; then
       bad "quirk: --mutate=$mutation is not a flag this binary knows -- the control is testing nothing"
     else

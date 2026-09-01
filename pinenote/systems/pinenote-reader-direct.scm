@@ -5,6 +5,7 @@
   #:use-module (pinenote packages kernel)
   #:use-module (pinenote services ebc)
   #:use-module (pinenote services ebc-direct)
+  #:use-module (pinenote services koreader-profile)
   #:use-module (pinenote systems pinenote-reader)
   #:export (pinenote-reader-direct-operating-system))
 
@@ -124,6 +125,16 @@
     (inherit pinenote-reader-operating-system)
     (host-name "pinenote-reader-direct")
     (kernel linux-pinenote-hrdl-direct)
+    ;; fbcon=map:1 keeps the framebuffer console off fb0 for good: the
+    ;; panel never shows a tty (operator directive 2026-08-27, after a
+    ;; night of console text burning into the ghost ledger during every
+    ;; reader stop and rebind).  The pinenote-ebc-splash one-shot paints
+    ;; the white page that replaces it.  Serial console and sysrq are
+    ;; untouched.
+    (kernel-arguments
+     (append (operating-system-user-kernel-arguments
+              pinenote-reader-operating-system)
+             '("fbcon=map:1")))
     ;; Per-device calibration data is compiled on the device from the
     ;; device's own waveform -- as with the waveform itself, nothing of the
     ;; sort is ever bundled in the image.
@@ -131,12 +142,24 @@
                     (operating-system-packages
                      pinenote-reader-operating-system)))
     (services
-     (cons (service pinenote-ebc-clut-service-type)
-           (modify-services (operating-system-user-services
+     (cons* (service pinenote-ebc-direct-params-service-type)
+            (service pinenote-ebc-clut-service-type)
+            (service pinenote-ebc-splash-service-type)
+            (modify-services (operating-system-user-services
                              pinenote-reader-operating-system)
              (pinenote-ebc-modprobe-service-type
               config => (pinenote-ebc-modprobe-configuration
                          (inherit config)
-                         (options %pinenote-ebc-direct-modprobe-options))))))))
+                         (options %pinenote-ebc-direct-modprobe-options)))
+             ;; Ghosting is resolved on this flavor (doc/status.md part
+             ;; 20), so UI flash promotion is no longer load-bearing:
+             ;; suppress KOReader's mandatory UI flashes and reserve the
+             ;; device layer's wash promotion for genuinely full-screen
+             ;; intents.  The shipping flavor keeps its validated 0.60.
+             (pinenote-koreader-profile-service-type
+              config => (pinenote-koreader-profile-configuration
+                         (inherit config)
+                         (avoid-flashing-ui? #t)
+                         (flash-area-fraction 0.98))))))))
 
 pinenote-reader-direct-operating-system

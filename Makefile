@@ -79,7 +79,7 @@ FLAVORS = minimal slim networked dev usb-console usb-console-linux-6-6 reader re
         timezone-check kernel-version-check library-check \
         manuals-check ultra-coupling-check timesync-check \
         settings-check koreader-profile-check ebc-modprobe-options-check \
-        ebc-clut-check ebc-card-resolution-check reader-stop-check \
+        ebc-clut-check ebc-card-resolution-check reader-stop-check pen-check ebc-lab-check \
         $(FLAVORS) $(addprefix image-,$(FLAVORS)) $(addprefix rootfs-,$(FLAVORS))
 
 help:
@@ -336,7 +336,7 @@ CHECK_HOST_TARGETS = clut-check ebc-logic-check ebc-barrier-check rastersim-chec
         battery-dtb-check time-machine-check gexp-modules-check \
         timezone-check refresh-trigger-check timesync-check settings-check \
         ebc-modprobe-options-check ebc-clut-check ebc-card-resolution-check \
-        reader-stop-check
+        reader-stop-check pen-check ebc-lab-check
 
 # Parse time, not recipe time: a recipe-level guard would run only AFTER every
 # prerequisite had already completed, so it could not prevent the mistake it
@@ -475,6 +475,18 @@ optics-audit-dataset:
 # daemon's own extracted source.
 power-check:
 	$(call guix-shell,guile python luajit) $(MAKE) -C pinenote/tools/power check
+
+# The D8 pen tools: the scribbler's geometry/parsing/publish path and
+# ebc-mode's MODE/RECT_HINTS ABI, extracted verbatim and pinned against
+# the hardware-proven GLOBAL_REFRESH ioctl constant.
+pen-check:
+	$(call guix-shell,luajit) $(MAKE) -C pinenote/tools/pen check
+
+# The EBC live-iteration lab: struct packers for RECT_HINTS and the
+# PHASE_SEQUENCE userspace-drive program, discovery, and page-flip's
+# synthetic-turn renderer -- the no-image-write experiment workbench.
+ebc-lab-check:
+	$(call guix-shell,luajit) $(MAKE) -C pinenote/tools/ebc-lab check
 
 # The SNTP client behind pinenote-timesync (issue #27).  Its protocol and
 # policy functions are extracted VERBATIM from the shipped daemon, and the
