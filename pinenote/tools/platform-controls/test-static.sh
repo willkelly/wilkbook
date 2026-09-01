@@ -12,7 +12,12 @@ grep -q 'bundle_root.*overlay/frontend/?.lua' "$broker"
 grep -q 'WILKBOOK_KOREADER_ROOT' "$broker"
 grep -q 'WILKBOOK_WIFI_CONTROL' "$broker"
 grep -q 'RTC backstop clear failed after resume' "$broker"
+# Zero physical inputs (QEMU virt, rung 4) must degrade, not crash-loop:
+# a dead broker holds reader-session -- and so the reader -- down.
+grep -q 'physical triggers disabled' "$broker"
+! grep -q 'error("no power/cover input devices")' "$broker"
 echo "PASS: broker is the single power-state writer and watches only power/cover"
 echo "PASS: standalone broker can load staged PineNote modules"
 echo "PASS: packaged broker paths can be supplied by the Shepherd service"
 echo "PASS: resume clears the RTC backstop alarm"
+echo "PASS: broker degrades without physical inputs instead of crash-looping"
