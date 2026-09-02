@@ -73,7 +73,7 @@ FIXTURE ?= os1-used
 # with the direct-mode patch if the adoption bails out.
 FLAVORS = minimal slim networked dev usb-console usb-console-linux-6-6 reader reader-debug reader-direct
 
-.PHONY: help packages kernel kernel-drv reader-system-drv qemu-smoke qemu-virt qemu-virt-check qemu-pageturn-campaign refresh-episodes-check refresh-trigger-check \
+.PHONY: help packages kernel kernel-drv reader-system-drv qemu-smoke qemu-virt qemu-virt-check qemu-update-check qemu-pageturn-campaign refresh-episodes-check refresh-trigger-check \
          check-host wbf-check wbf-notice clut-check ebc-logic-check ebc-barrier-check rastersim-check koreader-input-check orientation-check platform-controls-check optics-check optics-audit-dataset power-check rockchip-pm-check activation-positive-check suspend-check \
         battery-dtb-check time-machine-check gexp-modules-check \
         timezone-check kernel-version-check library-check \
@@ -103,6 +103,7 @@ help:
 	@echo "  ebc-ioctl-roster-check  every on-device EBC ioctl against the driver(s) it runs on (both UAPI headers from the patches)"
 	@echo "  update-path-check the update path: generation ledger, extlinux rendering, trial/promote pins"
 	@echo "  deploy            DEVICE=<ssh host>: build, guix copy, add generation, kexec trial, health, promote"
+	@echo "  qemu-update-check ROOTFS=<ext4> [SYSTEM_B=..]: the update flow end to end in QEMU (rung 4u)"
 	@echo "  ebc-logic-check   extracted EBC driver logic checks ([WBF=..])"
 	@echo "  ebc-barrier-check supervised EBC sleep-frame command host tests"
 	@echo "  rastersim-check   raster/waveform simulation checks ([WBF=..])"
@@ -244,6 +245,40 @@ qemu-virt-check:
 	  pinenote/scripts/preflight/stage-boot-bundle-from-rootfs.sh '$(ROOTFS)' \"$$bundle\" && \
 	  pinenote/scripts/qemu/make-virt-disk.sh '$(ROOTFS)' \"$$disk\" $(WAVEFORM) && \
 	  pinenote/scripts/qemu/run-virt-assertions.sh \"$$bundle\" \"$$disk\""
+
+# The update path end to end in QEMU virt (rung 4u, doc/update-path.md):
+# boot generation A from ROOTFS with a data partition carrying a harness ssh
+# key, a fixed host key and this workstation's guix signing key; guix copy
+# generation B (SYSTEM_B, a system store path -- default: the hostname
+# variant in pinenote/scripts/qemu/update-flow-generation-b.scm, built here)
+# into the guest; add, kexec trial, health, promote; then roll back to A.
+# Needs /etc/guix/signing-key.pub on this host (sudo guix archive --generate-key).
+# Usage: make qemu-update-check ROOTFS=<rootfs.ext4> [SYSTEM_B=<store path>] [WAVEFORM=<file>]
+qemu-update-check:
+	@test -n "$(ROOTFS)" || { echo "usage: make qemu-update-check ROOTFS=<rootfs.ext4> [SYSTEM_B=<system store path>] [WAVEFORM=<file>]"; exit 2; }
+	@test -r /etc/guix/signing-key.pub || { echo "FAIL: /etc/guix/signing-key.pub missing -- run: sudo guix archive --generate-key"; exit 2; }
+	@set -e; \
+	stamp=$$(date +%Y%m%d-%H%M%S); \
+	mkdir -p $(ARTIFACTS); \
+	bundle=$(ARTIFACTS)/pinenote-updchk-bundle-$$stamp; \
+	disk=$(ARTIFACTS)/pinenote-updchk-disk-$$stamp.img; \
+	data=$(ARTIFACTS)/pinenote-updchk-data-$$stamp.img; \
+	home=$(ARTIFACTS)/pinenote-updchk-home-$$stamp; \
+	sysb="$(SYSTEM_B)"; \
+	if [ -z "$$sysb" ]; then sysb=$$($(GUIX) system build --no-grafts $(GUIX_FLAGS) pinenote/scripts/qemu/update-flow-generation-b.scm | tail -n 1); fi; \
+	$(call guix-shell,e2fsprogs gptfdisk qemu openssh) sh -c "\
+	  set -e; \
+	  pinenote/scripts/preflight/stage-boot-bundle-from-rootfs.sh '$(ROOTFS)' \"$$bundle\" && \
+	  sysa=\$$(sed -n 's/.*gnu.system=\([^ ]*\).*/\1/p' \"$$bundle/extlinux/extlinux.conf\" | head -n 1) && \
+	  mkdir -p \"$$home/.ssh\" && chmod 700 \"$$home/.ssh\" && \
+	  ssh-keygen -q -t ed25519 -N '' -f \"$$home/.ssh/id_ed25519\" && \
+	  ssh-keygen -q -t ed25519 -N '' -f \"$$home/.ssh/vm_host_ed25519\" && \
+	  printf 'Host vm\n  HostName 127.0.0.1\n  Port %s\n  User root\n  IdentityFile %s\n  UserKnownHostsFile %s\n  StrictHostKeyChecking yes\n  ConnectTimeout 5\n  BatchMode yes\n' \"$${VIRT_UPDATE_PORT:-2277}\" \"$$home/.ssh/id_ed25519\" \"$$home/.ssh/known_hosts\" > \"$$home/.ssh/config\" && \
+	  printf '[127.0.0.1]:%s %s\n' \"$${VIRT_UPDATE_PORT:-2277}\" \"\$$(cut -d' ' -f1,2 \"$$home/.ssh/vm_host_ed25519.pub\")\" > \"$$home/.ssh/known_hosts\" && \
+	  UPDATE_FLOW_SSH_PUBKEY=\"$$home/.ssh/id_ed25519.pub\" UPDATE_FLOW_HOST_KEY=\"$$home/.ssh/vm_host_ed25519\" UPDATE_FLOW_GUIX_KEY=/etc/guix/signing-key.pub \
+	    pinenote/scripts/qemu/make-data-fixture.sh update-flow \"$$data\" && \
+	  pinenote/scripts/qemu/make-virt-disk.sh '$(ROOTFS)' \"$$disk\" $(or $(WAVEFORM),'') \"$$data\" && \
+	  pinenote/scripts/qemu/run-virt-update-flow.sh \"$$bundle\" \"$$disk\" \"$$home\" \"\$$sysa\" \"$$sysb\""
 
 # QEMU-virt WITH a data partition (offline ladder rung 4d): the same boot,
 # on a synthetic p7 that looks like a PineNote whose stock Debian os1 has

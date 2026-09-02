@@ -114,7 +114,7 @@ teardown as a suspend (EBC quiesce, gadget unbind, Wi-Fi off) before
 - **Rung 1**: the helper's pure logic (ledger, extlinux render, promote/
   demote/prune, health predicate) under host luajit; the kernel-config
   and package pins in the image inspection.
-- **Rung 4 — the whole flow in QEMU virt**: boot generation A, `guix
+- **Rung 4 — the whole flow in QEMU virt** (`make qemu-update-check ROOTFS=…`): boot generation A, `guix
   copy` generation B into the VM over SSH, `add`, `trial` (kexec inside
   the VM), verify B answers as `/run/current-system`, `promote`, then
   roll back to A. The mechanism end-to-end, no glass.

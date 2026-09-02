@@ -33,8 +33,8 @@ variant=$1
 out=$2
 
 case $variant in
-  os1-used|with-library|empty) ;;
-  *) fail "unknown variant: $variant (os1-used|with-library|empty)" ;;
+  os1-used|with-library|empty|update-flow) ;;
+  *) fail "unknown variant: $variant (os1-used|with-library|empty|update-flow)" ;;
 esac
 
 command -v mke2fs >/dev/null 2>&1 || \
@@ -81,6 +81,24 @@ LUA
   printf '# fixture\n' > "$tree/user/.bashrc"
 fi
 
+# update-flow (doc/update-path.md, rung 4): what a real operator's data
+# partition carries for the update path, from files the harness generated
+# -- a client public key (root login), a fixed host key pair (so the host
+# identity survives the kexec and can be pinned before the first boot),
+# and the workstation's guix signing key (so `guix copy` imports are
+# accepted).  Paths are the ones the ssh-keys and guix-acl services read.
+if [ "$variant" = "update-flow" ]; then
+  : "${UPDATE_FLOW_SSH_PUBKEY:?update-flow needs UPDATE_FLOW_SSH_PUBKEY}"
+  : "${UPDATE_FLOW_HOST_KEY:?update-flow needs UPDATE_FLOW_HOST_KEY (private; .pub beside it)}"
+  : "${UPDATE_FLOW_GUIX_KEY:?update-flow needs UPDATE_FLOW_GUIX_KEY (signing-key.pub)}"
+  mkdir -p "$tree/ssh/host" "$tree/wilkbook/guix/authorized-keys"
+  cp "$UPDATE_FLOW_SSH_PUBKEY" "$tree/ssh/authorized_keys"
+  cp "$UPDATE_FLOW_HOST_KEY" "$tree/ssh/host/ssh_host_ed25519_key"
+  cp "$UPDATE_FLOW_HOST_KEY.pub" "$tree/ssh/host/ssh_host_ed25519_key.pub"
+  cp "$UPDATE_FLOW_GUIX_KEY" "$tree/wilkbook/guix/authorized-keys/harness.pub"
+  chmod 700 "$tree/ssh" "$tree/ssh/host"
+  chmod 600 "$tree/ssh/authorized_keys" "$tree/ssh/host/ssh_host_ed25519_key"
+fi
 if [ "$variant" = "with-library" ]; then
   mkdir -p "$tree/books/Existing Book.sdr"
   printf 'stub epub (fixture)\n' > "$tree/books/Existing Book.epub"

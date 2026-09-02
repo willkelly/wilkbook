@@ -181,9 +181,22 @@ function commands.trial(n)
     run("herd stop reader-session >/dev/null 2>&1")
     run(WIFI .. " off >/dev/null 2>&1")
     if read_file(UDC) and read_file(UDC) ~= "" then write_file(UDC, "\n") end
-    if not ebc_quiesce() then die("EBC did not go idle; refusing to replace the kernel under a refresh") end
-    local load = string.format("/run/current-system/profile/sbin/kexec -l %s/Image --initrd=%s/initrd.cpio.gz --dtb=%s/%s --command-line='%s'",
-                               dir, dir, dir, L.DTB_NAME, append)
+    -- The EBC must be idle before the kernel is replaced under it -- on a
+    -- PineNote.  On any other machine (the QEMU virt rig, rung 4) there is
+    -- no EBC interrupt line and nothing to quiesce; likewise the
+    -- generation's DTB is the PineNote's, and kexec-tools reuses the
+    -- running device tree when --dtb is omitted.
+    local model = (read_file("/proc/device-tree/model") or ""):gsub("%z", "")
+    local pinenote = model:find("PineNote", 1, true) ~= nil
+    if pinenote then
+        if not ebc_quiesce() then die("EBC did not go idle; refusing to replace the kernel under a refresh") end
+    else
+        log("machine model %q: no EBC to quiesce", model)
+    end
+    local dtb_arg = pinenote and string.format(" --dtb=%s/%s", dir, L.DTB_NAME) or ""
+    log("machine model %q -> %s", model, dtb_arg ~= "" and "generation DTB" or "running device tree reused")
+    local load = string.format("/run/current-system/profile/sbin/kexec -l %s/Image --initrd=%s/initrd.cpio.gz%s --command-line='%s'",
+                               dir, dir, dtb_arg, append)
     if not run(load) then die("kexec -l failed for generation %d", n) end
     run("sync")
     run("mount -o remount,ro / 2>/dev/null")

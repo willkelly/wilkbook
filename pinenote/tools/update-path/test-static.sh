@@ -12,11 +12,15 @@ after 'herd stop reader-session' 'WIFI .. " off' "$helper"
 after 'WIFI .. " off' 'write_file(UDC, "' "$helper"
 after 'write_file(UDC, "' 'if not ebc_quiesce() then' "$helper"
 after 'if not ebc_quiesce() then' 'kexec -l %s/Image' "$helper"
+grep -q 'no EBC to quiesce' "$helper"
 after 'kexec -l %s/Image' 'remount,ro' "$helper"
 after 'remount,ro' 'sbin/kexec -e")' "$helper"
 [ "$(grep -c 'sbin/kexec -e")' "$helper")" -eq 1 ]
 grep -q 'refusing to replace the kernel under a refresh' "$helper"
 grep -q 'DEFAULT is unchanged' "$helper"
+# The PineNote DTB rides only on a PineNote; elsewhere (QEMU) the running DT is reused.
+grep -q 'model:find("PineNote", 1, true)' "$helper"
+grep -q 'running device tree reused' "$helper"
 echo "PASS: trial boot tears down like a suspend, quiesces the EBC, and never touches DEFAULT"
 # add materializes every profile generation's payload (the shipped one has no /boot/gen-N).
 grep -q 'ensure_payload(g)' "$helper"
