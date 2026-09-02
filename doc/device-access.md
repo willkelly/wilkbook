@@ -181,6 +181,13 @@ UART or a human at the menu.
   (re-push test assets). On pre-2026-08-06 images each reflash also
   regenerates the host key (`accept-new`); newer images restore both the
   authorized key and the host identity from `/data/ssh/` at boot.
+- **Never `accept-new` a host key against the shared address until the
+  slot you mean is the one answering** (2026-09-02): the two slots share
+  one IP and have different host keys, so a watcher that reconnects
+  with `StrictHostKeyChecking=accept-new` during an os1 window pins
+  os1's key, and the next os2 boot fails strict checking — which looks
+  identical to "no network" from the workstation. Purge with
+  `ssh-keygen -R` and re-pin once the right slot is up.
 - **Auto-suspend makes SSH intermittent**: the device is only reachable
   for the idle window after the last input, and Wi-Fi re-association eats
   several seconds of it after each wake. To work on the device, first
