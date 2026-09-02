@@ -3,6 +3,34 @@
 Last updated: 2026-09-02. Update protocol: add a dated entry at the top
 after every hardware session; entries are per-device/per-operator.
 
+## 2026-09-02 (wkelly PineNote) — three-fix image DEPLOYED to os2; first boot pending
+
+`pinenote-reader-direct-PNGuixRoot-20260901.ext4`, SHA256
+`4b55ae781f7ad3f58e13c43e50d49f79ae92689ae84002cec4b2b239c71ac5f6`
+(1,824,964,608 bytes, 445,548 × 4096), carrying everything on the
+previous os2 image plus tonight's three fixes: the slot identity guard
+(`d90e181`, the pinch-to-font-size crash), the driver-aware EBC quiesce
++ Wi-Fi restore seeds + ioctl roster gate (`3005a66`, issue #42).
+Offline record: `make check-host` green end to end on the merged tree
+(including the new `ebc-ioctl-roster-check`), both flavors lower, the
+closure-level image inspection passed on this exact ext4 (now also
+requiring the packaged `broker_quiesce.lua`). Transferred to the data
+partition from os1, written by the five-step protocol from stock os1:
+DEPLOY OK. The `enabled=0` pause left on the data partition the night
+before was removed as part of the write; the os2 host key was purged
+workstation-side. This overwrites `2adef085…` (the first broker+direct
+image, which could not suspend).
+
+**Not yet booted.** The session that boots it is the validation of all
+three fixes on glass, in this order: power tap → KOReader sleep screen
+→ resume with Wi-Fi back (`auto_restore_wifi`/`wifi_was_on` seeded);
+the broker log must say "no REFRESH_BARRIER on this driver; waiting for
+interrupt quiescence" and then "idle" — never "EBC busy"; cover close
+and menu Sleep through the same path; one AutoSuspend cycle; what the
+panel shows while asleep on hrdl's driver; and a pinch-to-font-size
+followed immediately by another pinch, which is the exact sequence that
+crashed the reader on 2026-09-02 02:18.
+
 ## 2026-09-01/02 (wkelly PineNote) — broker + direct FIRST BOOT: chain works, Wi-Fi toggle works, SUSPEND IMPOSSIBLE (barrier ioctl collision, issue #42)
 
 The `2adef085…` image booted hands-off into KOReader (white splash, no

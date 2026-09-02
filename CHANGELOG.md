@@ -82,8 +82,10 @@ says otherwise.
   network until you toggled Wi-Fi in the menu. Both settings are now
   seeded on (the retired daemon's behavior); flip "restore Wi-Fi after
   resume" in the Network menu if you want the radio to stay off.
-- Both fixes are on the rebuilt direct image, not yet on any deployed
-  device; their glass validation is the next hardware session.
+- Both fixes (and the pinch-crash fix below) are on the direct image
+  deployed to the author's os2 on 2026-09-02 (`4b55ae78…`, protocol
+  clean — `doc/status.md`); their glass validation is that image's
+  first boot.
 
 ### Input
 
@@ -96,7 +98,8 @@ says otherwise.
   KOReader defect — `doc/upstream-register.md` item 21). The reader now
   refuses to hand the gesture detector a touch it cannot identify, so
   the crash is impossible; the surviving finger is simply ignored until
-  it moves on both axes or lifts. Not yet on any deployed image.
+  it moves on both axes or lifts. On the author's os2 as of 2026-09-02
+  (`4b55ae78…`), first boot pending.
 
 ## v0.2.0-prealpha — 2026-08-27
 
