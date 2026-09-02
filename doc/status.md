@@ -69,9 +69,17 @@ window) and the RTC-backstop wake — rpedde's shipping-flavor matrix
 covers both paths, and they are logged, not special-cased, on this
 driver.
 
-The hot-fix dies with the next reboot; the durable image is
-`827576fd…` (rebuilt from `a7cef44`), staged and verified on the data
-partition, to be written by the protocol.
+**Durable image DEPLOYED the same session**:
+`pinenote-reader-direct-PNGuixRoot-20260902.ext4`, SHA256
+`827576fdae836e081ec2d5a8942989a0eb148dca4894fdd3a683849b8b44c587`
+(1,824,972,800 bytes, 445,550 × 4096 — two blocks larger than its
+predecessor; the protocol's size gate would have refused the stale
+count), pre-staged to the data partition over the live os2 link,
+written from os1 by the five-step protocol: DEPLOY OK. This is
+`a7cef44`'s tree: the corrected fingerprint and the fallback baked in,
+no hot-fix needed. First boot pending; one power tap on it is the
+confirmation that the shipped probe, not the bind mount, chooses the
+quiescence path.
 
 ## 2026-09-02 (wkelly PineNote) — three-fix image DEPLOYED to os2; first boot pending
 

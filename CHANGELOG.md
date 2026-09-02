@@ -91,8 +91,8 @@ says otherwise.
   too); corrected the same night with a fallback that makes a wrong
   fingerprint impossible to strand on, and the gate now checks the
   fingerprint against both drivers' real parameter registrations.
-  Durable image `827576fd…` pending deploy; the pinch-crash fix below
-  rides the same image.
+  The corrected image (`827576fd…`) is on the author's os2 as of
+  2026-09-02; the pinch-crash fix below rides the same image.
 
 ### Input
 
