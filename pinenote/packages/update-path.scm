@@ -30,7 +30,7 @@
                        (string-append share "/wilkbook-generation.lua"))
             (call-with-output-file (string-append bin "/wilkbook-generation")
               (lambda (port)
-                (format port "#!/bin/sh~nexec ~a ~a \"$@\"~n"
+                (format port "#!/bin/sh~%exec ~a ~a \"$@\"~%"
                         #$(file-append koreader-bin "/lib/koreader/luajit")
                         (string-append share "/wilkbook-generation.lua"))))
             (chmod (string-append bin "/wilkbook-generation") #o555)
