@@ -3,6 +3,48 @@
 Last updated: 2026-09-02. Update protocol: add a dated entry at the top
 after every hardware session; entries are per-device/per-operator.
 
+## 2026-09-02 (wkelly PineNote) — first boot of 4b55ae78: the fingerprint was wrong, hot-fixed live, and #42 VALIDATED ON GLASS
+
+Booted hands-off; SSH up 32 s after boot with Wi-Fi from the service;
+broker before reader, slot guard in the closure, both Wi-Fi keys seeded
+(`auto_restore_wifi`, `wifi_was_on`), zero out-of-order warnings.
+
+**Found on the first sysfs listing**: hrdl's direct driver registers
+`no_off_screen` too, so the `3005a66` fingerprint chose the barrier
+path and suspend would still have failed. From the patches: the
+shipping driver registers both `refresh_waveform` and `no_off_screen`;
+the direct-mode patch REMOVES `refresh_waveform` and keeps
+`no_off_screen`. Fix (`a7cef44`): the probe keys on
+`refresh_waveform`; `broker_quiesce` falls back to interrupt
+quiescence on an unsupported-ioctl-class barrier failure (EFAULT /
+EINVAL / ENOTTY) so a wrong fingerprint can never strand suspend
+again; the ioctl roster gate now proves the fingerprint against both
+drivers' real `module_param()` registrations via the modprobe
+preflight's extractor (and pins `no_off_screen` as registered by both).
+
+**Hot-fixed live** rather than reflashed: the two patched files
+bind-mounted over their store paths, `herd restart
+pinenote-platform-controls` (KOReader respawned once behind the
+recreated input node, as designed). Then, unplugged, one power tap:
+
+    04:35:46 power tap accepted
+    04:35:50 received ready; EBC quiesce: no REFRESH_BARRIER on this driver;
+             waiting for interrupt quiescence
+    04:35:50 EBC quiesce: idle (no interrupts for 250 ms, 250 ms total)
+    04:36:13 resumed after 20s; transaction complete ok=true detail=button
+    04:36:19 KOReader: Wi-Fi successfully restored (after 2.5 seconds)!
+
+Kernel: `PM: suspend entry (deep)` → `suspend devices took 5.549 s` →
+`rockchip_ebc_resume` → `suspend exit`; RTC backstop cleared after the
+button wake; the wake press itself correctly ignored inside the grace
+window. The known `cyttsp5: Validation of the wakeup response failed`
+line appeared on resume (the resume workaround's signature; touch
+worked). **This is the first rails-off suspend/resume through the
+broker on the direct driver, and the first time Wi-Fi came back on its
+own in the broker era.** The hot-fix dies with the next reboot; the
+durable image is `827576fd…` (rebuilt from `a7cef44`), to be deployed
+by the protocol.
+
 ## 2026-09-02 (wkelly PineNote) — three-fix image DEPLOYED to os2; first boot pending
 
 `pinenote-reader-direct-PNGuixRoot-20260901.ext4`, SHA256

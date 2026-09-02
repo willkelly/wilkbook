@@ -82,10 +82,15 @@ says otherwise.
   network until you toggled Wi-Fi in the menu. Both settings are now
   seeded on (the retired daemon's behavior); flip "restore Wi-Fi after
   resume" in the Network menu if you want the radio to stay off.
-- Both fixes (and the pinch-crash fix below) are on the direct image
-  deployed to the author's os2 on 2026-09-02 (`4b55ae78…`, protocol
-  clean — `doc/status.md`); their glass validation is that image's
-  first boot.
+- **Validated on glass 2026-09-02**: one power tap on the direct image
+  → sleep screen → rails-off suspend (the broker logged "interrupt
+  quiescence … idle") → button wake → Wi-Fi back on its own. The first
+  build's driver fingerprint was wrong (hrdl's driver has `no_off_screen`
+  too); corrected the same night with a fallback that makes a wrong
+  fingerprint impossible to strand on, and the gate now checks the
+  fingerprint against both drivers' real parameter registrations.
+  Durable image `827576fd…` pending deploy; the pinch-crash fix below
+  rides the same image.
 
 ### Input
 
