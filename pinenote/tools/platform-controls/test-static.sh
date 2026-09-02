@@ -27,5 +27,7 @@ grep -q 'driver_has_barrier = driver_has_barrier, barrier = ebc_barrier' "$broke
 grep -q 'ebc_quiesce()' "$broker"
 ! grep -q 'barrier_ok, barrier_error = ebc_barrier()' "$broker"
 grep -q 'fdec0000.ebc' "$broker"
+grep -q 'read_line("/sys/module/rockchip_ebc/parameters/refresh_waveform") ~= nil' "$broker"
+! grep -q 'parameters/no_off_screen") ~= nil' "$broker"
 echo "PASS: broker degrades without physical inputs instead of crash-looping"
 echo "PASS: broker quiesces the EBC by driver capability (barrier or interrupt quiescence, #42)"

@@ -332,10 +332,35 @@ def main():
     broker = read(BROKER)
     if ("driver_has_barrier = driver_has_barrier, barrier = ebc_barrier" in broker
             and "= ebc_barrier()" not in broker
-            and 'read_line("/sys/module/rockchip_ebc/parameters/no_off_screen")' in broker):
+            and 'read_line("/sys/module/rockchip_ebc/parameters/refresh_waveform")' in broker):
         ok("%s: the shipping-only barrier is reachable only through the driver probe" % BROKER)
     else:
         bad("%s: the barrier must be reachable only via broker_quiesce's driver_has_barrier" % BROKER)
+
+    # 4b. the fingerprint parameter must be registered by the shipping driver
+    #     and NOT by the direct driver -- from module_param() in each driver's
+    #     reconstructed source (the modprobe-options preflight's own extractor).
+    #     no_off_screen is registered by BOTH, which is how the first fix of
+    #     #42 still took the barrier path on glass.
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "modprobe_preflight", ROOT / "pinenote/scripts/preflight/validate-ebc-modprobe-options.py")
+    modprobe = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(modprobe)
+    ours, hrdl, defconfig, _ = modprobe.build_driver_sources()
+    shipping_params = set(modprobe.registered_params(ours, modprobe.OUR_CONFIG, "shipping"))
+    direct_params = set(modprobe.registered_params(hrdl, modprobe.HRDL_CONFIG, "direct"))
+    probe = re.search(r'read_line\("/sys/module/rockchip_ebc/parameters/(\w+)"\) ~= nil', broker)
+    probe = probe.group(1) if probe else None
+    if probe in shipping_params and probe not in direct_params:
+        ok("%s: fingerprint parameter `%s' is registered by the shipping driver only" % (BROKER, probe))
+    else:
+        bad("%s: fingerprint parameter %r must be shipping-only (shipping: %s, direct: %s)"
+            % (BROKER, probe, probe in shipping_params, probe in direct_params))
+    if "no_off_screen" in shipping_params and "no_off_screen" in direct_params:
+        ok("no_off_screen is registered by BOTH drivers (not a fingerprint; the 2026-09-02 trap)")
+    else:
+        bad("no_off_screen registration changed; re-read the fingerprint argument")
 
     # 5. positive control
     barrier = rosters["shipping"]["REFRESH_BARRIER"]

@@ -114,11 +114,17 @@ local function ebc_irq_count()
     end
     f:close(); return sum
 end
--- REFRESH_BARRIER is a wilkbook addition to the shipping driver; the
--- shipping-only module parameters are the same driver's fingerprint.
--- hrdl's direct driver registers neither (issue #42).
+-- REFRESH_BARRIER is a wilkbook addition to the shipping driver.  Its
+-- fingerprint is `refresh_waveform`: registered by the shipping driver,
+-- REMOVED by the direct-mode patch (`make ebc-ioctl-roster-check` pins
+-- that against both drivers' module_param registrations).  NOT
+-- `no_off_screen` -- hrdl's driver registers that one too, which is how
+-- the first fix of #42 still took the barrier path on glass (2026-09-02).
+-- If the fingerprint is ever wrong again, broker_quiesce falls back to
+-- interrupt quiescence on an unsupported-ioctl class error rather than
+-- stranding suspend.
 local function driver_has_barrier()
-    return read_line("/sys/module/rockchip_ebc/parameters/no_off_screen") ~= nil
+    return read_line("/sys/module/rockchip_ebc/parameters/refresh_waveform") ~= nil
 end
 local function ebc_quiesce()
     return Quiesce.new{ driver_has_barrier = driver_has_barrier, barrier = ebc_barrier,

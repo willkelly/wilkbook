@@ -20,12 +20,27 @@
 local Quiesce = {}
 Quiesce.__index = Quiesce
 
+-- A barrier failure that means "this driver does not speak REFRESH_BARRIER"
+-- rather than "the panel is busy": EFAULT (14, the command number landed in
+-- another handler), EINVAL (22), ENOTTY (25).  Anything else is the panel's
+-- verdict and stands.
+local UNSUPPORTED = { [14] = true, [22] = true, [25] = true }
+
+local function unsupported_ioctl(detail)
+    local errno = tostring(detail):match("errno (%d+)")
+    return errno ~= nil and UNSUPPORTED[tonumber(errno)] == true
+end
+
 function Quiesce:wait()
     if self.driver_has_barrier() then
         self.log("EBC quiesce: driver registers REFRESH_BARRIER; submitting barrier")
-        return self.barrier()
+        local ok, detail = self.barrier()
+        if ok or not unsupported_ioctl(detail) then return ok, detail end
+        self.log("EBC quiesce: barrier is not supported by this driver (" .. tostring(detail)
+                 .. "); the driver fingerprint is WRONG -- falling back to interrupt quiescence")
+    else
+        self.log("EBC quiesce: no REFRESH_BARRIER on this driver; waiting for interrupt quiescence")
     end
-    self.log("EBC quiesce: no REFRESH_BARRIER on this driver; waiting for interrupt quiescence")
     local last = self.irq_count()
     if last == nil then return false, "EBC interrupt line not found" end
     local elapsed, stable_for = 0, 0

@@ -61,8 +61,24 @@ do
     local ok = q:wait()
     check(ok and slept() == 250, "direct driver: an already-idle panel still proves stable_ms of silence", slept())
 end
+-- 5b. Wrong fingerprint: the barrier fails with the unsupported-ioctl
+--     class (EFAULT: the command landed in another handler) -> fall back
+--     to interrupt quiescence instead of stranding suspend.  A busy-class
+--     failure (ETIMEDOUT) must NOT fall back.
+do
+    local q, slept = fake({ 7 }, true, { false, "SUBMIT ioctl returned -1 (errno 14)" })
+    local ok, detail = q:wait()
+    check(ok and detail == "idle" and slept() == 250,
+          "wrong fingerprint: EFAULT from the barrier falls back to interrupt quiescence", detail)
+    local q2 = fake({ 7 }, true, { false, "WAIT ioctl returned -1 (errno 110)" })
+    local ok2, detail2 = q2:wait()
+    check(not ok2 and detail2:find("errno 110", 1, true),
+          "a busy-class barrier failure (ETIMEDOUT) does not fall back", detail2)
+    local q3 = fake({ 7 }, true, { false, "SUBMIT ioctl returned -1 (errno 25)" })
+    check(q3:wait() == true, "ENOTTY from the barrier also falls back")
+end
 -- 6. The choice is logged either way (the log is the field evidence).
-check(#logs >= 6 and logs[1]:find("REFRESH_BARRIER", 1, true) ~= nil, "both paths log which quiesce ran")
+check(#logs >= 8 and logs[1]:find("REFRESH_BARRIER", 1, true) ~= nil, "both paths log which quiesce ran")
 -- 7. Dependencies are mandatory.
 do
     local ok = pcall(Quiesce.new, { driver_has_barrier = function() end })
