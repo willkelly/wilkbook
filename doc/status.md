@@ -1,7 +1,44 @@
 # Hardware status
 
-Last updated: 2026-08-31. Update protocol: add a dated entry at the top
+Last updated: 2026-09-01. Update protocol: add a dated entry at the top
 after every hardware session; entries are per-device/per-operator.
+
+## 2026-09-01 (wkelly PineNote) — broker + direct image DEPLOYED to os2; first boot pending
+
+The first image carrying both lineages — v0.2.0's direct-mode display
+stack and rpedde's platform-controls broker (PR #41, merged 2026-09-01
+with the rung-4 degraded-mode fix `d442b9d`) — is on os2:
+`pinenote-reader-direct-PNGuixRoot-20260831.ext4`, SHA256
+`2adef0852cf5ce5bd70671d81f6a7cfd02da326c155fa21eff9e51c5f537b515`
+(1,824,964,608 bytes, 445,548 × 4096). Staged over SSH to the data
+partition from the running v0.2.0 os2 (SHA verified on-device),
+written from stock os1 by the five-step protocol (slot check, p6
+unmounted, staged SHA, exact-count dd, readback SHA over the written
+range): DEPLOY OK. The autosuspend pause used during staging was
+removed before the write, so the new image sleeps out of the box. The
+os2 host key was purged workstation-side (fresh keys on first boot).
+This overwrites the v0.2.0 release image `7afd3f8a…`; the release
+itself remains tagged and its image file is kept on the workstation.
+
+Offline record for this image: `make check-host` green end to end on
+the merged tree; both flavors lower; the closure-level image inspection
+(rpedde's Phase 2 gates) passed on this exact ext4; rung 4 was proven
+on the sibling reader-flavor image (fail → pass across the broker fix).
+No `qemu-virt-check` on the direct image itself — its assertions are
+reader-flavor-specific (`refresh_waveform` does not exist on hrdl's
+driver).
+
+**Not yet booted.** This is the first time the broker and the direct
+driver meet on any hardware. Watch list for the first boot:
+`pinenote-platform-controls` ready before `reader-session`; the reader
+opening `wilkbook-power-control`; a power-button tap → KOReader sleep
+screen → clean resume (frontlight level and warmth restored); ultra
+rails-off resume on this driver; what the panel shows *while*
+suspended (`no_off_screen` is a shipping-driver parameter hrdl's driver
+does not register, so the broker's write is a silent no-op here); and
+the fallback SUSPEND banner's hardcoded 32 bpp geometry if KOReader
+ever misses the ten-second deadline (same class as the retired
+daemon's banner bug on this flavor).
 
 ## 2026-08-31 (rpedde PineNote) — Phase 2 packaged platform controls accepted on hardware
 

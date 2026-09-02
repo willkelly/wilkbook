@@ -48,10 +48,12 @@ says otherwise.
   completed second-person install (`doc/install.md` is no longer
   unverified), and the first validated cold boots of the
   shipping-driver 7.1.8 reader image on glass.
-- Not yet on any deployed wilkbook device: the v0.2.0 image on os2
-  predates this and still runs the old daemon; the broker rides the
-  next built image. The broker + direct-driver combination has not had
-  a hardware session yet.
+- Deployed to the author's os2 on 2026-09-01 as the first image carrying
+  both the direct-mode display stack and the broker
+  (`pinenote-reader-direct-PNGuixRoot-20260831.ext4`, SHA256
+  `2adef085…`, protocol clean — `doc/status.md`). First boot pending:
+  the broker + direct-driver combination has not run on any hardware
+  yet.
 
 ## v0.2.0-prealpha — 2026-08-27
 
