@@ -79,7 +79,7 @@ FLAVORS = minimal slim networked dev usb-console usb-console-linux-6-6 reader re
         timezone-check kernel-version-check library-check \
         manuals-check ultra-coupling-check timesync-check \
         settings-check koreader-profile-check ebc-modprobe-options-check \
-        ebc-clut-check ebc-card-resolution-check ebc-ioctl-roster-check reader-stop-check pen-check ebc-lab-check \
+        ebc-clut-check ebc-card-resolution-check ebc-ioctl-roster-check update-path-check deploy reader-stop-check pen-check ebc-lab-check \
         $(FLAVORS) $(addprefix image-,$(FLAVORS)) $(addprefix rootfs-,$(FLAVORS))
 
 help:
@@ -101,6 +101,8 @@ help:
 	@echo "  clut-check        C CLUT compiler vs hrdl's wbf_to_custom.py, byte-identical ([WBF=..] [CLUT_REF=..])"
 	@echo "  ebc-clut-check    the direct-mode CLUT installer one-shot, driven through every branch"
 	@echo "  ebc-ioctl-roster-check  every on-device EBC ioctl against the driver(s) it runs on (both UAPI headers from the patches)"
+	@echo "  update-path-check the update path: generation ledger, extlinux rendering, trial/promote pins"
+	@echo "  deploy            DEVICE=<ssh host>: build, guix copy, add generation, kexec trial, health, promote"
 	@echo "  ebc-logic-check   extracted EBC driver logic checks ([WBF=..])"
 	@echo "  ebc-barrier-check supervised EBC sleep-frame command host tests"
 	@echo "  rastersim-check   raster/waveform simulation checks ([WBF=..])"
@@ -337,7 +339,7 @@ CHECK_HOST_TARGETS = clut-check ebc-logic-check ebc-barrier-check rastersim-chec
         battery-dtb-check time-machine-check gexp-modules-check \
         timezone-check refresh-trigger-check timesync-check settings-check \
         ebc-modprobe-options-check ebc-clut-check ebc-card-resolution-check ebc-ioctl-roster-check \
-        reader-stop-check pen-check ebc-lab-check
+        update-path-check reader-stop-check pen-check ebc-lab-check
 
 # Parse time, not recipe time: a recipe-level guard would run only AFTER every
 # prerequisite had already completed, so it could not prevent the mistake it
@@ -553,6 +555,21 @@ ebc-card-resolution-check:
 # ioctl user against the driver(s) it is declared for; positive-controlled.
 ebc-ioctl-roster-check:
 	python3 pinenote/scripts/preflight/validate-ebc-ioctl-roster.py
+
+# The update path's pure decisions (generation ledger, extlinux rendering,
+# promote/prune/health) and the structural pins on its imperative halves
+# (the trial boot's teardown order, the deployer's promote-only-after-health).
+update-path-check:
+	$(call guix-shell,luajit) $(MAKE) -C pinenote/tools/update-path check
+
+# Deploy a flavor to a running reader over ssh: build, guix copy, add a
+# generation, kexec trial boot, health check, promote, prune
+# (doc/update-path.md).  DEVICE is an ssh destination for root.  Never
+# touches os1, p7 or the partition table; a failed health check leaves the
+# previous generation as DEFAULT.
+deploy:
+	@test -n "$(DEVICE)" || { echo "usage: make deploy DEVICE=<ssh host> [FLAVOR=reader-direct] [KEEP=3]"; exit 2; }
+	sh pinenote/tools/deploy/deploy.sh "$(DEVICE)" "$(or $(FLAVOR),reader-direct)" "$(or $(KEEP),3)"
 
 # reader-session's stop must be INT-first: TERM truncates the crengine
 # cache to zero bytes and re-arms a 30 s re-parse of the manuals book

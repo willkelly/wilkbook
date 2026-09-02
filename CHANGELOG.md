@@ -62,6 +62,23 @@ says otherwise.
   read-plugged-in only; v0.2.0 remains the last direct image that
   sleeps.
 
+### The update path (designed and enabled; not yet on any device)
+
+- **Updates without a cable are coming.** `doc/update-path.md` lays out
+  the design: the workstation cross-builds a system, `guix copy` sends
+  it to the reader, the reader registers it as a Guix system
+  generation, kexecs into it as a *trial* (the boot menu default is
+  untouched, so a power-cycle returns to the last good one), and only
+  after it answers a health check is it promoted. Rollback is the same
+  move backwards. The image changes that make it possible are in this
+  tree: the guix daemon returns purely as a store importer (local builds
+  impossible, substitutes off), kexec is enabled in the kernel,
+  `kexec-tools` and the `wilkbook-generation` helper are packaged, and
+  the root filesystem grows to fill its 15.7 GB partition on first
+  boot. One more dd-from-os1 reflash enables it; after that, `make
+  deploy DEVICE=…`. Nothing here has run on glass yet; the whole flow
+  is to be proven in QEMU first.
+
 ### Suspend on the direct-mode image (issue #42) and Wi-Fi after wake
 
 - **The direct image can sleep again.** The broker's pre-suspend EBC

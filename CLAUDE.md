@@ -115,6 +115,12 @@ code review — before a single reboot. That's the standard.
   man pages and Texinfo manuals become EPUBs KOReader can open, the
   measurements behind each decision, and the standing list of what has
   never been rendered.
+- `doc/update-path.md` — how a running reader gets a new OS without a
+  cable: cross-built closures over `guix copy` into a store-importer
+  daemon that never builds, Guix system generations as the rollback
+  tree, kexec trial-boot-then-promote (U-Boot defaults to os1, so
+  nothing else is hands-off), root stays ext4; the per-book filesystem
+  question is deferred there with its options.
 - `doc/pinenote-flavors.md` — the system flavors.
 - `doc/koreader-spike.md` + `doc/ebc-harness-spike.md` — completed
   spike/decision records (kept for their still-cited evidence).
