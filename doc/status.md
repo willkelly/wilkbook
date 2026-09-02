@@ -77,9 +77,24 @@ predecessor; the protocol's size gate would have refused the stale
 count), pre-staged to the data partition over the live os2 link,
 written from os1 by the five-step protocol: DEPLOY OK. This is
 `a7cef44`'s tree: the corrected fingerprint and the fallback baked in,
-no hot-fix needed. First boot pending; one power tap on it is the
-confirmation that the shipped probe, not the bind mount, chooses the
-quiescence path.
+no hot-fix needed. **First boot confirmed the same session** (uptime
+405 s at the read, `mount | grep hotfix` = 0, the packaged broker keys
+on `refresh_waveform`): two taps rejected `charging` with the cable in,
+then unplugged — 05:17:54 tap → `no REFRESH_BARRIER on this driver;
+waiting for interrupt quiescence` → `idle` → resumed after 9 s,
+`ok=true` → 05:18:12 `Wi-Fi successfully restored (after 2.5 seconds)`.
+The shipped probe chooses the quiescence path on its own. **Tonight's
+arc is durable on os2**: broker + direct driver + slot guard + Wi-Fi
+restore.
+
+Instrument lesson, for the ledger: after the reflash the workstation
+watcher used `StrictHostKeyChecking=accept-new` while the device was
+still on os1, so os1's host key was pinned under the shared address and
+the freshly booted os2 then failed strict checking — which from the
+workstation looks exactly like "no network". Ten minutes of "maybe
+Wi-Fi didn't come back" were the tooling, not the device. Rule: never
+`accept-new` against the shared address until the intended slot is the
+one answering (`doc/device-access.md`).
 
 ## 2026-09-02 (wkelly PineNote) — three-fix image DEPLOYED to os2; first boot pending
 
