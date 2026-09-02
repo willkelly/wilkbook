@@ -21,6 +21,7 @@ grep -q 'DEFAULT is unchanged' "$helper"
 # The PineNote DTB rides only on a PineNote; elsewhere (QEMU) the running DT is reused.
 grep -q 'model:find("PineNote", 1, true)' "$helper"
 grep -q 'running device tree reused' "$helper"
+grep -q 'console=ttyS2,%d+n%d", "console=ttyAMA0"' "$helper"
 echo "PASS: trial boot tears down like a suspend, quiesces the EBC, and never touches DEFAULT"
 # add materializes every profile generation's payload (the shipped one has no /boot/gen-N).
 grep -q 'ensure_payload(g)' "$helper"
@@ -34,4 +35,23 @@ after 'wilkbook-generation health --expect' 'wilkbook-generation promote' "$depl
 grep -q 'NOT PROMOTED: health check failed' "$deploy"
 grep -q 'NOT PROMOTED: generation .* never answered' "$deploy"
 grep -q -- '--target=aarch64-linux-gnu' "$deploy"
-echo "PASS: deployer promotes only after health, cross-builds, and reports refusals"
+grep -q 'guix archive --missing' "$deploy"
+! grep -q 'guix archive --export -r' "$deploy"
+grep -q 'guix archive --import' "$deploy"
+echo "PASS: deployer promotes only after health, cross-builds, sends only the missing paths, and reports refusals"
+# The trial's ssh session dies with the old kernel and kexec never closes the
+# TCP connection; without keepalives the client hangs forever (2026-09-02).
+harness="$here/../../scripts/qemu/run-virt-update-flow.sh"
+[ "$(grep -c '^vm_trial "wilkbook-generation trial' "$harness")" -eq 2 ]
+! grep -q '^vm "wilkbook-generation trial' "$harness"
+grep -q 'ServerAliveInterval=5 -o ServerAliveCountMax=2' "$harness"
+grep -q 'timeout 120 ssh' "$harness"
+grep -q 'ServerAliveInterval=5 -o ServerAliveCountMax=2' "$deploy"
+grep -q 'timeout 90 ssh' "$deploy"
+grep -q 'ServerAliveInterval 5' "$here/../../../Makefile"
+echo "PASS: every trial ssh carries keepalives and a timeout, so a kexec cannot hang the caller"
+# A stale generation tests the wrong helper; the trial's output is evidence.
+grep -q 'stale SYSTEM_B or ROOTFS' "$harness"
+grep -q 'cmp -s "$tree_helper" "$shipped"' "$harness"
+[ "$(grep -c 'sed "s/^/        trial> /"' "$harness")" -eq 2 ]
+echo "PASS: the rig refuses a generation whose helper is not the tree's and keeps each trial's output"

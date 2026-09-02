@@ -62,11 +62,11 @@ says otherwise.
   read-plugged-in only; v0.2.0 remains the last direct image that
   sleeps.
 
-### The update path (designed and enabled; not yet on any device)
+### The update path (designed, enabled, proven in QEMU; not yet on any device)
 
 - **Updates without a cable are coming.** `doc/update-path.md` lays out
-  the design: the workstation cross-builds a system, `guix copy` sends
-  it to the reader, the reader registers it as a Guix system
+  the design: the workstation cross-builds a system, guix's signed nar
+  stream sends only the store paths the reader lacks, the reader registers it as a Guix system
   generation, kexecs into it as a *trial* (the boot menu default is
   untouched, so a power-cycle returns to the last good one), and only
   after it answers a health check is it promoted. Rollback is the same
@@ -76,8 +76,19 @@ says otherwise.
   `kexec-tools` and the `wilkbook-generation` helper are packaged, and
   the root filesystem grows to fill its 15.7 GB partition on first
   boot. One more dd-from-os1 reflash enables it; after that, `make
-  deploy DEVICE=…`. Nothing here has run on glass yet; the whole flow
-  is to be proven in QEMU first.
+  deploy DEVICE=…`. Nothing here has run on glass yet.
+- **The whole flow is proven end to end in QEMU (2026-09-02).** Rung 4u
+  (`make qemu-update-check`) boots generation A, grows the root
+  filesystem, authorizes the workstation's signing key, sends generation
+  B's missing paths (58 of a 444-path closure), registers it, kexecs
+  into it as a trial, health-checks and promotes it, then kexecs back
+  into A and promotes that — three distinct boot ids, every stage green.
+  What the rig taught is recorded in the design doc: a wrong serial
+  console argument leaves Guix's initrd unable to open `/dev/console`
+  and it runs away in memory (so the helper rewrites it off a PineNote),
+  `guix copy` cannot honor per-slot known-hosts files (so the deployer
+  uses the same nar pipe over plain OpenSSH), and the trial's ssh
+  session needs keepalives because kexec never closes the connection.
 
 ### Suspend on the direct-mode image (issue #42) and Wi-Fi after wake
 

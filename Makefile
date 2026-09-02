@@ -256,7 +256,6 @@ qemu-virt-check:
 # Usage: make qemu-update-check ROOTFS=<rootfs.ext4> [SYSTEM_B=<store path>] [WAVEFORM=<file>]
 qemu-update-check:
 	@test -n "$(ROOTFS)" || { echo "usage: make qemu-update-check ROOTFS=<rootfs.ext4> [SYSTEM_B=<system store path>] [WAVEFORM=<file>]"; exit 2; }
-	@test -r /etc/guix/signing-key.pub || { echo "FAIL: /etc/guix/signing-key.pub missing -- run: sudo guix archive --generate-key"; exit 2; }
 	@set -e; \
 	stamp=$$(date +%Y%m%d-%H%M%S); \
 	mkdir -p $(ARTIFACTS); \
@@ -273,12 +272,12 @@ qemu-update-check:
 	  mkdir -p \"$$home/.ssh\" && chmod 700 \"$$home/.ssh\" && \
 	  ssh-keygen -q -t ed25519 -N '' -f \"$$home/.ssh/id_ed25519\" && \
 	  ssh-keygen -q -t ed25519 -N '' -f \"$$home/.ssh/vm_host_ed25519\" && \
-	  printf 'Host vm\n  HostName 127.0.0.1\n  Port %s\n  User root\n  IdentityFile %s\n  UserKnownHostsFile %s\n  StrictHostKeyChecking yes\n  ConnectTimeout 5\n  BatchMode yes\n' \"$${VIRT_UPDATE_PORT:-2277}\" \"$$home/.ssh/id_ed25519\" \"$$home/.ssh/known_hosts\" > \"$$home/.ssh/config\" && \
+	  printf 'Host vm\n  HostName 127.0.0.1\n  Port %s\n  User root\n  IdentityFile %s\n  UserKnownHostsFile %s\n  StrictHostKeyChecking yes\n  ConnectTimeout 5\n  ServerAliveInterval 5\n  ServerAliveCountMax 2\n  BatchMode yes\n' \"$${VIRT_UPDATE_PORT:-2277}\" \"$$home/.ssh/id_ed25519\" \"$$home/.ssh/known_hosts\" > \"$$home/.ssh/config\" && \
 	  printf '[127.0.0.1]:%s %s\n' \"$${VIRT_UPDATE_PORT:-2277}\" \"\$$(cut -d' ' -f1,2 \"$$home/.ssh/vm_host_ed25519.pub\")\" > \"$$home/.ssh/known_hosts\" && \
-	  UPDATE_FLOW_SSH_PUBKEY=\"$$home/.ssh/id_ed25519.pub\" UPDATE_FLOW_HOST_KEY=\"$$home/.ssh/vm_host_ed25519\" UPDATE_FLOW_GUIX_KEY=/etc/guix/signing-key.pub \
+	  UPDATE_FLOW_SSH_PUBKEY=\"$$home/.ssh/id_ed25519.pub\" UPDATE_FLOW_HOST_KEY=\"$$home/.ssh/vm_host_ed25519\" \
 	    pinenote/scripts/qemu/make-data-fixture.sh update-flow \"$$data\" && \
-	  pinenote/scripts/qemu/make-virt-disk.sh '$(ROOTFS)' \"$$disk\" $(or $(WAVEFORM),'') \"$$data\" && \
-	  pinenote/scripts/qemu/run-virt-update-flow.sh \"$$bundle\" \"$$disk\" \"$$home\" \"\$$sysa\" \"$$sysb\""
+	  VIRT_ROOT_SLACK_MIB=2048 pinenote/scripts/qemu/make-virt-disk.sh '$(ROOTFS)' \"$$disk\" $(or $(WAVEFORM),'') \"$$data\" && \
+	  VIRT_ROOT_SLACK_MIB=2048 pinenote/scripts/qemu/run-virt-update-flow.sh \"$$bundle\" \"$$disk\" \"$$home\" \"\$$sysa\" \"$$sysb\""
 
 # QEMU-virt WITH a data partition (offline ladder rung 4d): the same boot,
 # on a synthetic p7 that looks like a PineNote whose stock Debian os1 has

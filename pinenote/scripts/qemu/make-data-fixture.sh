@@ -90,7 +90,9 @@ fi
 if [ "$variant" = "update-flow" ]; then
   : "${UPDATE_FLOW_SSH_PUBKEY:?update-flow needs UPDATE_FLOW_SSH_PUBKEY}"
   : "${UPDATE_FLOW_HOST_KEY:?update-flow needs UPDATE_FLOW_HOST_KEY (private; .pub beside it)}"
-  : "${UPDATE_FLOW_GUIX_KEY:?update-flow needs UPDATE_FLOW_GUIX_KEY (signing-key.pub)}"
+  # The host daemon's signing key by default: what `guix archive --export` signs with.
+  : "${UPDATE_FLOW_GUIX_KEY:=/etc/guix/signing-key.pub}"
+  [ -r "$UPDATE_FLOW_GUIX_KEY" ] || { echo "FAIL: update-flow needs a readable signing key (UPDATE_FLOW_GUIX_KEY=$UPDATE_FLOW_GUIX_KEY; run \`sudo guix archive --generate-key\`)" >&2; exit 2; }
   mkdir -p "$tree/ssh/host" "$tree/wilkbook/guix/authorized-keys"
   cp "$UPDATE_FLOW_SSH_PUBKEY" "$tree/ssh/authorized_keys"
   cp "$UPDATE_FLOW_HOST_KEY" "$tree/ssh/host/ssh_host_ed25519_key"

@@ -194,6 +194,15 @@ function commands.trial(n)
         log("machine model %q: no EBC to quiesce", model)
     end
     local dtb_arg = pinenote and string.format(" --dtb=%s/%s", dir, L.DTB_NAME) or ""
+    -- Likewise the generation's console: ttyS2 is the PineNote's UART.  On
+    -- QEMU virt the console is the PL011 (ttyAMA0); a kernel told to use a
+    -- console that does not exist leaves the initrd's init unable to open
+    -- /dev/console, and Guix's initrd then runs away in memory and is
+    -- OOM-killed (rung 4, 2026-09-02: 1.9 GB anon RSS, init reaped).
+    if not pinenote then
+        append = append:gsub("console=ttyS2,%d+n%d", "console=ttyAMA0")
+        log("machine model %q: console argument rewritten for the PL011", model)
+    end
     log("machine model %q -> %s", model, dtb_arg ~= "" and "generation DTB" or "running device tree reused")
     local load = string.format("/run/current-system/profile/sbin/kexec -l %s/Image --initrd=%s/initrd.cpio.gz%s --command-line='%s'",
                                dir, dir, dtb_arg, append)

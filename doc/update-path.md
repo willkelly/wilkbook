@@ -61,7 +61,10 @@ and the device never builds anything.
 workstation                                   device (os2, running gen N)
 -----------                                   ---------------------------
 guix system build --target=aarch64-linux-gnu  → S (system store path)
-guix copy --to=root@reader S                  → store import (signed; ACL)
+guix gc --references -R S | ssh reader \
+  guix archive --missing                      → the paths the device lacks
+guix archive --export <missing> | ssh reader \
+  guix archive --import                       → store import (signed; ACL)
 ssh reader wilkbook-generation add S          → system-(N+1)-link, /boot/gen-(N+1)/{Image,initrd,dtb,append}
                                                 extlinux.conf regenerated: one LABEL per kept generation,
                                                 DEFAULT unchanged (still gen N)
@@ -71,9 +74,23 @@ ssh reader wilkbook-generation promote N+1    → DEFAULT = gen N+1
 (prune)                                       → keep K generations; guix gc reclaims the rest
 ```
 
+The transfer is guix's own signed nar stream — `guix archive --export`
+piped through plain OpenSSH into `guix archive --import` on the reader,
+which is what `guix copy` does internally — rather than `guix copy`
+itself, because `guix copy` talks ssh through Guile-SSH/libssh, which
+resolves `~/.ssh/known_hosts` and `~/.ssh/config` from the passwd home
+directory rather than `$HOME` or any option it exposes, so it cannot
+honor the per-slot `UserKnownHostsFile` convention (`doc/device-access.md`)
+or a harness's pinned host key; plain OpenSSH honors both.
+
 Rollback: `wilkbook-generation trial N` then `promote N`. A generation
 that never answers is abandoned by a power-cycle (U-Boot → os2 →
 extlinux DEFAULT, which still names the last promoted one).
+
+**What actually moves.** The deployer asks the device which of the
+closure's paths it lacks (`guix archive --missing` on the far side) and
+exports only those — the `guix copy` algorithm. A KOReader or service
+change is megabytes; a kernel change ~100 MB; never the 2 GB closure.
 
 ## Pieces
 
@@ -102,7 +119,8 @@ inspection requires every one of them.
 
 ## Safety model, unchanged
 
-Builds never touch the device. `guix copy` and the helper write only
+Builds never touch the device. The nar export/import (what `guix copy`
+does internally, sent over plain OpenSSH) and the helper write only
 p6's store, profiles and `/boot`; never p7, never the table, never os1.
 The dd protocol remains the recovery path. kexec replaces the kernel
 under a running system — the trial step therefore runs the same
@@ -115,9 +133,10 @@ teardown as a suspend (EBC quiesce, gadget unbind, Wi-Fi off) before
   demote/prune, health predicate) under host luajit; the kernel-config
   and package pins in the image inspection.
 - **Rung 4 — the whole flow in QEMU virt** (`make qemu-update-check ROOTFS=…`): boot generation A, `guix
-  copy` generation B into the VM over SSH, `add`, `trial` (kexec inside
-  the VM), verify B answers as `/run/current-system`, `promote`, then
-  roll back to A. The mechanism end-to-end, no glass.
+  archive --export | ssh | guix archive --import` generation B into the
+  VM (the guix copy nar pipe over plain OpenSSH), `add`, `trial` (kexec
+  inside the VM), verify B answers as `/run/current-system`, `promote`,
+  then roll back to A. The mechanism end-to-end, no glass.
 - **Glass** (UART-attended): the SoC-specific unknowns — kexec on
   RK3566 with the BSP firmware, the EBC and TPS65185 through a warm
   restart, brcmfmac over SDIO, the waveform install running again in
@@ -134,8 +153,40 @@ teardown as a suspend (EBC quiesce, gadget unbind, Wi-Fi off) before
 - Store growth policy: how many generations to keep on a 15.7 GB slot
   (default K=3), and when `guix gc` runs (only from the deployer, never
   on a timer).
-- Whether `guix copy` over Wi-Fi is fast enough for a kernel-sized
+- Whether the nar transfer over Wi-Fi is fast enough for a kernel-sized
   delta (~100 MB) to feel routine.
+
+## Rig notes (what the QEMU flow taught, 2026-09-02)
+
+- A generation's `APPEND` is the PineNote's: `console=ttyS2`, the
+  PineNote DTB, an EBC to quiesce. Off a PineNote (the rig keys on
+  `/proc/device-tree/model`) the helper reuses the running device tree,
+  skips the quiesce, and rewrites the console to the PL011. Without the
+  last one the kexec'd kernel cannot open `/dev/console`, and Guix's
+  initrd `init` runs away to ~1.9 GB and is OOM-killed — a fragility of
+  the upstream initrd worth remembering on the device too: a wrong
+  serial console argument is a non-booting generation, which is exactly
+  what trial-then-promote is for.
+- `guix copy`'s Guile-SSH transport resolves known-hosts and ssh config
+  from the passwd home and ignores `$HOME`; the signed nar pipe over
+  OpenSSH (what `guix copy` does internally) is used instead, and sends
+  only what `guix archive --missing` reports on the far side.
+- The `trial` ssh session dies with the old kernel, and kexec never
+  closes its TCP connection: a client without keepalives waits forever
+  (the harness did, twice, with the guest already up as the new
+  generation). `ServerAliveInterval` makes the replacement kernel answer
+  the next probe with a reset within seconds; the caller's `timeout` is
+  the backstop. The helper is right to let `kexec -e` end the session
+  rather than detach it -- a "scheduled" return would hide a failed
+  `-e` behind a clean exit.
+- A generation built before a helper change tests the old helper: a
+  pre-gate generation B refused the rollback trial with "EBC did not go
+  idle" on a machine with no EBC, and the harness had thrown the trial's
+  output away. The rig now refuses a generation whose shipped helper is
+  not the tree's and echoes every trial's output.
+- The synthetic os2 partition needs slack (`VIRT_ROOT_SLACK_MIB`) or the
+  first-boot `resize2fs` has nothing to grow into; with 2 GiB of slack
+  the rig proves the grow and has room for generation B.
 
 ## Deferred: filesystems and per-book histories
 
