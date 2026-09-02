@@ -62,6 +62,19 @@ says otherwise.
   read-plugged-in only; v0.2.0 remains the last direct image that
   sleeps.
 
+### Input
+
+- **Pinch-to-font-size could crash the reader** (KOReader exited and
+  respawned in about a second, losing nothing but your gesture).
+  Root-caused offline from the device's own log and reproduced
+  deterministically on the workstation: after the font-size re-render,
+  KOReader forgets a finger that is still on the glass, and the next
+  two-finger gesture crashes on the ghost it left behind (an upstream
+  KOReader defect — `doc/upstream-register.md` item 21). The reader now
+  refuses to hand the gesture detector a touch it cannot identify, so
+  the crash is impossible; the surviving finger is simply ignored until
+  it moves on both axes or lifts. Not yet on any deployed image.
+
 ## v0.2.0-prealpha — 2026-08-27
 
 **The pre-alpha moves to the direct-mode driver.** This tag cuts the

@@ -49,6 +49,20 @@ The host suite runs entirely on the workstation — no device or KOReader UI:
    upstream's own `gesToFontSize` arithmetic, the 900 ms ceiling above
    which a pinch silently does nothing, and the reachability of the
    two-finger family on this input stack.
+7. **`test-slotguard.lua`** — the 2026-09-02 glass crash
+   (`gesturedetector.lua:325`, nil `initial_tev.x` in the two-finger
+   path), reproduced deterministically from the verbatim upstream files:
+   a pinch's re-render calls `Input:resetState()` under a finger still on
+   the glass, whose next delta-only frame becomes a ghost contact that
+   the next finger pairs with.  Pinned as `quirk:` cases that MUST throw
+   without the repo's `slotguard.lua`, proven fixed with it, with
+   neutrality controls (`doc/upstream-register.md` item 21).
+8. **`replay-evdev.lua`** — not a test: an instrument that feeds a raw
+   `cat /dev/input/eventN` capture from the device through the same
+   verbatim stack (device-layer frame rewrite applied), reporting every
+   warning with its preceding frames and catching a throw mid-frame.
+   `luajit replay-evdev.lua KOREADER_DIR MIXEDROUTER touch=CAPTURE`
+   (host luajit needs the Lua 5.2 `table.pack` shim it carries).
 
 **The bug** (hardware-observed 2026-07-05, mechanism in
 `mixedrouter.lua`'s header): upstream `Input` keeps ONE global

@@ -68,7 +68,24 @@ recorded an initial_tev out of order for slot 0` — the upstream
 slot-sharing quirk class pinned in `koreader-input-check`
 (`doc/upstream-register.md` item 11), here as a crash rather than a
 swipe misclassification. Not the broker's doing (its ready marker and
-uinput node were untouched). Needs its own look.
+uinput node were untouched). **Root-caused the same night, offline**:
+not the slot-sharing quirk after all — the re-render a pinch triggers
+calls `Input:inhibitInput(false)` → `Input:resetState()`, which wipes
+every MT slot table under the finger still on the glass; that finger's
+next delta-only frame becomes a ghost contact (no id, no x) which the
+next finger pairs with, and `Contact:getPath` throws on it. Every one
+of the 13 "initial_tev out of order" warnings in the log lands at the
+exact second of a `Restoring user input handling` line. Reproduced
+deterministically from the verbatim upstream files
+(`pinenote/tools/koreader-input/test-slotguard.lua`, exact line-325
+error), fixed in our device layer (`slotguard.lua`: a slot with no id,
+or a live id and no position, never reaches the detector), pinned with
+neutrality controls, upstream item 21 written. A 75 s raw evdev
+capture of the operator pinching (13 warnings on device, no crash) is
+what proved the touch stream itself is clean: the replay instrument
+(`replay-evdev.lua`) produced zero warnings from it, which is what
+pointed at the reset. The fix is offline-proven only; the device still
+runs the crashing code until the next image.
 
 **Device posture left tonight**: `enabled=0` written to
 `/data/wilkbook/autosuspend.conf` — deliberately, so the broker stops

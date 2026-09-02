@@ -588,6 +588,16 @@ function PineNote:init()
         require("device/pinenote/mixedrouter").install(
             self.input, devs.pen, devs.touch)
     end
+    -- On top of both: never feed the gesture detector a slot it cannot
+    -- identify.  Upstream's Input:resetState() (run by inhibitInput(false)
+    -- after every crengine re-render, i.e. after every pinch-to-font-size)
+    -- forgets a finger that is still on the glass; its next delta-only
+    -- frame would otherwise become a ghost contact that crashes the next
+    -- two-finger pan (glass, 2026-09-02; mechanism and offline repro in
+    -- slotguard.lua / test-slotguard.lua).
+    if devs.touch then
+        require("device/pinenote/slotguard").install(self.input)
+    end
 
     -- Per-source event conditioning.  Our evdev backend tags every
     -- event with src = originating device node, so no cross-device
