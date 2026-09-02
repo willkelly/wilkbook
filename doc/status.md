@@ -1,7 +1,82 @@
 # Hardware status
 
-Last updated: 2026-09-01. Update protocol: add a dated entry at the top
+Last updated: 2026-09-02. Update protocol: add a dated entry at the top
 after every hardware session; entries are per-device/per-operator.
+
+## 2026-09-01/02 (wkelly PineNote) — broker + direct FIRST BOOT: chain works, Wi-Fi toggle works, SUSPEND IMPOSSIBLE (barrier ioctl collision, issue #42)
+
+The `2adef085…` image booted hands-off into KOReader (white splash, no
+console text). All from the device's own logs, harvested over SSH after
+the fact:
+
+**What worked.**
+- **The service chain**: udev 01:46:40 → `pinenote-ebc-clut`,
+  `pinenote-platform-controls`, `orientation-bridge`, `pinenote-wifi`
+  01:46:41 → `reader-session` 01:46:43. Broker ready marker written,
+  `wilkbook-power-control` present as event7, KOReader opened it. The
+  fidelity CLUT compiled at boot (`c1b6f4f6…`, byte-identical to the
+  v0.2.0 table). Wi-Fi came up at boot and KOReader adopted the stock
+  supplicant (`adopted existing supplicant pid=525`, 01:46:46).
+- **Ron's Wi-Fi toggle, end to end on our device**: after the reader
+  had been left off the network (below), the operator tapped Wi-Fi on
+  in KOReader's menu — `rfkill unblock` → supplicant with the
+  out-of-band conf → dhcpcd — and SSH returned within a minute
+  (`pinenote-wifi: on pid=4545`).
+- **Charging inhibit, as designed**: the 01:50 power tap was rejected
+  (`charging on rk817-charger`). The charger reports `online=1` and the
+  gadget UDC is bound whenever *any* USB host is attached — a debug or
+  workstation cable counts as charging to the broker, and a power tap
+  then does nothing visible. Operator-facing note, not a bug.
+
+**What did not: the device cannot suspend on this image.** Two
+transactions, one from a power tap (02:21:40) and one from KOReader's
+AutoSuspend 900 s later (02:36:46), both aborted identically before any
+`/sys/power/state` write:
+
+    transaction complete ok=false detail=EBC busy: SUBMIT ioctl returned -1 (errno 14)
+
+errno 14 = EFAULT. Root cause, from the two patches: the
+`REFRESH_BARRIER` ioctl the broker's `ebc_barrier` submits is a
+**wilkbook addition to the shipping driver** (forward-port patch,
+DRM command `0x03`, `DRM_IOWR`, 40-byte struct). hrdl's direct driver
+never had it — the direct patch deletes it and registers `RECT_HINTS`
+(`DRM_IOW`, 16-byte struct) at command `0x03`. DRM dispatches on the
+command number, so the barrier SUBMIT lands in `ioctl_rect_hints`,
+which reads a garbage pointer out of it → `copy_from_user` → EFAULT.
+The retired daemon never used the barrier (which is why D6 passed on
+this driver 2026-08-26). Same class as the modprobe-options collision
+that `ebc-modprobe-options-check` guards, one layer down; there is no
+ioctl-roster gate. Filed as issue #42 with the fix shape (driver-aware
+quiesce — hrdl's kernel suspend path drains its own work items — plus
+an ioctl-roster preflight).
+
+**Secondary consequence, and a behavior change to know about**: each
+failed attempt left the reader OFF THE NETWORK. KOReader's suspend
+preparation turns Wi-Fi off (`pinenote-wifi: off`, 02:21:37) before it
+acknowledges, and after the broker's KEY_WAKEUP the restore is gated
+on KOReader's `auto_restore_wifi`, which defaults off (the retired
+daemon always restored). The operator saw "Wi-Fi toggle says off" with
+no memory of a sleep — correct, it never slept; it *tried*. Follow-up:
+seed `auto_restore_wifi=true` from the koreader-profile service so the
+reader behaves as before.
+
+**Unrelated finding, first observation**: KOReader exited with 1 at
+02:18:18 and was respawned in 1 s. Traceback:
+`gesturedetector.lua:325: attempt to perform arithmetic on field 'x'
+(a nil value)` in `getPath`, immediately after `Contact:setState
+recorded an initial_tev out of order for slot 0` — the upstream
+slot-sharing quirk class pinned in `koreader-input-check`
+(`doc/upstream-register.md` item 11), here as a crash rather than a
+swipe misclassification. Not the broker's doing (its ready marker and
+uinput node were untouched). Needs its own look.
+
+**Device posture left tonight**: `enabled=0` written to
+`/data/wilkbook/autosuspend.conf` — deliberately, so the broker stops
+the futile attempts and the Wi-Fi drop-outs; the device cannot sleep
+on this image either way. Battery 94 %, on USB. v0.2.0
+(`v0.2.0-prealpha.ext4`) is still staged on the data partition for a
+rollback from os1 if wanted before #42 lands. **Undo `enabled=0` with
+the next image.**
 
 ## 2026-09-01 (wkelly PineNote) — broker + direct image DEPLOYED to os2; first boot pending
 

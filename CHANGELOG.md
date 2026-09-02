@@ -51,9 +51,16 @@ says otherwise.
 - Deployed to the author's os2 on 2026-09-01 as the first image carrying
   both the direct-mode display stack and the broker
   (`pinenote-reader-direct-PNGuixRoot-20260831.ext4`, SHA256
-  `2adef085…`, protocol clean — `doc/status.md`). First boot pending:
-  the broker + direct-driver combination has not run on any hardware
-  yet.
+  `2adef085…`, protocol clean — `doc/status.md`). **First boot
+  (2026-09-02): boot chain, Wi-Fi toggle, and charging inhibit all work
+  on the direct driver — but the device CANNOT SUSPEND on it**: the
+  broker's EBC barrier ioctl is a shipping-driver-only addition and
+  collides with a different ioctl on hrdl's driver (EFAULT, issue #42).
+  Each failed attempt also leaves Wi-Fi off until toggled on in the
+  menu (KOReader's restore-after-resume setting defaults off). The
+  shipping flavor is unaffected. Until #42 lands, this image is
+  read-plugged-in only; v0.2.0 remains the last direct image that
+  sleeps.
 
 ## v0.2.0-prealpha — 2026-08-27
 
