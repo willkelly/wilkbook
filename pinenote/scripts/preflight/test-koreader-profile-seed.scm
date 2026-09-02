@@ -49,7 +49,8 @@
   (string-append "    [\"" key "\"] = " value ",\n"))
 
 (define %keys-with-fonts
-  '("avoid_flashing_ui"
+  '("auto_restore_wifi"
+    "avoid_flashing_ui"
     "closed_rotation_mode"
     "copt_b_page_margin"
     "copt_font_size"
@@ -70,7 +71,8 @@
     "pinenote_flash_area_fraction"
     "quickstart_shown_version"
     "refresh_on_pages_with_images"
-    "screensaver_type"))
+    "screensaver_type"
+    "wifi_was_on"))
 
 (define %font-keys '("cre_font" "cre_font_family_fonts" "monospace_font"))
 
@@ -82,6 +84,11 @@
     ("flash_ui" . "false")
     ("flash_keyboard" . "false")
     ("cre_header_auto_refresh" . "0")
+    ;; Wi-Fi returns after every wake (the retired daemon's behavior):
+    ;; both keys are required by NetworkListener:onResume, and KOReader
+    ;; never sets wifi_was_on itself when a service brought Wi-Fi up.
+    ("auto_restore_wifi" . "true")
+    ("wifi_was_on" . "true")
     ;; The SHIPPING flavor's flash promotion stays at its validated
     ;; behavior: mandatory UI flashes on, promotion threshold 0.60.
     ;; Only the direct flavor overrides these (ghosting resolved there).

@@ -87,6 +87,20 @@ what proved the touch stream itself is clean: the replay instrument
 pointed at the reset. The fix is offline-proven only; the device still
 runs the crashing code until the next image.
 
+**#42 fixed offline the same night** (`broker_quiesce.lua` +
+`test-quiesce.lua`, `make ebc-ioctl-roster-check`): the broker now
+chooses its quiesce by driver — barrier on the shipping driver, EBC
+interrupt quiescence (`fdec0000.ebc` flat for 250 ms) on the direct
+driver — and the new roster gate reconstructs both drivers' ioctl
+tables from the patches and proves every on-device ioctl against the
+driver it runs on (positive-controlled: the barrier literal is rejected
+against the direct driver). Also seeded `auto_restore_wifi` and
+`wifi_was_on` in the KOReader profile, after the device fell off the
+network a SECOND time under `enabled=0`: the broker rejects KOReader's
+AutoSuspend request only after KOReader has already run its
+preparation (Wi-Fi off), and nothing restored it. Rebuilt image carries
+both plus the slot guard; not yet on glass.
+
 **Device posture left tonight**: `enabled=0` written to
 `/data/wilkbook/autosuspend.conf` — deliberately, so the broker stops
 the futile attempts and the Wi-Fi drop-outs; the device cannot sleep

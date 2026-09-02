@@ -20,4 +20,12 @@ echo "PASS: broker is the single power-state writer and watches only power/cover
 echo "PASS: standalone broker can load staged PineNote modules"
 echo "PASS: packaged broker paths can be supplied by the Shepherd service"
 echo "PASS: resume clears the RTC backstop alarm"
+# Issue #42: the shipping-only REFRESH_BARRIER must never be the only
+# quiesce; the broker chooses by driver and the choice is a pure module.
+grep -q 'require("broker_quiesce")' "$broker"
+grep -q 'driver_has_barrier = driver_has_barrier, barrier = ebc_barrier' "$broker"
+grep -q 'ebc_quiesce()' "$broker"
+! grep -q 'barrier_ok, barrier_error = ebc_barrier()' "$broker"
+grep -q 'fdec0000.ebc' "$broker"
 echo "PASS: broker degrades without physical inputs instead of crash-looping"
+echo "PASS: broker quiesces the EBC by driver capability (barrier or interrupt quiescence, #42)"

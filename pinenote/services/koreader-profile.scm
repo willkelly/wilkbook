@@ -34,6 +34,8 @@
             pinenote-koreader-profile-closed-rotation-mode
             pinenote-koreader-profile-quickstart-shown-version
             pinenote-koreader-profile-screensaver-type
+            pinenote-koreader-profile-auto-restore-wifi?
+            pinenote-koreader-profile-wifi-was-on?
 
             pinenote-koreader-profile-settings
             pinenote-koreader-profile->lua
@@ -220,7 +222,24 @@
    pinenote-koreader-profile-quickstart-shown-version (default 2021070000))
 
   (screensaver-type pinenote-koreader-profile-screensaver-type
-                    (default "cover")))
+                    (default "cover"))
+  ;; Wi-Fi comes back after every wake.  KOReader's generic suspend path
+  ;; turns the radio off before sleeping (on any device with
+  ;; hasWifiRestore), and NetworkListener:onResume restores it only when
+  ;; BOTH `auto_restore_wifi` (the user preference, default off) and
+  ;; `wifi_was_on` (KOReader's own memory of having brought Wi-Fi up)
+  ;; are true.  Our Wi-Fi is brought up by the pinenote-wifi service, not
+  ;; by KOReader, so on a fresh image wifi_was_on would never be set: the
+  ;; first sleep -- or the first REJECTED suspend request, which still
+  ;; runs the preparation -- would leave the reader off the network until
+  ;; someone toggled it in the menu (glass, 2026-09-02: found off twice).
+  ;; The retired daemon always restored; seed both so the broker era does
+  ;; too.  A user who wants the radio to stay off can still flip the
+  ;; preference in the Network menu.
+  (auto-restore-wifi? pinenote-koreader-profile-auto-restore-wifi?
+                      (default #t))
+  (wifi-was-on? pinenote-koreader-profile-wifi-was-on?
+                (default #t)))
 
 
 ;;;
@@ -313,7 +332,10 @@ stable under any reordering of the record."
       ("refresh_on_pages_with_images"
        . ,(pinenote-koreader-profile-refresh-on-pages-with-images? config))
       ("screensaver_type"
-       . ,(pinenote-koreader-profile-screensaver-type config))))
+       . ,(pinenote-koreader-profile-screensaver-type config))
+      ("auto_restore_wifi"
+       . ,(pinenote-koreader-profile-auto-restore-wifi? config))
+      ("wifi_was_on" . ,(pinenote-koreader-profile-wifi-was-on? config))))
   ;; All three or none: one field, one branch.
   (define font-settings
     (if fonts

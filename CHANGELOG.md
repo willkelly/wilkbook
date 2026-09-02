@@ -62,6 +62,29 @@ says otherwise.
   read-plugged-in only; v0.2.0 remains the last direct image that
   sleeps.
 
+### Suspend on the direct-mode image (issue #42) and Wi-Fi after wake
+
+- **The direct image can sleep again.** The broker's pre-suspend EBC
+  barrier was a shipping-driver-only ioctl; on hrdl's driver the same
+  command number is a different call, so every suspend aborted with
+  EFAULT (found on the first broker+direct boot, 2026-09-02). The broker
+  now quiesces the panel by driver capability: the barrier where the
+  driver has it, otherwise it waits for the EBC's interrupt line to go
+  quiet — the same idle signal the lab instruments measure frames with.
+  Offline-proven (`test-quiesce.lua`); a new host gate
+  (`make ebc-ioctl-roster-check`) reconstructs both drivers' ioctl
+  tables from the patches and checks every on-device ioctl user against
+  the driver it runs on, so this class cannot recur silently.
+- **Wi-Fi comes back after every wake, like it used to.** KOReader turns
+  the radio off before sleeping and restores it only if two of its
+  settings say so; neither was seeded, so a sleep — or a *rejected*
+  sleep request, e.g. while `enabled=0` — left the reader off the
+  network until you toggled Wi-Fi in the menu. Both settings are now
+  seeded on (the retired daemon's behavior); flip "restore Wi-Fi after
+  resume" in the Network menu if you want the radio to stay off.
+- Both fixes are on the rebuilt direct image, not yet on any deployed
+  device; their glass validation is the next hardware session.
+
 ### Input
 
 - **Pinch-to-font-size could crash the reader** (KOReader exited and
