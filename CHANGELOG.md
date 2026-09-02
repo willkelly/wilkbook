@@ -48,10 +48,65 @@ says otherwise.
   completed second-person install (`doc/install.md` is no longer
   unverified), and the first validated cold boots of the
   shipping-driver 7.1.8 reader image on glass.
-- Not yet on any deployed wilkbook device: the v0.2.0 image on os2
-  predates this and still runs the old daemon; the broker rides the
-  next built image. The broker + direct-driver combination has not had
-  a hardware session yet.
+- Deployed to the author's os2 on 2026-09-01 as the first image carrying
+  both the direct-mode display stack and the broker
+  (`pinenote-reader-direct-PNGuixRoot-20260831.ext4`, SHA256
+  `2adef085…`, protocol clean — `doc/status.md`). **First boot
+  (2026-09-02): boot chain, Wi-Fi toggle, and charging inhibit all work
+  on the direct driver — but the device CANNOT SUSPEND on it**: the
+  broker's EBC barrier ioctl is a shipping-driver-only addition and
+  collides with a different ioctl on hrdl's driver (EFAULT, issue #42).
+  Each failed attempt also leaves Wi-Fi off until toggled on in the
+  menu (KOReader's restore-after-resume setting defaults off). The
+  shipping flavor is unaffected. Until #42 lands, this image is
+  read-plugged-in only; v0.2.0 remains the last direct image that
+  sleeps.
+
+### Suspend on the direct-mode image (issue #42) and Wi-Fi after wake
+
+- **The direct image can sleep again.** The broker's pre-suspend EBC
+  barrier was a shipping-driver-only ioctl; on hrdl's driver the same
+  command number is a different call, so every suspend aborted with
+  EFAULT (found on the first broker+direct boot, 2026-09-02). The broker
+  now quiesces the panel by driver capability: the barrier where the
+  driver has it, otherwise it waits for the EBC's interrupt line to go
+  quiet — the same idle signal the lab instruments measure frames with.
+  Offline-proven (`test-quiesce.lua`); a new host gate
+  (`make ebc-ioctl-roster-check`) reconstructs both drivers' ioctl
+  tables from the patches and checks every on-device ioctl user against
+  the driver it runs on, so this class cannot recur silently.
+- **Wi-Fi comes back after every wake, like it used to.** KOReader turns
+  the radio off before sleeping and restores it only if two of its
+  settings say so; neither was seeded, so a sleep — or a *rejected*
+  sleep request, e.g. while `enabled=0` — left the reader off the
+  network until you toggled Wi-Fi in the menu. Both settings are now
+  seeded on (the retired daemon's behavior); flip "restore Wi-Fi after
+  resume" in the Network menu if you want the radio to stay off.
+- **Validated on glass 2026-09-02**: five suspend/resume cycles on the
+  direct image — two power taps, two cover closes, one menu Sleep — each
+  with the sleep screen held on the panel, the broker logging "interrupt
+  quiescence … idle", a clean rails-off resume, and Wi-Fi back on its
+  own. The first
+  build's driver fingerprint was wrong (hrdl's driver has `no_off_screen`
+  too); corrected the same night with a fallback that makes a wrong
+  fingerprint impossible to strand on, and the gate now checks the
+  fingerprint against both drivers' real parameter registrations.
+  The corrected image (`827576fd…`) is on the author's os2 as of
+  2026-09-02; the pinch-crash fix below rides the same image.
+
+### Input
+
+- **Pinch-to-font-size could crash the reader** (KOReader exited and
+  respawned in about a second, losing nothing but your gesture).
+  Root-caused offline from the device's own log and reproduced
+  deterministically on the workstation: after the font-size re-render,
+  KOReader forgets a finger that is still on the glass, and the next
+  two-finger gesture crashes on the ghost it left behind (an upstream
+  KOReader defect — `doc/upstream-register.md` item 21). The reader now
+  refuses to hand the gesture detector a touch it cannot identify, so
+  the crash is impossible; the surviving finger is simply ignored until
+  it moves on both axes or lifts. On the author's os2 as of 2026-09-02
+  (`4b55ae78…`), first boot pending.
 
 ## v0.2.0-prealpha — 2026-08-27
 

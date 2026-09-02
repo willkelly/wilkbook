@@ -10,6 +10,7 @@ package.path = script_dir .. "/?.lua;"
     .. (koreader_root and koreader_root .. "/frontend/?.lua;" or "")
     .. package.path
 local Protocol = require("broker_protocol")
+local Quiesce = require("broker_quiesce")
 
 ffi.cdef[[
 int open(const char*, int, ...); int close(int); int fsync(int); long read(int, void*, unsigned long);
@@ -98,6 +99,36 @@ local function ebc_barrier()
     end)
     if not ok then return false, adapter end
     return adapter.submit_and_wait()
+end
+-- The EBC's interrupt line, summed across CPUs (the same row the lab's
+-- frame-clock instrument counts); nil when the line is absent.
+local function ebc_irq_count()
+    local f = io.open("/proc/interrupts", "r"); if not f then return nil end
+    local sum
+    for line in f:lines() do
+        if line:find("fdec0000.ebc", 1, true) then
+            sum = 0
+            for tok in line:gmatch("%S+") do local n = tonumber(tok); if n then sum = sum + n end end
+            break
+        end
+    end
+    f:close(); return sum
+end
+-- REFRESH_BARRIER is a wilkbook addition to the shipping driver.  Its
+-- fingerprint is `refresh_waveform`: registered by the shipping driver,
+-- REMOVED by the direct-mode patch (`make ebc-ioctl-roster-check` pins
+-- that against both drivers' module_param registrations).  NOT
+-- `no_off_screen` -- hrdl's driver registers that one too, which is how
+-- the first fix of #42 still took the barrier path on glass (2026-09-02).
+-- If the fingerprint is ever wrong again, broker_quiesce falls back to
+-- interrupt quiescence on an unsupported-ioctl class error rather than
+-- stranding suspend.
+local function driver_has_barrier()
+    return read_line("/sys/module/rockchip_ebc/parameters/refresh_waveform") ~= nil
+end
+local function ebc_quiesce()
+    return Quiesce.new{ driver_has_barrier = driver_has_barrier, barrier = ebc_barrier,
+                        irq_count = ebc_irq_count, sleep_ms = sleep_ms, log = log }:wait()
 end
 local function frontlight_off()
     local saved = {}
@@ -189,9 +220,9 @@ local function suspend_transaction(fallback)
     local allowed, reason = suspend_allowed()
     if not allowed then return false, reason end
     if fallback then fallback_banner() else write_value("/sys/module/rockchip_ebc/parameters/no_off_screen", "1") end
-    local barrier_ok, barrier_error = ebc_barrier()
-    if not barrier_ok then
-        cleanup_display(); return false, "EBC busy: " .. tostring(barrier_error)
+    local quiet_ok, quiet_error = ebc_quiesce()
+    if not quiet_ok then
+        cleanup_display(); return false, "EBC busy: " .. tostring(quiet_error)
     end
     local had_wifi = wifi_was_on()
     if had_wifi and not run(WIFI .. " off") then cleanup_display(); return false, "Wi-Fi quiesce failed" end

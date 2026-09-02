@@ -79,7 +79,7 @@ FLAVORS = minimal slim networked dev usb-console usb-console-linux-6-6 reader re
         timezone-check kernel-version-check library-check \
         manuals-check ultra-coupling-check timesync-check \
         settings-check koreader-profile-check ebc-modprobe-options-check \
-        ebc-clut-check ebc-card-resolution-check reader-stop-check pen-check ebc-lab-check \
+        ebc-clut-check ebc-card-resolution-check ebc-ioctl-roster-check reader-stop-check pen-check ebc-lab-check \
         $(FLAVORS) $(addprefix image-,$(FLAVORS)) $(addprefix rootfs-,$(FLAVORS))
 
 help:
@@ -100,6 +100,7 @@ help:
 	@echo "  wbf-check         waveform parser checks (WBF=..; never committed)"
 	@echo "  clut-check        C CLUT compiler vs hrdl's wbf_to_custom.py, byte-identical ([WBF=..] [CLUT_REF=..])"
 	@echo "  ebc-clut-check    the direct-mode CLUT installer one-shot, driven through every branch"
+	@echo "  ebc-ioctl-roster-check  every on-device EBC ioctl against the driver(s) it runs on (both UAPI headers from the patches)"
 	@echo "  ebc-logic-check   extracted EBC driver logic checks ([WBF=..])"
 	@echo "  ebc-barrier-check supervised EBC sleep-frame command host tests"
 	@echo "  rastersim-check   raster/waveform simulation checks ([WBF=..])"
@@ -335,7 +336,7 @@ CHECK_HOST_TARGETS = clut-check ebc-logic-check ebc-barrier-check rastersim-chec
         library-check koreader-profile-check manuals-check ultra-coupling-check \
         battery-dtb-check time-machine-check gexp-modules-check \
         timezone-check refresh-trigger-check timesync-check settings-check \
-        ebc-modprobe-options-check ebc-clut-check ebc-card-resolution-check \
+        ebc-modprobe-options-check ebc-clut-check ebc-card-resolution-check ebc-ioctl-roster-check \
         reader-stop-check pen-check ebc-lab-check
 
 # Parse time, not recipe time: a recipe-level guard would run only AFTER every
@@ -541,6 +542,17 @@ ebc-modprobe-options-check:
 # index -- the 2026-08-25 wash-to-GPU ghosting root cause.
 ebc-card-resolution-check:
 	sh pinenote/scripts/preflight/validate-ebc-card-resolution.sh
+
+# The two drivers do not share an ioctl table (shipping adds REFRESH_BARRIER
+# at DRM command 0x03; hrdl's direct driver puts RECT_HINTS there), and DRM
+# dispatches on the command number -- so a tool built for one driver lands
+# in a DIFFERENT handler on the other (issue #42: every suspend on the direct
+# image aborted with EFAULT).  Reconstructs both UAPI headers from the
+# patches, computes every ioctl number the way _IOC() does, proves the
+# calculator against glass-proven constants, and checks each on-device
+# ioctl user against the driver(s) it is declared for; positive-controlled.
+ebc-ioctl-roster-check:
+	python3 pinenote/scripts/preflight/validate-ebc-ioctl-roster.py
 
 # reader-session's stop must be INT-first: TERM truncates the crengine
 # cache to zero bytes and re-arms a 30 s re-parse of the manuals book

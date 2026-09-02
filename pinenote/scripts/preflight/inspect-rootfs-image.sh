@@ -155,6 +155,8 @@ require_image_path "$platform_controls_store/share/pinenote-platform-controls/pi
   "packaged suspend broker"
 require_image_path "$platform_controls_store/share/pinenote-platform-controls/broker_protocol.lua" \
   "packaged suspend broker protocol"
+require_image_path "$platform_controls_store/share/pinenote-platform-controls/broker_quiesce.lua" \
+  "packaged suspend broker EBC quiesce"
 
 platform_service=$(unique_store_path \
   '-shepherd-pinenote-platform-controls\.scm$' \

@@ -125,6 +125,8 @@ run_case() {
 
 run_case test-mixedrouter.lua "$tool_dir/test-mixedrouter.lua" \
   "$koreader" "$router"
+run_case test-slotguard.lua "$tool_dir/test-slotguard.lua" \
+  "$koreader" "$router" "$pinenote_dev/slotguard.lua"
 run_case test-optics-inject.lua "$tool_dir/test-optics-inject.lua" \
   "$koreader" "$device_lua" "$router"
 run_case test-idlewasher-logic.lua "$tool_dir/test-idlewasher-logic.lua" \

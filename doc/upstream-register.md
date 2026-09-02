@@ -926,3 +926,66 @@ outside our tree — a stock Guix system (or bare shepherd) with an
 inetd-style service, `reboot` over ssh, and a scripted reconnect-on-
 disconnect; confirm the same accept→dependency-restart→wedge sequence.
 Also confirm against current shepherd (the device ran 1.0.x).
+
+## 21. KOReader: `Input:resetState()` under live contacts creates ghost MT contacts; the gesture detector's safety nets then crash the next two-finger pan
+
+**Where it would go:** koreader/koreader (frontend/device/input.lua,
+frontend/device/gesturedetector.lua, frontend/apps/reader/modules/readerrolling.lua).
+
+**Status: crashed on device (2026-09-02, PineNote, pinch-to-font-size),
+root-caused offline, reproduced deterministically from the verbatim
+upstream files, worked around in our device layer
+(`device/pinenote/slotguard.lua`); the reproducer is
+`pinenote/tools/koreader-input/test-slotguard.lua` and runs on any
+x86 host against the stock bundle.**
+
+**What we saw:** `gesturedetector.lua:325: attempt to perform
+arithmetic on field 'x' (a nil value)` in `Contact:getPath`, called from
+`handleTwoFingerPan` on a buddy contact, with `GestureDetector:newContact
+recorded an initial_tev out of order for buddy slot 0` a few frames
+earlier — and, over the preceding forty seconds, six more of those
+warnings each landing at the exact second of a `Restoring user input
+handling` line.
+
+**Mechanism (all upstream code):** a pinch is emitted on the FIRST
+finger's lift; ReaderFont changes the size and ReaderRolling re-renders
+with `Input:inhibitInput(true)` (`readerrolling.lua:999`), which swaps
+`handleTouchEv` for `voidEv` — the still-down finger's frames are
+dropped — and `inhibitInput(false)` then calls `Input:resetState()`,
+which replaces `ev_slots` with a single empty `{ slot = 0 }` and drops
+every contact. The finger still on the glass keeps reporting per the
+MT protocol-B contract: only what changed, so neither its tracking id
+nor an unchanged axis is re-sent. Its next frame lands in the empty
+table as a contact with no `id` and possibly no `x`. When the user's
+next finger lands, `newContact` pairs it with that ghost as a buddy and
+the "safety net for broken platforms" copies the positionless table
+into `initial_tev`; `Contact:setState` has the same net. The next
+`handleTwoFingerPan` builds `rstart_pos` from `buddy.initial_tev.x`
+(nil, no throw) and calls `buddy:getPath()`, whose subtraction throws.
+`ev_slots` being persistent is exactly why this needs the reset: on a
+slot that has ever been used, x/y are otherwise always present.
+
+**Why it deserves a report:** any reader that re-renders on a pinch and
+inhibits input during it (that is the shipped ReaderRolling path) is
+one delta-only frame away from this crash, on every MT panel. Three
+plausible upstream fixes, any one sufficient: (1) `inhibitInput(false)`
+re-reads slot state from the kernel (`EVIOCGMTSLOTS` for
+`ABS_MT_TRACKING_ID`/`POSITION_X`/`POSITION_Y`) instead of forgetting
+it; (2) the two safety nets refuse to record an `initial_tev` without
+`x`/`y` (leave it nil and let `initialState` record the real one); (3)
+`getPath`/`handleTwoFingerPan` guard a buddy without a position. Our
+workaround does the frame-level equivalent of (2): a slot with no id,
+or a live id and no position, is withheld from the detector until it
+is complete.
+
+**What has to be true first:** the baseline gate; reproduce on the
+stock SDL build with the test's synthetic stream (it uses only
+upstream files, so this is mechanical); confirm current master still
+has `resetState()` in `inhibitInput(false)`.
+
+**Our follow-up (independent of upstream):** the faithful fix on our
+side is the `EVIOCGMTSLOTS` resync after every reset, so a finger that
+survives a re-render stays a first-class contact instead of being
+invisible until it is complete again — recorded here rather than done,
+because the guard already makes the crash impossible and the resync
+needs a real kernel to test against.

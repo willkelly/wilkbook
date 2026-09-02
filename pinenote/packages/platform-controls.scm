@@ -27,10 +27,14 @@
              #$(local-file "platform-controls/broker_protocol.lua")
              (string-append share "/broker_protocol.lua"))
             (copy-file
+             #$(local-file "platform-controls/broker_quiesce.lua")
+             (string-append share "/broker_quiesce.lua"))
+            (copy-file
              #$(local-file "platform-controls/pinenote-wifi-control")
              (string-append bin "/pinenote-wifi-control"))
             (chmod (string-append share "/pinenote-power-broker.lua") #o555)
             (chmod (string-append share "/broker_protocol.lua") #o444)
+            (chmod (string-append share "/broker_quiesce.lua") #o444)
             (chmod (string-append bin "/pinenote-wifi-control") #o555)))))
     (home-page "https://github.com/rpedde/wilkbook")
     (synopsis "Acknowledged suspend and Wi-Fi controls for PineNote")

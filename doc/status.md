@@ -1,7 +1,256 @@
 # Hardware status
 
-Last updated: 2026-08-31. Update protocol: add a dated entry at the top
+Last updated: 2026-09-02. Update protocol: add a dated entry at the top
 after every hardware session; entries are per-device/per-operator.
+
+## 2026-09-02 (wkelly PineNote) — first boot of 4b55ae78: the fingerprint was wrong, hot-fixed live, and #42 VALIDATED ON GLASS
+
+Booted hands-off; SSH up 32 s after boot with Wi-Fi from the service;
+broker before reader, slot guard in the closure, both Wi-Fi keys seeded
+(`auto_restore_wifi`, `wifi_was_on`), zero out-of-order warnings.
+
+**Found on the first sysfs listing**: hrdl's direct driver registers
+`no_off_screen` too, so the `3005a66` fingerprint chose the barrier
+path and suspend would still have failed. From the patches: the
+shipping driver registers both `refresh_waveform` and `no_off_screen`;
+the direct-mode patch REMOVES `refresh_waveform` and keeps
+`no_off_screen`. Fix (`a7cef44`): the probe keys on
+`refresh_waveform`; `broker_quiesce` falls back to interrupt
+quiescence on an unsupported-ioctl-class barrier failure (EFAULT /
+EINVAL / ENOTTY) so a wrong fingerprint can never strand suspend
+again; the ioctl roster gate now proves the fingerprint against both
+drivers' real `module_param()` registrations via the modprobe
+preflight's extractor (and pins `no_off_screen` as registered by both).
+
+**Hot-fixed live** rather than reflashed: the two patched files
+bind-mounted over their store paths, `herd restart
+pinenote-platform-controls` (KOReader respawned once behind the
+recreated input node, as designed). Then, unplugged, one power tap:
+
+    04:35:46 power tap accepted
+    04:35:50 received ready; EBC quiesce: no REFRESH_BARRIER on this driver;
+             waiting for interrupt quiescence
+    04:35:50 EBC quiesce: idle (no interrupts for 250 ms, 250 ms total)
+    04:36:13 resumed after 20s; transaction complete ok=true detail=button
+    04:36:19 KOReader: Wi-Fi successfully restored (after 2.5 seconds)!
+
+Kernel: `PM: suspend entry (deep)` → `suspend devices took 5.549 s` →
+`rockchip_ebc_resume` → `suspend exit`; RTC backstop cleared after the
+button wake; the wake press itself correctly ignored inside the grace
+window. The known `cyttsp5: Validation of the wakeup response failed`
+line appeared on resume (the resume workaround's signature; touch
+worked). **This is the first rails-off suspend/resume through the
+broker on the direct driver, and the first time Wi-Fi came back on its
+own in the broker era.**
+
+**The matrix, same session, all on the hot-fixed broker** (the broker's
+own log; copies of every log are in `/data/wilkbook/logs-20260902/`,
+which survives the reflash):
+
+| # | trigger | quiesce | asleep | result | Wi-Fi after wake |
+|---|---|---|---|---|---|
+| 1 | power tap 04:35:24 | idle 250 ms | 14 s | ok, button | restored 2.5 s |
+| 2 | power tap 04:35:50 | idle 250 ms | 20 s | ok, button | restored 2.5 s |
+| 3 | cover 04:44:19 | idle 250 ms | 17 s | ok, button | (re-slept 7 s later) |
+| 4 | cover 04:44:45 | idle 250 ms | 278 s | ok, button | restored 2.25 s |
+| 5 | menu Sleep (`trigger=koreader`) 04:53:25 | idle 250 ms | 4 s | ok, button | restored |
+
+Kernel `PM: suspend entry`/`suspend exit` 5/5; RTC backstop clear after
+every wake; **the KOReader sleep screen held on the panel throughout
+each suspend** — hrdl's driver honors `no_off_screen`, closing the
+2026-09-01 watch item. Between #2 and #3 the cover switch fired
+repeatedly with the USB cable in and every request was rejected
+`charging on rk817-charger` — the accepted policy, and a papercut for
+anyone reading on the charger (any USB host counts). Pinch-to-font-size
+twice in a row did not crash (as with the previous night, it never
+reproduced by hand; the offline pin is the proof). Not exercised: an
+AutoSuspend cycle (the device slept via the cover during every idle
+window) and the RTC-backstop wake — rpedde's shipping-flavor matrix
+covers both paths, and they are logged, not special-cased, on this
+driver.
+
+**Durable image DEPLOYED the same session**:
+`pinenote-reader-direct-PNGuixRoot-20260902.ext4`, SHA256
+`827576fdae836e081ec2d5a8942989a0eb148dca4894fdd3a683849b8b44c587`
+(1,824,972,800 bytes, 445,550 × 4096 — two blocks larger than its
+predecessor; the protocol's size gate would have refused the stale
+count), pre-staged to the data partition over the live os2 link,
+written from os1 by the five-step protocol: DEPLOY OK. This is
+`a7cef44`'s tree: the corrected fingerprint and the fallback baked in,
+no hot-fix needed. First boot pending; one power tap on it is the
+confirmation that the shipped probe, not the bind mount, chooses the
+quiescence path.
+
+## 2026-09-02 (wkelly PineNote) — three-fix image DEPLOYED to os2; first boot pending
+
+`pinenote-reader-direct-PNGuixRoot-20260901.ext4`, SHA256
+`4b55ae781f7ad3f58e13c43e50d49f79ae92689ae84002cec4b2b239c71ac5f6`
+(1,824,964,608 bytes, 445,548 × 4096), carrying everything on the
+previous os2 image plus tonight's three fixes: the slot identity guard
+(`d90e181`, the pinch-to-font-size crash), the driver-aware EBC quiesce
++ Wi-Fi restore seeds + ioctl roster gate (`3005a66`, issue #42).
+Offline record: `make check-host` green end to end on the merged tree
+(including the new `ebc-ioctl-roster-check`), both flavors lower, the
+closure-level image inspection passed on this exact ext4 (now also
+requiring the packaged `broker_quiesce.lua`). Transferred to the data
+partition from os1, written by the five-step protocol from stock os1:
+DEPLOY OK. The `enabled=0` pause left on the data partition the night
+before was removed as part of the write; the os2 host key was purged
+workstation-side. This overwrites `2adef085…` (the first broker+direct
+image, which could not suspend).
+
+**Not yet booted.** The session that boots it is the validation of all
+three fixes on glass, in this order: power tap → KOReader sleep screen
+→ resume with Wi-Fi back (`auto_restore_wifi`/`wifi_was_on` seeded);
+the broker log must say "no REFRESH_BARRIER on this driver; waiting for
+interrupt quiescence" and then "idle" — never "EBC busy"; cover close
+and menu Sleep through the same path; one AutoSuspend cycle; what the
+panel shows while asleep on hrdl's driver; and a pinch-to-font-size
+followed immediately by another pinch, which is the exact sequence that
+crashed the reader on 2026-09-02 02:18.
+
+## 2026-09-01/02 (wkelly PineNote) — broker + direct FIRST BOOT: chain works, Wi-Fi toggle works, SUSPEND IMPOSSIBLE (barrier ioctl collision, issue #42)
+
+The `2adef085…` image booted hands-off into KOReader (white splash, no
+console text). All from the device's own logs, harvested over SSH after
+the fact:
+
+**What worked.**
+- **The service chain**: udev 01:46:40 → `pinenote-ebc-clut`,
+  `pinenote-platform-controls`, `orientation-bridge`, `pinenote-wifi`
+  01:46:41 → `reader-session` 01:46:43. Broker ready marker written,
+  `wilkbook-power-control` present as event7, KOReader opened it. The
+  fidelity CLUT compiled at boot (`c1b6f4f6…`, byte-identical to the
+  v0.2.0 table). Wi-Fi came up at boot and KOReader adopted the stock
+  supplicant (`adopted existing supplicant pid=525`, 01:46:46).
+- **Ron's Wi-Fi toggle, end to end on our device**: after the reader
+  had been left off the network (below), the operator tapped Wi-Fi on
+  in KOReader's menu — `rfkill unblock` → supplicant with the
+  out-of-band conf → dhcpcd — and SSH returned within a minute
+  (`pinenote-wifi: on pid=4545`).
+- **Charging inhibit, as designed**: the 01:50 power tap was rejected
+  (`charging on rk817-charger`). The charger reports `online=1` and the
+  gadget UDC is bound whenever *any* USB host is attached — a debug or
+  workstation cable counts as charging to the broker, and a power tap
+  then does nothing visible. Operator-facing note, not a bug.
+
+**What did not: the device cannot suspend on this image.** Two
+transactions, one from a power tap (02:21:40) and one from KOReader's
+AutoSuspend 900 s later (02:36:46), both aborted identically before any
+`/sys/power/state` write:
+
+    transaction complete ok=false detail=EBC busy: SUBMIT ioctl returned -1 (errno 14)
+
+errno 14 = EFAULT. Root cause, from the two patches: the
+`REFRESH_BARRIER` ioctl the broker's `ebc_barrier` submits is a
+**wilkbook addition to the shipping driver** (forward-port patch,
+DRM command `0x03`, `DRM_IOWR`, 40-byte struct). hrdl's direct driver
+never had it — the direct patch deletes it and registers `RECT_HINTS`
+(`DRM_IOW`, 16-byte struct) at command `0x03`. DRM dispatches on the
+command number, so the barrier SUBMIT lands in `ioctl_rect_hints`,
+which reads a garbage pointer out of it → `copy_from_user` → EFAULT.
+The retired daemon never used the barrier (which is why D6 passed on
+this driver 2026-08-26). Same class as the modprobe-options collision
+that `ebc-modprobe-options-check` guards, one layer down; there is no
+ioctl-roster gate. Filed as issue #42 with the fix shape (driver-aware
+quiesce — hrdl's kernel suspend path drains its own work items — plus
+an ioctl-roster preflight).
+
+**Secondary consequence, and a behavior change to know about**: each
+failed attempt left the reader OFF THE NETWORK. KOReader's suspend
+preparation turns Wi-Fi off (`pinenote-wifi: off`, 02:21:37) before it
+acknowledges, and after the broker's KEY_WAKEUP the restore is gated
+on KOReader's `auto_restore_wifi`, which defaults off (the retired
+daemon always restored). The operator saw "Wi-Fi toggle says off" with
+no memory of a sleep — correct, it never slept; it *tried*. Follow-up:
+seed `auto_restore_wifi=true` from the koreader-profile service so the
+reader behaves as before.
+
+**Unrelated finding, first observation**: KOReader exited with 1 at
+02:18:18 and was respawned in 1 s. Traceback:
+`gesturedetector.lua:325: attempt to perform arithmetic on field 'x'
+(a nil value)` in `getPath`, immediately after `Contact:setState
+recorded an initial_tev out of order for slot 0` — the upstream
+slot-sharing quirk class pinned in `koreader-input-check`
+(`doc/upstream-register.md` item 11), here as a crash rather than a
+swipe misclassification. Not the broker's doing (its ready marker and
+uinput node were untouched). **Root-caused the same night, offline**:
+not the slot-sharing quirk after all — the re-render a pinch triggers
+calls `Input:inhibitInput(false)` → `Input:resetState()`, which wipes
+every MT slot table under the finger still on the glass; that finger's
+next delta-only frame becomes a ghost contact (no id, no x) which the
+next finger pairs with, and `Contact:getPath` throws on it. Every one
+of the 13 "initial_tev out of order" warnings in the log lands at the
+exact second of a `Restoring user input handling` line. Reproduced
+deterministically from the verbatim upstream files
+(`pinenote/tools/koreader-input/test-slotguard.lua`, exact line-325
+error), fixed in our device layer (`slotguard.lua`: a slot with no id,
+or a live id and no position, never reaches the detector), pinned with
+neutrality controls, upstream item 21 written. A 75 s raw evdev
+capture of the operator pinching (13 warnings on device, no crash) is
+what proved the touch stream itself is clean: the replay instrument
+(`replay-evdev.lua`) produced zero warnings from it, which is what
+pointed at the reset. The fix is offline-proven only; the device still
+runs the crashing code until the next image.
+
+**#42 fixed offline the same night** (`broker_quiesce.lua` +
+`test-quiesce.lua`, `make ebc-ioctl-roster-check`): the broker now
+chooses its quiesce by driver — barrier on the shipping driver, EBC
+interrupt quiescence (`fdec0000.ebc` flat for 250 ms) on the direct
+driver — and the new roster gate reconstructs both drivers' ioctl
+tables from the patches and proves every on-device ioctl against the
+driver it runs on (positive-controlled: the barrier literal is rejected
+against the direct driver). Also seeded `auto_restore_wifi` and
+`wifi_was_on` in the KOReader profile, after the device fell off the
+network a SECOND time under `enabled=0`: the broker rejects KOReader's
+AutoSuspend request only after KOReader has already run its
+preparation (Wi-Fi off), and nothing restored it. Rebuilt image carries
+both plus the slot guard; not yet on glass.
+
+**Device posture left tonight**: `enabled=0` written to
+`/data/wilkbook/autosuspend.conf` — deliberately, so the broker stops
+the futile attempts and the Wi-Fi drop-outs; the device cannot sleep
+on this image either way. Battery 94 %, on USB. v0.2.0
+(`v0.2.0-prealpha.ext4`) is still staged on the data partition for a
+rollback from os1 if wanted before #42 lands. **Undo `enabled=0` with
+the next image.**
+
+## 2026-09-01 (wkelly PineNote) — broker + direct image DEPLOYED to os2; first boot pending
+
+The first image carrying both lineages — v0.2.0's direct-mode display
+stack and rpedde's platform-controls broker (PR #41, merged 2026-09-01
+with the rung-4 degraded-mode fix `d442b9d`) — is on os2:
+`pinenote-reader-direct-PNGuixRoot-20260831.ext4`, SHA256
+`2adef0852cf5ce5bd70671d81f6a7cfd02da326c155fa21eff9e51c5f537b515`
+(1,824,964,608 bytes, 445,548 × 4096). Staged over SSH to the data
+partition from the running v0.2.0 os2 (SHA verified on-device),
+written from stock os1 by the five-step protocol (slot check, p6
+unmounted, staged SHA, exact-count dd, readback SHA over the written
+range): DEPLOY OK. The autosuspend pause used during staging was
+removed before the write, so the new image sleeps out of the box. The
+os2 host key was purged workstation-side (fresh keys on first boot).
+This overwrites the v0.2.0 release image `7afd3f8a…`; the release
+itself remains tagged and its image file is kept on the workstation.
+
+Offline record for this image: `make check-host` green end to end on
+the merged tree; both flavors lower; the closure-level image inspection
+(rpedde's Phase 2 gates) passed on this exact ext4; rung 4 was proven
+on the sibling reader-flavor image (fail → pass across the broker fix).
+No `qemu-virt-check` on the direct image itself — its assertions are
+reader-flavor-specific (`refresh_waveform` does not exist on hrdl's
+driver).
+
+**Not yet booted.** This is the first time the broker and the direct
+driver meet on any hardware. Watch list for the first boot:
+`pinenote-platform-controls` ready before `reader-session`; the reader
+opening `wilkbook-power-control`; a power-button tap → KOReader sleep
+screen → clean resume (frontlight level and warmth restored); ultra
+rails-off resume on this driver; what the panel shows *while*
+suspended (`no_off_screen` is a shipping-driver parameter hrdl's driver
+does not register, so the broker's write is a silent no-op here); and
+the fallback SUSPEND banner's hardcoded 32 bpp geometry if KOReader
+ever misses the ten-second deadline (same class as the retired
+daemon's banner bug on this flavor).
 
 ## 2026-08-31 (rpedde PineNote) — Phase 2 packaged platform controls accepted on hardware
 
