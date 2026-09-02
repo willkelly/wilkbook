@@ -82,9 +82,11 @@ says otherwise.
   network until you toggled Wi-Fi in the menu. Both settings are now
   seeded on (the retired daemon's behavior); flip "restore Wi-Fi after
   resume" in the Network menu if you want the radio to stay off.
-- **Validated on glass 2026-09-02**: one power tap on the direct image
-  → sleep screen → rails-off suspend (the broker logged "interrupt
-  quiescence … idle") → button wake → Wi-Fi back on its own. The first
+- **Validated on glass 2026-09-02**: five suspend/resume cycles on the
+  direct image — two power taps, two cover closes, one menu Sleep — each
+  with the sleep screen held on the panel, the broker logging "interrupt
+  quiescence … idle", a clean rails-off resume, and Wi-Fi back on its
+  own. The first
   build's driver fingerprint was wrong (hrdl's driver has `no_off_screen`
   too); corrected the same night with a fallback that makes a wrong
   fingerprint impossible to strand on, and the gate now checks the

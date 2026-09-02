@@ -41,9 +41,37 @@ window. The known `cyttsp5: Validation of the wakeup response failed`
 line appeared on resume (the resume workaround's signature; touch
 worked). **This is the first rails-off suspend/resume through the
 broker on the direct driver, and the first time Wi-Fi came back on its
-own in the broker era.** The hot-fix dies with the next reboot; the
-durable image is `827576fd…` (rebuilt from `a7cef44`), to be deployed
-by the protocol.
+own in the broker era.**
+
+**The matrix, same session, all on the hot-fixed broker** (the broker's
+own log; copies of every log are in `/data/wilkbook/logs-20260902/`,
+which survives the reflash):
+
+| # | trigger | quiesce | asleep | result | Wi-Fi after wake |
+|---|---|---|---|---|---|
+| 1 | power tap 04:35:24 | idle 250 ms | 14 s | ok, button | restored 2.5 s |
+| 2 | power tap 04:35:50 | idle 250 ms | 20 s | ok, button | restored 2.5 s |
+| 3 | cover 04:44:19 | idle 250 ms | 17 s | ok, button | (re-slept 7 s later) |
+| 4 | cover 04:44:45 | idle 250 ms | 278 s | ok, button | restored 2.25 s |
+| 5 | menu Sleep (`trigger=koreader`) 04:53:25 | idle 250 ms | 4 s | ok, button | restored |
+
+Kernel `PM: suspend entry`/`suspend exit` 5/5; RTC backstop clear after
+every wake; **the KOReader sleep screen held on the panel throughout
+each suspend** — hrdl's driver honors `no_off_screen`, closing the
+2026-09-01 watch item. Between #2 and #3 the cover switch fired
+repeatedly with the USB cable in and every request was rejected
+`charging on rk817-charger` — the accepted policy, and a papercut for
+anyone reading on the charger (any USB host counts). Pinch-to-font-size
+twice in a row did not crash (as with the previous night, it never
+reproduced by hand; the offline pin is the proof). Not exercised: an
+AutoSuspend cycle (the device slept via the cover during every idle
+window) and the RTC-backstop wake — rpedde's shipping-flavor matrix
+covers both paths, and they are logged, not special-cased, on this
+driver.
+
+The hot-fix dies with the next reboot; the durable image is
+`827576fd…` (rebuilt from `a7cef44`), staged and verified on the data
+partition, to be written by the protocol.
 
 ## 2026-09-02 (wkelly PineNote) — three-fix image DEPLOYED to os2; first boot pending
 
