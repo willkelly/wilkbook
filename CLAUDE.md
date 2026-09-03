@@ -319,10 +319,8 @@ gitignored `build/`, or the reader's static address.
   off (`DEFAULT_ENABLE=0x0`), BREAK+`sysrq` arms, BREAK+key fires —
   the sequence is an arming toggle, NOT a per-use guard
   (`doc/kernel-forward-port.md`). 6.6.30 remains regression-isolation only.
-  Twelve patches as of 2026-09-03 (seven from the 7.0/7.1 series, four for the direct-mode driver and our fixes on it, one mfd rk8xx kexec fix); the 7.1 move *deleted* two hunks mainline absorbed. An
-  eighth (`linux-pinenote-7.1-rk8xx-kexec-sleep-pin.patch`, the RK817
-  kexec/sleep-pin fix) is on the kexec-hardening branch, glass proof
-  pending — not yet merged into `%linux-pinenote-patches`. Inventory in
+  Twelve patches as of 2026-09-03 (seven from the 7.0/7.1 series, four for the direct-mode driver and our fixes on it, one mfd rk8xx kexec fix); the 7.1 move *deleted* two hunks mainline absorbed. The
+  rk8xx one is glass-proven and merged (2026-09-03). Inventory in
   `doc/kernel-forward-port.md`.
 - **Suspend**: **ultra suspend is the shipping suspend** (2026-08-08,
   R12): hrdl's configuration adopted whole — standing
