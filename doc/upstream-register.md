@@ -1010,9 +1010,15 @@ domain was on.
 regmap-mmio enables the clock around each access — the mechanism
 already used for other clocked syscons; (2) `CLK_IGNORE_UNUSED` on
 `pclk_pipe` in `clk-rk3568.c`, as `clk_pcie*_pipe_dft` already are.
-(1) is the minimal one. Our workaround skips the initcall on the kexec
-command line only (the GRF retains the cold boot's values across a
-kexec).
+(1) is the minimal one and is what our tree carries
+(`linux-pinenote-7.0-pipegrf-clock.patch`; `syscon_node_to_regmap`
+registers a "syscon" node with resource checking, so the clock is
+attached to the regmap and enabled around each access — the fix lives in
+the *receiving* kernel, which is what a kexec needs). Until it is
+proven on glass the generation helper also skips the initcall on the
+kexec command line (the GRF retains the cold boot's values across a
+kexec). The binding (`soc/rockchip/grf.yaml`) needs `clocks` allowed for
+the pipe-grf compatibles alongside.
 
 **Related, same session (a known upstream limitation, not a bug
 report):** the GICv3 LPI tables are reserved for the next kernel only

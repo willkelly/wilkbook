@@ -68,7 +68,7 @@ All live in `pinenote/packages/kernel.scm`:
 
 `%linux-pinenote-patches` in `pinenote/packages/kernel.scm` is the
 authoritative list; the comments there carry each patch's rationale and
-revert instruction. As of 2026-08-08 it is seven patches, applied in list
+revert instruction. As of 2026-09-02 it is eight patches, applied in list
 order on top of the vanilla source:
 
 1. `linux-pinenote-7.0-forward-port.patch` — the EBC display stack,
@@ -112,6 +112,15 @@ order on top of the vanilla source:
    hourly RTC backstop, idle standby is **5.47 mA** over a 6.17-day
    unplugged soak with 170 cycles and no failures
    (`doc/artifacts/pinenote-ultra-soak-20260815/`).
+8. `linux-pinenote-7.0-pipegrf-clock.patch` — `clocks = <&cru PCLK_PIPE>`
+   on the rk356x `pipegrf` syscon, so a kexec'd kernel's
+   `rockchip_grf_init` clocks the PIPE GRF before writing it. The
+   running kernel gates `pclk_pipe` as unused and U-Boot leaves it on,
+   which is why cold boots never noticed and the first three kexecs on
+   glass hung at 0.12 s (2026-09-02; `doc/update-path.md` "Glass
+   notes", `doc/upstream-register.md` item 22). Until proven on glass
+   the generation helper also skips that initcall on the kexec command
+   line; the patch retires the skip.
 
 `linux-pinenote-debug` stacks `linux-pinenote-debug-extract-fbs.patch`
 on top of the same seven.

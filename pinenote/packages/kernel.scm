@@ -143,7 +143,17 @@
         ;; apply after the bsp-sip patch -- it adds the standing override
         ;; to the /rockchip-suspend node that patch creates.  See the
         ;; patch header for why the pair must never be split.
-        (local-file "../patches/linux-pinenote-7.0-ultra-rails.patch")))
+        (local-file "../patches/linux-pinenote-7.0-ultra-rails.patch")
+        ;; kexec (2026-09-02): the PIPE GRF gets its clock.  The running
+        ;; kernel gates pclk_pipe as unused (nothing on the PineNote holds
+        ;; it; U-Boot leaves it on), and a kexec'd kernel's early
+        ;; rockchip_grf_init then writes the unclocked block and hangs the
+        ;; bus at 0.12 s with no message -- three identical hangs on
+        ;; glass.  With `clocks` on the syscon node the regmap enables it
+        ;; around every access.  Retires the generation helper's
+        ;; kexec-only initcall_blacklist=rockchip_grf_init once proven.
+        ;; doc/upstream-register.md item 22.  Drop this line to revert.
+        (local-file "../patches/linux-pinenote-7.0-pipegrf-clock.patch")))
 
 (define %linux-pinenote-source
   (origin

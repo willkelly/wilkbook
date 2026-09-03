@@ -1,0 +1,38 @@
+arm64: dts: rockchip: rk356x: clock the PIPE GRF so a kexec'd kernel can write it
+
+rockchip_grf_init (drivers/soc/rockchip/grf.c) is a postcore_initcall that
+writes three USB3-OTG bits into the rk3566 PIPE GRF at 0xfdc50000
+("rockchip,rk3566-pipe-grf").  That register block sits on pclk_pipe.  On a
+board with no PCIe, SATA or USB3 consumer nothing holds that clock, so the
+running kernel gates it as unused at late init; U-Boot hands a cold boot
+with it running, which is why cold boots never notice.
+
+A kexec'd kernel inherits the previous kernel's clock tree.  Its
+rockchip_grf_init then writes into an unclocked APB block, the access never
+completes, and the boot stalls silently 0.12 s in -- the last line is the
+DMA pool preallocation, and a minute later the workqueue watchdog reports a
+lockup on whichever CPU ran init.  Seen three times on a Pine64 PineNote
+(RK3566, 7.1.8) before a kexec with initcall_blacklist=rockchip_grf_init
+booted all the way; clk_summary on the running kernel shows pclk_pipe at
+enable count 0 while the pipe power domain is on.
+
+Give the pipegrf syscon its clock.  syscon_node_to_regmap() registers a
+"syscon"-compatible node with resource checking, which attaches the node's
+first clock to the regmap and enables it around every access, so the GRF
+init clocks the block itself before writing -- whatever the previous
+kernel left behind.  The binding (soc/rockchip/grf.yaml) would want
+`clocks` allowed for the pipe-grf compatibles alongside this.
+
+wilkbook: doc/upstream-register.md item 22; doc/update-path.md "Glass
+notes" (2026-09-02).
+
+--- a/arch/arm64/boot/dts/rockchip/rk356x-base.dtsi
++++ b/arch/arm64/boot/dts/rockchip/rk356x-base.dtsi
+@@ -375,6 +375,7 @@
+ 
+ 	pipegrf: syscon@fdc50000 {
+ 		reg = <0x0 0xfdc50000 0x0 0x1000>;
++		clocks = <&cru PCLK_PIPE>;
+ 	};
+ 
+ 	grf: syscon@fdc60000 {
