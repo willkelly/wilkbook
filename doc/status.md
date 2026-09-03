@@ -52,6 +52,23 @@ promote, gen-1 pruned, `guix gc`; `DEPLOY OK`. Gen-2 pruned by hand
 afterwards (pre-fix helper; a trial into it would hang). Ledger now
 gen-3, gen-4 `[promoted] [booted]`; 2.0 GB of 15 GB used.
 
+**2026-09-03, 00:43–01:39 (wkelly PineNote) — the "hang" was U-Boot's menu; the route-bit theory refuted; hung again.**
+The operator's power-cycle at 00:43 landed in U-Boot; the watcher picked
+os2, U-Boot loaded our extlinux menu (generations 6, 5, 4) — and stopped
+at `Enter choice:` for fifty minutes: two watchers were alive and each
+sent DOWN DOWN ENTER, so the second set landed in extlinux's menu and
+cancelled its countdown. A `3` on the UART booted generation 4 cold at
+01:32 (the watcher is single-instance now). Then the prepared sequence:
+`CRU_GLB_RST_CON` read **`0x00000103` before any write** — bits 0–1
+were already set, so the PX30-style route bit is not what enables a
+watchdog reset here — and the armed hang test still produced no reset in
+four minutes. **The watchdog does not reset this SoC as configured; the
+enabler is unknown.** PR #54 closed as refuted; PR #48 keeps the arm and
+drops the routing. Device left hung in the kexec'd generation-5 kernel,
+DEFAULT generation 4, auto-suspend paused. Next: a *runtime* watchdog
+test with no kexec (arm, read the DW WDT's own counter for 15 s, wait)
+to separate "cannot reset this SoC" from "the kexec path stops it".
+
 **Later the same night — three negatives and one root cause, all
 recorded so nobody repeats them.** (1) A kexec from the unpatched
 generation 4 into generation 5 (the DT clock reference on the pipe
