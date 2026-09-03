@@ -1058,3 +1058,27 @@ tree still has the bare return (our patch is a snapshot); the pin
 `make direct-probe-quirk-check` goes red when we port the fix or rebase
 over theirs, by design.
 
+## 25. RK3568: the watchdog's reset is not routed to the global reset — `CRU_GLB_RST_CON` bits 0–1 are left clear
+
+**What:** the DesignWare watchdog on the RK3568 (`rockchip,rk3568-wdt`)
+arms, counts and expires, and nothing happens: its reset output reaches
+the chip's first global reset only when `CRU_GLB_RST_CON` (CRU + 0xdc)
+bits 0–1 are set, and neither stock U-Boot nor the kernel sets them.
+Observed on the PineNote 2026-09-02: armed before a kexec, running
+through it ("watchdog did not stop!"), the next kernel hung at 0.16 s,
+no reset in three minutes. Mainline U-Boot fixes the same thing for the
+PX30 in board init ("Make TSADC and WDT trigger a first global reset",
+`clrsetbits_le32(&cru->glb_rst_con, 0x3, 0x3)`); the RK3568 has the
+register (`RK3568_GLB_RST_CON`, defined in the kernel's `clk.h` and
+unused) and no writer.
+
+**Fix (ours, `linux-pinenote-7.0-wdt-glb-rst.patch`):** set the two bits
+by read-modify-write in `rk3568_clk_init`. Where it belongs upstream is
+a judgement: U-Boot's `rk3568.c` (matching the PX30 precedent) or the
+kernel's CRU driver (covers every bootloader). Glass proof pending — a
+deliberately hanging armed kexec that resets itself.
+
+**What has to be true first:** the baseline gate; the TRM's bit table
+for `CRU_GLB_RST_CON` quoted (the PX30 precedent and the register name
+are the evidence so far); the proof on glass.
+

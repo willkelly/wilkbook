@@ -1,0 +1,39 @@
+clk: rockchip: rk3568: route the watchdog reset to the first global reset
+
+On the RK3568 the DesignWare watchdog's reset output reaches the chip's
+global reset only when CRU_GLB_RST_CON (CRU + 0xdc) bits 0-1 are set.
+Stock U-Boot and the kernel leave them clear, so a watchdog timeout
+resets nothing: armed before a kexec on a Pine64 PineNote (2026-09-02),
+the watchdog ran through the kexec, the new kernel hung 0.16 s in, and
+the SoC sat there indefinitely.  Mainline U-Boot sets exactly these bits
+for the PX30 ("Make TSADC and WDT trigger a first global reset",
+arch/arm/mach-rockchip/px30/px30.c); nothing does it for the RK3568.
+
+Set them in the CRU driver's init, read-modify-write (the register has
+no write-enable half), so any watchdog user -- systemd's shutdown, a
+kexec trial, a runtime hang -- gets the reset it asked for.  A kernel
+that never reaches its drivers is exactly the case a watchdog exists
+for, and the one this board could not recover from.
+
+wilkbook: doc/upstream-register.md item 25.  RK3568_GLB_RST_CON is
+already defined in clk.h (0xdc) and unused.
+
+--- a/drivers/clk/rockchip/clk-rk3568.c
++++ b/drivers/clk/rockchip/clk-rk3568.c
+@@ -1693,6 +1693,16 @@
+ 
+ 	rockchip_register_restart_notifier(ctx, RK3568_GLB_SRST_FST, NULL);
+ 
++	/*
++	 * Route the watchdog (and TSADC) reset to the first global reset.
++	 * The boot firmware leaves CRU_GLB_RST_CON clear on this SoC, so a
++	 * DesignWare watchdog timeout otherwise resets nothing; U-Boot does
++	 * the same for the PX30 ("Make TSADC and WDT trigger a first global
++	 * reset").  Read-modify-write: this register carries no write mask.
++	 */
++	writel(readl(reg_base + RK3568_GLB_RST_CON) | 0x3,
++	       reg_base + RK3568_GLB_RST_CON);
++
+ 	rockchip_clk_protect_critical(rk3568_cru_critical_clocks,
+ 				      ARRAY_SIZE(rk3568_cru_critical_clocks));
+ 

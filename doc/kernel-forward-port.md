@@ -68,7 +68,7 @@ All live in `pinenote/packages/kernel.scm`:
 
 `%linux-pinenote-patches` in `pinenote/packages/kernel.scm` is the
 authoritative list; the comments there carry each patch's rationale and
-revert instruction. As of 2026-08-08 it is seven patches, applied in list
+revert instruction. As of 2026-09-03 it is eight patches, applied in list
 order on top of the vanilla source:
 
 1. `linux-pinenote-7.0-forward-port.patch` — the EBC display stack,
@@ -112,6 +112,14 @@ order on top of the vanilla source:
    hourly RTC backstop, idle standby is **5.47 mA** over a 6.17-day
    unplugged soak with 170 cycles and no failures
    (`doc/artifacts/pinenote-ultra-soak-20260815/`).
+8. `linux-pinenote-7.0-wdt-glb-rst.patch` — the CRU driver's init sets
+   `CRU_GLB_RST_CON` bits 0–1 so the DesignWare watchdog's timeout
+   reaches the chip's global reset (U-Boot and mainline leave them clear
+   on the RK3568; U-Boot sets them for the PX30). Found the night the
+   armed watchdog expired into nothing (2026-09-02, `doc/status.md`);
+   `doc/upstream-register.md` item 25. The generation helper also sets
+   them from userspace before arming, so a kexec trial is covered even
+   from a generation without this patch.
 
 `linux-pinenote-debug` stacks `linux-pinenote-debug-extract-fbs.patch`
 on top of the same seven.

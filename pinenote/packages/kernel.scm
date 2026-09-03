@@ -143,7 +143,16 @@
         ;; apply after the bsp-sip patch -- it adds the standing override
         ;; to the /rockchip-suspend node that patch creates.  See the
         ;; patch header for why the pair must never be split.
-        (local-file "../patches/linux-pinenote-7.0-ultra-rails.patch")))
+        (local-file "../patches/linux-pinenote-7.0-ultra-rails.patch")
+        ;; The RK3568 routes the watchdog's reset to the chip's global reset
+        ;; only when CRU_GLB_RST_CON bits 0-1 are set; U-Boot and mainline
+        ;; leave them clear, so an expired watchdog resets nothing (glass
+        ;; 2026-09-02: armed through a kexec, the new kernel hung, no reset).
+        ;; Set in the CRU driver's init, as U-Boot does for the PX30.  The
+        ;; generation helper also sets them from userspace before arming, so
+        ;; a trial is covered even from a generation without this patch.
+        ;; doc/upstream-register.md item 25.  Drop this line to revert.
+        (local-file "../patches/linux-pinenote-7.0-wdt-glb-rst.patch")))
 
 (define %linux-pinenote-source
   (origin
