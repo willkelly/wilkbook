@@ -236,10 +236,22 @@ the hang.
   gets there resets into U-Boot after the hardware timeout (30 s
   requested; the reset lands on the second expiry). U-Boot's own default
   then lands on **os1**; the UART watcher picks os2 when attended. Both
-  are best-effort (no such device on QEMU virt) and pinned. Whether the
-  DT clock patch (`pinenote-7.0-pipegrf-clock`, PR #46) is needed at all
-  is decided by a kexec with the domain held into the *unpatched*
-  generation.
+  are best-effort (no such device on QEMU virt) and pinned.
+  **Both measured the same night, both negative, both recorded in
+  `doc/status.md`:** the PIPE domain stayed *on* through the unbind, the
+  hold and the kexec, and the patched generation still hung in
+  `rockchip_grf_init` — so neither the clock reference nor the domain is
+  the mechanism, and the kexec-only skip remains the only proven fix
+  (`doc/upstream-register.md` 22 is corrected accordingly). And the
+  watchdog armed, kept running through the kexec, expired — and reset
+  nothing: on the RK3568 the watchdog's reset reaches the chip's global
+  reset only when `CRU_GLB_RST_CON` (CRU + 0xdc) bits 0–1 are set,
+  which stock U-Boot and the kernel leave clear; mainline U-Boot sets
+  exactly those bits for the PX30 ("Make TSADC and WDT trigger a first
+  global reset"). The helper now sets them by read-modify-write through
+  `/dev/mem` right before arming; the proof (a deliberately hanging
+  armed trial that resets itself) is the first item of the next glass
+  visit, and the kernel-side version is its own patch.
 - **Recovery is what the design said.** A trial that hangs leaves
   `DEFAULT` on the last good generation; the power button plus the
   UART slot pick (`pinenote/scripts/uart/uboot-pick-slot.sh`) brought

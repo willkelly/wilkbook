@@ -25,6 +25,32 @@ local WIFI = "/run/current-system/profile/bin/pinenote-wifi-control"
 local UDC = "/sys/kernel/config/usb_gadget/pinenote-acm/UDC"
 local DWC3_CONTROL = "/sys/bus/platform/devices/fcc00000.usb/power/control"
 local WATCHDOG = "/dev/watchdog0"
+-- CRU_GLB_RST_CON (RK3568 CRU + 0xdc): bits 0-1 make the watchdog and the
+-- TSADC trigger the first global reset.  Stock U-Boot and the kernel leave
+-- them clear on this SoC, so an expired watchdog resets nothing (glass,
+-- 2026-09-02: armed, expired, no reset).  Mainline U-Boot sets exactly these
+-- bits for the PX30 ("Make TSADC and WDT trigger a first global reset").
+local CRU_BASE, GLB_RST_CON = 0xfdd20000, 0xdc
+local function route_watchdog_reset()
+    local ok, ffi = pcall(require, "ffi")
+    if not ok then return false, "no ffi" end
+    pcall(ffi.cdef, [[
+        int open(const char *pathname, int flags, ...);
+        int close(int fd);
+        void *mmap(void *addr, size_t length, int prot, int flags, int fd, long offset);
+        int munmap(void *addr, size_t length);
+    ]])
+    local fd = ffi.C.open("/dev/mem", 0x101002) -- O_RDWR | O_SYNC
+    if fd < 0 then return false, "cannot open /dev/mem" end
+    local p = ffi.C.mmap(nil, 4096, 3, 1, fd, CRU_BASE) -- PROT_READ|PROT_WRITE, MAP_SHARED
+    if ffi.cast("intptr_t", p) == -1 then ffi.C.close(fd); return false, "mmap failed" end
+    local reg = ffi.cast("volatile uint32_t *", ffi.cast("uint8_t *", p) + GLB_RST_CON)
+    local before = reg[0]
+    reg[0] = bit.bor(before, 3) -- read-modify-write: no write-mask assumption
+    local after = reg[0]
+    ffi.C.munmap(p, 4096); ffi.C.close(fd)
+    return bit.band(after, 3) == 3, string.format("GLB_RST_CON %08x -> %08x", before, after)
+end
 
 local function die(fmt, ...) io.stderr:write("wilkbook-generation: " .. fmt:format(...) .. "\n"); os.exit(1) end
 local function log(fmt, ...) io.stderr:write("wilkbook-generation: " .. fmt:format(...) .. "\n") end
@@ -242,6 +268,10 @@ function commands.trial(n)
     -- without a reset line, so it simply stays kernel-fed.  Closing
     -- without the magic character keeps it running on purpose.
     -- Best-effort: no /dev/watchdog0 (QEMU virt) means no cover.
+    if pinenote then
+        local routed, detail = route_watchdog_reset()
+        log("watchdog reset route (%s): %s", routed and "routed to the global reset" or "NOT routed -- a hung trial will not reset", detail)
+    end
     local wd = io.open(WATCHDOG, "w")
     if wd then wd:write("1"); wd:close(); log("watchdog armed: a trial that never boots resets into U-Boot")
     else log("no %s: a trial that never boots needs the power button", WATCHDOG) end

@@ -92,3 +92,11 @@ after 'recover_after_failed_trial() {' 'uboot-pick-slot.sh" "$log" --slot os2' "
 sed -n '/^recover_after_failed_trial() {/,/^}/p' "$deploy" | grep -q '^  exit 1$'
 ! grep -q 'never answered; a power-cycle boots' "$deploy"
 echo "PASS: a trial that never answers is recovered over the UART when one is configured, and never promoted"
+# The RK3568 routes the watchdog to the global reset only when CRU_GLB_RST_CON
+# bits 0-1 are set (glass 2026-09-02: armed, expired, no reset); the trial sets
+# them by read-modify-write through /dev/mem right before arming.
+grep -q 'local CRU_BASE, GLB_RST_CON = 0xfdd20000, 0xdc' "$helper"
+grep -q 'reg\[0\] = bit.bor(before, 3)' "$helper"
+after 'route_watchdog_reset()' 'io.open(WATCHDOG, "w")' "$helper"
+after 'remount,ro' 'local routed, detail = route_watchdog_reset()' "$helper"
+echo "PASS: the trial routes the watchdog to the global reset (read-modify-write) before arming it"

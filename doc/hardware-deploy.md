@@ -328,9 +328,11 @@ notes"):**
   cold-boot it from the menu instead, or prune it.
 - A hung trial cannot be reset over the UART (it stalls before the
   serial driver is up; the debug cable has no reset line). Since the
-  helper arms the SoC watchdog before `kexec -e` (designed 2026-09-02,
-  glass proof pending), a kernel that never reaches its drivers resets
-  itself into U-Boot after ~45–90 s. U-Boot's default is os1, so: with
+  helper arms the SoC watchdog before `kexec -e` — after routing its
+  reset to the chip's global reset (`CRU_GLB_RST_CON` bits 0–1, which
+  U-Boot leaves clear; without them the watchdog expired into nothing
+  on 2026-09-02) — a kernel that never reaches its drivers resets itself
+  into U-Boot after ~45–90 s (glass proof pending). U-Boot's default is os1, so: with
   the cable attached and `WILKBOOK_UART=/dev/ttyUSB0` set, `make deploy`
   drives the menu back to os2 itself and reports the device back on the
   previous `DEFAULT`; without the cable, a failed trial ends on stock
