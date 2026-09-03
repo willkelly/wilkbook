@@ -68,11 +68,10 @@ All live in `pinenote/packages/kernel.scm`:
 
 `%linux-pinenote-patches` in `pinenote/packages/kernel.scm` is the
 authoritative list; the comments there carry each patch's rationale and
-revert instruction. As of 2026-09-03 it is eleven patches, applied in list
-order on top of the vanilla source (the last four are the direct-mode
-driver and our fixes on it). **There is a twelfth** (item 12 below) —
-it lives on the kexec-hardening branch until that merges, so the array
-in the tree at this commit is these eleven:
+revert instruction. As of 2026-09-03 it is twelve patches, applied in list
+order on top of the vanilla source (items 8–11 are the direct-mode
+driver and our fixes on it; item 12 is the mfd rk8xx kexec fix that
+makes the update path's watchdog self-reset work):
 
 1. `linux-pinenote-7.0-forward-port.patch` — the EBC display stack,
    WS8100 pen, PineNote DTS, `pinenote_defconfig`; the permanent core
@@ -139,7 +138,7 @@ in the tree at this commit is these eleven:
     **Glass-proven 2026-09-03 17:05** (a halted trial kernel was reset by
     the armed watchdog and DEFAULT booted hands-off; the GRF bus-wedge
     hang is the one class the reset cannot recover — the blacklist
-    prevents it). On the kexec-hardening branch until that merges.
+    prevents it). Merged 2026-09-03.
 
 `linux-pinenote-debug` stacks `linux-pinenote-debug-extract-fbs.patch`
 on top of the same seven.
