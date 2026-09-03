@@ -1027,3 +1027,25 @@ mainline tree with a plain rk3566 board (the PineNote DTS is not
 upstream); confirm `clk_summary` after boot and the hang with
 `initcall_debug`; test candidate (1) on glass.
 
+## 23. hrdl direct-mode driver: probe returns bare after a failed `rockchip_ebc_drm_init`, leaking runtime PM and the refresh kthread
+
+**What:** in hrdl's direct-mode rework of `rockchip_ebc_probe` the error
+path after `rockchip_ebc_drm_init()` became `return ret;` — the
+`err_stop_kthread` label (and its `kthread_stop`) was removed while
+`err_disable_pm` survives, now unreachable from that path. A probe that
+fails there returns with `pm_runtime_enable` still counted and the
+parked refresh kthread alive. On wilkbook's direct image the first probe
+fails there by construction (the CLUT is compiled on-device after the
+module is loaded, then the driver is rebound), so every boot logs
+`rockchip-ebc fdec0000.ebc: Unbalanced pm_runtime_enable!` at the
+rebind. Benign in effect; still a leak on every failed probe.
+
+**Fix:** restore `goto err_stop_kthread;` and the label
+(`kthread_stop(ebc->refresh_thread);` falling into `err_disable_pm`).
+Two lines.
+
+**What has to be true first:** the baseline gate; confirm hrdl's current
+tree still has the bare return (our patch is a snapshot); the pin
+`make direct-probe-quirk-check` goes red when we port the fix or rebase
+over theirs, by design.
+
