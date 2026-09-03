@@ -24,9 +24,18 @@ UART watcher's pick of os2, extlinux `Retrieving file: /boot/gen-7/Image`,
 and generation 7 up with the reader running at 17:09:48 device time
 (`reader-session … running since 23:09:48`), `[promoted] [booted]`,
 watchdog `inactive`, `SYS_CFG3` `0x20`, boot_id `01a39325…`. The capture
-has no host timestamp for the reset itself — the reset time is
-**inferred** from the 44 s hardware timeout, not measured; everything
-else in this paragraph was measured. **A trial kernel that dies without
+has no host timestamp for the reset itself, but it is bracketed: the
+host script's 200 s window from the 17:05:13 launch saw no `DDR
+Version` line, and generation 7's kernel started at about 17:09:26
+(host clock), with U-Boot's 15 s autoboot and the two menu countdowns
+in between — so the reset landed around 17:09:00, **roughly 3.5 minutes
+after the arm, not the 44 s the armed timeout predicts.** Unexplained:
+the 12:00 driverless measurement showed the armed dog counting a 44 s
+period, so whatever stretched it is something the NEW kernel's dw_wdt
+probe did in the 0.86 s before the panic (candidates to measure, not
+guess: a re-programmed top, or interrupt mode's double expiry). The
+deployer's post-trial wait must cover it (SSH came back 5 min 13 s
+after the launch); everything else in this paragraph was measured. **A trial kernel that dies without
 rebooting now recovers by watchdog, hands-off, on this device — the
 hardening branch's promise, proven end to end.**
 
