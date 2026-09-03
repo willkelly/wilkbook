@@ -143,7 +143,35 @@
         ;; apply after the bsp-sip patch -- it adds the standing override
         ;; to the /rockchip-suspend node that patch creates.  See the
         ;; patch header for why the pair must never be split.
-        (local-file "../patches/linux-pinenote-7.0-ultra-rails.patch")))
+        (local-file "../patches/linux-pinenote-7.0-ultra-rails.patch")
+        ;; ---- The direct-mode EBC driver, embraced 2026-09-02 (both
+        ;; operators; doc/direct-mode-adoption.md, doc/embrace-sweep-plan.md
+        ;; S1).  hrdl's rework swaps out the forward-port patch's
+        ;; rockchip_ebc.c: per-pixel software TCON, NEON blitters in their
+        ;; own module, an offline-compiled CLUT instead of the hardware LUT
+        ;; walk.  Two run-time conditions: the driver request_firmware()s
+        ;; rockchip/custom_wf.bin (what wbf-clut produces on the device from
+        ;; its own waveform; -EINVAL without it, so the FIRST probe of every
+        ;; boot fails and the clut one-shot rebinds), and the third clock
+        ;; (cpll_333m) is supplied by the swap patch's own DT hunk.  On
+        ;; glass since 2026-08-25; the shipping reader's driver since S1.
+        (local-file "../patches/linux-pinenote-7.1-hrdl-direct-mode.patch")
+        ;; Ours, on top of hrdl's: the banded parallel NORMAL advance
+        ;; (full-panel frames 18.4 -> 11.9 ms, glass-proven 2026-08-26 via
+        ;; live module swap) plus the frame_period_us / advance_bands
+        ;; instruments; queue_work's return checked.  See the patch header.
+        (local-file "../patches/linux-pinenote-7.1-ebc-parallel-advance.patch")
+        ;; Ours, on top of hrdl's: the RECT_HINTS ioctl bounded (an inverted
+        ;; rectangle wrote a whole pitch past the hint plane; a short copy
+        ;; over-read the batch; -ENOMEM).  doc/upstream-register.md item 24;
+        ;; pinned by make direct-rect-hints-check.
+        (local-file "../patches/linux-pinenote-7.1-rect-hints-bounds.patch")
+        ;; Ours, on top of hrdl's: the probe unwinds again when drm_init
+        ;; fails (stop the parked refresh kthread, disable runtime PM) --
+        ;; the by-construction first probe no longer leaks and the rebind
+        ;; stops logging "Unbalanced pm_runtime_enable!".  Item 23; pinned
+        ;; by make direct-probe-quirk-check.
+        (local-file "../patches/linux-pinenote-7.1-probe-unwind.patch")))
 
 (define %linux-pinenote-source
   (origin
@@ -175,7 +203,7 @@
                 (invoke "make" "olddefconfig")))))))
     (home-page
      "https://github.com/m-weigand/linux/tree/branch_pinenote_6-12-11")
-    (synopsis "PineNote-oriented Linux kernel")
+    (synopsis "PineNote kernel: vanilla 7.1 + the EBC forward-port, hrdl's direct-mode EBC driver, and the suspend/power patches")
     (description
      "PineNote kernel package using vanilla kernel.org sources (via the
 nonguix channel) with a local forward-port of the downstream PineNote EBC
@@ -192,96 +220,12 @@ or mutate bootloader state.")
 
 
 
-;; Diagnostic kernel: linux-pinenote plus the stacked debug patches.
-;; Currently carried (order matters; the ebc-logic harness's dbg variant
-;; applies the same stack to the extracted driver and executes it, so no
-;; debug hunk ships un-executed):
-;;   1. linux-pinenote-debug-extract-fbs.patch — implements the
-;;      EXTRACT_FBS ioctl (the primary kernel keeps the -EOPNOTSUPP
-;;      stub): the belief-vs-glass dump for the corruption hunt and
-;;      optics PLAN task 23 (doc/pageturn-program.md §5.2; grabber and
-;;      decoder in pinenote/tools/ebc-logic).
-;; A separate inheriting variant so the primary linux-pinenote stays
-;; byte-identical; delete patches here as their investigations close.
-(define-public linux-pinenote-debug
-  (package
-    (inherit linux-pinenote)
-    (name "linux-pinenote-debug")
-    (source
-     (origin
-       (inherit (package-source %linux-pinenote-base))
-       (patches
-        (append (origin-patches (package-source %linux-pinenote-base))
-                %linux-pinenote-patches
-                 (list (local-file
-                        "../patches/linux-pinenote-debug-extract-fbs.patch"))))))
-    (synopsis "PineNote kernel with EBC EXTRACT_FBS diagnostics")
-    (description
-      "The linux-pinenote kernel with the EXTRACT_FBS diagnostic patch.  It
- implements the already-shipped buffer-dump ioctl (stubbed -EOPNOTSUPP on the primary
-kernel), exposing the driver's belief buffers (prev/next/final and both
-phase planes) to the ebc-dump-grab tool for camera-vs-belief joins.
-Refresh-machine logic is unchanged; this is a diagnostic artifact
-for the panel-corruption investigations.")))
-
-(define-public linux-pinenote-hrdl-direct
-  ;; STUDY ARTIFACT, not a product.  The primary kernel with our EBC driver
-  ;; SWAPPED OUT for hrdl's direct-mode rework (doc/direct-mode-adoption.md).
-  ;; It exists so the swap can be built and read rather than argued about.
-  ;; Exactly one flavor references it: pinenote-reader-direct, the study
-  ;; image (pinenote/systems/pinenote-reader-direct.scm).
-  ;;
-  ;; Built and linked against 7.1.8 with pinenote_defconfig on 2026-08-25 --
-  ;; Image, three modules and both PineNote DTBs, zero errors.  RAN ON GLASS
-  ;; the same day (doc/status.md 2026-08-25): probed, lit the panel, drove a
-  ;; full KOReader session.  Two run-time conditions apply: the driver
-  ;; request_firmware()s rockchip/custom_wf.bin (what wbf-clut produces;
-  ;; -EINVAL without it, and the initrd load order guarantees the FIRST
-  ;; probe of every boot fails, so a post-CLUT rebind is required -- the
-  ;; clut one-shot's final stage), and the third clock (cpll_333m) is
-  ;; supplied by our own DT hunk in the swap patch.
-  (package
-    (inherit linux-pinenote)
-    (name "linux-pinenote-hrdl-direct")
-    (source
-     (origin
-       (inherit (package-source %linux-pinenote-base))
-       (patches
-        (append (origin-patches (package-source %linux-pinenote-base))
-                %linux-pinenote-patches
-                (list (local-file
-                       "../patches/linux-pinenote-7.1-hrdl-direct-mode.patch")
-                      ;; Ours, on top of hrdl's: the banded parallel
-                      ;; NORMAL advance (full-panel frames 18.4 -> 11.9
-                      ;; ms, glass-proven 2026-08-26 via live module
-                      ;; swap) plus the frame_period_us / advance_bands
-                      ;; instruments.  See the patch header.
-                      (local-file
-                       "../patches/linux-pinenote-7.1-ebc-parallel-advance.patch")
-                      ;; Ours, on top of hrdl's: the RECT_HINTS ioctl
-                      ;; bounded (an inverted rectangle wrote a whole
-                      ;; pitch past the hint plane; a short copy over-read
-                      ;; the batch; -ENOMEM).  Found by review 2026-09-02,
-                      ;; doc/upstream-register.md item 24; pinned by
-                      ;; make direct-rect-hints-check.
-                      (local-file
-                       "../patches/linux-pinenote-7.1-rect-hints-bounds.patch")
-                      ;; Ours, on top of hrdl's: the probe unwinds again
-                      ;; when drm_init fails (stop the parked refresh
-                      ;; kthread, disable runtime PM) -- the by-construction
-                      ;; first probe of the direct image no longer leaks and
-                      ;; the rebind stops logging "Unbalanced
-                      ;; pm_runtime_enable!".  doc/upstream-register.md 23.
-                      (local-file
-                       "../patches/linux-pinenote-7.1-probe-unwind.patch"))))))
-    (synopsis "PineNote kernel with hrdl's direct-mode EBC driver (study)")
-    (description
-     "The linux-pinenote kernel with our EBC driver replaced by hrdl's
-direct-mode rework: per-pixel software TCON, NEON blitters in their own
-module, and an offline-compiled CLUT instead of the hardware LUT walk.
-A study artifact for the adoption decision in doc/direct-mode-adoption.md,
-not a shipping kernel -- it has never been run, and probe fails without a
-per-device custom_wf.bin.")))
+;; The EXTRACT_FBS diagnostic kernel (linux-pinenote-debug) and the direct-mode
+;; study kernel (linux-pinenote-hrdl-direct) were retired by the embrace sweep's
+;; S1 (2026-09-03): the shipping kernel IS the direct driver now, and it registers
+;; EXTRACT_FBS natively.  linux-pinenote-debug-extract-fbs.patch stays in the tree
+;; only as the ebc-logic harness's dbg fixture over the retained forward-port
+;; driver source (doc/embrace-sweep-plan.md, decision 4).
 
 (define-public linux-pinenote-6.6.30
   (package

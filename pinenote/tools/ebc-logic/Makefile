@@ -9,8 +9,9 @@
 #                     with ASan; see doc/ebc-harness-spike.md
 #   ebc-refresh-test-dbg  the same TU compiled against the DEBUG driver:
 #                     the extraction with pinenote/patches/
-#                     linux-pinenote-debug-*.patch applied (the exact
-#                     stack the linux-pinenote-debug kernel carries) and
+#                     linux-pinenote-debug-*.patch applied (the stack the
+#                     retired linux-pinenote-debug kernel carried; a harness
+#                     fixture now -- the shipping direct driver has EXTRACT_FBS) and
 #                     -DEBC_HARNESS_DBG.  Runs the whole rung-7a suite
 #                     (proving the debug patches change no refresh
 #                     behavior: same goldens) plus the EXTRACT_FBS ioctl

@@ -629,8 +629,7 @@ def gate_scheme_evaluates(shipping, direct):
 def gate_no_shipping_consumer():
     """Rule: the direct-mode study artifact reaches no shipping flavor."""
     for flavor in ("pinenote/systems/base.scm",
-                   "pinenote/systems/pinenote-reader.scm",
-                   "pinenote/systems/pinenote-reader-debug.scm"):
+                   "pinenote/systems/pinenote-reader.scm"):
         if "ebc-direct" in read(flavor):
             bad("%s references the direct-mode module; the shipping "
                 "flavors must be byte-identically unaffected" % flavor)

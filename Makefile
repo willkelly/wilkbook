@@ -64,14 +64,14 @@ ARTIFACTS ?= /tmp/wilkbook/pinenote-rootfs-artifacts
 #   empty        no Debian home at all (reprovisioned p7)
 FIXTURE ?= os1-used
 
-# reader-debug = reader with the EXTRACT_FBS diagnostic kernel
-# (linux-pinenote-debug); remove with the debug patch when done.
-# reader-direct = reader with hrdl's direct-mode EBC driver
-# (linux-pinenote-hrdl-direct).  A STUDY flavor: it builds, it has never
-# run, and it is expected NOT to reach a working reader on a first boot
-# (doc/pinenote-flavors.md says why).  Never a deploy candidate; remove
-# with the direct-mode patch if the adoption bails out.
-FLAVORS = minimal slim networked dev usb-console usb-console-linux-6-6 reader reader-debug reader-direct
+# reader-direct = the reader plus the direct-mode wiring (CLUT one-shot,
+# rebind, splash, direct params); since the embrace sweep's S1 (2026-09-03)
+# every flavor runs the direct-mode EBC driver, and S2 folds this flavor's
+# remaining deltas into `reader` and deletes it (doc/embrace-sweep-plan.md).
+# Until S2 lands, `reader` cannot light the panel (no CLUT) -- build and
+# deploy reader-direct.  reader-debug is gone: the direct driver carries
+# EXTRACT_FBS natively.
+FLAVORS = minimal slim networked dev usb-console usb-console-linux-6-6 reader reader-direct
 
 .PHONY: help packages kernel kernel-drv reader-system-drv qemu-smoke qemu-virt qemu-virt-check qemu-update-check qemu-pageturn-campaign refresh-episodes-check refresh-trigger-check \
          check-host wbf-check wbf-notice clut-check ebc-logic-check ebc-barrier-check rastersim-check koreader-input-check orientation-check platform-controls-check optics-check optics-audit-dataset power-check rockchip-pm-check activation-positive-check suspend-check \

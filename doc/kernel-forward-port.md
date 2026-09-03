@@ -68,8 +68,9 @@ All live in `pinenote/packages/kernel.scm`:
 
 `%linux-pinenote-patches` in `pinenote/packages/kernel.scm` is the
 authoritative list; the comments there carry each patch's rationale and
-revert instruction. As of 2026-08-08 it is seven patches, applied in list
-order on top of the vanilla source:
+revert instruction. As of 2026-09-03 it is eleven patches, applied in list
+order on top of the vanilla source (the last four are the direct-mode
+driver and our fixes on it):
 
 1. `linux-pinenote-7.0-forward-port.patch` — the EBC display stack,
    WS8100 pen, PineNote DTS, `pinenote_defconfig`; the permanent core
@@ -112,6 +113,17 @@ order on top of the vanilla source:
    hourly RTC backstop, idle standby is **5.47 mA** over a 6.17-day
    unplugged soak with 170 cycles and no failures
    (`doc/artifacts/pinenote-ultra-soak-20260815/`).
+8. `linux-pinenote-7.1-hrdl-direct-mode.patch` — hrdl's direct-mode EBC
+   driver, swapping out the forward-port patch's `rockchip_ebc.c`
+   (per-pixel software TCON, NEON blitters, offline CLUT; the swap's own
+   `cpll_333m` DT hunk). Embraced 2026-09-02 (`doc/direct-mode-adoption.md`).
+9. `linux-pinenote-7.1-ebc-parallel-advance.patch` — ours: the banded
+   parallel NORMAL advance (18.4 → 11.9 ms full-panel, glass 2026-08-26)
+   and its instruments; `queue_work`'s return checked.
+10. `linux-pinenote-7.1-rect-hints-bounds.patch` — ours: the RECT_HINTS
+    ioctl bounded (`doc/upstream-register.md` 24; `make direct-rect-hints-check`).
+11. `linux-pinenote-7.1-probe-unwind.patch` — ours: the probe unwinds when
+    `drm_init` fails (item 23; `make direct-probe-quirk-check`).
 
 `linux-pinenote-debug` stacks `linux-pinenote-debug-extract-fbs.patch`
 on top of the same seven.
@@ -151,17 +163,12 @@ requires `SUSPEND`, closing the ARM64 `CPU_PM` dependency for the linked backend
 Host fixtures exercise the same model and executor with fakes only.
 It does not change Linux 7.0's `ROCKCHIP_SLEEP_PD_CONFIG=0xff` pmdomain ABI.
 
-**The direct kernel's own patches** (`linux-pinenote-hrdl-direct`, on top
-of the eight): `linux-pinenote-7.1-hrdl-direct-mode.patch` (hrdl's driver
-swap), `linux-pinenote-7.1-ebc-parallel-advance.patch` (ours: the banded
-parallel NORMAL advance and its instruments; `queue_work`'s return
-checked since 2026-09-02) `linux-pinenote-7.1-rect-hints-bounds.patch`
-(ours, 2026-09-02: the RECT_HINTS ioctl bounded — `doc/upstream-register.md`
-item 24, pinned by `make direct-rect-hints-check`) and
-`linux-pinenote-7.1-probe-unwind.patch` (ours, 2026-09-03: the probe
-unwinds when drm_init fails — item 23, pinned by
-`make direct-probe-quirk-check`). The embrace sweep
-(`doc/embrace-sweep-plan.md`) moves them into the shipping list.
+**The direct-mode driver is in the shipping list since the embrace
+sweep's S1 (2026-09-03):** items 8–11 below. `linux-pinenote-hrdl-direct`
+and `linux-pinenote-debug` are retired (the direct driver registers
+`EXTRACT_FBS` natively); `linux-pinenote-debug-extract-fbs.patch` stays
+only as the ebc-logic harness's dbg fixture over the retained forward-port
+driver source (`doc/embrace-sweep-plan.md`, decision 4).
 
 ## What the forward-port patch carries
 

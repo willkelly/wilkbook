@@ -2,7 +2,6 @@
   #:use-module (gnu services)
   #:use-module (gnu system)
   #:use-module (pinenote packages firmware)
-  #:use-module (pinenote packages kernel)
   #:use-module (pinenote services ebc)
   #:use-module (pinenote services ebc-direct)
   #:use-module (pinenote services koreader-profile)
@@ -124,7 +123,6 @@
   (operating-system
     (inherit pinenote-reader-operating-system)
     (host-name "pinenote-reader-direct")
-    (kernel linux-pinenote-hrdl-direct)
     ;; fbcon=map:1 keeps the framebuffer console off fb0 for good: the
     ;; panel never shows a tty (operator directive 2026-08-27, after a
     ;; night of console text burning into the ghost ledger during every
