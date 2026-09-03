@@ -251,6 +251,93 @@ section stays as the replay procedure.**
 - Winner gets pinned in `pinenote-apply-ebc-params`
   (`pinenote/packages/firmware.scm`) and recorded in `doc/status.md`.
 
+## The update path (after the enabling reflash)
+
+Since 2026-09-02 the write protocol above is needed **once**: to put an
+image that carries the update path on os2 (any reader image built from
+this tree after that date does — the guix importer daemon, kexec, the
+`wilkbook-generation` helper, first-boot root growth and the signing-key
+ACL; `doc/update-path.md`). After that, a new build reaches the device
+over Wi-Fi as a Guix system *generation*: registered, kexec'd as a
+trial, health-checked, and promoted only then. A trial that never
+answers leaves the boot menu's default on the last good generation.
+
+**Once, per workstation:**
+
+- `sudo guix archive --generate-key` (an interactive terminal; it
+  writes `/etc/guix/signing-key.{pub,sec}`). The device's daemon accepts
+  only nars signed by a key in its ACL.
+- Stage that public key on the data partition as
+  `wilkbook/guix/authorized-keys/<your-name>.pub` (from os1, where p7
+  is `/home`: `/home/wilkbook/guix/authorized-keys/…`, `sudo install
+  -m 0444`). The `pinenote-guix-acl` one-shot authorizes every `*.pub`
+  there at each boot.
+- An ssh alias for the reader that carries the per-slot known-hosts
+  file, because both slots answer at one address with different keys
+  (`doc/device-access.md`):
+
+  ```
+  Host pinenote-os2
+    HostName <the reader's address>
+    User root
+    UserKnownHostsFile ~/.ssh/known_hosts_pinenote
+    StrictHostKeyChecking yes
+  ```
+
+- A UART for the first kexec on a device (`doc/device-access.md`): a
+  hung trial is recovered by the power button and the U-Boot menu, and
+  the menu is driven by `pinenote/scripts/uart/uboot-pick-slot.sh`.
+
+**Every update:**
+
+```
+make deploy DEVICE=pinenote-os2 [FLAVOR=reader-direct] [KEEP=3]
+```
+
+builds the flavor (cross, `--no-grafts`), sends only the store paths
+the device lacks (guix's signed nar stream over plain OpenSSH; a
+KOReader change is megabytes, a kernel ~100 MB), registers generation
+N+1 (`add`: profile link, `/boot/gen-N+1/{Image,initrd,dtb,append}`,
+the extlinux menu re-rendered with `DEFAULT` unchanged), kexecs into
+it (`trial`: the reader stopped INT-first, Wi-Fi off, gadget unbound,
+EBC quiescent, then `kexec -e`; the panel goes idle and the ssh link
+dies with the old kernel — by design), waits for the new generation to
+answer, runs `health` (`/run/current-system` is the new system, the
+broker is ready, the reader started), and only then `promote`s it and
+prunes to KEEP generations plus the promoted and booted ones, then
+`guix gc`. Every refusal is printed as `NOT PROMOTED: …` and the
+default is untouched. Expect the device to be silent for ~30 s around
+the kexec; the reader is back with the page it had.
+
+**On the device**, `wilkbook-generation list | add | trial N | health
+[--expect S] | promote N | demote | prune --keep K` are the same
+verbs; `deploy.sh DEVICE --rollback N` is trial+health+promote of an
+existing generation.
+
+**Rules learned on glass (2026-09-02, `doc/update-path.md` "Glass
+notes"):**
+
+- A kexec on this SoC needs what the helper now does: it appends
+  `initcall_blacklist=rockchip_grf_init` to the *kexec* command line
+  (the running kernel gates `pclk_pipe`; the next kernel's GRF init
+  would write into the unclocked block and hang the bus at 0.12 s), and
+  every flavor boots with `irqchip.gicv3_nolpi=1`. Cold boots are
+  untouched by the first and need nothing else.
+- The trial runs the helper the *target* generation ships. A
+  generation older than the fix cannot be trialled *into* by kexec —
+  cold-boot it from the menu instead, or prune it.
+- A hung trial cannot be reset over the UART (it stalls before the
+  serial driver is up; the debug cable has no reset line): hold the
+  power button, then let `uboot-pick-slot.sh --slot os2` choose os2 at
+  the U-Boot menu; extlinux's `DEFAULT` is still the last promoted
+  generation.
+- Anything that changes early boot (kernel, DTB, command line) wants
+  both proofs: the kexec trial and a cold boot from the menu.
+- While a session needs stable SSH, pause auto-suspend
+  (`/data/wilkbook/autosuspend.conf` = `enabled=0`) — and remember
+  that with the pause in place KOReader's sleep screen still paints;
+  the device is *not* asleep. Remove the file afterwards.
+
 ## Stop conditions
 
 Stop before any write if backups do not verify, the rescue path is unclear,

@@ -87,6 +87,16 @@
         "CONFIG_DRM_VIRTIO_GPU=m"
         "CONFIG_VIRTIO_INPUT=m"))
 
+(define %pinenote-kexec-config-lines
+  ;; The update path (doc/update-path.md) trial-boots a new system
+  ;; generation with kexec, because the stock U-Boot defaults to os1 on
+  ;; its countdown and saveenv is forbidden: no unattended reboot lands in
+  ;; os2 otherwise.  Both syscalls: kexec-tools prefers kexec_file_load on
+  ;; arm64 and falls back to kexec_load.  Appended here, never by editing
+  ;; the forward-port patch's defconfig.
+  (list "CONFIG_KEXEC=y"
+        "CONFIG_KEXEC_FILE=y"))
+
 (define %linux-pinenote-patches
   (list (local-file "../patches/linux-pinenote-7.0-forward-port.patch")
         (local-file "../patches/linux-pinenote-7.0-bsp-sip-probe.patch")
@@ -159,7 +169,8 @@
                   (for-each (lambda (line)
                               (display line port)
                               (newline port))
-                            '#$%pinenote-qemu-virt-config-lines)
+                            (append '#$%pinenote-qemu-virt-config-lines
+                                    '#$%pinenote-kexec-config-lines))
                   (close-port port))
                 (invoke "make" "olddefconfig")))))))
     (home-page
@@ -277,7 +288,8 @@ per-device custom_wf.bin.")))
                   (for-each (lambda (line)
                               (display line port)
                               (newline port))
-                            '#$%pinenote-qemu-virt-config-lines)
+                            (append '#$%pinenote-qemu-virt-config-lines
+                                    '#$%pinenote-kexec-config-lines))
                   (close-port port))
                 (invoke "make" "olddefconfig")))))))
     (home-page

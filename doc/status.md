@@ -3,6 +3,74 @@
 Last updated: 2026-09-02. Update protocol: add a dated entry at the top
 after every hardware session; entries are per-device/per-operator.
 
+## 2026-09-02 evening (wkelly PineNote) — the update path on glass: enabling image DEPLOYED, three kexec hangs root-caused, the first cable-free deploy PROMOTED
+
+**Enabling image `35f5fbab…`** (3,054,727,168 B, the guix importer
+daemon, kexec-tools, the generation helper, grow-root, the signing-key
+ACL) written to os2 by the five-step protocol from os1 (staged under a
+distinct name — the staging dir already held a same-named 1.8 GB image
+from the morning; readback SHA matched). The workstation's
+`/etc/guix/signing-key.pub` staged as
+`/data/wilkbook/guix/authorized-keys/pop-os.pub` (p7 is `/home` on os1).
+First boot hands-off: root fs resized to the 14.6 GB partition, ACL
+carried the key, `guix-daemon` running, ledger `gen-1 [promoted]
+[booted]`, reader and broker up, SSH in 10 s. The UART slot pick
+(`pinenote/scripts/uart/uboot-pick-slot.sh`, now in the tree) caught the
+U-Boot menu at poll 23.
+
+**Deploy 1 (generation 2, tree build):** build cached, 54 of 444 paths
+moved, `add`, trial kexec — `kexec_core: Starting new kernel`, the new
+7.1.8 came up, printed `GICv3: CPU0: Booted with LPIs enabled, memory
+probably corrupted` / `Failed to disable LPIs` on all four CPUs, then
+stalled after `DMA: preallocated 512 KiB … pool` (0.13 s); `BUG:
+workqueue lockup - pool cpus=2` at 60 s. Serial-BREAK sysrq: no
+response (the stall predates the serial driver; the debug cable has no
+reset line). Power button; U-Boot parsed the helper-rendered menu
+(`wilkbook generations`, DEFAULT gen-1) and booted gen-1.
+
+**Generation 3 (`irqchip.gicv3_nolpi=1`):** built, deployed, trial from
+gen-1 hung at the same line. Power button. `promote 3` + reboot: gen-3
+booted **cold** from the menu, no ITS/LPI lines, health ok. Trial 3 →
+3 (kexec between two nolpi kernels): the same stall, lockup on cpu 3.
+So the LPI defect is real but not the hang. Power button.
+
+**The cause, from the kernel's own map:** postcore initcalls between
+the DMA pool and `thermal_init` in link order; the one hardware write
+is `rockchip_grf_init`'s rk3566 table into the PIPE GRF (`0xfdc50000`,
+three USB3-OTG bits). `clk_summary` on the running kernel: `pclk_pipe`
+enable count 0 (gated as unused; U-Boot leaves it on). The power-domain
+summary taken seconds before a kexec showed `pipe on / fcc00000.usb
+active`, so it is the clock, not the domain. **Proof:** a kexec with
+`initcall_debug initcall_blacklist=rockchip_grf_init` booted all the
+way — new boot id, EBC probed, waveform loaded, gadget bound (the usual
+`failed to enable ep0out` line, as on cold boots), health ok.
+
+**Deploy 2 (generation 4 = the helper that appends the skip on the kexec
+path; the deployer runs the target generation's helper):** 13 of 444
+paths, add, trial kexec — booted (boot id `2bfd2cd4…`), health ok,
+promote, gen-1 pruned, `guix gc`; `DEPLOY OK`. Gen-2 pruned by hand
+afterwards (pre-fix helper; a trial into it would hang). Ledger now
+gen-3, gen-4 `[promoted] [booted]`; 2.0 GB of 15 GB used.
+
+**Suspend/resume on the kexec'd kernel (generation 4, 00:19):** with
+the session pause removed, a power tap was accepted by the broker,
+`PM: suspend entry (deep)` under the standing ultra override, 5.4 s
+asleep, woken by the button (`gpio-keys` wakeup count 1), `resumed
+after 7s`, `suspend_stats success=1 fail=0`, reader and Wi-Fi back.
+The first rails-off suspend through a warm-restarted panel and PMIC.
+(Before that, KOReader's 15-minute AutoSuspend had painted its sleep
+screen while the pause file made the broker refuse — "globally
+inhibited" — which looks exactly like a suspended device and is not
+one.)
+
+Also observed: `rockchip-ebc fdec0000.ebc: Unbalanced pm_runtime_enable!`
+at the direct driver's rebind — present on the cold boots of this image
+too, not a kexec artifact; unexamined. Auto-suspend is paused for the
+session (`/data/wilkbook/autosuspend.conf` = `enabled=0`). Evidence: the
+full UART capture of every boot and hang, and the deploy logs, in the
+session scratchpad; the kernel-side findings and fixes in
+`doc/update-path.md` "Glass notes" and `doc/upstream-register.md` 22.
+
 ## 2026-09-02 (wkelly PineNote) — first boot of 4b55ae78: the fingerprint was wrong, hot-fixed live, and #42 VALIDATED ON GLASS
 
 Booted hands-off; SSH up 32 s after boot with Wi-Fi from the service;

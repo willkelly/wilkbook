@@ -267,8 +267,9 @@ The machinery now exists; the acts themselves wait for sign-off.
       the hash, the git description and the channel pointer, so the hash
       lands inside signed history rather than beside a download.
 - [x] **`doc/release.md`** — the procedure, and what we deliberately do
-      not do (no hosted binary, no update path, no detached signatures
-      until there is a binary to sign).
+      not do (no hosted binary, no detached signatures until there is a
+      binary to sign; "no update path" was true when written — the
+      update path arrived 2026-09-02, `doc/update-path.md`).
 - [x] **Merged to main and public**: `ultra-handshake-arm` fast-forwarded
       into main (`586016c`) and pushed to
       `https://github.com/willkelly/wilkbook` on 2026-08-08, with

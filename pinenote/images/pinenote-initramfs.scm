@@ -259,6 +259,20 @@ partition and loading PineNote display modules from the initrd.")
      ;; at all -- which in production is never, since suspend is disabled.
      ;; Revert with the suspend program if that ever changes.
      "no_console_suspend"
+     ;; kexec hygiene (doc/update-path.md, first kexecs on glass
+     ;; 2026-09-02).  The GICv3's LPI tables live in ordinary memory the
+     ;; running kernel allocates; only an EFI boot persists a reservation
+     ;; for the next kernel (gic_reserve_range is a silent no-op
+     ;; otherwise), and this GIC latches GICR_CTLR.EnableLPIs, so the
+     ;; kexec'd kernel logged "Booted with LPIs enabled, memory probably
+     ;; corrupted" / "Failed to disable LPIs" on all four CPUs.  LPIs
+     ;; exist for PCIe message-signalled interrupts; the PineNote has no
+     ;; PCIe node and no ITS user, so never enabling them costs nothing
+     ;; and leaves the next kernel a clean interrupt controller.  This is
+     ;; NOT what hung those boots -- that was rockchip_grf_init writing an
+     ;; unclocked PIPE GRF, handled on the kexec path by the generation
+     ;; helper -- but it is real corruption and stays fixed here.
+     "irqchip.gicv3_nolpi=1"
      "fw_devlink=off"))
 
 ;; The reader's cmdline: everything above EXCEPT console=tty0.

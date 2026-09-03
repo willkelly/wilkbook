@@ -1,5 +1,6 @@
 (define-module (pinenote systems pinenote-reader)
   #:use-module (gnu services)
+  #:use-module (gnu packages linux)
   #:use-module (gnu services base)
   #:use-module (gnu services networking)
   #:use-module (gnu services ssh)
@@ -11,10 +12,12 @@
   #:use-module (pinenote packages koreader)
   #:use-module (pinenote packages orientation)
   #:use-module (pinenote packages platform-controls)
+  #:use-module (pinenote packages update-path)
   #:use-module (pinenote services orientation)
   #:use-module (pinenote services koreader-profile)
   #:use-module (pinenote services reader-session)
   #:use-module (pinenote services platform-controls)
+  #:use-module (pinenote services update-path)
   #:use-module (pinenote services dmc)
   #:use-module (pinenote services library)
   #:use-module (pinenote services manuals)
@@ -54,6 +57,10 @@ root ALL=(ALL) ALL
 (define %pinenote-reader-packages
   (append (list koreader-bin pinenote-orientation-bridge
                 pinenote-platform-controls
+                ;; The update path (doc/update-path.md): kexec for the
+                ;; trial boot, and the generation helper.
+                kexec-tools
+                pinenote-update-path
                 ;; wpa_supplicant + wpa_cli in the profile: pinenote-wifi
                 ;; execs them, and Phase 2's KOReader Wi-Fi UI will drive
                 ;; wpa_cli against the same conf.
@@ -109,6 +116,23 @@ root ALL=(ALL) ALL
                  ;; KOReader owns idle policy and screen preparation.
                  (service pinenote-platform-controls-service-type)
                  (service pinenote-reader-session-service-type)
+                 ;; The update path (doc/update-path.md): the daemon comes
+                 ;; back as a STORE IMPORTER for `guix copy`, never a
+                 ;; builder -- --max-jobs=0 makes local builds impossible,
+                 ;; substitutes are off, no substitute key is generated,
+                 ;; no channels are installed.  Rollback is then Guix's own
+                 ;; system generations.  Measured 2026-09-02: ~5 MB idle,
+                 ;; no timers.
+                 (service guix-service-type
+                          (guix-configuration
+                           (use-substitutes? #f)
+                           (substitute-urls '())
+                           (authorize-key? #f)
+                           (generate-substitute-key? #f)
+                           (discover? #f)
+                           (extra-options '("--max-jobs=0"))))
+                 (service pinenote-grow-root-service-type)
+                 (service pinenote-guix-acl-service-type)
                 ;; Wi-Fi (doc/networking.md): associate from an out-of-band
                 ;; credential file on the persistent data partition (no-op
                 ;; when absent), and lease with dhcpcd.  Credentials are

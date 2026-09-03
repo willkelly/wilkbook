@@ -69,8 +69,14 @@ tested. `README.md` says so at the top and means it.
 - **No hosted binary.** The audience builds from source
   (`doc/alpha-checklist.md`). Publishing a 1.9 GB image invites people who
   should not be running this to run it.
-- **No update mechanism.** A new version is a reflash. `guix-service-type`
-  is filtered out of release flavors on purpose.
+- **An update path, since 2026-09-02** (`doc/update-path.md`): an
+  installed device takes a new version over Wi-Fi as a Guix system
+  generation, trialled by kexec and promoted after a health check. A
+  *release* still publishes the image, because the first install — and
+  the one enabling reflash of an older install — is the dd protocol.
+  `guix-service-type` runs in the reader flavors as a store importer
+  only (no builds, no substitutes, `--max-jobs=0`), not as the full
+  daemon.
 - **No detached signatures yet.** They would only matter with a hosted
   binary. If that ever changes, the missing piece is a *"Verify what you
   downloaded"* section in `doc/install.md` carrying the full fingerprint

@@ -62,6 +62,51 @@ says otherwise.
   read-plugged-in only; v0.2.0 remains the last direct image that
   sleeps.
 
+### The update path (designed, enabled, proven in QEMU, and on glass: the first cable-free deploy)
+
+- **Updates without a cable are coming.** `doc/update-path.md` lays out
+  the design: the workstation cross-builds a system, guix's signed nar
+  stream sends only the store paths the reader lacks, the reader registers it as a Guix system
+  generation, kexecs into it as a *trial* (the boot menu default is
+  untouched, so a power-cycle returns to the last good one), and only
+  after it answers a health check is it promoted. Rollback is the same
+  move backwards. The image changes that make it possible are in this
+  tree: the guix daemon returns purely as a store importer (local builds
+  impossible, substitutes off), kexec is enabled in the kernel,
+  `kexec-tools` and the `wilkbook-generation` helper are packaged, and
+  the root filesystem grows to fill its 15.7 GB partition on first
+  boot. One more dd-from-os1 reflash enables it; after that, `make
+  deploy DEVICE=…`.
+- **It runs on glass (2026-09-02 evening).** The enabling image went
+  onto os2 by the usual dd protocol; from then on `make deploy
+  DEVICE=<alias>` did the rest: a cross-built system moved as a
+  13-path delta, registered as generation 4, kexec'd as a trial,
+  health-checked, promoted and the oldest generation pruned — the
+  panel re-probed on its own waveform, the reader, gadget and Wi-Fi
+  came back. What it took: the first three kexecs hung 0.12 s into the
+  new kernel, each costing a power-cycle, until the UART named the
+  cause — an early init writing the USB3 "pipe" register block whose
+  clock the previous kernel had gated off. That init is skipped on the
+  kexec path only (the values persist from the cold boot); a second,
+  real defect found on the way — the interrupt controller's LPI tables
+  are not preserved across a non-EFI kexec — is closed by never
+  enabling LPIs (nothing on the PineNote uses them). For the operator:
+  a trial that hangs is the power button, then the U-Boot menu, and
+  the last good generation is still the default. Details:
+  `doc/update-path.md` "Glass notes".
+- **The whole flow is proven end to end in QEMU (2026-09-02).** Rung 4u
+  (`make qemu-update-check`) boots generation A, grows the root
+  filesystem, authorizes the workstation's signing key, sends generation
+  B's missing paths (58 of a 444-path closure), registers it, kexecs
+  into it as a trial, health-checks and promotes it, then kexecs back
+  into A and promotes that — three distinct boot ids, every stage green.
+  What the rig taught is recorded in the design doc: a wrong serial
+  console argument leaves Guix's initrd unable to open `/dev/console`
+  and it runs away in memory (so the helper rewrites it off a PineNote),
+  `guix copy` cannot honor per-slot known-hosts files (so the deployer
+  uses the same nar pipe over plain OpenSSH), and the trial's ssh
+  session needs keepalives because kexec never closes the connection.
+
 ### Suspend on the direct-mode image (issue #42) and Wi-Fi after wake
 
 - **The direct image can sleep again.** The broker's pre-suspend EBC

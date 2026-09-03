@@ -989,3 +989,41 @@ survives a re-render stays a first-class contact instead of being
 invisible until it is complete again — recorded here rather than done,
 because the guard already makes the crash impossible and the resync
 needs a real kernel to test against.
+
+## 22. RK356x: a kexec'd kernel hangs in `rockchip_grf_init` because the previous kernel gated `pclk_pipe`
+
+**What:** `drivers/soc/rockchip/grf.c` carries an rk3566 table that
+writes three USB3-OTG bits into the PIPE GRF (`rockchip,rk3566-pipe-grf`,
+`0xfdc50000`) from a `postcore_initcall`. That register block is on
+`pclk_pipe`. Nothing in a board tree without PCIe/SATA/USB3 keeps that
+clock, so the running kernel gates it as unused; U-Boot leaves it on,
+which is why every cold boot is fine and every kexec'd boot stalls at
+0.12 s with no message (an APB access into an unclocked block never
+completes; the workqueue watchdog reports a lockup on whichever CPU ran
+init). Found on the PineNote (RK3566, 7.1.8) 2026-09-02: three identical
+hangs, then a full boot with `initcall_blacklist=rockchip_grf_init`,
+`clk_summary` showing `pclk_pipe` at enable count 0 while the pipe power
+domain was on.
+
+**Fix candidates, either sufficient:** (1) `clocks = <&cru PCLK_PIPE>`
+(and `clock-names`) on the `pipegrf` syscon node, so the syscon's
+regmap-mmio enables the clock around each access — the mechanism
+already used for other clocked syscons; (2) `CLK_IGNORE_UNUSED` on
+`pclk_pipe` in `clk-rk3568.c`, as `clk_pcie*_pipe_dft` already are.
+(1) is the minimal one. Our workaround skips the initcall on the kexec
+command line only (the GRF retains the cold boot's values across a
+kexec).
+
+**Related, same session (a known upstream limitation, not a bug
+report):** the GICv3 LPI tables are reserved for the next kernel only
+under EFI (`gic_reserve_range` is a no-op otherwise), so a U-Boot/DT
+kexec prints "Booted with LPIs enabled, memory probably corrupted" and
+this GIC cannot clear `EnableLPIs`. `irqchip.gicv3_nolpi=1` is the
+documented answer where nothing uses LPIs; worth a line in the kexec
+documentation for arm64 DT platforms.
+
+**What has to be true first:** the baseline gate; reproduce on a clean
+mainline tree with a plain rk3566 board (the PineNote DTS is not
+upstream); confirm `clk_summary` after boot and the hang with
+`initcall_debug`; test candidate (1) on glass.
+

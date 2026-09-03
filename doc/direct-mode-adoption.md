@@ -1,6 +1,17 @@
 # Adopting direct mode: the plan
 
-**Status: plan, with its first glass results — not a decision record.**
+**Decision (both operators, 2026-09-02): tentatively EMBRACE.** Will and
+Ron each approved; barring new information, hrdl's direct-mode driver
+is the path forward. "Tentatively" means the bail-out criteria at the
+bottom stay live as the *new information* that would reverse it — not
+that the decision is pending. What changes: the embrace sweep is now
+the work, not a fork in the road — the `reader` flavor moves to the
+direct-mode kernel, the `reader-direct` scaffolding and the
+shipping-driver-only pieces are deleted, and the next prealpha tag
+ships `reader`, singular. Nothing in that sweep may be done piecemeal
+in a way that leaves two flavors a user could choose between.
+
+**Status of the plan below: written as an experiment, with its glass results.**
 Written 2026-08-24, after the operator named handwriting as a product
 direction that the current display path cannot support. Built: P1's CLUT
 compiler and installer one-shot, P2's `linux-pinenote-hrdl-direct` kernel

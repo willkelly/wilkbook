@@ -59,6 +59,12 @@ rootfs_bytes=$(wc -c < "$rootfs")
 #   8192..+rootfs   rootfs partition named "os2", PNGuixRoot inside
 root_start=8192
 root_sectors=$(( (rootfs_bytes + 511) / 512 ))
+# VIRT_ROOT_SLACK_MIB (default 0): extra partition room beyond the image, so
+# the reader's first-boot resize2fs (pinenote-grow-root) has something to
+# grow into -- the real p6 is 15.7 GB around a 1.76 GB image.  The update
+# rig sets it; every other rung keeps the exact-size partition it had.
+root_sectors=$(( root_sectors + ${VIRT_ROOT_SLACK_MIB:-0} * 2048 ))
+printf '%s\n' "$rootfs_bytes" > "$disk.rootfs-bytes"
 root_end=$(( root_start + root_sectors - 1 ))
 
 # Optional third partition, GPT-named "data": the p7 the reader mounts at

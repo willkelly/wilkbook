@@ -72,6 +72,20 @@ community convention and stays).
       Debian's `usb-otg_eth.sh` is the configfs reference).
 - [ ] A/B slot awareness (os1/os2) in the image tooling rather than
       manual dd; testable offline against the synthetic GPT disk.
+- [x] **The update path (2026-09-02)**: one enabling reflash, then
+      `make deploy DEVICE=<alias>` — a cross-built system as a Guix
+      generation, sent as a delta, kexec'd as a trial, promoted after a
+      health check, rollback the same move backwards; rig-proven in
+      QEMU (rung 4u) and on one device (`doc/update-path.md`,
+      `doc/hardware-deploy.md`).
+- [ ] Retire the kexec-only `initcall_blacklist=rockchip_grf_init` with
+      the kernel fix (a clock reference on the pipe GRF syscon;
+      `doc/upstream-register.md` 22), then send it upstream.
+- [ ] A second operator through the update path on their own device
+      (the enabling reflash, the signing key on `/data`, the alias, the
+      first kexec attended).
+- [ ] Per-book filesystems / point-in-time restore for interactive
+      books — deferred with its options in `doc/update-path.md`.
 
 ## 3. Offline testing ladder (cross-cutting)
 
@@ -321,7 +335,10 @@ the start of this track — no panel required. Policy background in
 
 The direction the display work now serves, settled 2026-08-24/25 and
 recorded across `doc/direct-mode-adoption.md` and `doc/configuration.md`;
-gathered here because ROADMAP is where direction lives.
+gathered here because ROADMAP is where direction lives. **Decided
+2026-09-02: direct mode is tentatively embraced by both operators**,
+barring new information (`doc/direct-mode-adoption.md`); the embrace
+sweep is the display track's next work item.
 
 **Handwriting is a product direction, not a feature**: continuous
 note-taking, then drawn UIs inside books, then handwritten code that

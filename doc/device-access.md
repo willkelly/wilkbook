@@ -174,6 +174,12 @@ unattended reboot always lands on os1. Booting os2 takes either a human
 at the menu (on-device, no cable) or an agent driving the menu over
 UART, since an agent has no fingers or eyes. The old text: needs either a working
 UART or a human at the menu.
+`pinenote/scripts/uart/uboot-pick-slot.sh LOG --slot os2 [--reboot
+<os1-ssh-dest>]` is that agent: one reboot attempt, no reconnect until
+the menu is drawn, two DOWNs + ENTER, and the capture keeps running so
+the whole boot lands in LOG (it used to live in a session scratchpad and
+was lost with it; 2026-09-02 it picked os2 at poll 23 and recorded the
+first kexec on glass).
 
 ## SSH to the deployed reader
 
@@ -181,6 +187,12 @@ UART or a human at the menu.
   (re-push test assets). On pre-2026-08-06 images each reflash also
   regenerates the host key (`accept-new`); newer images restore both the
   authorized key and the host identity from `/data/ssh/` at boot.
+- **One ssh alias per slot** in `~/.ssh/config`, each carrying its own
+  `UserKnownHostsFile` (the os2 reader as `root@`, os1 as `user@`,
+  different files), is the documented way to address the device; the
+  deployer takes the alias (`make deploy DEVICE=pinenote-os2`,
+  `doc/hardware-deploy.md`). The default `known_hosts` hard-fails on
+  the two slots' colliding keys.
 - **Never `accept-new` a host key against the shared address until the
   slot you mean is the one answering** (2026-09-02): the two slots share
   one IP and have different host keys, so a watcher that reconnects

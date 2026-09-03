@@ -132,6 +132,14 @@ if ! grep -F -x -q -- 'CONFIG_ROCKCHIP_SUSPEND_MODE_ACTIVATE=y' "$tmpdir/kernel-
   fail "embedded kernel config lacks Rockchip suspend activation (deep will not wake)"
 fi
 pass "embedded kernel config enables reviewed Rockchip suspend activation"
+for symbol in CONFIG_KEXEC=y CONFIG_KEXEC_FILE=y; do
+  grep -F -x -q -- "$symbol" "$tmpdir/kernel-config" || \
+    fail "embedded kernel config lacks $symbol (the update path's trial boot needs kexec)"
+done
+pass "embedded kernel config enables kexec (update path)"
+require_image_path "$system_store/profile/sbin/kexec" "packaged kexec-tools"
+require_image_path "$system_store/profile/bin/guix" "packaged guix (store importer for guix copy)"
+require_image_path "$system_store/profile/bin/wilkbook-generation" "packaged generation helper (update path)"
 
 debugfs -R "dump $system_store/profile/bin/pinenote-ebc-sleep-frame-test $tmpdir/barrier-link" \
   "$rootfs_image" >/dev/null 2>&1 || fail "could not resolve packaged EBC sleep-frame test"
@@ -161,6 +169,10 @@ require_image_path "$platform_controls_store/share/pinenote-platform-controls/br
 platform_service=$(unique_store_path \
   '-shepherd-pinenote-platform-controls\.scm$' \
   "generated pinenote-platform-controls Shepherd service")
+for svc in guix-daemon pinenote-grow-root pinenote-guix-acl; do
+  unique_store_path "-shepherd-$svc\.scm\$" "generated $svc Shepherd service" >/dev/null
+done
+pass "generated guix-daemon, grow-root and guix-acl services are present (update path)"
 reader_service=$(unique_store_path \
   '-shepherd-reader-session\.scm$' \
   "generated reader-session Shepherd service")
