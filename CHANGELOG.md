@@ -39,6 +39,18 @@ says otherwise.
   check — this proved the boot/update/suspend path, not full
   read-quality acceptance.
 
+### A failed cable-free update now recovers by itself
+
+- **On the kexec-hardening branch (PR #48), not yet merged.** If a
+  cable-free update (`make deploy`) trials a kernel that hangs instead
+  of booting, the device now brings itself back — the armed SoC
+  watchdog resets it and the last promoted version boots on its own, no
+  cable and no power button, proven end to end on wkelly's PineNote
+  2026-09-03 evening (`doc/status.md`). One class still needs the power
+  button (a specific bus-wedge hang the update path already avoids by
+  default), and the very first update to a device that doesn't have
+  this fix yet isn't covered by it.
+
 ### Suspend and wake: the platform-controls broker (first outside contribution)
 
 - **Sleep is now a conversation with the reader instead of a rug-pull**

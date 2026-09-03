@@ -97,6 +97,9 @@ For a trace through suspend entry, `no_console_suspend` on the cmdline is
 required — the runtime `console_suspend=N` knob does not hold the 8250 up
 through its own dev_pm_ops. UART gives passwordless root whenever the
 device is awake; it is the recovery channel if auto-suspend misbehaves.
+**That passwordless serial getty is a standing security item, not yet
+decided** — flagged 2026-09-03 after a session that leaned on it for
+hours; see `doc/alpha-checklist.md` for the open decision.
 
 3. (2026-08-26) **A hung shutdown answers the UART like a live system —
    and reconnecting over ssh is what causes the hang.** Root-caused
@@ -145,6 +148,23 @@ device is awake; it is the recovery channel if auto-suspend misbehaves.
    splits the output between the two and neither sees a complete
    stream. And the watcher needs the UART plugged in and live for the
    whole reboot it is meant to catch, not just at the start.
+
+5. (2026-09-03) **A suspended console swallows typed input.** KOReader's
+   idle timer suspended the device (UART: `PM: suspend entry (deep)`)
+   while a script was launched over the serial console; the launch did
+   nothing — the operator's press woke the device, but the console had
+   not queued the keystrokes, it had simply not been listening. Pause
+   auto-suspend (`enabled=0` in `/data/wilkbook/autosuspend.conf`)
+   before any console-driven procedure, the same rule as for SSH below.
+
+6. (2026-09-03) **Wi-Fi may not survive a power-button suspend/resume.**
+   Observed on the reader-direct study flavor (generation 8): after
+   resume, UART showed `brcmfmac: brcmf_sdio_bus_rxctl: resumed on
+   timeout` then `brcmfmac: brcmf_sdio_firmware_callback: brcmf_att…`
+   (attach failed) — the SDIO firmware did not reload. A second
+   suspend/resume cycle on the same boot did not recover it either; SSH
+   stayed unreachable for the rest of that boot. A cold boot restores
+   it. Observed once, on one flavor; not yet root-caused.
 
 ### Proving the link end to end (2026-08-06)
 

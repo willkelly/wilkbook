@@ -295,6 +295,13 @@ tag, one channel pin and one hash clears it.
       `NOPASSWD: ALL`). That is fine for two people who know — and only
       if they are told, in the README, not in a commit message.
       `/etc/wilkbook-build` names the build either way.
+- [ ] **The debug-UART serial console is also an unauthenticated root
+      shell** — flagged 2026-09-03 (`doc/status.md`, `doc/device-access.md`):
+      `ttyS2`'s getty logs root in with no password, same standing as the
+      ACM gadget item above, but a *physical debug pad* rather than the
+      convenience flag, so it is on every build regardless of
+      `WILKBOOK_VERY_INSECURE_FOR_CONVENIENCE`. State it alongside the
+      root posture above, or decide it needs its own gate.
 - [ ] Merge the shippable half of `ultra-handshake-arm` to main.
 - [ ] A "what to steal" entry point: this repo's genuine value to other
       PineNote people is the host tools and the findings, not the image.
