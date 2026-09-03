@@ -257,9 +257,12 @@ the hang.
   (`doc/status.md`). So the identical arm sequence resets the chip when
   nothing else happens and does not reset it when a kexec intervenes:
   the kexec transition itself is what defeats it, not the watchdog's
-  configuration. Ranked candidate mechanisms (leading one: the
-  watchdog's counting clock freezes somewhere in the transition, not
-  yet located in source) are in `doc/upstream-register.md` item 25. The
+  configuration. Two candidate mechanisms remain — the transition stops or
+  freezes the dog before the hang, or the reset fires into the bus the
+  PIPE GRF write wedged and the BootROM stalls before TPL prints — and
+  the discriminating test (arm, then a blacklisted kexec trial into the
+  running generation, then read the counter in the new kernel) is in
+  `doc/upstream-register.md` item 25. The
   arm stays in the helper as harmless — it is what will deliver the
   self-reset once the kexec-path mechanism is found — but today it does
   not recover a trial that dies before its drivers probe; that still
