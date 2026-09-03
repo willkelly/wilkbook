@@ -31,12 +31,19 @@ minutes, either time** — the device needed the power button both
 times. Same hardware, same arm sequence, same starting register state:
 resets when nothing else happens, does not reset when a kexec
 intervenes. A read-only, source-and-device investigation the same
-morning ranked candidate mechanisms (item 25 of
-`doc/upstream-register.md` now carries the full ranking and evidence);
-the leading one is that the watchdog's counting clock (`tclk_wdt_ns`)
-stops advancing somewhere in the kexec transition, freezing the
-countdown before it reaches zero, by a mechanism not yet located in
-source. The obvious "wrong CRU route bits" theory stays refuted
+morning (item 25 of `doc/upstream-register.md` carries the evidence)
+narrowed it to two mechanisms that UART silence cannot separate: the
+transition stops or freezes the dog before the hang (no actor found in
+source — `dw_wdt_stop()` is inert without a reset line, which the DT
+confirms live, and no early clock write gates `tclk_wdt_ns`), or the
+reset fires into the interconnect the PIPE GRF write wedged and the
+BootROM stalls before TPL ever prints. The runtime test reset a healthy
+bus, so it does not rule the second out. The discriminating test needs
+the operator but adds no risk beyond a routine trial: arm, then a blacklisted kexec
+trial into generation 4 itself, then read the counter and enable bit
+in the new kernel — `CONFIG_WATCHDOG_HANDLE_BOOT_ENABLED=y` (confirmed
+in the running kernel's config) means the new kernel feeds a running
+dog from probe. The obvious "wrong CRU route bits" theory stays refuted
 (`CRU_GLB_RST_CON` already `0x103`, unchanged by rewriting it).
 
 **Consequence:** a hung trial still needs the power button. The
