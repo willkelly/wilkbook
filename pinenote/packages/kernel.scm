@@ -143,7 +143,8 @@
         ;; apply after the bsp-sip patch -- it adds the standing override
         ;; to the /rockchip-suspend node that patch creates.  See the
         ;; patch header for why the pair must never be split.
-        (local-file "../patches/linux-pinenote-7.0-ultra-rails.patch")))
+        (local-file "../patches/linux-pinenote-7.0-ultra-rails.patch")
+        (local-file "../patches/linux-pinenote-7.1-rk8xx-kexec-sleep-pin.patch")))
 
 (define %linux-pinenote-source
   (origin
