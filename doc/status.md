@@ -52,6 +52,30 @@ promote, gen-1 pruned, `guix gc`; `DEPLOY OK`. Gen-2 pruned by hand
 afterwards (pre-fix helper; a trial into it would hang). Ledger now
 gen-3, gen-4 `[promoted] [booted]`; 2.0 GB of 15 GB used.
 
+**Later the same night — three negatives and one root cause, all
+recorded so nobody repeats them.** (1) A kexec from the unpatched
+generation 4 into generation 5 (the DT clock reference on the pipe
+GRF, PR #46) with no skip hung at `calling rockchip_grf_init` — the
+clock reference alone is not the fix. (2) The PIPE power domain was
+measured **on** before the gadget unbind, 4 s after it, after a forced
+runtime-PM `on`, and at `kexec -e`; the same kexec hung again — the
+domain is not the mechanism either. Only the kexec-only
+`initcall_blacklist=rockchip_grf_init` is proven; the mechanism is
+unknown. (3) The SoC watchdog armed (`state active`, 44 s), survived
+the kexec ("watchdog did not stop!"), the new kernel hung as intended —
+and no reset came in three minutes. Root cause by precedent: the
+RK3568 routes the watchdog's reset to the global reset only when
+`CRU_GLB_RST_CON` (CRU + 0xdc) bits 0–1 are set; U-Boot and the kernel
+leave them clear here, mainline U-Boot sets them for the PX30. The
+helper now sets them before arming (PR #48); the proof is the next
+visit's first item. Two instrument lessons: Guix wipes `/tmp` on boot,
+so scripts staged there vanish with a kexec (stage under `/data`); and
+`read()` on `/dev/mem` faults on this kernel for MMIO — mmap it
+(KOReader's luajit FFI does; `/data/wilkbook/tools/mmio.lua`). The
+device was left hung in the kexec'd generation 5 kernel with DEFAULT on
+generation 4 and auto-suspend paused; the operator could not
+power-cycle again that night.
+
 **Suspend/resume on the kexec'd kernel (generation 4, 00:19):** with
 the session pause removed, a power tap was accepted by the broker,
 `PM: suspend entry (deep)` under the standing ultra override, 5.4 s
