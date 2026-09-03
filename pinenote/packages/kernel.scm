@@ -265,7 +265,15 @@ for the panel-corruption investigations.")))
                       ;; doc/upstream-register.md item 24; pinned by
                       ;; make direct-rect-hints-check.
                       (local-file
-                       "../patches/linux-pinenote-7.1-rect-hints-bounds.patch"))))))
+                       "../patches/linux-pinenote-7.1-rect-hints-bounds.patch")
+                      ;; Ours, on top of hrdl's: the probe unwinds again
+                      ;; when drm_init fails (stop the parked refresh
+                      ;; kthread, disable runtime PM) -- the by-construction
+                      ;; first probe of the direct image no longer leaks and
+                      ;; the rebind stops logging "Unbalanced
+                      ;; pm_runtime_enable!".  doc/upstream-register.md 23.
+                      (local-file
+                       "../patches/linux-pinenote-7.1-probe-unwind.patch"))))))
     (synopsis "PineNote kernel with hrdl's direct-mode EBC driver (study)")
     (description
      "The linux-pinenote kernel with our EBC driver replaced by hrdl's

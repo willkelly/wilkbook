@@ -1042,7 +1042,9 @@ rebind. Benign in effect; still a leak on every failed probe.
 
 **Fix:** restore `goto err_stop_kthread;` and the label
 (`kthread_stop(ebc->refresh_thread);` falling into `err_disable_pm`).
-Two lines.
+Two lines — carried in tree since 2026-09-03 as
+`linux-pinenote-7.1-probe-unwind.patch` (the pin asserts both the
+inherited shape and the fix).
 
 **What has to be true first:** the baseline gate; confirm hrdl's current
 tree still has the bare return (our patch is a snapshot); the pin

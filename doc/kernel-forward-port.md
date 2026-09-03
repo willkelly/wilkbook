@@ -155,9 +155,12 @@ It does not change Linux 7.0's `ROCKCHIP_SLEEP_PD_CONFIG=0xff` pmdomain ABI.
 of the eight): `linux-pinenote-7.1-hrdl-direct-mode.patch` (hrdl's driver
 swap), `linux-pinenote-7.1-ebc-parallel-advance.patch` (ours: the banded
 parallel NORMAL advance and its instruments; `queue_work`'s return
-checked since 2026-09-02) and `linux-pinenote-7.1-rect-hints-bounds.patch`
+checked since 2026-09-02) `linux-pinenote-7.1-rect-hints-bounds.patch`
 (ours, 2026-09-02: the RECT_HINTS ioctl bounded — `doc/upstream-register.md`
-item 24, pinned by `make direct-rect-hints-check`). The embrace sweep
+item 24, pinned by `make direct-rect-hints-check`) and
+`linux-pinenote-7.1-probe-unwind.patch` (ours, 2026-09-03: the probe
+unwinds when drm_init fails — item 23, pinned by
+`make direct-probe-quirk-check`). The embrace sweep
 (`doc/embrace-sweep-plan.md`) moves them into the shipping list.
 
 ## What the forward-port patch carries
