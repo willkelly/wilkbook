@@ -33,7 +33,6 @@ pinenote/packages/koreader-device
 pinenote/services
 pinenote/packages/ebc-test.scm
 pinenote/tools/power/autosuspend.lua
-pinenote/tools/ebc-barrier/pinenote-ebc-sleep-frame-test.c
 pinenote/tools/ebc-logic/ebc-dump-grab.c
 pinenote/tools/pen/scribble.lua
 pinenote/tools/pen/ebc-mode.lua
@@ -59,7 +58,6 @@ for path in \
 	pinenote/packages/koreader-device/frontend/device/pinenote/device.lua \
 	pinenote/services/reader-session.scm \
 	pinenote/packages/ebc-test.scm \
-	pinenote/tools/ebc-barrier/pinenote-ebc-sleep-frame-test.c \
 	pinenote/tools/ebc-logic/ebc-dump-grab.c \
 	pinenote/tools/pen/ebc-mode.lua \
 	pinenote/tools/ebc-lab/ebclib.lua

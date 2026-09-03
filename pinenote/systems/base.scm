@@ -34,7 +34,6 @@
   (list pinenote-firmware-support
          pinenote-diagnostics
          pinenote-ebc-test
-         pinenote-ebc-barrier-test
          pinenote-extlinux-reference))
 
 (define %pinenote-firmware
@@ -46,7 +45,6 @@
 (define %pinenote-bringup-services
   (list (service pinenote-waveform-service-type)
         (service pinenote-ebc-modprobe-service-type)
-        (service pinenote-ebc-params-service-type)
         (service pinenote-diagnostics-service-type)
         (service pinenote-ebc-test-service-type)
         (service pinenote-state-service-type)))

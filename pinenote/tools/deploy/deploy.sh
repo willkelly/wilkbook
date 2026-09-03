@@ -3,7 +3,7 @@
 # doc/update-path.md.  Every step refuses rather than guesses; a failed
 # health check leaves DEFAULT on the previous generation and exits 1.
 #
-#   usage: deploy.sh DEVICE [FLAVOR] [KEEP]        (FLAVOR default reader-direct, KEEP 3)
+#   usage: deploy.sh DEVICE [FLAVOR] [KEEP]        (FLAVOR default reader, KEEP 3)
 #          deploy.sh DEVICE --rollback N           trial+health+promote an existing generation
 #
 # DEVICE is an ssh destination for root (an alias in ~/.ssh/config that
@@ -54,7 +54,7 @@ if [ "${2:-}" = "--rollback" ]; then
   exit 0
 fi
 
-flavor=${2:-reader-direct}
+flavor=${2:-reader}
 keep=${3:-3}
 echo "== 1/7 build: pinenote-$flavor (cross, aarch64-linux-gnu)"
 system=$(cd "$repo" && guix system build --no-grafts -L . --target=aarch64-linux-gnu \

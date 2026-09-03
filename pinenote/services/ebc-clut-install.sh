@@ -117,6 +117,16 @@ fi
   fail "no CLUT compiler at $compiler -- cannot build $destination, and
    rockchip_ebc fails probe with -EINVAL without it"
 
+# A machine without the panel -- the QEMU rig, a bringup flavor -- has nothing
+# to compile and nothing to rebind; say so and succeed, so reader-session (which
+# requires this one-shot since S2) still starts there.  EBC_DEVICE lets the
+# harness pick either branch.
+ebc_device=${EBC_DEVICE:-/sys/bus/platform/devices/fdec0000.ebc}
+if [ ! -e "$ebc_device" ]; then
+  say "no EBC device at $ebc_device (no panel on this machine); nothing to compile, nothing to rebind"
+  exit 0
+fi
+
 # The waveform is the input.  Its absence is the never-bundle rule working as
 # intended (no generic waveform is shipped), and it must be as loud here as it
 # is in pinenote-install-waveform, which is the service that should have put

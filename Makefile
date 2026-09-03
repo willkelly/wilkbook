@@ -64,17 +64,14 @@ ARTIFACTS ?= /tmp/wilkbook/pinenote-rootfs-artifacts
 #   empty        no Debian home at all (reprovisioned p7)
 FIXTURE ?= os1-used
 
-# reader-direct = the reader plus the direct-mode wiring (CLUT one-shot,
-# rebind, splash, direct params); since the embrace sweep's S1 (2026-09-03)
-# every flavor runs the direct-mode EBC driver, and S2 folds this flavor's
-# remaining deltas into `reader` and deletes it (doc/embrace-sweep-plan.md).
-# Until S2 lands, `reader` cannot light the panel (no CLUT) -- build and
-# deploy reader-direct.  reader-debug is gone: the direct driver carries
+# One reader, on the direct-mode EBC driver (the embrace sweep, S1+S2,
+# 2026-09-03: doc/embrace-sweep-plan.md).  reader-direct and reader-debug
+# are gone -- their wiring is the reader's, and the driver carries
 # EXTRACT_FBS natively.
-FLAVORS = minimal slim networked dev usb-console usb-console-linux-6-6 reader reader-direct
+FLAVORS = minimal slim networked dev usb-console usb-console-linux-6-6 reader
 
 .PHONY: help packages kernel kernel-drv reader-system-drv qemu-smoke qemu-virt qemu-virt-check qemu-update-check qemu-pageturn-campaign refresh-episodes-check refresh-trigger-check \
-         check-host wbf-check wbf-notice clut-check ebc-logic-check ebc-barrier-check rastersim-check koreader-input-check orientation-check platform-controls-check optics-check optics-audit-dataset power-check rockchip-pm-check activation-positive-check suspend-check \
+         check-host wbf-check wbf-notice clut-check ebc-logic-check rastersim-check koreader-input-check orientation-check platform-controls-check optics-check optics-audit-dataset power-check rockchip-pm-check activation-positive-check suspend-check \
         battery-dtb-check time-machine-check gexp-modules-check \
         timezone-check kernel-version-check library-check \
         manuals-check ultra-coupling-check timesync-check \
@@ -107,7 +104,6 @@ help:
 	@echo "  deploy            DEVICE=<ssh host>: build, guix copy, add generation, kexec trial, health, promote"
 	@echo "  qemu-update-check ROOTFS=<ext4> [SYSTEM_B=..]: the update flow end to end in QEMU (rung 4u)"
 	@echo "  ebc-logic-check   extracted EBC driver logic checks ([WBF=..])"
-	@echo "  ebc-barrier-check supervised EBC sleep-frame command host tests"
 	@echo "  rastersim-check   raster/waveform simulation checks ([WBF=..])"
 	@echo "  koreader-input-check  KOReader input, touch, and virtual-node lifecycle tests"
 	@echo "  orientation-check SC7A20 classifier and uinput bridge tests"
@@ -205,7 +201,7 @@ kernel:
 	  -e '(@ (pinenote packages kernel) linux-pinenote)'
 
 packages:
-	$(GUIX) build $(GUIX_FLAGS) pinenote-ebc-test pinenote-ebc-barrier-test pinenote-diagnostics \
+	$(GUIX) build $(GUIX_FLAGS) pinenote-ebc-test pinenote-diagnostics \
 	  pinenote-firmware-support pinenote-broadcom-wifi-firmware \
 	  pinenote-broadcom-bt-firmware pinenote-wbf-clut
 
@@ -368,7 +364,7 @@ refresh-trigger-check:
 # The rung-1 roster.  Single source of truth: CI shards it with SKIP_CHECKS=
 # rather than restating it, so a suite added here is picked up automatically
 # instead of quietly missing from CI.
-CHECK_HOST_TARGETS = clut-check ebc-logic-check ebc-barrier-check rastersim-check \
+CHECK_HOST_TARGETS = clut-check ebc-logic-check rastersim-check \
         koreader-input-check orientation-check platform-controls-check optics-check power-check \
         rockchip-pm-check activation-positive-check suspend-check \
         library-check koreader-profile-check manuals-check ultra-coupling-check \
@@ -466,12 +462,6 @@ ebc-logic-check:
 	@# above is blind to the deferred-io drain and to its ordering against
 	@# the wash. That ordering is worth one whole visible refresh pass.
 	sh pinenote/scripts/preflight/validate-ebc-global-arm-order-hunk.sh
-
-# Host-only fake-operation coverage for the separately invoked sleep-frame
-# diagnostic.  It extracts the barrier UAPI from the permanent kernel patch;
-# this target never invokes --run or opens device nodes.
-ebc-barrier-check:
-	$(call guix-shell,gcc-toolchain python) $(MAKE) -C pinenote/tools/ebc-barrier check
 
 # Gray8->Y4 raster library + waveform simulator tests (offline ladder
 # rung 3). WBF optional; without it the waveform-dependent tests are
@@ -617,8 +607,8 @@ update-path-check:
 # touches os1, p7 or the partition table; a failed health check leaves the
 # previous generation as DEFAULT.
 deploy:
-	@test -n "$(DEVICE)" || { echo "usage: make deploy DEVICE=<ssh host> [FLAVOR=reader-direct] [KEEP=3]"; exit 2; }
-	sh pinenote/tools/deploy/deploy.sh "$(DEVICE)" "$(or $(FLAVOR),reader-direct)" "$(or $(KEEP),3)"
+	@test -n "$(DEVICE)" || { echo "usage: make deploy DEVICE=<ssh host> [FLAVOR=reader] [KEEP=3]"; exit 2; }
+	sh pinenote/tools/deploy/deploy.sh "$(DEVICE)" "$(or $(FLAVOR),reader)" "$(or $(KEEP),3)"
 
 # reader-session's stop must be INT-first: TERM truncates the crengine
 # cache to zero bytes and re-arms a 30 s re-parse of the manuals book

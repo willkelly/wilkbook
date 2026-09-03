@@ -380,7 +380,7 @@ function PineNote:init()
     -- settings.reader.lua).  G_reader_settings is initialized in
     -- reader.lua before the device module loads (reader.lua:39 vs the
     -- device require), but nil-guard anyway: host harnesses stub it.
-    local flash_area_fraction = 0.60
+    local flash_area_fraction = 0.98
     do
         local ok, v = pcall(function()
             return G_reader_settings and G_reader_settings.readSetting

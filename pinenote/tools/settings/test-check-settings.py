@@ -146,7 +146,7 @@ MUTATIONS = [
      "UNKNOWN DIVERGENCE host-model:policy_ship:refresh_threshold"),
     ("the host model drifts from the KOReader-layer default",
      "pinenote/packages/koreader-device/frontend/device/pinenote/device.lua",
-     "local flash_area_fraction = 0.60",
+     "local flash_area_fraction = 0.98",
      "local flash_area_fraction = 0.50",
      "UNKNOWN DIVERGENCE host-model:policy_ship:flash_frac"),
     ("the modelled global waveform stops matching the shipped one",
