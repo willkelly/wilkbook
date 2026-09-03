@@ -6,6 +6,10 @@
 #   usage: deploy.sh DEVICE [FLAVOR] [KEEP]        (FLAVOR default reader-direct, KEEP 3)
 #          deploy.sh DEVICE --rollback N           trial+health+promote an existing generation
 #
+# WILKBOOK_UART=/dev/ttyUSB0 (optional): with the debug cable attached, a
+# trial that never boots is recovered hands-free -- the watchdog resets the
+# device, the U-Boot menu is driven back to os2, the previous DEFAULT boots.
+#
 # DEVICE is an ssh destination for root (an alias in ~/.ssh/config that
 # carries the per-slot UserKnownHostsFile is the documented way --
 # doc/device-access.md).  The transfer is the guix copy nar pipe (guix
@@ -26,6 +30,29 @@ wait_for_ssh() {
   return 1
 }
 
+# A trial that never answers: the helper armed the SoC watchdog before
+# kexec -e, so a kernel that never reached its drivers resets the device
+# into U-Boot on its own (~45-90 s); U-Boot's default lands on os1.  With
+# a UART configured (WILKBOOK_UART=/dev/ttyUSB0) the menu is driven back
+# to os2 here, and extlinux boots the previous DEFAULT -- no hands.
+# Without one, this reports what to do.  Either way: exit 1, nothing
+# promoted.
+recover_after_failed_trial() {
+  gen=$1
+  if [ -n "${WILKBOOK_UART:-}" ] && [ -e "$WILKBOOK_UART" ]; then
+    echo "NOT PROMOTED: generation $gen never answered; waiting for the watchdog reset and picking os2 at the U-Boot menu ($WILKBOOK_UART)" >&2
+    log=${TMPDIR:-/tmp}/wilkbook-uart-recover-$$.log
+    if sh "$repo/pinenote/scripts/uart/uboot-pick-slot.sh" "$log" --slot os2 --tty "$WILKBOOK_UART" && wait_for_ssh; then
+      echo "back on $(ssh_cmd 'readlink /run/current-system') (the previous DEFAULT); UART capture in $log" >&2
+    else
+      echo "the device did not come back on its own: power-cycle it; the U-Boot default is os1 and extlinux's DEFAULT is still the previous generation" >&2
+    fi
+  else
+    echo "NOT PROMOTED: generation $gen never answered; the watchdog resets it into U-Boot (default os1) -- pick os2 at the menu, or set WILKBOOK_UART=/dev/ttyUSB0 to have this done for you" >&2
+  fi
+  exit 1
+}
+
 trial_health_promote() {
   gen=$1; expect=$2; keep=$3
   echo "== trial: kexec into generation $gen (DEFAULT unchanged; the ssh link dies with the old kernel)"
@@ -35,7 +62,7 @@ trial_health_promote() {
   timeout 90 ssh -o ConnectTimeout=10 -o BatchMode=yes -o ServerAliveInterval=5 -o ServerAliveCountMax=2 "root@$device" "\$(cat /boot/gen-$gen/system)/profile/bin/wilkbook-generation trial $gen" || true
   echo "== waiting for the new generation to answer ssh"
   sleep 15
-  wait_for_ssh || { echo "NOT PROMOTED: generation $gen never answered; a power-cycle boots the previous DEFAULT" >&2; exit 1; }
+  wait_for_ssh || recover_after_failed_trial "$gen"
   echo "== health"
   if ! ssh_cmd "wilkbook-generation health --expect $expect"; then
     echo "NOT PROMOTED: health check failed on generation $gen; DEFAULT still names the previous one" >&2

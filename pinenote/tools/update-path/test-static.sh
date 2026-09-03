@@ -84,3 +84,11 @@ grep -q 'wd:write("1"); wd:close()' "$helper"
 ! grep -q 'wd:write("V")' "$helper"
 grep -q 'needs the power button' "$helper"
 echo "PASS: the trial holds the PIPE domain up and arms the watchdog last, both best-effort"
+# A trial that never answers is recovered, not just reported: with a UART the
+# deployer drives the menu back to os2 after the watchdog reset; without one it
+# says what to do.  Never promotes on that path.
+grep -q 'recover_after_failed_trial "$gen"' "$deploy"
+after 'recover_after_failed_trial() {' 'uboot-pick-slot.sh" "$log" --slot os2' "$deploy"
+sed -n '/^recover_after_failed_trial() {/,/^}/p' "$deploy" | grep -q '^  exit 1$'
+! grep -q 'never answered; a power-cycle boots' "$deploy"
+echo "PASS: a trial that never answers is recovered over the UART when one is configured, and never promoted"
