@@ -102,6 +102,11 @@ code review — before a single reboot. That's the standard.
 - `doc/direct-mode-adoption.md` — the staged plan for adopting hrdl's
   direct-mode driver, its blockers, and its bail-out criteria. Written
   because handwriting needs latency the LUT path cannot reach.
+- `doc/embrace-sweep-plan.md` — the reviewable plan for the embrace
+  sweep (2026-09-02): the ten deltas between the flavors, the twelve
+  decisions with recommendations, the six steps with their offline
+  proofs, and the bail-out. Read before touching anything
+  direct-related.
 - `doc/driver-findings-report.md` — the community-facing writeup of driver
   bugs the host tools found.
 - `doc/upstream-register.md` — the standing list of what we owe the
