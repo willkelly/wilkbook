@@ -52,6 +52,17 @@ promote, gen-1 pruned, `guix gc`; `DEPLOY OK`. Gen-2 pruned by hand
 afterwards (pre-fix helper; a trial into it would hang). Ledger now
 gen-3, gen-4 `[promoted] [booted]`; 2.0 GB of 15 GB used.
 
+**Suspend/resume on the kexec'd kernel (generation 4, 00:19):** with
+the session pause removed, a power tap was accepted by the broker,
+`PM: suspend entry (deep)` under the standing ultra override, 5.4 s
+asleep, woken by the button (`gpio-keys` wakeup count 1), `resumed
+after 7s`, `suspend_stats success=1 fail=0`, reader and Wi-Fi back.
+The first rails-off suspend through a warm-restarted panel and PMIC.
+(Before that, KOReader's 15-minute AutoSuspend had painted its sleep
+screen while the pause file made the broker refuse — "globally
+inhibited" — which looks exactly like a suspended device and is not
+one.)
+
 Also observed: `rockchip-ebc fdec0000.ebc: Unbalanced pm_runtime_enable!`
 at the direct driver's rebind — present on the cold boots of this image
 too, not a kexec artifact; unexamined. Auto-suspend is paused for the

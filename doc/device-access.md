@@ -187,6 +187,12 @@ first kexec on glass).
   (re-push test assets). On pre-2026-08-06 images each reflash also
   regenerates the host key (`accept-new`); newer images restore both the
   authorized key and the host identity from `/data/ssh/` at boot.
+- **One ssh alias per slot** in `~/.ssh/config`, each carrying its own
+  `UserKnownHostsFile` (the os2 reader as `root@`, os1 as `user@`,
+  different files), is the documented way to address the device; the
+  deployer takes the alias (`make deploy DEVICE=pinenote-os2`,
+  `doc/hardware-deploy.md`). The default `known_hosts` hard-fails on
+  the two slots' colliding keys.
 - **Never `accept-new` a host key against the shared address until the
   slot you mean is the one answering** (2026-09-02): the two slots share
   one IP and have different host keys, so a watcher that reconnects

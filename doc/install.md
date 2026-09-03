@@ -231,17 +231,26 @@ them):
   undoing it** (`enabled=1`, or delete the file — the platform-controls
   broker re-reads it continuously, with no reboot). Skip it and suspend
   works out of the box.
-  What it controls: auto-suspend sleeps the device to
-  ultra suspend (rails-off; **5.47 mA idle standby measured** across a
-  6.17-day unplugged soak, 170 cycles and zero failures, 2026-08-15)
-  after 5 minutes of no *input* (an SSH session does not count). Waking
+  What it controls: the platform-controls broker (PR #41, 2026-08-31)
+  is the only writer of `/sys/power/state`; KOReader's AutoSuspend
+  (default 15 minutes of no input, user-settable) asks it, as do the
+  power button and the cover, and it sleeps the device to ultra suspend
+  (rails-off; **5.47 mA idle standby measured** across a 6.17-day
+  unplugged soak, 170 cycles and zero failures, 2026-08-15). Waking
   takes the power button, the RTC backstop, plugging in a charger, or
   opening the cover (confirmed 2026-08-09); the serial console cannot
-  wake it. The daemon reads this file first and the
-  `/var/lib/pinenote/autosuspend.conf` runtime knob second (so a same-boot
-  change there still wins), and unlike `/var/lib` it survives reflashes
-  and is writable from os1 — which is exactly why it exists
-  (`pinenote/tools/power/autosuspend.lua`, `doc/device-access.md`).
+  wake it. With `enabled=0` the broker refuses every request — and
+  KOReader still paints its sleep screen when its timer fires, which
+  looks exactly like a suspended device and is not one (2026-09-02).
+  The file survives reflashes and is writable from os1, which is why it
+  lives here (`doc/device-access.md`).
+- `wilkbook/guix/authorized-keys/<name>.pub` — **optional, for the
+  update path.** Your workstation's `/etc/guix/signing-key.pub` (from
+  `sudo guix archive --generate-key`), mode `0444`. Every `*.pub` here
+  is authorized in the device's guix ACL at each boot, which is what
+  lets `make deploy` send signed store paths later
+  (`doc/hardware-deploy.md`, "The update path"). Absent = no update
+  path; the dd protocol still works.
 - `books/` — your library. The seeded KOReader profile hardcodes
   `home_dir = "/data/books"` (`pinenote/systems/pinenote-reader.scm`).
 
@@ -381,10 +390,16 @@ are debug images; treat them accordingly.
 
 ## 11. Living with it
 
-- **There is no update mechanism.** A new build is the same write
-  protocol again: rebuild, extract, verify backups, `dd` to os2,
-  readback-SHA. There is no `guix system reconfigure` path on the
-  device and no package management in the release flavors.
+- **Updates without the cable, after one more reflash.** Any image
+  built from this tree after 2026-09-02 carries the update path: from
+  then on `make deploy DEVICE=<alias>` sends a new build over Wi-Fi as
+  a Guix system generation, kexecs into it as a trial, and promotes it
+  only after a health check — rollback is the same move backwards
+  (`doc/hardware-deploy.md`, "The update path"; design and the
+  first-kexec findings in `doc/update-path.md`). It has run on exactly
+  one device so far. There is still no `guix system reconfigure` on
+  the device, no package management, and no building there — the
+  daemon is an importer only.
 - **A reflash wipes `/`, including `/root`.** Your books, Wi-Fi
   credentials, SSH keys, and the `/data/wilkbook` knobs survive (p7);
   KOReader's global settings live in `/root/.config/koreader/` and do
@@ -395,7 +410,8 @@ are debug images; treat them accordingly.
   for the idle window after the last *input* event, and Wi-Fi
   re-association eats several seconds of it. Pause it before working on
   the device (section 7); wake it with the power button rather than
-  waiting for the RTC backstop.
+  waiting for the RTC backstop. `make deploy` itself needs the device
+  awake for a few minutes; pause first, unpause after.
 - **os1 remains yours.** Nothing here writes it, and the recorded
   practice is to power-cycle back to it and confirm it still works after
   every session.

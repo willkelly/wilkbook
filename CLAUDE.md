@@ -253,9 +253,26 @@ gitignored `build/`, or the reader's static address.
   registered); **idle power is at parity** (155.3 vs 156.9 mA; real
   turns at 20/min add ~59 mA at ~41.5 frames/turn — the untuned hint
   is a power cost too). Page-turn injection trap: KEY 158 advances
-  (KOReader's labels are inverted on this stack). The decision remains
-  embrace-or-reject, one shipping image either way
-  (`doc/direct-mode-adoption.md`, `doc/status.md`).
+  (KOReader's labels are inverted on this stack). **The decision was
+  taken 2026-09-02: tentatively EMBRACED by both operators, barring
+  new information** — the embrace sweep (the `reader` flavor moves to
+  the direct kernel, the scaffolding is deleted, one shipping image) is
+  now the work; the bail-out criteria stay live as what could reverse
+  it (`doc/direct-mode-adoption.md`, `doc/status.md`).
+- **Update path — on glass since 2026-09-02.** os2 carries an image
+  with the guix importer daemon, kexec, the `wilkbook-generation`
+  helper, first-boot root growth and the signing-key ACL; from there
+  `make deploy DEVICE=<ssh alias>` sends only the missing store paths,
+  registers a generation, kexecs it as a trial, health-checks, promotes
+  (`doc/hardware-deploy.md` "The update path", `doc/update-path.md`).
+  Two kexec facts on this SoC, both pinned: the helper appends
+  `initcall_blacklist=rockchip_grf_init` to the kexec command line
+  only (the next kernel's GRF init writes the PIPE GRF, whose clock the
+  running kernel gated; upstream register 22), and every flavor boots
+  with `irqchip.gicv3_nolpi=1`. A hung trial is the power button plus
+  `pinenote/scripts/uart/uboot-pick-slot.sh`; DEFAULT stays on the last
+  promoted generation. Generations that predate the fix cannot be
+  kexec'd into. Suspend/resume on a kexec'd kernel is proven.
 - **Kernel — read this carefully, the tree and the device differ.**
   `%linux-pinenote-base` is `nongnu:linux-7.1` and `make kernel`
   cross-builds **7.1.8** clean (both DTBs, both modules linked). The
