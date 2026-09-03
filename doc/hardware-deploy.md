@@ -331,6 +331,16 @@ notes"):**
   power button, then let `uboot-pick-slot.sh --slot os2` choose os2 at
   the U-Boot menu; extlinux's `DEFAULT` is still the last promoted
   generation.
+- **Recovery from os1, no cable:** whatever landed you on os1 (a
+  watchdog reset, the power button, a countdown that fell through), the
+  ledger on p6 is one chroot away:
+  `pinenote/scripts/os1/rescue-generation.sh list | promote N | demote |
+  log` mounts p6, runs the shipped helper inside it, and unmounts. Then
+  reboot and choose "Boot OS2 (part 6)" at the U-Boot menu; extlinux
+  boots the promoted generation with no further key. (kdump is not the
+  tool for our hangs: a core stalled in a bus access never panics, so
+  no crash kernel would fire; the watchdog reset plus os1 is the
+  failsafe on this SoC.)
 - Anything that changes early boot (kernel, DTB, command line) wants
   both proofs: the kexec trial and a cold boot from the menu.
 - While a session needs stable SSH, pause auto-suspend
