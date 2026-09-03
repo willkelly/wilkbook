@@ -1,0 +1,32 @@
+drm/rockchip/ebc: unwind the probe when drm_init fails -- stop the refresh kthread, disable runtime PM
+
+hrdl's direct-mode rework of rockchip_ebc_probe() replaced the error
+path after a failed rockchip_ebc_drm_init() -- `goto err_stop_kthread`
+-- with a bare `return ret`, and dropped that label. A probe that fails
+there returns with pm_runtime_enable() still counted and the parked
+refresh kthread alive. On wilkbook's direct image the FIRST probe fails
+there by construction (the CLUT is compiled on-device after the module
+loads, then the driver is rebound), so every boot logged
+"rockchip-ebc fdec0000.ebc: Unbalanced pm_runtime_enable!" at the
+rebind, and leaked one parked kthread. Restore the label and the goto.
+
+Root-caused 2026-09-02 (wilkbook doc/upstream-register.md item 23).
+
+--- a/drivers/gpu/drm/rockchip/rockchip_ebc.c
++++ b/drivers/gpu/drm/rockchip/rockchip_ebc.c
+@@ -2440,12 +2440,14 @@
+ 	kthread_park(ebc->refresh_thread);
+ 	sched_set_fifo(ebc->refresh_thread);
+ 
+ 	ret = rockchip_ebc_drm_init(ebc);
+ 	if (ret)
+-		return ret;
++		goto err_stop_kthread;
+ 
+ 	return 0;
+ 
++err_stop_kthread:
++	kthread_stop(ebc->refresh_thread);
+ err_disable_pm:
+ 	pm_runtime_disable(dev);
+ 	if (!pm_runtime_status_suspended(dev))

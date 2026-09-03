@@ -463,13 +463,21 @@ def gate_record_vs_daemon():
 
 
 # ====================================================================
-# gate B -- the shipped rockchip_ebc parameter set has three copies
+# gate B -- the shipped rockchip_ebc parameter set has ONE site
 # ====================================================================
-EBC_PARAM_SITES = [
-    ("ebc.scm modprobe options", "pinenote/services/ebc.scm"),
-    ("firmware.scm set_parameter script", "pinenote/packages/firmware.scm"),
-    ("firmware.scm modprobe options", "pinenote/packages/firmware.scm"),
+# Since the embrace sweep (2026-09-03) the direct driver is the shipping
+# driver.  Its two parameters go through sysfs from the direct params
+# one-shot -- module parameters cannot reach an initrd-loaded module -- so
+# the three build-time modprobe/script copies the old gate held in agreement
+# are gone, and the gate now asserts that they STAY gone: a reappearing
+# `options rockchip_ebc k=v' line is an intent the kernel would silently
+# ignore.
+EBC_SYSFS_SITE = "pinenote/services/ebc-direct.scm"
+EBC_RETIRED_MODPROBE_SITES = [
+    "pinenote/services/ebc.scm",
+    "pinenote/packages/firmware.scm",
 ]
+SYSFS_PUT_RE = re.compile(r'\(put "(\w+)" "([^"]*)"\)')
 
 
 def modprobe_options(source, path_for_errors):
@@ -478,92 +486,55 @@ def modprobe_options(source, path_for_errors):
     for match in re.finditer(r"options rockchip_ebc ([^\\\"\n]+)", source):
         found.append(dict(
             (k, v) for k, v in re.findall(r"(\w+)=(\S+)", match.group(1))))
-    if not found:
-        raise ValueError("no `options rockchip_ebc' line in "
-                         + path_for_errors)
-    return found
-
-
-def set_parameter_options(source, path_for_errors):
-    found = dict(re.findall(r'set_parameter (\w+) (\S+?)\\n', source))
-    if not found:
-        raise ValueError("no `set_parameter' lines in " + path_for_errors)
     return found
 
 
 def gate_ebc_params():
-    copies = {}
-    try:
-        ebc = modprobe_options(read("pinenote/services/ebc.scm"),
-                               "pinenote/services/ebc.scm")
-        if len(ebc) != 1:
-            bad("site not found -- ebc.scm carries %d `options rockchip_ebc' "
-                "lines, expected exactly 1" % len(ebc))
-        copies["ebc.scm modprobe options"] = ebc[0]
-        firmware = read("pinenote/packages/firmware.scm")
-        fw_modprobe = modprobe_options(firmware,
-                                       "pinenote/packages/firmware.scm")
-        if len(fw_modprobe) != 1:
-            bad("site not found -- firmware.scm carries %d `options "
-                "rockchip_ebc' lines, expected exactly 1" % len(fw_modprobe))
-        copies["firmware.scm modprobe options"] = fw_modprobe[0]
-        copies["firmware.scm set_parameter script"] = set_parameter_options(
-            firmware, "pinenote/packages/firmware.scm")
-    except ValueError as exc:
-        bad("site not found -- %s" % exc)
+    shipped = dict(SYSFS_PUT_RE.findall(read(EBC_SYSFS_SITE)))
+    if set(shipped) != {"temp_override", "default_hint"}:
+        bad("site not found -- %s writes %s through sysfs; expected exactly "
+            "temp_override and default_hint" % (EBC_SYSFS_SITE, sorted(shipped)))
         return None
-
-    # A floor, not the count: a dropped parameter is a real divergence the
-    # key-set comparison below must be allowed to report.  Two or fewer
-    # means the extractor stopped working, which is a different failure.
-    for label, values in copies.items():
-        if len(values) < 3:
-            bad("site not found -- %s yielded only %d parameters; the "
-                "extractor is broken, not the tree" % (label, len(values)))
-            return None
-
-    reference_label = "ebc.scm modprobe options"
-    reference = copies[reference_label]
-    agreed = True
-    for label, values in copies.items():
-        if label == reference_label:
-            continue
-        if set(values) != set(reference):
-            agreed = False
-            divergence("ebc-params:keyset",
-                       "%s has keys %s; %s has %s"
-                       % (label, sorted(values), reference_label,
-                          sorted(reference)))
-            continue
-        for key in sorted(reference):
-            if values[key] != reference[key]:
-                agreed = False
-                divergence("ebc-params:%s" % key,
-                           "%s says %s=%s; %s says %s=%s"
-                           % (label, key, values[key], reference_label,
-                              key, reference[key]))
-    if agreed:
-        ok("all %d shipped rockchip_ebc parameters agree across the %d "
-           "build-time copies (%s)"
-           % (len(reference), len(copies), ", ".join(sorted(copies))))
-    return reference
+    ok("the shipped rockchip_ebc parameters are declared once (%s): %s"
+       % (EBC_SYSFS_SITE,
+          ", ".join("%s=%s" % kv for kv in sorted(shipped.items()))))
+    for site in EBC_RETIRED_MODPROBE_SITES:
+        lines = modprobe_options(read(site), site)
+        if lines:
+            divergence("ebc-params:modprobe-copy",
+                       "%s carries an `options rockchip_ebc' line again (%s); "
+                       "modprobe.d cannot reach the initrd-loaded module and "
+                       "the kernel would ignore it silently"
+                       % (site, ", ".join(sorted(lines[0]))))
+        else:
+            ok("%s carries no `options rockchip_ebc' line" % site)
+    if "set_parameter " in read("pinenote/packages/firmware.scm"):
+        divergence("ebc-params:set_parameter-script",
+                   "firmware.scm grew a set_parameter script again; the "
+                   "direct params one-shot is the one writer")
+    else:
+        ok("firmware.scm carries no set_parameter script")
+    return shipped
 
 
 # ====================================================================
 # gate B2 -- the shipped waveform value, and the GC16 wash transient,
 #            are literals in several runtime self-heal paths
 # ====================================================================
+# The shipping-driver waveform the runtime self-heal paths still restore.
+# Those paths (autosuspend.lua, reader-session's panel-blank Lua, the idle
+# washer) write a sysfs node the direct driver does not register; each guards
+# on its absence and they leave with S3 of the embrace sweep.  Until then they
+# must keep agreeing with each other, so the gate keeps checking them against
+# this retired value rather than against a shipped set that no longer names it.
+RETIRED_SHIPPING_WAVEFORM = "6"
+
+
 def gate_waveform_literals(shipped):
     if shipped is None:
-        bad("site not found -- no shipped parameter set, so the waveform "
-            "literals cannot be checked")
+        bad("site not found -- no shipped parameter set")
         return
-    want = shipped.get("refresh_waveform")
-    if want is None:
-        bad("site not found -- the shipped parameter set has no "
-            "refresh_waveform")
-        return
-
+    want = RETIRED_SHIPPING_WAVEFORM
     sites = []
 
     match = re.search(r'local WAVEFORM_SHIPPED = "(\d+)"',
@@ -576,17 +547,17 @@ def gate_waveform_literals(shipped):
     sites.append(("reader-session.scm %panel-blank-lua self-heal",
                   match.group(1) if match else None))
 
-    # TWO assertions in that script encode the shipped value -- the boot
-    # milestone grep and the named requirement.  Checking only the first
-    # would leave the other free to drift.
+    # The rig no longer asserts a live refresh_waveform (the direct driver
+    # has none); a reappearing assertion would expect a node nothing ships.
     virtchk = re.findall(r"VIRTCHK-WF-(\d+)'",
                          read("pinenote/scripts/qemu/run-virt-assertions.sh"))
-    if len(virtchk) != 2:
-        bad("site not found -- run-virt-assertions.sh carries %d shipped-"
-            "waveform assertions, expected 2" % len(virtchk))
-    for index, value in enumerate(virtchk):
-        sites.append(("run-virt-assertions.sh boot assertion %d" % (index + 1),
-                      value))
+    if virtchk:
+        divergence("waveform-literal:run-virt-assertions.sh",
+                   "run-virt-assertions.sh asserts refresh_waveform=%s, a "
+                   "sysfs node the direct driver does not register"
+                   % virtchk[0])
+    else:
+        ok("run-virt-assertions.sh asserts no shipping-driver waveform")
 
     for label, value in sites:
         if value is None:
@@ -655,6 +626,20 @@ def waveform_enum():
         raise ValueError("no `enum drm_epd_waveform' in the forward-port patch")
     names = re.findall(r"DRM_EPD_WF_(\w+)", match.group(1))
     return dict((name, index) for index, name in enumerate(names))
+
+
+# The policy the ebc-logic replay harness models is the RETIRED shipping
+# driver's (doc/embrace-sweep-plan.md decision 4: that harness stays as a
+# legacy gate over the forward-port driver source until it is ported to the
+# direct driver), so its twins come from this constant, not from the shipped
+# sysfs pair.  flash_frac is the exception: it models the reader's own
+# promotion policy (device.lua), which is live.
+RETIRED_SHIPPING_PARAMS = {
+    "direct_mode": "0", "auto_refresh": "0", "refresh_threshold": "60",
+    "split_area_limit": "0", "panel_reflection": "1",
+    "prepare_prev_before_a2": "0", "dclk_select": "0",
+    "refresh_waveform": "6", "defio_delay_ms": "250",
+}
 
 
 def gate_host_model(shipped):
@@ -978,7 +963,7 @@ def main():
     gate_record_vs_daemon()
     shipped = gate_ebc_params()
     gate_waveform_literals(shipped)
-    gate_host_model(shipped)
+    gate_host_model(RETIRED_SHIPPING_PARAMS if shipped is not None else None)
     gate_conf_keys()
 
     # The register can only shrink: a row that no longer describes the

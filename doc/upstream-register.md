@@ -1051,12 +1051,45 @@ rebind. Benign in effect; still a leak on every failed probe.
 
 **Fix:** restore `goto err_stop_kthread;` and the label
 (`kthread_stop(ebc->refresh_thread);` falling into `err_disable_pm`).
-Two lines.
+Two lines — carried in tree since 2026-09-03 as
+`linux-pinenote-7.1-probe-unwind.patch` (the pin asserts both the
+inherited shape and the fix).
 
 **What has to be true first:** the baseline gate; confirm hrdl's current
 tree still has the bare return (our patch is a snapshot); the pin
 `make direct-probe-quirk-check` goes red when we port the fix or rebase
 over theirs, by design.
+
+## 24. hrdl direct-mode driver: the RECT_HINTS ioctl is unbounded — an inverted rectangle writes past the hint plane; a short copy over-reads the batch
+
+**What:** `rockchip_ebc_apply_rect_hints()` clamps only the low edges of
+each userspace rectangle and then works in unsigned: for `x2 < x1` the
+`x2 - x1` wraps, `min(pixel_pitch, …)` collapses to the pitch, and
+`memset()` writes a whole pitch from `x1` — on the last row, past the end
+of the hint plane (a kernel heap write). A short `copy_from_user()` sets
+`to_process = (copied bytes) % sizeof(record)` and walks that many
+records of a batch that may hold one (an over-read of up to 23 records
+of `rect_hint_batch`-sized heap). A failed `kmalloc_array()` returns
+`-EFAULT`. Found by review 2026-09-02 (an operator-supplied analysis,
+verified line by line against the patch). The ioctl is root-only on the
+DRM node — correctness rather than exposure — but it is memory-unsafe in
+a driver we ship.
+
+**Fix (ours, carried as `linux-pinenote-7.1-rect-hints-bounds.patch`,
+pinned by `make direct-rect-hints-check`):** read each rectangle as the
+signed `drm_mode_rect` it is, clip to the panel, skip inverted or empty
+ones; a short copy applies nothing and fails with `-EFAULT`; `-ENOMEM`
+on allocation failure. Two-dozen-line diff, no behaviour change for
+well-formed input.
+
+**What has to be true first:** the baseline gate; confirm hrdl's tree
+still has the shape (our patch is a snapshot); a synthetic-input test
+under the ebc-logic harness once it targets the direct driver
+(`doc/embrace-sweep-plan.md`, decision 4).
+
+**Ours, fixed in place (not for upstream):** our parallel-advance patch
+ignored `queue_work()`'s return; a `false` would have waited forever on a
+completion nobody signals. It now runs the band inline in that case.
 
 ## 25. RK3566 (PineNote): a kexec leaves the RK817 PMIC's sleep pin on its power-down function, so the next SoC reset powers the chip off instead of rebooting it
 

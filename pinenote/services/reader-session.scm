@@ -126,9 +126,14 @@ end
     ;; from an unresolvable home_dir, it lands in the store directory.
     ;; Like pinenote-dmc, the one-shot exits success even when it does
     ;; nothing, so it can delay the reader but never block it.
+    ;; pinenote-ebc-clut: the reader starts only once the CLUT is compiled
+    ;; and the driver rebound (decision 9 of the embrace sweep,
+    ;; 2026-09-03) -- no race with the first paint.  Off a PineNote the
+    ;; one-shot succeeds doing nothing, so this never blocks the rig.
     (requirement '(udev user-processes orientation-bridge
                    pinenote-platform-controls
-                   pinenote-waveform pinenote-ebc-params
+                   pinenote-waveform pinenote-ebc-direct-params
+                   pinenote-ebc-clut
                    pinenote-dmc pinenote-library))
     (documentation "KOReader running natively on the e-ink framebuffer.")
     (respawn? #t)

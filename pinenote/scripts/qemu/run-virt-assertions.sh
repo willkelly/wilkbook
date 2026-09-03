@@ -223,12 +223,14 @@ probe_round() {
   guile -s "$probe_scm" "$sock" \
     "if grep -q 'Service udev has been started' /var/log/messages; then u=yes; else u=no; fi; echo VIRTCHK-UDEV-\$u" \
     "if grep -q 'Service pinenote-waveform has been started' /var/log/messages; then w=yes; else w=no; fi; echo VIRTCHK-WVF-\$w" \
-    "if grep -q 'Service pinenote-ebc-params has been started' /var/log/messages; then e=yes; else e=no; fi; echo VIRTCHK-EBCP-\$e" \
-    "v=\$(cat /sys/module/rockchip_ebc/parameters/refresh_waveform 2>/dev/null || echo absent); echo VIRTCHK-WF-\$v" \
+    "if grep -q 'Service pinenote-ebc-direct-params has been started' /var/log/messages; then e=yes; else e=no; fi; echo VIRTCHK-EBCP-\$e" \
+    "v=\$(cat /sys/module/rockchip_ebc/parameters/temp_override 2>/dev/null || echo absent); echo VIRTCHK-TO-\$v" \
+    "v=\$(cat /sys/module/rockchip_ebc/parameters/default_hint 2>/dev/null || echo absent); echo VIRTCHK-DH-\$v" \
+    "if grep -q 'Service pinenote-ebc-clut has been started' /var/log/messages; then c=yes; else c=no; fi; echo VIRTCHK-CLUT-\$c" \
+    "if grep -q 'Service pinenote-ebc-splash has been started' /var/log/messages; then s=yes; else s=no; fi; echo VIRTCHK-SPLASH-\$s" \
     "if grep -q 'Service orientation-bridge has been started' /var/log/messages; then o=yes; else o=no; fi; echo VIRTCHK-ORI-SVC-\$o" \
     "if grep -q '^wilkbook-orientation\$' /sys/class/input/event*/device/name 2>/dev/null; then n=yes; else n=no; fi; echo VIRTCHK-ORI-NODE-\$n" \
     "if grep -q 'Service reader-session has been started' /var/log/messages; then r=yes; else r=no; fi; echo VIRTCHK-RDR-\$r" \
-    "if command -v pinenote-ebc-sleep-frame-test >/dev/null 2>&1 && pinenote-ebc-sleep-frame-test --help >/dev/null 2>&1; then b=yes; else b=no; fi; echo VIRTCHK-BARRIER-\$b" \
     "if mountpoint -q /data; then m=yes; else m=no; fi; echo VIRTCHK-DATA-MNT-\$m" \
     "if [ -d /data/books ]; then d=yes; else d=no; fi; echo VIRTCHK-LIB-DIR-\$d" \
     "t=\$(readlink '/data/books/Debian home' 2>/dev/null || echo none); echo VIRTCHK-LIB-PTR-\$t" \
@@ -249,11 +251,13 @@ all_sentinels_present() {
   grep -aq 'VIRTCHK-UDEV-yes' "$log" && \
   grep -aq 'VIRTCHK-WVF-yes'  "$log" && \
   grep -aq 'VIRTCHK-EBCP-yes' "$log" && \
-  grep -aq 'VIRTCHK-WF-6'     "$log" && \
+  grep -aq 'VIRTCHK-TO-22'    "$log" && \
+  grep -aq 'VIRTCHK-DH-32'    "$log" && \
+  grep -aq 'VIRTCHK-CLUT-yes' "$log" && \
+  grep -aq 'VIRTCHK-SPLASH-yes' "$log" && \
   grep -aq 'VIRTCHK-ORI-SVC-yes' "$log" && \
   grep -aq 'VIRTCHK-ORI-NODE-yes' "$log" && \
   grep -aq 'VIRTCHK-RDR-yes'  "$log" && \
-  grep -aq 'VIRTCHK-BARRIER-yes' "$log" && \
   { [ "$expect_data" = "none" ] || {
       grep -aq 'VIRTCHK-DATA-MNT-yes' "$log" && \
       grep -aq 'VIRTCHK-LIB-DIR-yes' "$log" && \
@@ -353,17 +357,22 @@ require 'reached udev service'         'Starting service udev'
 printf '\nRequired service milestones (in-guest probe of /var/log/messages):\n'
 require 'udev service completes'       'VIRTCHK-UDEV-yes'
 require 'waveform one-shot ran'        'VIRTCHK-WVF-yes'
-require 'ebc-params one-shot ran'      'VIRTCHK-EBCP-yes'
-# The live parameter value, not the intent: the 2026-07-05 A.2 image
-# carried refresh_waveform=6 on the cmdline, which the raw initrd module
-# loader silently ignores — the device booted GC16.  Reading the sysfs
-# value from inside the guest is the only check that catches the whole
-# chain (module loaded, one-shot ran, parameter actually took).
-require 'live refresh_waveform is GL16' 'VIRTCHK-WF-6'
+require 'direct-params one-shot ran'   'VIRTCHK-EBCP-yes'
+# The live parameter values, not the intent: the 2026-07-05 A.2 image
+# carried a module parameter on the cmdline, which the raw initrd module
+# loader silently ignores.  Reading the sysfs values from inside the guest
+# is the only check that catches the whole chain (module loaded, one-shot
+# ran, parameters actually took).  Since S2 these are the direct driver's.
+require 'live temp_override is 22'      'VIRTCHK-TO-22'
+require 'live default_hint is 32'       'VIRTCHK-DH-32'
+# The CLUT and splash one-shots succeed doing nothing where there is no
+# panel; reader-session requires the former since S2, so a failure here
+# would keep the reader from starting at all.
+require 'CLUT one-shot ran (no-op here)' 'VIRTCHK-CLUT-yes'
+require 'splash one-shot ran (no-op here)' 'VIRTCHK-SPLASH-yes'
 require 'orientation service started'    'VIRTCHK-ORI-SVC-yes'
 require 'orientation evdev exists'       'VIRTCHK-ORI-NODE-yes'
 require 'reader-session started'       'VIRTCHK-RDR-yes'
-require 'inert EBC barrier command packaged' 'VIRTCHK-BARRIER-yes'
 require 'clean poweroff'               'reboot: Power down'
 
 if [ "$expect_data" != "none" ]; then

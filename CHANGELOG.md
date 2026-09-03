@@ -96,6 +96,19 @@ says otherwise.
   read-plugged-in only; v0.2.0 remains the last direct image that
   sleeps.
 
+### Direct driver: a bounds bug in the rectangle-hint ioctl, fixed in tree
+
+- **A malformed rectangle hint could corrupt kernel memory.** The direct
+  driver's `RECT_HINTS` ioctl (what the pen and UI hint paths will use)
+  took an inverted rectangle as a huge unsigned width and wrote a whole
+  row from its left edge — past the hint plane on the last row; a short
+  copy from userspace walked records that were never copied. Both are
+  fixed by a small patch of ours on top of hrdl's driver, with the
+  inherited shape pinned so a rebase re-approves on purpose
+  (`doc/upstream-register.md` item 24). Nothing in the shipped reader
+  sends malformed rectangles today; this closes the door before the
+  semantic-hint work opens it wider.
+
 ### The update path (designed, enabled, proven in QEMU, and on glass: the first cable-free deploy)
 
 - **Updates without a cable are coming.** `doc/update-path.md` lays out

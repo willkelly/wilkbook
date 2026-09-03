@@ -1,0 +1,88 @@
+drm/rockchip/ebc: bound the RECT_HINTS ioctl -- inverted rectangles wrote past the hint plane
+
+rockchip_ebc_apply_rect_hints() (hrdl's direct-mode driver) took each
+userspace rectangle as unsigned after clamping only its low edges:
+for an inverted rectangle (x2 < x1) the unsigned x2 - x1 wrapped, the
+min() collapsed to the row pitch, and memset() wrote a full pitch from
+x1 -- on the last row, past the end of the hint plane.  Separately, a
+short copy_from_user() counted the copied bytes MODULO the record size
+and walked that many records of a batch that may hold one (an
+over-read of up to 23 records), and a failed kmalloc_array() returned
+-EFAULT.
+
+Now every rectangle is read as the signed drm_mode_rect it is, clipped
+to the panel, and ignored when inverted or empty; a short copy applies
+nothing and fails with -EFAULT; allocation failure is -ENOMEM.  Found
+by review 2026-09-02 (wilkbook doc/upstream-register.md item 24); the
+ioctl is root-only on the DRM node, so this is correctness, not an
+exposure -- but it is a kernel memory-safety bug in a driver we ship.
+
+--- a/drivers/gpu/drm/rockchip/rockchip_ebc.c
++++ b/drivers/gpu/drm/rockchip/rockchip_ebc.c
+@@ -2030,44 +2030,52 @@
+ 		return -EFAULT;
+ 	}
+ 
+ 	struct drm_rockchip_ebc_rect_hint *rect_hint_arr = kmalloc_array(min(rect_hint_batch, num_rects), sizeof(*rect_hints), GFP_KERNEL);
+ 	if (!rect_hint_arr) {
+-		return -EFAULT;
++		return -ENOMEM;
+ 	}
+ 
+ 	size_t processed = 0;
+ 	while (num_rects > 0 && ret == 0) {
+ 		size_t to_process = min(rect_hint_batch, num_rects);
+ 		size_t copy_size = to_process * sizeof(*rect_hints);
+ 		size_t remain = copy_from_user(rect_hint_arr, rect_hints + processed, copy_size);
+ 
+-		// I'm not even sure this can really happen, but for now this will do.
++		/*
++		 * A short copy leaves the tail of the batch undefined: apply
++		 * nothing from it.  (Counting the copied bytes modulo the record
++		 * size, as before, walked up to 23 records of a batch that may
++		 * hold one.)
++		 */
+ 		if (remain > 0) {
+-			// Alternatively, we could do an early return here.
+-			to_process = (copy_size - remain) % sizeof(*rect_hints);
+ 			ret = -EFAULT;
++			break;
+ 		}
+ 
+ 		spin_lock(&ebc->hints_ioctl_lock);
+ 		// TODO: neon blit
+ 		for (int i = 0; i < to_process; ++i) {
+-			struct drm_rect *r = (struct drm_rect *)&(rect_hint_arr[i].rect);
++			const struct drm_mode_rect *r = &rect_hint_arr[i].rect;
+ 			u8 hint = rect_hint_arr[i].hints & ROCKCHIP_EBC_HINT_MASK;
+-
+-			for (unsigned int y = max(0, r->y1);
+-			     y < min(ebc->height, (u32)r->y2); ++y) {
+-				unsigned int x1 = max(0, r->x1);
+-				unsigned int x2 = min(ebc->pixel_pitch, (u32)r->x2);
+-				unsigned int width = min(ebc->pixel_pitch, x2 - x1);
+-				if (x1 < ebc->pixel_pitch)
+-					memset(ebc->hints_ioctl + y * ebc->pixel_pitch + x1, hint, width);
+-			}
++			/*
++			 * Signed, then clipped to the panel; an inverted or empty
++			 * rectangle is ignored.  The unsigned x2 - x1 of an inverted
++			 * rectangle used to wrap, and the memset then covered a whole
++			 * pitch from x1 -- past the plane on the last row.
++			 */
++			int y1 = max(0, r->y1), y2 = min((int)ebc->height, r->y2);
++			int x1 = max(0, r->x1), x2 = min((int)ebc->pixel_pitch, r->x2);
++
++			if (x2 <= x1 || y2 <= y1)
++				continue;
++			for (int y = y1; y < y2; ++y)
++				memset(ebc->hints_ioctl + (size_t)y * ebc->pixel_pitch + x1, hint, x2 - x1);
+ 		}
+ 		spin_unlock(&ebc->hints_ioctl_lock);
+ 
+ 		num_rects -= to_process;
+ 		processed += to_process;
+ 	}
+ 
+ 	kfree(rect_hint_arr);
+ 	return ret;

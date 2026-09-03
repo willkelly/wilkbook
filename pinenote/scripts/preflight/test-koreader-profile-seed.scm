@@ -89,11 +89,11 @@
     ;; never sets wifi_was_on itself when a service brought Wi-Fi up.
     ("auto_restore_wifi" . "true")
     ("wifi_was_on" . "true")
-    ;; The SHIPPING flavor's flash promotion stays at its validated
-    ;; behavior: mandatory UI flashes on, promotion threshold 0.60.
-    ;; Only the direct flavor overrides these (ghosting resolved there).
-    ("avoid_flashing_ui" . "false")
-    ("pinenote_flash_area_fraction" . "0.6")
+    ;; Fewer flashes (decision 7 of the embrace sweep, 2026-09-03): the
+    ;; direct driver resolved ghosting, so mandatory UI flashes are off
+    ;; and promotion is reserved for genuinely full-screen intents.
+    ("avoid_flashing_ui" . "true")
+    ("pinenote_flash_area_fraction" . "0.98")
     ("coverbrowser_initial_default_setup_done" . "true")
     ("full_refresh_count" . "0")
     ("refresh_on_pages_with_images" . "false")

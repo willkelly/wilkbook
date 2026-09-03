@@ -10,7 +10,6 @@
             pinenote-ebc-modprobe-configuration
             pinenote-ebc-modprobe-configuration?
             pinenote-ebc-modprobe-configuration-options
-            pinenote-ebc-params-service-type
             pinenote-ebc-test-service-type
             pinenote-ebc-modprobe-options))
 
@@ -25,28 +24,16 @@
 ;; panfrost today (CONFIG_DRM_PANFROST=m, nothing modprobes it), so this
 ;; is inert until something does — at which point the hazard is real.
 (define pinenote-ebc-modprobe-options
-  "options rockchip_ebc direct_mode=0 auto_refresh=0 refresh_threshold=60 split_area_limit=0 panel_reflection=1 prepare_prev_before_a2=0 dclk_select=0 refresh_waveform=6 defio_delay_ms=250
-softdep panfrost pre: rockchip_ebc\n")
+  ;; One driver (the direct-mode driver, since the embrace sweep's S1) and
+  ;; one string.  Its parameters cannot be set here at all: the initrd
+  ;; raw-loads rockchip_ebc, so modprobe.d never reaches it -- the two that
+  ;; matter (temp_override, default_hint) are written through sysfs by the
+  ;; pinenote-ebc-direct-params one-shot (pinenote services ebc-direct).
+  ;; What remains is the module-ordering softdep both postmarketOS and PNDeb
+  ;; ship: load the EBC driver before the GPU so panfrost never claims the
+  ;; DRM device slot ahead of the display.
+  "softdep panfrost pre: rockchip_ebc\n")
 
-;; This string is DRIVER-SPECIFIC, and the kernel will not tell you when it
-;; is wrong: `unknown_module_param_cb' warns and ignores, so an options line
-;; aimed at the wrong rockchip_ebc loads fine with its intents discarded.
-;; The service type therefore takes the text as configuration -- one service
-;; type, one /etc/modprobe.d/rockchip_ebc.conf, no possibility of two
-;; instances colliding on that file.
-;;
-;; The other set lives in (pinenote services ebc-direct), NOT here: of the
-;; nine parameters named above, exactly ONE (`dclk_select') is registered by
-;; hrdl's direct-mode driver at all, and it is dead code there.  It is a
-;; different configuration for a different driver, and `make settings-check'
-;; requires exactly one
-;; `options rockchip_ebc' line in this file because that one string has three
-;; build-time copies it holds in agreement.  `make ebc-modprobe-options-check'
-;; gates both sets against the module_param registrations of their own driver.
-;;
-;; NOT issue #12 step 3: there is no schema, no validation, and no p7
-;; override path here -- this is a Guix-level field so a flavor can choose,
-;; which is strictly more than the `(_config)' that ignored its argument.
 (define-record-type* <pinenote-ebc-modprobe-configuration>
   pinenote-ebc-modprobe-configuration make-pinenote-ebc-modprobe-configuration
   pinenote-ebc-modprobe-configuration?
@@ -95,33 +82,11 @@ softdep panfrost pre: rockchip_ebc\n")
    (default-value (pinenote-ebc-modprobe-configuration))
    (description "Install PineNote rockchip_ebc module options into /etc/modprobe.d.")))
 
-(define (pinenote-ebc-params-shepherd-service _config)
-  (list
-   (shepherd-service
-    (provision '(pinenote-ebc-params))
-    (requirement '(root-file-system))
-    (documentation "Apply conservative PineNote rockchip_ebc module parameters when sysfs exposes them.")
-    (one-shot? #t)
-    (start
-     #~(lambda _
-         (zero? (system* #$(file-append pinenote-firmware-support
-                                        "/bin/pinenote-apply-ebc-params")))))
-    (stop #~(const #t)))))
-
-(define pinenote-ebc-params-service-type
-  (service-type
-   (name 'pinenote-ebc-params)
-   (extensions
-    (list (service-extension shepherd-root-service-type
-                             pinenote-ebc-params-shepherd-service)))
-   (default-value #f)
-   (description "Apply PNDeb-derived PineNote EBC module parameter defaults.")))
-
 (define (pinenote-ebc-test-shepherd-service _config)
   (list
    (shepherd-service
     (provision '(pinenote-ebc-test))
-    (requirement '(pinenote-waveform pinenote-ebc-params))
+    (requirement '(pinenote-waveform))
     (documentation "Run the read-only PineNote EBC status report once.")
     (one-shot? #t)
     (start
