@@ -821,6 +821,18 @@ guard rebases. Highlights:
 When refreshing the patch or cherry-picking from hrdl/ayakael, check
 whether their trees already fix any of these before re-pinning.
 
+**Direct-mode driver (hrdl's tree), found by source reading 2026-09-02,
+pinned by `make direct-probe-quirk-check`:** the probe's error path after
+a failed `rockchip_ebc_drm_init` is a bare `return ret` — hrdl's patch
+replaced `goto err_stop_kthread` and deleted that label — so a probe that
+fails there leaves runtime PM enabled and the parked refresh kthread
+alive. On the direct image the *first* probe fails there by construction
+(no CLUT until the one-shot compiles it), and the rebind's second
+`pm_runtime_enable` prints `Unbalanced pm_runtime_enable!` on every boot.
+Benign (runtime PM still works; one parked kthread leaked per boot), and
+the driver's lineage owns the two-line fix (`doc/upstream-register.md`
+item 23).
+
 ## Why the base is vanilla, not linux-libre (history)
 
 The forward-port originally sat on Guix's `linux-libre`. That can never

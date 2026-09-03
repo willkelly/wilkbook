@@ -65,7 +65,13 @@ one.)
 
 Also observed: `rockchip-ebc fdec0000.ebc: Unbalanced pm_runtime_enable!`
 at the direct driver's rebind — present on the cold boots of this image
-too, not a kexec artifact; unexamined. Auto-suspend is paused for the
+too, not a kexec artifact. **Root-caused from the source the same
+night:** hrdl's direct-mode patch replaced the probe's
+`goto err_stop_kthread` after a failed `rockchip_ebc_drm_init` with a
+bare `return ret`, so the by-construction first probe (no CLUT yet)
+returns with runtime PM still enabled and the parked refresh kthread
+alive; the one-shot's rebind enables runtime PM again. Benign
+(`doc/kernel-forward-port.md` quirks; `doc/upstream-register.md` 23). Auto-suspend is paused for the
 session (`/data/wilkbook/autosuspend.conf` = `enabled=0`). Evidence: the
 full UART capture of every boot and hang, and the deploy logs, in the
 session scratchpad; the kernel-side findings and fixes in

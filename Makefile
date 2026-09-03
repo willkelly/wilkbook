@@ -79,7 +79,7 @@ FLAVORS = minimal slim networked dev usb-console usb-console-linux-6-6 reader re
         timezone-check kernel-version-check library-check \
         manuals-check ultra-coupling-check timesync-check \
         settings-check koreader-profile-check ebc-modprobe-options-check \
-        ebc-clut-check ebc-card-resolution-check ebc-ioctl-roster-check update-path-check deploy reader-stop-check pen-check ebc-lab-check \
+        ebc-clut-check ebc-card-resolution-check ebc-ioctl-roster-check direct-probe-quirk-check update-path-check deploy reader-stop-check pen-check ebc-lab-check \
         $(FLAVORS) $(addprefix image-,$(FLAVORS)) $(addprefix rootfs-,$(FLAVORS))
 
 help:
@@ -101,6 +101,7 @@ help:
 	@echo "  clut-check        C CLUT compiler vs hrdl's wbf_to_custom.py, byte-identical ([WBF=..] [CLUT_REF=..])"
 	@echo "  ebc-clut-check    the direct-mode CLUT installer one-shot, driven through every branch"
 	@echo "  ebc-ioctl-roster-check  every on-device EBC ioctl against the driver(s) it runs on (both UAPI headers from the patches)"
+	@echo "  direct-probe-quirk-check  quirk: the direct driver's probe returns bare after a failed drm_init (pinned, reported)"
 	@echo "  update-path-check the update path: generation ledger, extlinux rendering, trial/promote pins"
 	@echo "  deploy            DEVICE=<ssh host>: build, guix copy, add generation, kexec trial, health, promote"
 	@echo "  qemu-update-check ROOTFS=<ext4> [SYSTEM_B=..]: the update flow end to end in QEMU (rung 4u)"
@@ -372,7 +373,7 @@ CHECK_HOST_TARGETS = clut-check ebc-logic-check ebc-barrier-check rastersim-chec
         library-check koreader-profile-check manuals-check ultra-coupling-check \
         battery-dtb-check time-machine-check gexp-modules-check \
         timezone-check refresh-trigger-check timesync-check settings-check \
-        ebc-modprobe-options-check ebc-clut-check ebc-card-resolution-check ebc-ioctl-roster-check \
+        ebc-modprobe-options-check ebc-clut-check ebc-card-resolution-check ebc-ioctl-roster-check direct-probe-quirk-check \
         update-path-check reader-stop-check pen-check ebc-lab-check
 
 # Parse time, not recipe time: a recipe-level guard would run only AFTER every
@@ -589,6 +590,13 @@ ebc-card-resolution-check:
 # ioctl user against the driver(s) it is declared for; positive-controlled.
 ebc-ioctl-roster-check:
 	python3 pinenote/scripts/preflight/validate-ebc-ioctl-roster.py
+
+# quirk: the direct-mode driver's probe leaks runtime PM and the parked
+# refresh kthread on a failed drm_init (the by-construction first probe of
+# the direct image), hence "Unbalanced pm_runtime_enable!" at every rebind.
+# Inherited from hrdl's tree; pinned so a rebase re-approves on purpose.
+direct-probe-quirk-check:
+	sh pinenote/scripts/preflight/validate-direct-probe-quirk.sh
 
 # The update path's pure decisions (generation ledger, extlinux rendering,
 # promote/prune/health) and the structural pins on its imperative halves
