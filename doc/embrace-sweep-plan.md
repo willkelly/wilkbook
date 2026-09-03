@@ -165,6 +165,85 @@ and command line). Then the shipping-reader validation list in
 list, the next prealpha tag ships `reader`, singular
 (`doc/alpha-checklist.md` gains the row).
 
+## After the sweep: the display program, in order
+
+From an operator-supplied review of the direct driver (2026-09-02),
+checked line by line against the tree where it made concrete claims.
+Two clarifications it makes are worth keeping in front of every reader
+of this repo: "direct" means two things here — KOReader rendering
+straight into `/dev/fb0` with no compositor (an unambiguous win, keep
+it), and hrdl's kernel driver generating panel phases in software with
+per-pixel transition state (valuable, especially for the pen, and more
+general than a page turn needs). And the driver's per-pixel loop moves
+about 8 bytes per pixel per panel advance (three bytes of transition
+state read and written, target, hint, the packed phase) — roughly 20 MiB
+per full-panel advance, ~1.7 GiB/s at the 12 ms cadence — so the
+optimisation target is memory traversal and unnecessary state work, not
+the two-bit output packing; the documented 56 vs 335 MB/s figure is the
+phase-buffer side only.
+
+What the review claimed about the code, and what the tree says:
+
+- **Confirmed and fixed in tree (branch `rect-hints-bounds`,
+  `doc/upstream-register.md` 24):** the `RECT_HINTS` ioctl counted a
+  short copy modulo the record size (an over-read), took an inverted
+  rectangle as a huge unsigned width and wrote a whole pitch past the
+  hint plane, and returned `-EFAULT` on allocation failure; our
+  parallel-advance patch ignored `queue_work()`'s return.
+- **Confirmed, reported, not fixed (register 23):** the probe's bare
+  return after a failed `drm_init` leaks runtime PM and the refresh
+  kthread.
+- **Confirmed stale:** KOReader's device layer said "32bpp XR24" (the
+  direct driver is RGB565; fixed); hrdl's "direct mode (not implemented
+  yet)" comment (left, reported with 23).
+- **Correct as a caveat on our numbers:** 11.9 ms full-panel is
+  panel-clamped and measured at 1.8 GHz; it does not show the margin,
+  and it does not show what a 1.0 GHz cap would do. Instrument before
+  deciding frequencies: advance duration p50/p95/p99/max, dispatch delay
+  per CPU, barrier wait, missed scans, active pixel/tile count, CPU and
+  DDR frequency, temperature, energy per update.
+
+The order the review recommends, which this plan adopts as the display
+track after S1–S6 (each item is its own work item; none is part of the
+sweep):
+
+1. **Correctness** — done for the hint ioctl (above); the probe unwind
+   goes to the lineage with our report.
+2. **Deterministic RT workers** — replace the system-unbound-wq bands
+   with a persistent pinned FIFO coordinator and per-CPU FIFO band
+   workers (generation-numbered jobs, bounded waits, missed-deadline
+   accounting), and add the telemetry above. Decides whether dense
+   updates need four cores and narrow stylus clips one.
+3. **Semantic KOReader hints** — today `refreshPartial/UI/Fast/A2` all
+   end in the same `fsync`; wire intent to what the UAPI already has:
+   page turn NORMAL + Y4 (no automatic REDRAW unless optics demand it),
+   small transient UI NORMAL + Y1/Y2 rectangle hints, annotation NORMAL
+   with Y1/Y2 over live ink and a Y4 settle over the dirty region after
+   pen-up, an explicit sketch mode that enters FAST once per session and
+   settles on exit. Mode switching is session-level, never per sample.
+   The biggest visible win available without new kernel work.
+4. **A real completion fence** — a driver-defined generation
+   (submitted → accepted → all frames emitted → scan finished /
+   quiescent) that a caller can wait on, replacing the broker's 250 ms
+   interrupt-silence heuristic (which passed suspend on glass but is a
+   heuristic). Makes pen settle, suspend, tests and mode transitions
+   formal. A future submit API carries generation, intent, damage rects
+   and hints in one call.
+5. **Sparse active tiles** — a 16×16/32×32 tile bitmap or row spans
+   inside the coarse bounding rectangle, so two far-apart UI islands or a
+   stylus stroke do not process the empty interior. The disabled
+   `shrink_virtual_window` points at this on the fetch side only.
+6. **Dense page-turn specialisation inside NORMAL** — when damage is
+   dense, hints uniformly Y4, no REDRAW, no new damage, one epoch: skip
+   per-pixel hint reads, cancellation checks, redraw bookkeeping, the
+   scalar LUT gathers for blocks not crossing a phase, and some state
+   writes. Measure; only then consider a separate bulk representation
+   (old page, new page, shared frame and mode, promoted tiles for
+   mid-update changes).
+
+Not adopted: tighter state packing. The byte-planar layout is what makes
+the NEON path simple; packing would cost more shuffling than bandwidth.
+
 ## Bail-out
 
 `doc/direct-mode-adoption.md`'s bail-out criteria stay live. Until S6
