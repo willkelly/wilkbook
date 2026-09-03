@@ -661,6 +661,17 @@ Record anything that took a hardware session to discover:
 - Kernel arguments that matter are centralized in
   `pinenote/images/pinenote-initramfs.scm`
   (`earlycon console=tty0 console=ttyS2,1500000n8 fw_devlink=off`).
+- **kexec on the RK3566 needs two things (2026-09-02, glass).**
+  `irqchip.gicv3_nolpi=1` on every flavor: the GICv3 LPI tables are not
+  reserved across a non-EFI kexec and this GIC cannot clear
+  `EnableLPIs`, so a kexec'd kernel otherwise boots on corrupted tables
+  (nothing on the PineNote uses LPIs). And, on the kexec command line
+  only, `initcall_blacklist=rockchip_grf_init`: the running kernel gates
+  `pclk_pipe` as unused, U-Boot leaves it on, and the next kernel's GRF
+  init writes the PIPE GRF into the unclocked block and hangs the bus at
+  0.12 s with no message. The generation helper adds it; cold boots keep
+  the init. Proper fix and evidence: `doc/upstream-register.md` 22,
+  `doc/update-path.md` "Glass notes".
 - **`module.param=` cmdline tokens are inert for our modules**
   (2026-07-05, found live on the A.2 boot): the kernel only applies
   cmdline parameters to *built-in* modules; for loadable ones it is

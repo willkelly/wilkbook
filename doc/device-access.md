@@ -174,6 +174,12 @@ unattended reboot always lands on os1. Booting os2 takes either a human
 at the menu (on-device, no cable) or an agent driving the menu over
 UART, since an agent has no fingers or eyes. The old text: needs either a working
 UART or a human at the menu.
+`pinenote/scripts/uart/uboot-pick-slot.sh LOG --slot os2 [--reboot
+<os1-ssh-dest>]` is that agent: one reboot attempt, no reconnect until
+the menu is drawn, two DOWNs + ENTER, and the capture keeps running so
+the whole boot lands in LOG (it used to live in a session scratchpad and
+was lost with it; 2026-09-02 it picked os2 at poll 23 and recorded the
+first kexec on glass).
 
 ## SSH to the deployed reader
 

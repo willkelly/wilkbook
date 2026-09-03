@@ -137,24 +137,90 @@ teardown as a suspend (EBC quiesce, gadget unbind, Wi-Fi off) before
   VM (the guix copy nar pipe over plain OpenSSH), `add`, `trial` (kexec
   inside the VM), verify B answers as `/run/current-system`, `promote`,
   then roll back to A. The mechanism end-to-end, no glass.
-- **Glass** (UART-attended): the SoC-specific unknowns — kexec on
-  RK3566 with the BSP firmware, the EBC and TPS65185 through a warm
-  restart, brcmfmac over SDIO, the waveform install running again in
-  the new initrd.
+- **Glass** (UART-attended) — **done 2026-09-02**: the enabling image
+  was written to os2 by the dd protocol, generation 3 (a cross-built
+  system) was promoted and cold-booted from the helper's own extlinux
+  menu, and generation 4 went through the whole `make deploy` path
+  hands-off — 13-path delta, add, trial kexec, health, promote, prune —
+  with the panel re-probing on its own waveform, the reader, the ACM
+  gadget and brcmfmac all back. The SoC unknowns are answered below.
 
 ## Open questions
 
 - Does the stock U-Boot read anything but ext4/FAT? (`version`, and
   whether `help` lists `btrls`.) First item at the next cable session;
   it decides the deferred filesystem question, not phase 1.
-- kexec on this SoC: does the panel need to be powered down (not just
-  quiesced) before the kernel is replaced? What does the TPS65185 do
-  through a warm restart?
+- ~~kexec on this SoC: does the panel need to be powered down?~~
+  Answered 2026-09-02: quiesced is enough. The EBC re-probes in the new
+  kernel, loads the device's waveform and the reader paints; the
+  TPS65185 came through four warm restarts. What kexec *does* need on
+  the RK3566 is in the glass notes below.
 - Store growth policy: how many generations to keep on a 15.7 GB slot
   (default K=3), and when `guix gc` runs (only from the deployer, never
-  on a timer).
+  on a timer). First data point: four generations of the reader used
+  2.0 GB of the 15 GB slot; prune to two took it to the same 2.0 GB
+  (the generations share nearly everything).
 - Whether the nar transfer over Wi-Fi is fast enough for a kernel-sized
   delta (~100 MB) to feel routine.
+
+## Glass notes (what the first kexecs on the PineNote taught, 2026-09-02)
+
+Three kexecs hung identically before the fourth booted; each hang cost
+a power-cycle (the kexec'd kernel stalls before its serial driver is
+up, so serial-BREAK sysrq cannot reach it — the debug cable carries no
+reset line). Every one stalled at the same line, `DMA: preallocated
+512 KiB … pool`, 0.12 s in, then reported a workqueue lockup on
+whichever CPU was running init. Two real defects were found; one was
+the hang.
+
+- **The GICv3's LPI tables are not reserved across a non-EFI kexec.**
+  The running kernel allocates them in ordinary memory and only an
+  EFI boot persists a reservation for the next kernel
+  (`gic_reserve_range` is a silent no-op otherwise); this GIC latches
+  `GICR_CTLR.EnableLPIs`, so the kexec'd kernel printed "Booted with
+  LPIs enabled, memory probably corrupted" and "Failed to disable
+  LPIs" on all four CPUs. LPIs serve PCIe message-signalled interrupts;
+  the PineNote has no PCIe node and `/proc/interrupts` shows no ITS
+  user, so every flavor now boots with `irqchip.gicv3_nolpi=1` and a
+  kexec'd kernel inherits a clean controller. Real, fixed — and **not
+  the hang**: a kexec from a nolpi kernel into a nolpi kernel stalled
+  at the same line.
+- **The hang: `rockchip_grf_init` writes the PIPE GRF with its clock
+  gated.** In link order the postcore initcalls between the DMA pool
+  and the thermal core are few, and the only unconditional hardware
+  write among them is the rk3566 table in `drivers/soc/rockchip/grf.c`:
+  three USB3-OTG bits into the PIPE GRF at `0xfdc50000`. That block
+  sits on `pclk_pipe`, which nothing in the PineNote's tree uses, so
+  the running kernel gates it as unused (`clk_summary`: enable count
+  0); U-Boot hands a cold boot with it running. An APB write into an
+  unclocked block never completes — no fault, no message. Proof: a
+  kexec with `initcall_debug initcall_blacklist=rockchip_grf_init`
+  booted all the way, USB gadget included (the GRF keeps the cold
+  boot's values across a kexec, so the write is redundant there). The
+  helper therefore appends `initcall_blacklist=rockchip_grf_init` to
+  the kexec command line on a PineNote, and nowhere else: cold boots
+  keep the init. The proper fix is a kernel one — a `clocks` reference
+  on the `pipegrf` syscon so regmap clocks the access, or
+  `CLK_IGNORE_UNUSED` on `pclk_pipe` — recorded as
+  `doc/upstream-register.md` item 22.
+- **The trial runs the helper the target generation ships.** The
+  running generation's helper could not know the skip; the deployer now
+  invokes `<target system>/profile/bin/wilkbook-generation trial N`, so
+  a kexec-preparation fix applies to the first kexec that needs it. A
+  generation that predates the fix cannot be *trialled into* (the
+  pre-fix generations 1 and 2 were pruned for that reason); it can still
+  be cold-booted from the menu.
+- **U-Boot reads the helper's menu.** The rendered `extlinux.conf`
+  (`MENU TITLE wilkbook generations`, one `LABEL` per kept generation,
+  `DEFAULT` the promoted one, `TIMEOUT 30`) was parsed by the stock
+  U-Boot on the first power-cycle and booted the promoted generation;
+  after `promote 3` and a plain reboot it booted generation 3 cold with
+  no key pressed at the extlinux stage.
+- **Recovery is what the design said.** A trial that hangs leaves
+  `DEFAULT` on the last good generation; the power button plus the
+  UART slot pick (`pinenote/scripts/uart/uboot-pick-slot.sh`) brought
+  it back three times. A generation is proven only by *both* boots: the
+  kexec trial and, for anything that changes early boot, a cold one.
 
 ## Rig notes (what the QEMU flow taught, 2026-09-02)
 

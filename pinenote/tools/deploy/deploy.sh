@@ -29,7 +29,10 @@ wait_for_ssh() {
 trial_health_promote() {
   gen=$1; expect=$2; keep=$3
   echo "== trial: kexec into generation $gen (DEFAULT unchanged; the ssh link dies with the old kernel)"
-  timeout 90 ssh -o ConnectTimeout=10 -o BatchMode=yes -o ServerAliveInterval=5 -o ServerAliveCountMax=2 "root@$device" "wilkbook-generation trial $gen" || true
+  # The trial runs the helper the TARGET generation ships, not the running
+  # one: a fix to how a kexec is prepared must apply to the first kexec that
+  # needs it (2026-09-02: the running helper could not skip the GRF init).
+  timeout 90 ssh -o ConnectTimeout=10 -o BatchMode=yes -o ServerAliveInterval=5 -o ServerAliveCountMax=2 "root@$device" "\$(cat /boot/gen-$gen/system)/profile/bin/wilkbook-generation trial $gen" || true
   echo "== waiting for the new generation to answer ssh"
   sleep 15
   wait_for_ssh || { echo "NOT PROMOTED: generation $gen never answered; a power-cycle boots the previous DEFAULT" >&2; exit 1; }

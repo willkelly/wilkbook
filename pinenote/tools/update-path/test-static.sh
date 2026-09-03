@@ -55,3 +55,21 @@ grep -q 'stale SYSTEM_B or ROOTFS' "$harness"
 grep -q 'cmp -s "$tree_helper" "$shipped"' "$harness"
 [ "$(grep -c 'sed "s/^/        trial> /"' "$harness")" -eq 2 ]
 echo "PASS: the rig refuses a generation whose helper is not the tree's and keeps each trial's output"
+# kexec on the RK3566 (first glass trial 2026-09-02): the kexec'd kernel found
+# the GICv3 LPI tables enabled and unreserved (no EFI to persist them) and
+# hung; the PineNote has no LPI user, so LPIs are never enabled.
+grep -q '"irqchip.gicv3_nolpi=1"' "$here/../../images/pinenote-initramfs.scm"
+echo "PASS: every flavor boots with LPIs disabled, so a kexec'd kernel inherits a clean GIC"
+# kexec on the RK3566 (glass, 2026-09-02): the next kernel's rockchip_grf_init
+# writes the PIPE GRF, left unclocked by the previous kernel, and hangs the bus
+# at 0.12 s; the values persist from the cold boot, so the kexec path -- and only
+# the PineNote kexec path -- skips that initcall.
+grep -q 'if pinenote then append = append .. " initcall_blacklist=rockchip_grf_init" end' "$helper"
+after 'initcall_blacklist=rockchip_grf_init' 'kexec -l %s/Image' "$helper"
+! grep -q 'initcall_blacklist' "$here/../../images/pinenote-initramfs.scm"
+echo "PASS: the kexec path skips the GRF init that hangs a warm RK3566; cold boots keep it"
+# The trial runs the target generation's helper, so a kexec-preparation fix
+# applies to the first kexec that needs it.
+grep -q 'cat /boot/gen-$gen/system)/profile/bin/wilkbook-generation trial $gen' "$deploy"
+! grep -q '"wilkbook-generation trial $gen"' "$deploy"
+echo "PASS: the deployer's trial runs the helper shipped by the generation on trial"

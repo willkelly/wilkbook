@@ -194,6 +194,17 @@ function commands.trial(n)
         log("machine model %q: no EBC to quiesce", model)
     end
     local dtb_arg = pinenote and string.format(" --dtb=%s/%s", dir, L.DTB_NAME) or ""
+    -- On the RK3566 a kexec'd kernel hangs, silently, 0.12 s into boot: its
+    -- early rockchip_grf_init writes three USB3-OTG bits into the PIPE GRF,
+    -- whose APB clock (pclk_pipe) the previous kernel gated as unused --
+    -- U-Boot hands a cold boot with it running -- and the bus never
+    -- answers (the pipe power domain itself was on).  The values it
+    -- would write are already there -- the cold boot wrote them and the
+    -- GRF persists across a kexec -- so on the kexec path, and only there,
+    -- that initcall is skipped.  Cold boots are untouched.  Proven on
+    -- glass 2026-09-02: three hangs at the same line, then a full boot
+    -- with exactly this argument (doc/update-path.md).
+    if pinenote then append = append .. " initcall_blacklist=rockchip_grf_init" end
     -- Likewise the generation's console: ttyS2 is the PineNote's UART.  On
     -- QEMU virt the console is the PL011 (ttyAMA0); a kernel told to use a
     -- console that does not exist leaves the initrd's init unable to open
