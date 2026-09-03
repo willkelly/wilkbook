@@ -365,7 +365,7 @@ static void synth_default(struct synth_params *sp)
 	sp->menus = 2;
 	sp->full_every = 6;
 	sp->seed = 42;
-	sp->flash_frac = 0.60;
+	sp->flash_frac = 0.98;	/* device.lua flash_area_fraction (S2, 2026-09-03) */
 }
 
 static void synth_line(FILE *f, double t, enum replay_intent in,
@@ -461,7 +461,7 @@ static void policy_ship(struct policy *p)
 	 * now pins these three values against ebc.scm, so the next drift is
 	 * a build failure rather than a silent reprice. */
 	memset(p, 0, sizeof(*p));
-	p->flash_frac = 0.60;
+	p->flash_frac = 0.98;
 	p->default_wf = DRM_EPD_WF_GC16;
 	p->refresh_wf = DRM_EPD_WF_GL16;
 	p->auto_refresh = false;	/* shipped since 2026-07-11 (b9bbc0e) */

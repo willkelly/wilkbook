@@ -89,7 +89,7 @@ EBC_DIRECT_SCM = "pinenote/services/ebc-direct.scm"
 # act that has to update this pin AND re-verify that the reader system
 # derivation moved for a reason.
 SHIPPING_OPTIONS_SHA256 = \
-    "d57aef241ceb8a8e763214dfc6210109f67332a41d6ad7563a3425b3c935f077"
+    "6a348e86210480d097601d24a2b42d968734cba02b816e6ba6c061693534e3e6"
 
 # Config symbols that guard a module_param in either driver.  A guard
 # symbol that is NOT in the relevant table is a hard failure, never a
@@ -463,91 +463,120 @@ def gate_membership(ours, hrdl, hrdl_3win):
            "CONFIG_DRM_ROCKCHIP_EBC_3WIN_MODE is on, and it is off")
 
 
+# The nine-parameter line the SHIPPING driver used to take.  Retired by the
+# embrace sweep (2026-09-03): the direct driver is the shipping driver, module
+# parameters cannot reach an initrd-loaded module anyway, and the two that
+# matter go through sysfs.  It survives here as the POSITIVE CONTROL -- the
+# string this gate must still be able to REJECT against hrdl's driver, which is
+# what says the comparison works.
+RETIRED_SHIPPING_OPTIONS = (
+    "options rockchip_ebc direct_mode=0 auto_refresh=0 refresh_threshold=60 "
+    "split_area_limit=0 panel_reflection=1 prepare_prev_before_a2=0 "
+    "dclk_select=0 refresh_waveform=6 defio_delay_ms=250\n"
+    "softdep panfrost pre: rockchip_ebc\n")
+
+SYSFS_PUT_RE = re.compile(r'\(put "(\w+)" "([^"]*)"\)')
+
+
 def gate_options(ours, hrdl):
-    shipping_source = read(EBC_SCM)
-    shipping = scheme_string(shipping_source, "pinenote-ebc-modprobe-options",
-                             EBC_SCM)
-    digest = hashlib.sha256(shipping.encode()).hexdigest()
+    live_source = read(EBC_SCM)
+    live = scheme_string(live_source, "pinenote-ebc-modprobe-options", EBC_SCM)
+    digest = hashlib.sha256(live.encode()).hexdigest()
     if digest != SHIPPING_OPTIONS_SHA256:
         bad("the shipping options text changed (sha256 %s, pinned %s).\n"
             "      now: %r\n"
             "      If that is deliberate: update SHIPPING_OPTIONS_SHA256 "
             "and re-verify the reader system derivation moved for a reason."
-            % (digest, SHIPPING_OPTIONS_SHA256, shipping))
+            % (digest, SHIPPING_OPTIONS_SHA256, live))
     else:
         ok("the shipping options text is unchanged (sha256 pin)")
 
-    shipped = options_parameters(shipping)
-    if len(shipped) < 3:
-        bad("only %d shipping parameters parsed; the extractor is broken"
-            % len(shipped))
-    unknown = sorted(name for name in shipped if name not in ours)
-    if unknown:
-        bad("the shipping options name %d parameter(s) our own driver does "
-            "not register: %s" % (len(unknown), ", ".join(unknown)))
+    # 1. The live string names NO parameter: the initrd raw-loads the
+    #    module, so an `options rockchip_ebc' line is an intent the kernel
+    #    never sees.  The two that matter go through sysfs (below).
+    live_params = options_parameters(live)
+    if live_params:
+        bad("the shipping options name %d parameter(s) (%s) -- modprobe.d "
+            "cannot reach the initrd-loaded module; put them in the "
+            "pinenote-ebc-direct-params one-shot"
+            % (len(live_params), ", ".join(sorted(live_params))))
     else:
-        ok("all %d shipping parameters are registered by our driver"
-           % len(shipped))
+        ok("the shipping options carry no module parameters (they would be inert)")
+    if "softdep panfrost pre: rockchip_ebc" not in live:
+        bad("the shipping options dropped the panfrost softdep, the "
+            "module-ordering guard both postmarketOS and PNDeb ship")
+    else:
+        ok("the shipping options keep the panfrost softdep")
 
-    # POSITIVE CONTROL.  The direct-mode options name no parameters, so
-    # the check below them passes over an empty set.  Run the same
-    # comparison on the string we would otherwise have shipped and
-    # require it to be rejected -- that is what says the comparison works.
-    would_break = sorted(name for name in shipped if name not in hrdl)
+    # 2. POSITIVE CONTROL over the retired nine-parameter line: the old
+    #    driver registered every name (the extractor works over the
+    #    forward-port source) and hrdl's driver rejects most of them (the
+    #    comparison can go red).
+    retired = options_parameters(RETIRED_SHIPPING_OPTIONS)
+    if len(retired) < 3:
+        bad("only %d retired parameters parsed; the extractor is broken"
+            % len(retired))
+    unknown = sorted(name for name in retired if name not in ours)
+    if unknown:
+        bad("the retired shipping options name %d parameter(s) the "
+            "forward-port driver does not register: %s -- the extractor "
+            "over our own source is broken" % (len(unknown), ", ".join(unknown)))
+    else:
+        ok("control: all %d retired shipping parameters are registered by the "
+           "forward-port driver" % len(retired))
+    would_break = sorted(name for name in retired if name not in hrdl)
     if len(would_break) < 7:
-        bad("positive control failed: the shipping options should be "
+        bad("positive control failed: the retired shipping options should be "
             "rejected against hrdl's driver, but only %d of %d names are "
             "unknown to it (%s)"
-            % (len(would_break), len(shipped), ", ".join(would_break)))
+            % (len(would_break), len(retired), ", ".join(would_break)))
     else:
-        ok("positive control -- the shipping options are REJECTED against "
-           "hrdl's driver: %d of %d names unknown (%s).  The kernel would "
-           "not refuse this: it warns and ignores, so every one of those "
-           "intents would evaporate silently"
-           % (len(would_break), len(shipped), ", ".join(would_break)))
+        ok("positive control -- the retired shipping options are REJECTED "
+           "against hrdl's driver: %d of %d names unknown (%s).  The kernel "
+           "would not refuse this: it warns and ignores"
+           % (len(would_break), len(retired), ", ".join(would_break)))
 
+    # 3. What actually ships: the sysfs pair the direct params one-shot
+    #    writes must be parameters hrdl's driver registers.
     direct_source = read(EBC_DIRECT_SCM)
-    direct = scheme_string(direct_source,
-                           "%pinenote-ebc-direct-modprobe-options",
-                           EBC_DIRECT_SCM)
-    direct_params = options_parameters(direct)
-    unknown = sorted(name for name in direct_params if name not in hrdl)
+    sysfs = dict(SYSFS_PUT_RE.findall(direct_source))
+    if set(sysfs) != {"temp_override", "default_hint"}:
+        bad("the direct params one-shot writes %s; expected exactly "
+            "temp_override and default_hint (re-approve if deliberate)"
+            % sorted(sysfs))
+    unknown = sorted(name for name in sysfs if name not in hrdl)
     if unknown:
-        bad("the direct-mode options name %d parameter(s) hrdl's driver "
-            "does not register: %s" % (len(unknown), ", ".join(unknown)))
+        bad("the direct params one-shot writes %d sysfs parameter(s) hrdl's "
+            "driver does not register: %s" % (len(unknown), ", ".join(unknown)))
     else:
-        ok("all %d direct-mode parameters are registered by hrdl's driver"
-           % len(direct_params))
+        ok("the direct params one-shot's %d sysfs parameters (%s) are "
+           "registered by hrdl's driver"
+           % (len(sysfs), ", ".join("%s=%s" % kv for kv in sorted(sysfs.items()))))
+
+    # 4. The alias (pinenote services ebc-direct) exports is the same
+    #    binding, not a second string that could drift.
+    if not re.search(r"\(define %pinenote-ebc-direct-modprobe-options\n"
+                     r"(?:\s*;;[^\n]*\n)*\s*pinenote-ebc-modprobe-options\)",
+                     direct_source):
+        bad("%%pinenote-ebc-direct-modprobe-options is no longer an alias of "
+            "pinenote-ebc-modprobe-options (a second string could drift)")
+    else:
+        ok("%pinenote-ebc-direct-modprobe-options aliases the shipping string")
 
     # dclk_select is the trap this gate was written around: it is a real
     # parameter of his driver, it accepts our shipped value, it shows up
     # in sysfs -- and rockchip_ebc_set_dclk() returns before reading it
     # whenever direct_mode is true, which it always is for us.  #23's
     # 250 MHz / 79.68 Hz measurement does not transfer.
-    if "direct_mode" not in hrdl and "dclk_select" in direct_params:
-        bad("the direct-mode options set dclk_select, which "
-            "rockchip_ebc_set_dclk() never reads in direct mode (it "
-            "returns after clamping cpll_333m to 33.33 MHz and dclk to "
-            "34 MHz).  Setting it is a knob that does nothing.")
+    if "dclk_select" in sysfs or "dclk_select" in live_params:
+        bad("dclk_select is set, which rockchip_ebc_set_dclk() never reads "
+            "in direct mode (it returns after clamping cpll_333m to "
+            "33.33 MHz and dclk to 34 MHz).  Setting it is a knob that does "
+            "nothing.")
     else:
-        ok("the direct-mode options do not set dclk_select (dead code in "
-           "direct mode)")
+        ok("nothing sets dclk_select (dead code in direct mode)")
 
-    if direct_params.get("limit_fb_blits") == "0":
-        bad("limit_fb_blits=0 means `allow zero framebuffer blits' -- "
-            "nothing would ever reach the panel.  It is NOT the analogue "
-            "of our split_area_limit=0.")
-    else:
-        ok("limit_fb_blits is not pinned to 0")
-
-    if "softdep panfrost pre: rockchip_ebc" not in direct:
-        bad("the direct-mode options dropped the panfrost softdep, which "
-            "is the module-ordering guard both postmarketOS and PNDeb "
-            "ship and is orthogonal to which EBC driver is loaded")
-    else:
-        ok("the direct-mode options keep the panfrost softdep")
-
-    return shipping, direct
+    return live, sysfs
 
 
 def scheme_literal(text):
@@ -568,45 +597,32 @@ RUNNER_TEMPLATE = r"""(use-modules (gnu services)
         (set! failures (+ failures 1))
         (format #t "FAIL: guix repl: ~a: got ~s want ~s~%" name got want))))
 
-(check "the direct options value matches the text this gate parsed"
-       %pinenote-ebc-direct-modprobe-options @DIRECT@)
-
-(check "the record default is the shipping text"
+(check "the record default is the shipping text this gate parsed"
        (pinenote-ebc-modprobe-configuration-options
         (pinenote-ebc-modprobe-configuration))
        @SHIPPING@)
 
-(check "the direct service carries the direct options"
-       (pinenote-ebc-modprobe-configuration-options
-        (service-value (pinenote-ebc-direct-modprobe-service)))
-       %pinenote-ebc-direct-modprobe-options)
+(check "the direct alias is the same string"
+       %pinenote-ebc-direct-modprobe-options @SHIPPING@)
 
 (exit failures)
 """
 
 
-def gate_scheme_evaluates(shipping, direct):
+def gate_scheme_evaluates(shipping):
     """Actually LOAD the Scheme, when guix is available to load it with.
 
-    Nothing in the tree imports (pinenote services ebc-direct) yet -- no
-    flavor consumes it -- so no `guix system build' would ever compile it
-    and a typo could sit there indefinitely.  This also cross-checks the
-    text parser above against the real values, which is the only thing
-    that says the regex reading of the sources is honest.
-
+    This cross-checks the text parser above against the real values, which
+    is the only thing that says the regex reading of the sources is honest.
     CI has guile but no guix, so this SKIPS there and says so: a green run
     without it has not evaluated a line of Scheme.
     """
     if shutil.which("guix") is None:
         print("SKIP: the Scheme was NOT evaluated -- no guix on PATH.")
-        print("      Everything above is text analysis: it does not prove")
-        print("      (pinenote services ebc-direct) even loads, and nothing")
-        print("      else in the tree imports it.  Run locally:")
+        print("      Everything above is text analysis.  Run locally:")
         print("      make ebc-modprobe-options-check")
         return
-    runner = RUNNER_TEMPLATE \
-        .replace("@DIRECT@", scheme_literal(direct)) \
-        .replace("@SHIPPING@", scheme_literal(shipping))
+    runner = RUNNER_TEMPLATE.replace("@SHIPPING@", scheme_literal(shipping))
     # The runner lives OUTSIDE the tree: `guix build -L .' evaluates every
     # .scm it walks, and a file with top-level side effects would run
     # inside unrelated builds (the 2026-08-24 sentinel finding in
@@ -622,19 +638,30 @@ def gate_scheme_evaluates(shipping, direct):
             % (result.returncode, result.stderr.strip().splitlines()[-1]
                if result.stderr.strip() else "no stderr"))
     else:
-        ok("(pinenote services ebc-direct) loads, and its values match the "
-           "text this gate parsed")
+        ok("(pinenote services ebc) and (pinenote services ebc-direct) load, "
+           "and their values match the text this gate parsed")
 
 
-def gate_no_shipping_consumer():
-    """Rule: the direct-mode study artifact reaches no shipping flavor."""
-    for flavor in ("pinenote/systems/base.scm",
-                   "pinenote/systems/pinenote-reader.scm"):
-        if "ebc-direct" in read(flavor):
-            bad("%s references the direct-mode module; the shipping "
-                "flavors must be byte-identically unaffected" % flavor)
-            return
-    ok("no shipping flavor references (pinenote services ebc-direct)")
+def gate_reader_consumer():
+    """Rule (since S2): the reader instantiates the direct-mode services; the
+    bringup flavors (base) do not -- the panel is their console."""
+    reader = read("pinenote/systems/pinenote-reader.scm")
+    missing = [name for name in ("pinenote-ebc-direct-params-service-type",
+                                 "pinenote-ebc-clut-service-type",
+                                 "pinenote-ebc-splash-service-type")
+               if "(service %s)" % name not in reader]
+    if "ebc-direct" not in reader or missing:
+        bad("pinenote-reader.scm no longer instantiates the direct-mode "
+            "services (missing: %s) -- the reader would boot the direct "
+            "driver with no CLUT and never light the panel"
+            % (", ".join(missing) or "the module import"))
+    else:
+        ok("the reader instantiates the three direct-mode services")
+    if "ebc-direct" in read("pinenote/systems/base.scm"):
+        bad("base.scm references the direct-mode module; the bringup "
+            "flavors keep their on-panel console and need no CLUT")
+    else:
+        ok("base.scm does not reference (pinenote services ebc-direct)")
 
 
 # ====================================================================
@@ -744,9 +771,9 @@ def main():
 
     gate_config_derivation(defconfig, direct_patch)
     gate_membership(ours, hrdl, hrdl_3win)
-    shipping, direct = gate_options(ours, hrdl)
-    gate_no_shipping_consumer()
-    gate_scheme_evaluates(shipping, direct)
+    shipping, _sysfs = gate_options(ours, hrdl)
+    gate_reader_consumer()
+    gate_scheme_evaluates(shipping)
     print()
     self_test()
 
