@@ -1181,26 +1181,72 @@ software "stop" path is proven, from source, to be completely inert on
 this board in either direction** — it cannot explain the
 kexec-vs-no-kexec difference, since it behaves identically in both.
 
-**The fix (built now, not yet on glass):** kernel patch 8 on the
+**The fix, PROVEN on glass 2026-09-03 evening:** kernel patch 8 on the
 kexec-hardening branch,
 `pinenote/patches/linux-pinenote-7.1-rk8xx-kexec-sleep-pin.patch`: in
 `rk8xx_shutdown()`, `if (kexec_in_progress) return;` (with `#include
 <linux/kexec.h>`; the header defines `kexec_in_progress` as a constant
 `false` without `CONFIG_KEXEC_CORE`, so the guard compiles out cleanly
 on kernels that don't carry kexec at all). Written with upstream
-submission in mind. Its glass proof is still pending: deploy a
-generation carrying the patch and the arming helper, kexec a
-*deliberately hanging* trial (the item-22 stall, unblacklisted, is the
-easy reproducer), and expect the watchdog's self-reset to work where it
-didn't on 2026-09-02/03. Only this patch — the old kernel's side of the
-transition — covers a trial that hangs before its own drivers probe;
-restoring the pin from the *new* kernel's PMIC probe would come too
-late for exactly that case, which is the one the update path needs
-covered.
+submission in mind.
 
-**Open — narrowed to the glass proof and the upstream send.** The two
-mechanisms this item named that same morning are both refuted, along
-with the route-bit theory from before:
+**The proof (17:05:17 MDT / 23:05:17 UTC device time).** From a
+generation whose kexecing kernel carried patch 8 (generation 8, PMIC
+`SYS_CFG3` confirmed `0x20` beforehand), with auto-suspend paused: a
+device script armed `/dev/watchdog0` (`timeout=44`,
+`state-after-arm=active 23:05:17`) then `kexec -l`'d a *deliberately
+hanging* trial — the proven blacklist
+(`initcall_blacklist=rockchip_grf_init`) plus
+`rdinit=/nonexistent-wilkbook-selfreset-test
+init=/nonexistent-wilkbook-selfreset-test panic=0`, so the new kernel
+boots far enough to leave the old kernel's shutdown path (running
+patch 8) but then halts cleanly instead of panicking — and `kexec -e`'d
+it. UART: the new kernel started, panicked (init not found), fell
+silent (nobody feeding the dog) — then, unattended, `DDR Version`,
+U-Boot, the UART watcher's slot pick, and the target generation up and
+running, `[promoted] [booted]`, watchdog `inactive`, `SYS_CFG3` back at
+`0x20`. **A trial kernel that halts is now recovered by the watchdog,
+hands-off, with patch 8 in the kexecing kernel — the mechanism this
+item root-caused, closed.** The reset time itself is inferred from the
+44 s hardware timeout (no host timestamp spans the blackout); every
+other value in this paragraph was read from the device. Full narrative,
+including the panic-vs-halt control (`CONFIG_PANIC_TIMEOUT=1` already
+self-recovers a panicking trial, watchdog or not) and the WiFi/console
+observations made along the way: `doc/status.md`, top entry.
+
+**Two limits, both measured the same evening.** (a) The
+`rockchip_grf_init` bus-wedge hang (item 22; the 2026-09-03 15:19 test)
+is **not** recovered by the watchdog even with patch 8 in place — the
+board stays hung, needing a long power-button press; that class of
+failure is instead *prevented* outright by the helper's
+`initcall_blacklist=rockchip_grf_init`, which is separately proven. So
+the update path's coverage is: bus wedge → prevented; panic → the
+kernel's own `PANIC_TIMEOUT=1` reboots it; any other halt or deadlock →
+the watchdog. (b) The self-reset requires the **kexecing** kernel (the
+one that runs `rk8xx_shutdown()`) to carry patch 8: the very first
+deployment of a patched generation is still kexec'd from an unpatched
+kernel, and a hang in that one trial still powers the board off, as
+observed live and unplanned at 16:25 the same evening
+(`doc/status.md`).
+
+**Open — narrowed to the upstream send and two loose ends, neither
+blocking.** The mechanism is closed; what is left:
+
+1. **Send patch 8 upstream** (mfd maintainers / linux-rockchip) with
+   the register measurements in this item and the glass proof above.
+2. **The 5.8 s panfrost-probe hang observed once (2026-09-03 16:25)**
+   is unexplained — a different hang from the item-22 GRF stall, seen
+   on a single trial, not reproduced. Record as an open observation,
+   not a finding.
+3. **The GRF bus wedge (item 22) is not recovered by a first-stage
+   global reset** even with patch 8 — see limit (a) above. That looks
+   like a question for the RK3566 TRM (what a global reset does and
+   doesn't reach on a wedged AXI/APB path), not something this repo can
+   fix; the blacklist already prevents the wedge from happening at all,
+   which is the operative mitigation.
+
+The three mechanisms this item named and tested before the root cause
+are refuted (unchanged from before, kept for the record):
 
 1. **Frozen or stopped dog: refuted.** The discriminating test's
    `WDT_CR` read `0x9` (enabled) and `WDT_CCVR` fell from `0x229fb70e`
@@ -1217,14 +1263,11 @@ with the route-bit theory from before:
    itself caused; rewriting `CRU_GLB_RST_CON` bits 0–1 (already `0x103`)
    before the second armed-hang test changed nothing (PR #54 closed).
 
-What's left is mechanical, not investigative: prove patch 8 stops the
-power-off on a trial that actually hangs, then send the finding up.
-
-**What has to be true first:** patch 8 proven on glass against a
-deliberately hanging trial (the update-path's actual failure mode, not
-just the healthy-kexec discriminating test above); a second board
-(rpedde's) if the timing works out, since a single-board PMIC finding
-is a weaker upstream claim than a corroborated one; then send to
-linux-rockchip and the mfd maintainer with the register measurements
-above.
+**What has to be true first:** nothing blocks the upstream send but
+review — the patch is on the kexec-hardening branch (PR #48), which
+per `CLAUDE.md` wants an operator's review before merge (kernel patch).
+A second board (rpedde's) would strengthen the upstream claim but is
+not required; the register-level mechanism (a documented shutdown hook
+racing a documented kexec code path) does not need a second board to be
+believed, only to be doubly corroborated.
 

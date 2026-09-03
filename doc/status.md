@@ -3,6 +3,102 @@
 Last updated: 2026-09-03. Update protocol: add a dated entry at the top
 after every hardware session; entries are per-device/per-operator.
 
+## 2026-09-03 evening (wkelly PineNote) — the watchdog self-reset PROVEN end to end (kernel patch 8): a trial kernel that halts is reset by the dog and DEFAULT boots, hands-off; what it cannot recover
+
+**The proof (17:05:17 MDT / 23:05:17 UTC device time).** From the
+patched generation 8 (kernel patch 8 in the kexecing kernel; PMIC
+`SYS_CFG3` confirmed `0x20` over the console beforehand), auto-suspend
+paused, the device script `kexec-wdt-panic.sh 7` ran over the serial
+console: stop the reader, unbind the gadget, `kexec -l` generation 7's
+Image/initrd/DTB with generation 7's `append` plus the proven
+`initcall_blacklist=rockchip_grf_init
+rdinit=/nonexistent-wilkbook-selfreset-test
+init=/nonexistent-wilkbook-selfreset-test panic=0`, sync, remount ro,
+arm the dog (`echo 1 > /dev/watchdog0`; device log: `timeout=44
+state-before=inactive`, `state-after-arm=active 23:05:17`), `kexec -e`.
+UART: the new kernel started (`Linux version 7.1.8`), its command line
+echoed with `panic=0`, a panic backtrace, then silence (halted, nobody
+feeding the dog) — then, with nobody touching the device, `DDR Version
+V1.10 20200218_resume`, `U-Boot SPL 2017.09`, the U-Boot boot menu, the
+UART watcher's pick of os2, extlinux `Retrieving file: /boot/gen-7/Image`,
+and generation 7 up with the reader running at 17:09:48 device time
+(`reader-session … running since 23:09:48`), `[promoted] [booted]`,
+watchdog `inactive`, `SYS_CFG3` `0x20`, boot_id `01a39325…`. The capture
+has no host timestamp for the reset itself — the reset time is
+**inferred** from the 44 s hardware timeout, not measured; everything
+else in this paragraph was measured. **A trial kernel that dies without
+rebooting now recovers by watchdog, hands-off, on this device — the
+hardening branch's promise, proven end to end.**
+
+**Path to the proof, in order (all times MDT 2026-09-03; device clock
+is UTC, +6 h):**
+
+1. **16:22:41 — benign-death control (no `panic=0`).** From the patched
+   generation 8, armed kexec into generation 7's kernel with the proven
+   blacklist plus `rdinit=/nonexistent-wilkbook-selfreset-test
+   init=/nonexistent-wilkbook-selfreset-test`. The kernel panicked
+   ("Kernel panic - not syncing: VFS: Unable to mount root fs on
+   unknown-block(0,0)") and **rebooted itself within a second**:
+   `CONFIG_PANIC_TIMEOUT=1` is in `pinenote_defconfig` (forward-port
+   patch, line ~415) and `/proc/sys/kernel/panic` reads `1` on the
+   device. The watchdog was not exercised by this test — but it is a
+   product fact worth stating on its own: any trial kernel that panics
+   reboots through firmware into U-Boot's DEFAULT by itself, watchdog or
+   not (UART showed the panic, then `DDR Version`, U-Boot, the watcher's
+   pick, generation 7).
+2. **16:25:15 — a trial into generation 8 from that freshly-rebooted
+   generation 7 hung at 5.8 s of uptime** (last UART output: panfrost
+   GPU probe lines, `panfrost fde60000.gpu: features…`) — a different
+   hang from the GRF one; generation 8 had booted fine by the same path
+   twice earlier that day and once more afterward (16:33:49, 28 s to
+   SSH). Generation 8's helper had armed the dog before that kexec, and
+   the kexecing kernel was generation 7's **unpatched** one, so the pin
+   was on power-down (`0x30`): the dog fired on the hang and the board
+   **powered off** — a single short press powered it back on at ~16:33
+   (contrast: after the 15:19 bus-wedge hang a long press was needed to
+   power off first, i.e. the board was hung, not off). This is the
+   failure mode patch 8 removes, seen live and unplanned. Cause of the
+   5.8 s hang: unknown; observed once; record as an open observation,
+   not a finding.
+3. **16:36 and ~16:43 — Wi-Fi did not survive a power-button
+   suspend/resume on generation 8** (reader-direct flavor). UART after
+   resume: `brcmfmac: brcmf_sdio_bus_rxctl: resumed on timeout`,
+   `brcmfmac: brcmf_sdio_firmware_callback: brcmf_att…` (attach failed);
+   a second suspend/resume cycle did not reload the firmware; no SSH for
+   the rest of that boot. The PMIC pin did go back to `0x20` on each
+   resume (read over the serial console). The serial console (`ttyS2`,
+   1500000) has a getty that logs root in **without a password** — it
+   was used for the rest of the session; flagged as a security item to
+   decide (`doc/device-access.md`, `doc/alpha-checklist.md`).
+4. **16:59:55 — a launch typed on the serial console did nothing**:
+   KOReader's 15-minute idle timer had suspended the device (UART: `PM:
+   suspend entry (deep)` before the launch; the operator's press woke
+   it, uptime continuous, the script's log file untouched). Trap for
+   `doc/device-access.md`: pause auto-suspend (`enabled=0` in
+   `/data/wilkbook/autosuspend.conf`) before any console-driven
+   procedure; a suspended console swallows typed input.
+5. **17:05:17 — the proof**, detailed above.
+6. **Limits, both measured today.** (a) The `rockchip_grf_init`
+   bus-wedge hang (the 15:19 test, afternoon entry below) is **not**
+   recovered by the watchdog even with patch 8 — the board stays hung,
+   long press needed; that hang is instead *prevented* by the helper's
+   blacklist, which is proven. So the two mechanisms together cover: bus
+   wedge → prevented; panic → reboots itself (`PANIC_TIMEOUT=1`);
+   halt/stall/deadlock → watchdog. (b) The self-reset requires the
+   **kexecing** kernel to carry patch 8: the first deployment of a
+   patched generation is done by an unpatched kernel, and a hang in that
+   trial still powers the board off (16:25 above showed exactly this,
+   live and unplanned).
+7. **End state:** `DEFAULT` generation 7 (the merged embrace reader);
+   generations 3–8 registered (gen-8 = the hardening build: reader-direct
+   flavor + patch 8; gen-4 = the old proven shipping-driver fallback);
+   auto-suspend restored (`enabled=1`); device handed back usable.
+
+**What this closes:** kernel patch 8's glass proof — marked "pending"
+in the afternoon entry below; proven this same evening. PR #48
+(`kexec-hardening`) still wants the operators' review before merge, per
+`CLAUDE.md`.
+
 ## 2026-09-03 late afternoon (wkelly PineNote) — the embrace sweep on glass: the merged reader (direct kernel + broker) is generation 7 — kexec trial, suspend/cover through the broker, cold boot
 
 **Deploy (14:23–14:45 MDT / 20:23–20:45 UTC), from branch `embrace-s1`
@@ -165,7 +261,8 @@ kexec a deliberately hanging trial, expect the self-reset. Only that
 patch (old-kernel side) covers a trial that hangs before its drivers
 probe; restoring the pin in the new kernel's probe would come too late
 for that case. Full mechanism writeup and the refuted-theory register:
-`doc/upstream-register.md` item 25.
+`doc/upstream-register.md` item 25. **Proven the same evening — see the
+entry at the top of this file.**
 
 **Also this session, a self-inflicted hang to record honestly
 (13:55 MDT):** a read that globbed every regmap's `registers` file
