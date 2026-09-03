@@ -69,7 +69,10 @@ All live in `pinenote/packages/kernel.scm`:
 `%linux-pinenote-patches` in `pinenote/packages/kernel.scm` is the
 authoritative list; the comments there carry each patch's rationale and
 revert instruction. As of 2026-08-08 it is seven patches, applied in list
-order on top of the vanilla source:
+order on top of the vanilla source. **As of 2026-09-03 there is an
+eighth** (below) — but it lives on the kexec-hardening branch, not yet
+merged into `%linux-pinenote-patches`, so the array in the tree today is
+still these seven:
 
 1. `linux-pinenote-7.0-forward-port.patch` — the EBC display stack,
    WS8100 pen, PineNote DTS, `pinenote_defconfig`; the permanent core
@@ -112,6 +115,20 @@ order on top of the vanilla source:
    hourly RTC backstop, idle standby is **5.47 mA** over a 6.17-day
    unplugged soak with 170 cycles and no failures
    (`doc/artifacts/pinenote-ultra-soak-20260815/`).
+8. `linux-pinenote-7.1-rk8xx-kexec-sleep-pin.patch` — mfd rk8xx: adds
+   `if (kexec_in_progress) return;` at the top of `rk8xx_shutdown()`
+   (`drivers/mfd/rk8xx-core.c`, `#include <linux/kexec.h>`). Without it,
+   `kernel_kexec()`'s `device_shutdown()` call runs the same shutdown
+   hook a power-off uses, which switches the RK817 PMIC's SLEEP pin to
+   its power-down function (`SYS_CFG3` bit pattern `NULL_FUN` → `DN_FUN`)
+   and nothing in the new kernel restores it — so any SoC-level reset
+   after a kexec that asserts that pin (the watchdog's global reset does)
+   powers the chip off instead of rebooting it, register-proven
+   2026-09-03 (`doc/upstream-register.md` item 25, `doc/status.md`).
+   **On the kexec-hardening branch, glass proof pending** — not yet
+   merged into `%linux-pinenote-patches` above; needs a deliberately
+   hanging trial to confirm the watchdog's self-reset survives it before
+   it lands.
 
 `linux-pinenote-debug` stacks `linux-pinenote-debug-extract-fbs.patch`
 on top of the same seven.

@@ -237,6 +237,15 @@ first kexec on glass).
 - Diagnose "blank page" issues by dumping `/dev/fb0` (32bpp XR24, stride
   7488) and looking at it — separates render-side from glass-side
   instantly.
+- **Never read a regmap debugfs dump wholesale.** A glob over every
+  `registers` file under `/sys/kernel/debug/regmap/` hung the device
+  (2026-09-03, 13:55 MDT): the glob includes
+  `dummy-syscon@fdc50000`, the PIPE GRF whose `pclk` is gated on this
+  board — reading it wedges the bus exactly like the item-22 kexec hang
+  (`doc/upstream-register.md`), except this time nothing was kexec'd at
+  all, just read. Power button needed. Name the one regmap you want
+  (`/sys/kernel/debug/regmap/0-0020/registers` for the RK817 PMIC, etc.)
+  and never `cat`/`grep -r` the directory.
 
 ## Launching KOReader by hand (bypassing reader-session)
 

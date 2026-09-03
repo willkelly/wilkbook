@@ -1058,7 +1058,7 @@ tree still has the bare return (our patch is a snapshot); the pin
 `make direct-probe-quirk-check` goes red when we port the fix or rebase
 over theirs, by design.
 
-## 25. RK3566 (PineNote): the watchdog resets the SoC at runtime; a kexec into a kernel that hangs before its drivers probe defeats it — mechanism unknown
+## 25. RK3566 (PineNote): a kexec leaves the RK817 PMIC's sleep pin on its power-down function, so the next SoC reset powers the chip off instead of rebooting it
 
 **What:** `rockchip,rk3568-wdt` / `snps,dw-wdt` at `0xfe600000` **does
 reset the chip as configured**, confirmed 2026-09-03 16:30 UTC
@@ -1082,15 +1082,78 @@ immediately before `kexec -e` — through the update path's kexec
 reset in four minutes, either time**; the UART sat silent (no repeated
 `DDR Version`/BootROM output at all — not even a botched
 reset-and-rehang loop), and the device needed the power button both
-times. Same hardware, same arm sequence, same starting register state:
-resets when nothing else happens, does not reset when a kexec
-intervenes. Something about the kexec transition — not the watchdog's
-own configuration — defeats it. The PX30-style route-bit theory (the
-mainline U-Boot fix "make TSADC and WDT trigger a first global reset,"
-`CRU_GLB_RST_CON` bits 0–1) is retested and still refuted: the register
-already reads `0x103` on this board, was confirmed unchanged by
-writing those bits again before the second armed-hang test, and the
-hang still didn't reset (PR #54 closed).
+times — and, the operator noted at the time, it looked like the board
+had actually powered off rather than hung. That observation turned out
+to be exactly right; see below.
+
+**Root-caused 2026-09-03 afternoon (12:00–14:12 MDT), refuting both
+mechanisms this item named that same morning.**
+
+**The discriminating test (12:00 MDT):** the watchdog was armed on the
+*running* generation 4, then a **blacklisted kexec into generation 4
+itself** — the proven-booting path — with two extra arguments for the
+new kernel only: `initcall_blacklist=rockchip_grf_init,dw_wdt_driver_init`
+(so nothing probes, pings, or ungates the driverless dog after the
+transition) and `clk_ignore_unused` (so late-init clock gating could not
+touch the driverless dog's own clocks). The new kernel answered SSH at
++27 s. Read there: `CLKGATE_CON26` = `0x00000e00` (bits 13/14,
+`pclk_wdt_ns`/`tclk_wdt_ns`, both still running); `WDT_CR` = `0x9`
+(enabled, reset mode); `WDT_TORR` = `0xe`; `WDT_CCVR` `0x229fb70e` then
+`0x1fbad5b0` two seconds later — falling at 24 MHz, ~24 s left. **The
+dog survives the kexec transition, enabled and counting, on a healthy
+bus.** It expired on schedule at ~12:00:24 (the kernel's UART output
+stopped at 41 s of uptime, the next expected line at 51 s never came,
+SSH died) — and the board went **dark**: no DDR init, no U-Boot, silent
+UART, needed the power button. The operator's description matched a
+power-off, not a hang: hold to power off, then press to boot.
+
+**Root cause, from the 7.1.8 source:** `kernel_kexec()`
+(`kernel/kexec_core.c`) sets `kexec_in_progress = true` then calls
+`kernel_restart_prepare("kexec reboot")` → `device_shutdown()` — exactly
+like a normal reboot. The RK817 PMIC driver's shutdown hook
+(`rk8xx_i2c_shutdown` → `rk8xx_shutdown`, `drivers/mfd/rk8xx-core.c`)
+switches the PMIC's SLEEP pin function to power-down:
+`regmap_update_bits(RK817_SYS_CFG(3), RK817_SLPPIN_FUNC_MSK,
+SLPPIN_DN_FUN)` (`SYS_CFG3` = register `0xf4`; mask `0x18`; `NULL_FUN`
+`0x00`, `SLP_FUN` `0x08`, `DN_FUN` `0x10`). That is exactly how a normal
+power-off works: PSCI `SYSTEM_OFF` runs the same shutdown path, then the
+asserted pin function tells the PMIC to cut the rails when the pin is
+driven. Nothing restores it after a kexec — the new kernel's PMIC probe
+never touches `SYS_CFG3`; only a suspend/resume cycle does
+(`rk8xx_suspend` sets `SLP_FUN`, `rk8xx_resume` sets `NULL_FUN`). So
+**after any kexec**, whatever SoC-level reset fires next inherits a PMIC
+primed to power off rather than reboot on that pin edge: the watchdog's
+global reset asserts it (proven above); a PSCI soft reboot evidently does
+not, since normal (non-kexec) reboots work with the same post-shutdown
+PMIC state — **that half is inferred**, not measured directly. This also
+explains the operator's observation after the 01:34 armed-hang test
+("I think the ereader actually powered off") — it had.
+
+**Register proof (14:02–14:12 MDT).** Cold generation 4: `SYS_CFG3` =
+`0x20` (`SLPPOL_H` set; sleep-pin function bits `00` = `NULL`), read two
+independent ways that agree: the driver's regmap debugfs
+(`/sys/kernel/debug/regmap/0-0020/registers`) and a direct
+`I2C_RDWR` read of bus 0, address `0x20`, register `0xf4` (a luajit FFI
+tool, bypassing the driver entirely). After a plain, proven, blacklisted
+trial (`wilkbook-generation trial 4`, i.e. kexec 4→4, no watchdog
+involved): `SYS_CFG3` = `0x30` (bits 4:3 = `10` = power-down), both
+paths agreeing again. Then one I2C read-modify-write restored `0x20` on
+that same kexec'd kernel (mask `0x18` → `0x00`, run by the operator),
+the watchdog was armed on it (`echo 1 > /dev/watchdog0`, the normal
+driver present and probed), and the self-reset **worked**: DDR init on
+the UART at +47 s from arming, U-Boot menu, the UART watcher picked os2,
+generation 4 booted cold, SSH back 43 s after the reset, `SYS_CFG3` back
+at `0x20`. Restoring the pin function is sufficient — the watchdog reset
+then behaves like the runtime-only test that opened this item.
+
+**Table:**
+
+| PMIC state (`SYS_CFG3`) | Trigger | Result |
+| --- | --- | --- |
+| `0x20` (NULL, cold boot) | watchdog reset | reset → U-Boot → boots (the runtime test) |
+| `0x30` (DN, after any kexec) | watchdog reset (armed pre-kexec, hung trial) | **dark** — power-off, power button needed |
+| `0x30` (DN, after any kexec) | watchdog reset (armed post-kexec, healthy trial) | **dark** at ~12:00:24 — power-off, power button needed |
+| `0x20` (restored by hand on a kexec'd kernel) | watchdog reset | reset → U-Boot → boots at +47 s |
 
 **Driver quirk pinned along the way, not itself the cause:**
 `dw_wdt_stop()` (`drivers/watchdog/dw_wdt.c`) is a hardware no-op on
@@ -1118,61 +1181,50 @@ software "stop" path is proven, from source, to be completely inert on
 this board in either direction** — it cannot explain the
 kexec-vs-no-kexec difference, since it behaves identically in both.
 
-**Open — two mechanisms, and UART silence cannot tell them apart:**
+**The fix (built now, not yet on glass):** kernel patch 8 on the
+kexec-hardening branch,
+`pinenote/patches/linux-pinenote-7.1-rk8xx-kexec-sleep-pin.patch`: in
+`rk8xx_shutdown()`, `if (kexec_in_progress) return;` (with `#include
+<linux/kexec.h>`; the header defines `kexec_in_progress` as a constant
+`false` without `CONFIG_KEXEC_CORE`, so the guard compiles out cleanly
+on kernels that don't carry kexec at all). Written with upstream
+submission in mind. Its glass proof is still pending: deploy a
+generation carrying the patch and the arming helper, kexec a
+*deliberately hanging* trial (the item-22 stall, unblacklisted, is the
+easy reproducer), and expect the watchdog's self-reset to work where it
+didn't on 2026-09-02/03. Only this patch — the old kernel's side of the
+transition — covers a trial that hangs before its own drivers probe;
+restoring the pin from the *new* kernel's PMIC probe would come too
+late for exactly that case, which is the one the update path needs
+covered.
 
-1. **The kexec transition stops or freezes the dog before the hang** —
-   the enable bit cleared, or the counting clock (`tclk_wdt_ns`, CRU
-   `CLKGATE_CON(26)` bit 14, parented on `xin24m`) gated. No actor has
-   been found in source: `dw_wdt_stop()` is inert here (above); the
-   running kernel's `clk_summary` shows `tclk_wdt_ns` and `pclk_wdt_ns`
-   enabled (`enable_cnt` 1, held by the bound driver's
-   `devm_clk_get_enabled()`), so — unlike item 22's never-claimed
-   `pclk_pipe` — something would have to *actively* re-gate an in-use
-   clock; no such write is in `clk-rk3568.c`'s `rk3568_clk_init()` or
-   `drivers/clk/rockchip/clk.c`'s registration path, and
-   `clk_disable_unused()` runs at `late_initcall_sync`, long after the
-   0.16 s hang. `machine_shutdown()` is generic arm64 PSCI CPU_OFF; what
-   BL31 (no source) does on that path is invisible to review.
-2. **The reset fires and lands on a wedged interconnect.** The hung
-   kernel's write to the clock-gated PIPE GRF leaves an APB/AXI
-   transaction outstanding; if the first-stage global reset the watchdog
-   requests does not clear it, the CPUs come out of reset into a BootROM
-   that stalls on its first bus access — before TPL, which is what
-   prints `DDR Version`, ever runs. The runtime test does **not** rule
-   this out: it reset a healthy bus. Four minutes of UART silence is
-   consistent with both mechanisms, because the BootROM prints nothing
-   and TPL needs the interconnect to print at all.
-3. **Route bits: refuted** (above). `CRU_GLB_RST_ST` (0xfdd200d4) read
-   `0x00000000` on the generation-4 boot the watchdog itself caused —
-   either firmware clears it on the way up or the offset/interpretation
-   is wrong for this SoC; no RK3568 TRM or bit-level `cru_rk3568.h` is
-   in the tree or the store to check (only generic
-   `drivers/clk/rockchip/softrst.c`; `u-boot-2026.01` exists in the store
-   as `.drv` only). Uninformative either way.
+**Open — narrowed to the glass proof and the upstream send.** The two
+mechanisms this item named that same morning are both refuted, along
+with the route-bit theory from before:
 
-**The discriminating measurement (operator on the UART; no new hang
-risk):** arm the dog on the running generation 4 (`echo 1 >
-/dev/watchdog0`, no magic close), then run a **blacklisted** kexec
-trial into generation 4 itself — the proven-booting path — and in the
-new kernel read `WDT_CR` bit 0 and `WDT_CCVR` twice a few seconds
-apart, plus `/sys/class/watchdog/watchdog0/state` (`active` there means
-the probe found the enable bit set). The running kernel's config has
-`CONFIG_WATCHDOG_HANDLE_BOOT_ENABLED=y` (read from
-`/run/current-system/kernel/.config`), so the new kernel's watchdog
-core feeds a dog it finds running from probe until userspace opens it:
-the device stays up whichever way the answer goes. Counter frozen or
-enable clear → mechanism 1, and it lives in the old kernel's shutdown
-or the new kernel's first ~0.2 s (a blacklisted kernel runs the same
-code except `rockchip_grf_init`). Counting and enabled → mechanism 1
-is out for the transition and mechanism 2 leads; the fix is then in
-the CRU (a reset tier that clears the bus, routed from the watchdog)
-or plain acceptance of the power button. Weaker alternatives, not
-worth a session: a shorter-timeout armed hang (another hang, and it
-still only observes silence) and a JTAG read of the live counter (no
-debug probe exists).
+1. **Frozen or stopped dog: refuted.** The discriminating test's
+   `WDT_CR` read `0x9` (enabled) and `WDT_CCVR` fell from `0x229fb70e`
+   to `0x1fbad5b0` across two seconds — counting normally, at the
+   expected 24 MHz rate, straight through the kexec transition and
+   right up to its scheduled expiry. The dog was never frozen.
+2. **Reset into a wedged bus: refuted.** The discriminating test's
+   kexec target was generation 4 itself — the proven-booting, healthy
+   path, not a hung one — and the board still went dark. A wedged
+   interconnect from a stalled `rockchip_grf_init` write cannot explain
+   a power-off reached from a kexec that never touched that code path.
+3. **Route bits: refuted** (unchanged from before). `CRU_GLB_RST_ST`
+   (0xfdd200d4) read `0x00000000` on the generation-4 boot the watchdog
+   itself caused; rewriting `CRU_GLB_RST_CON` bits 0–1 (already `0x103`)
+   before the second armed-hang test changed nothing (PR #54 closed).
 
-**What has to be true first:** that measurement; then either a
-kernel/CRU fix or the update-path docs saying plainly that a trial
-that dies before its drivers probe needs the power button; a second
-board.
+What's left is mechanical, not investigative: prove patch 8 stops the
+power-off on a trial that actually hangs, then send the finding up.
+
+**What has to be true first:** patch 8 proven on glass against a
+deliberately hanging trial (the update-path's actual failure mode, not
+just the healthy-kexec discriminating test above); a second board
+(rpedde's) if the timing works out, since a single-board PMIC finding
+is a weaker upstream claim than a corroborated one; then send to
+linux-rockchip and the mfd maintainer with the register measurements
+above.
 
