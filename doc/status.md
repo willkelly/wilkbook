@@ -1,7 +1,64 @@
 # Hardware status
 
-Last updated: 2026-09-02. Update protocol: add a dated entry at the top
+Last updated: 2026-09-03. Update protocol: add a dated entry at the top
 after every hardware session; entries are per-device/per-operator.
+
+## 2026-09-03 morning (wkelly PineNote) — the watchdog resets the SoC at runtime; the kexec path defeats it
+
+**Runtime test, no kexec at all** (2026-09-03 16:30 UTC / 10:30 MDT),
+on the running generation-4 kernel: the DesignWare watchdog
+(`rockchip,rk3568-wdt`/`snps,dw-wdt`, `0xfe600000`) was armed via
+`echo 1 > /dev/watchdog0` (closed without the magic character) and left
+unfed. `WDT_CCVR` counted down at 24 MHz from `0x3ff41391` (≈44.7 s,
+matching the 44 s `timeout`); SSH dropped ~45 s after arming. The UART
+then showed `DDR Version V1.10 20200218_resume`, U-Boot SPL, and the
+boot menu — a reset, ~58 s after arming by the poller — and the
+standing UART watcher (`pinenote/scripts/uart/uboot-pick-slot.sh`)
+picked os2; generation 4 booted normally. Registers read immediately
+before arming: WDT_CR `0x8` (RMOD=0 reset-on-first-timeout, RPL=2),
+WDT_TORR `0xe`, WDT_STAT `0`, `CRU_GLB_RST_CON` (0xfdd200dc) `0x103`,
+`GLB_CNT_TH` (0xfdd200d0) `0x00640064`. **So the watchdog does reset
+the RK3566 as configured.**
+
+That is the opposite of the two earlier results this same investigation
+had banked: armed-hang tests through the update path's kexec
+(2026-09-02 23:24 and 2026-09-03 01:34 local MDT), using the identical
+arm sequence (the kexec-hardening branch's helper arms
+`/dev/watchdog0` as the last thing before `kexec -e`), both hung the
+next kernel 0.16 s into boot (the known `rockchip_grf_init` stall,
+`doc/upstream-register.md` item 22) and produced **no reset in four
+minutes, either time** — the device needed the power button both
+times. Same hardware, same arm sequence, same starting register state:
+resets when nothing else happens, does not reset when a kexec
+intervenes. A read-only, source-and-device investigation the same
+morning (item 25 of `doc/upstream-register.md` carries the evidence)
+narrowed it to two mechanisms that UART silence cannot separate: the
+transition stops or freezes the dog before the hang (no actor found in
+source — `dw_wdt_stop()` is inert without a reset line, which the DT
+confirms live, and no early clock write gates `tclk_wdt_ns`), or the
+reset fires into the interconnect the PIPE GRF write wedged and the
+BootROM stalls before TPL ever prints. The runtime test reset a healthy
+bus, so it does not rule the second out. The discriminating test needs
+the operator but adds no risk beyond a routine trial: arm, then a blacklisted kexec
+trial into generation 4 itself, then read the counter and enable bit
+in the new kernel — `CONFIG_WATCHDOG_HANDLE_BOOT_ENABLED=y` (confirmed
+in the running kernel's config) means the new kernel feeds a running
+dog from probe. The obvious "wrong CRU route bits" theory stays refuted
+(`CRU_GLB_RST_CON` already `0x103`, unchanged by rewriting it).
+
+**Consequence:** a hung trial still needs the power button. The
+kexec-hardening branch's watchdog arm (PR #48) is harmless but is not
+yet a working self-recovery for a trial that dies before its drivers
+probe — it stays armed because it will matter once the kexec-path
+mechanism is found, not because it currently does anything.
+
+**Device state at the end of the session:** generation 4 booted and
+`DEFAULT`; generations 3–6 registered; auto-suspend paused
+(`enabled=0` in `/data/wilkbook/autosuspend.conf` — clear it before
+returning the device to normal reading). No destructive operation ran
+this session; all register reads were through the staged read-only
+`mmio.lua` and the standard watchdog arm/observe idiom already used in
+the two prior tests.
 
 ## 2026-09-02 evening (wkelly PineNote) — the update path on glass: enabling image DEPLOYED, three kexec hangs root-caused, the first cable-free deploy PROMOTED
 
@@ -51,6 +108,47 @@ paths, add, trial kexec — booted (boot id `2bfd2cd4…`), health ok,
 promote, gen-1 pruned, `guix gc`; `DEPLOY OK`. Gen-2 pruned by hand
 afterwards (pre-fix helper; a trial into it would hang). Ledger now
 gen-3, gen-4 `[promoted] [booted]`; 2.0 GB of 15 GB used.
+
+**2026-09-03, 00:43–01:39 (wkelly PineNote) — the "hang" was U-Boot's menu; the route-bit theory refuted; hung again.**
+The operator's power-cycle at 00:43 landed in U-Boot; the watcher picked
+os2, U-Boot loaded our extlinux menu (generations 6, 5, 4) — and stopped
+at `Enter choice:` for fifty minutes: two watchers were alive and each
+sent DOWN DOWN ENTER, so the second set landed in extlinux's menu and
+cancelled its countdown. A `3` on the UART booted generation 4 cold at
+01:32 (the watcher is single-instance now). Then the prepared sequence:
+`CRU_GLB_RST_CON` read **`0x00000103` before any write** — bits 0–1
+were already set, so the PX30-style route bit is not what enables a
+watchdog reset here — and the armed hang test still produced no reset in
+four minutes. **The watchdog does not reset this SoC as configured; the
+enabler is unknown.** PR #54 closed as refuted; PR #48 keeps the arm and
+drops the routing. Device left hung in the kexec'd generation-5 kernel,
+DEFAULT generation 4, auto-suspend paused. Next: a *runtime* watchdog
+test with no kexec (arm, read the DW WDT's own counter for 15 s, wait)
+to separate "cannot reset this SoC" from "the kexec path stops it".
+
+**Later the same night — three negatives and one root cause, all
+recorded so nobody repeats them.** (1) A kexec from the unpatched
+generation 4 into generation 5 (the DT clock reference on the pipe
+GRF, PR #46) with no skip hung at `calling rockchip_grf_init` — the
+clock reference alone is not the fix. (2) The PIPE power domain was
+measured **on** before the gadget unbind, 4 s after it, after a forced
+runtime-PM `on`, and at `kexec -e`; the same kexec hung again — the
+domain is not the mechanism either. Only the kexec-only
+`initcall_blacklist=rockchip_grf_init` is proven; the mechanism is
+unknown. (3) The SoC watchdog armed (`state active`, 44 s), survived
+the kexec ("watchdog did not stop!"), the new kernel hung as intended —
+and no reset came in three minutes. Root cause by precedent: the
+RK3568 routes the watchdog's reset to the global reset only when
+`CRU_GLB_RST_CON` (CRU + 0xdc) bits 0–1 are set; U-Boot and the kernel
+leave them clear here, mainline U-Boot sets them for the PX30. The
+helper now sets them before arming (PR #48); the proof is the next
+visit's first item. Two instrument lessons: Guix wipes `/tmp` on boot,
+so scripts staged there vanish with a kexec (stage under `/data`); and
+`read()` on `/dev/mem` faults on this kernel for MMIO — mmap it
+(KOReader's luajit FFI does; `/data/wilkbook/tools/mmio.lua`). The
+device was left hung in the kexec'd generation 5 kernel with DEFAULT on
+generation 4 and auto-suspend paused; the operator could not
+power-cycle again that night.
 
 **Suspend/resume on the kexec'd kernel (generation 4, 00:19):** with
 the session pause removed, a power tap was accepted by the broker,
