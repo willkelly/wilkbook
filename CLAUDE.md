@@ -263,7 +263,10 @@ gitignored `build/`, or the reader's static address.
   new information** — the embrace sweep (the `reader` flavor moves to
   the direct kernel, the scaffolding is deleted, one shipping image) is
   now the work; the bail-out criteria stay live as what could reverse
-  it (`doc/direct-mode-adoption.md`, `doc/status.md`).
+  it (`doc/direct-mode-adoption.md`, `doc/status.md`). **S1+S2 of that
+  sweep are glass-proven** as generation 7 on wkelly's device
+  2026-09-03 (branch `embrace-s1`, PR #56, not yet merged;
+  `doc/status.md`).
 - **Update path — on glass since 2026-09-02.** os2 carries an image
   with the guix importer daemon, kexec, the `wilkbook-generation`
   helper, first-boot root growth and the signing-key ACL; from there
@@ -357,8 +360,11 @@ gitignored `build/`, or the reader's static address.
   (`suspend_while_charging=1` opts out); `enabled=0` still pauses
   everything (the broker re-reads it continuously). Hardware-accepted
   on rpedde's device (shipping flavor); the v0.2.0 image on OUR os2
-  predates it and still runs the 5-min daemon, and the broker +
-  direct-driver combination has had no hardware session. Still
+  predates it and still runs the 5-min daemon. The broker +
+  direct-driver combination ran its first hardware session 2026-09-03
+  (wkelly's device, generation 7 on the embrace branch: power button
+  and cover both suspended and woke cleanly through the broker, three
+  cycles, zero failures — `doc/status.md`). Still
   unexplained: the TPS `ENABLE` 2f→20 delta after suspend, and one
   13.09 mA idle segment in the soak.
 - **Power**: awake reader idle ~157 mA after the vdd_cpu auto-PFM fix

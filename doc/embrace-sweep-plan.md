@@ -127,7 +127,8 @@ check-host`, `make qemu-virt-check` (the CLUT one-shot must be a clean
 no-op with the rig's zero-filled waveform — `test-ebc-clut-install.py`
 already exercises that branch), `make qemu-update-check`.
 
-**S3 — one driver in the broker and KOReader.** `broker_quiesce.lua`
+**S3 — one driver in the broker and KOReader. Not started.**
+`broker_quiesce.lua`
 becomes IRQ-quiescence only; `driver_has_barrier` and the
 `refresh_waveform` fingerprint leave the broker; `ebc_barrier.lua` is
 deleted; `test-quiesce.lua` loses its barrier cases and keeps the
@@ -137,13 +138,13 @@ direct vocabulary — carried, dated, not silently deleted). Proof:
 `make platform-controls-check`, `koreader-input` suites,
 `ebc-ioctl-roster-check`.
 
-**S4 — tools and gates.** Decision 4's relabelling; `ebc-barrier-check`
+**S4 — tools and gates. Not started.** Decision 4's relabelling; `ebc-barrier-check`
 deleted; `ebc-modprobe-options-check` rewritten (decision 11);
 `ebc-card-resolution-check` reworded (now unconditional); the deployer
 default. Proof: `make check-host` green with every positive control
 still able to go red (`doc/testing.md`'s rule).
 
-**S5 — docs.** `pinenote-flavors.md` (the table: `reader`, the bringup
+**S5 — docs. Not started.** `pinenote-flavors.md` (the table: `reader`, the bringup
 flavors, `usb-console-linux-6-6`; no `reader-direct`, no
 `reader-debug`), `building.md`, `hardware-deploy.md`, `testing.md`'s
 gate rows, `ROADMAP.md` §4/§5, `CLAUDE.md` ("Where we are" and the doc
@@ -156,14 +157,19 @@ the three workbench READMEs, `power-management.md:403`,
 `upstream-register.md:728`. Historical `doc/status.md` entries and
 artifact names stay as written.
 
-**S6 — glass.** The merged `reader` reaches os2 as a generation through
-the update path (`make deploy DEVICE=… FLAVOR=reader`), cold-booted
-from the menu as well as kexec-trialled (it changes early boot: kernel
-and command line). Then the shipping-reader validation list in
-`doc/glass-plan-2026-08.md` on that image, suspend/resume, and a
-`pinenote-flash-area` optics check against `doc/datasets/`. On a green
-list, the next prealpha tag ships `reader`, singular
-(`doc/alpha-checklist.md` gains the row).
+**S6 — glass. Kexec/cold-boot/suspend PROVEN 2026-09-03** (wkelly's
+PineNote, generation 7, `doc/status.md`): the merged `reader` reached
+os2 as a generation through the update path
+(`make deploy DEVICE=pinenote-os2 FLAVOR=reader`), kexec-trialled from
+generation 4 and promoted, then cold-booted after a UART-watcher
+recovery. Suspend/resume through the platform-controls broker (power
+button and cover) ran cleanly on this kernel for the first time — 3
+successes, 0 failures. **Not yet run**: the shipping-reader validation
+list in `doc/glass-plan-2026-08.md` item by item, and the
+`pinenote-flash-area` optics check against `doc/datasets/` — so this
+step is proven for boot/update/suspend, not yet for the green list it
+calls for. On a green list, the next prealpha tag ships `reader`,
+singular (`doc/alpha-checklist.md` gains the row).
 
 ## After the sweep: the display program, in order
 
