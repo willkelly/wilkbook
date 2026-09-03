@@ -235,7 +235,13 @@ the hang.
   and pings it from the moment the driver probes
   (`CONFIG_WATCHDOG_HANDLE_BOOT_ENABLED=y`), and a kernel that never
   gets there resets into U-Boot after the hardware timeout (44 s, per
-  `/sys/class/watchdog/watchdog0/timeout`). U-Boot's own default
+  `/sys/class/watchdog/watchdog0/timeout`) — nominally: on the one
+  proof run (2026-09-03 17:05, doc/status.md) the reset landed about
+  3.5 minutes after the arm, not 44 s, and SSH to the recovered DEFAULT
+  came 5 min 13 s after the launch; the stretch is unexplained (the
+  driverless measurement earlier that day showed a 44 s period, so it
+  is something the new kernel's dw_wdt probe did before the panic).
+  Any wait on this path must budget for it. U-Boot's own default
   then lands on **os1**; the UART watcher picks os2 when attended. Both
   are best-effort (no such device on QEMU virt) and pinned.
   **Both measured the same night, both negative, both recorded in
