@@ -500,10 +500,22 @@ notes"):**
   drives the menu back to os2 itself and reports the device back on the
   previous `DEFAULT`; without the cable, a failed trial ends on stock
   os1 with SSH — change the default from there if you want
-  (`rescue-generation.sh`, PR #51 — open against main, not in this
-  tree, never run), and pick os2 at the on-device menu. Before
-  the watchdog resets it (or if it doesn't): the power button, then
-  `uboot-pick-slot.sh --slot os2`.
+  (`rescue-generation.sh`, next item), and pick os2 at the on-device
+  menu. Before the watchdog resets it (or if it doesn't): the power
+  button, then `uboot-pick-slot.sh --slot os2`.
+- **Recovery from os1, no cable:** whatever landed you on os1 (a
+  watchdog reset, the power button, a countdown that fell through), the
+  ledger on p6 is one chroot away. Copy
+  `pinenote/scripts/os1/rescue-generation.sh` to os1 and run it there as
+  `user`: `list | promote N | demote | log [LINES]`. It refuses unless
+  `/` is p5 and p6 is unmounted; it mounts p6 (read-only for `list` and
+  `log`), runs the helper that ships in os2's promoted system inside a
+  chroot, and unmounts. Then reboot and choose "Boot OS2 (part 6)" at
+  the U-Boot menu; extlinux boots the promoted generation with no
+  further key. **Not yet run on os1.** (kdump is not the tool for our
+  hangs: a core stalled in a bus access never panics, so no crash
+  kernel would fire; the watchdog reset plus os1 is the failsafe on
+  this SoC.)
 - Anything that changes early boot (kernel, DTB, command line) wants
   both proofs: the kexec trial and a cold boot from the menu — then
   `pin` it.
