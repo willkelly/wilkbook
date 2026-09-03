@@ -1058,26 +1058,135 @@ tree still has the bare return (our patch is a snapshot); the pin
 `make direct-probe-quirk-check` goes red when we port the fix or rebase
 over theirs, by design.
 
-## 25. RK3566 (PineNote): the DesignWare watchdog arms, expires, and does not reset the chip — enabler unknown
+## 25. RK3566 (PineNote): the watchdog resets the SoC at runtime; a kexec into a kernel that hangs before its drivers probe defeats it — mechanism unknown
 
-**What:** `rockchip,rk3568-wdt` / `snps,dw-wdt` at `0xfe600000` arms
-(`/sys/class/watchdog/watchdog0/state` = active, timeout 44 s), keeps
-running through a kexec ("watchdog did not stop!"), and when the next
-kernel hangs 0.16 s into boot nothing feeds it — and no reset comes, in
-four minutes, twice (2026-09-02 23:24, 2026-09-03 01:34). The obvious
-suspect, the PX30-style route bits in `CRU_GLB_RST_CON` (CRU + 0xdc)
-that mainline U-Boot sets for the PX30 ("Make TSADC and WDT trigger a
-first global reset"), is refuted: the register already reads `0x103`
-on this board and setting bits 0–1 changes nothing.
+**What:** `rockchip,rk3568-wdt` / `snps,dw-wdt` at `0xfe600000` **does
+reset the chip as configured**, confirmed 2026-09-03 16:30 UTC
+(10:30 MDT) on the running generation-4 kernel with no kexec involved
+at all: armed via `echo 1 > /dev/watchdog0` (closed without the magic
+character — see the driver quirk below), `WDT_CCVR` counted down at
+24 MHz from `0x3ff41391` (≈44.7 s, matching the 44 s `timeout`), SSH
+dropped ~45 s after arming, and the UART showed `DDR Version V1.10
+20200218_resume`, U-Boot SPL, the boot menu (~58 s from arming by the
+poller); the UART watcher picked os2 and generation 4 booted normally.
+Registers immediately before arming: WDT_CR `0x8` (RMOD=0,
+reset-on-first-timeout; RPL=2), WDT_TORR `0xe`, WDT_STAT `0`,
+`CRU_GLB_RST_CON` (0xfdd200dc) `0x103`, `GLB_CNT_TH` (0xfdd200d0)
+`0x00640064`.
 
-**Open:** whether the watchdog resets the SoC at all as configured, or
-whether the kexec path stops it (a kexec'd kernel's early clock init
-could gate `tclk_wdt_ns` before the driver probes). The next
-measurement is a runtime test with no kexec: arm from a running kernel,
-read `WDT_CCVR` for 15 s, wait for the reset. Then the TRM's bit table
-for `CRU_GLB_RST_CON` and `GLB_CNT_TH` (0xd0).
+Against that: two earlier tests of the **same** arm sequence — the
+kexec-hardening helper's `wd:write("1"); wd:close()`, issued
+immediately before `kexec -e` — through the update path's kexec
+(2026-09-02 23:24 and 2026-09-03 01:34 local MDT) hung the next kernel
+0.16 s in (the item-22 `rockchip_grf_init` stall) and produced **no
+reset in four minutes, either time**; the UART sat silent (no repeated
+`DDR Version`/BootROM output at all — not even a botched
+reset-and-rehang loop), and the device needed the power button both
+times. Same hardware, same arm sequence, same starting register state:
+resets when nothing else happens, does not reset when a kexec
+intervenes. Something about the kexec transition — not the watchdog's
+own configuration — defeats it. The PX30-style route-bit theory (the
+mainline U-Boot fix "make TSADC and WDT trigger a first global reset,"
+`CRU_GLB_RST_CON` bits 0–1) is retested and still refuted: the register
+already reads `0x103` on this board, was confirmed unchanged by
+writing those bits again before the second armed-hang test, and the
+hang still didn't reset (PR #54 closed).
 
-**What has to be true first:** that measurement; a second board; then
-either a report ("the watchdog cannot reset the RK3568 without X") or a
-fix in the CRU driver.
+**Driver quirk pinned along the way, not itself the cause:**
+`dw_wdt_stop()` (`drivers/watchdog/dw_wdt.c`) is a hardware no-op on
+this board: `if (!dw_wdt->rst) { set_bit(WDOG_HW_RUNNING, ...); return
+0; }`. The `rockchip,rk3568-wdt` node (`rk356x-base.dtsi`, unmodified
+by the forward-port patch) carries `clocks` but no `resets` property —
+confirmed live on the device
+(`/sys/firmware/devicetree/base/watchdog@fe600000/` has no
+`resets`/`reset-names` file) — so `devm_reset_control_get_optional_shared()`
+always returns NULL and every call to `stop()` reports success without
+touching a single hardware register. This includes the SYS_RESTART
+reboot notifier that `kernel_kexec()` **does** fire
+(`kernel_restart_prepare()` → `blocking_notifier_call_chain(reboot_notifier_list,
+SYS_RESTART, ...)`; `SYS_RESTART == SYS_DOWN`, so
+`watchdog_reboot_notifier`'s check matches and it calls
+`wdd->ops->stop()`). Relatedly, `dw_wdt_ident.options` carries
+`WDIOF_MAGICCLOSE`, so closing `/dev/watchdog0` without writing `'V'`
+never even reaches `stop()`: `watchdog_release()`'s guard evaluates
+false, `err` stays at its initial `-EBUSY`, and the "watchdog did not
+stop!" `pr_crit` fires and pings the watchdog again — a routine,
+expected consequence of this policy on this driver, not a fault, and it
+happens on every arm (the runtime test's included, since its arm used
+the identical `echo 1 > /dev/watchdog0` idiom). Net effect: **the
+software "stop" path is proven, from source, to be completely inert on
+this board in either direction** — it cannot explain the
+kexec-vs-no-kexec difference, since it behaves identically in both.
+
+**Open, ranked most to least likely:**
+
+1. **Leading candidate, mechanism not located.** The watchdog's
+   counting reference clock (`tclk_wdt_ns`, CRU `CLKGATE_CON(26)` bit
+   14, parented on `xin24m`) stops advancing somewhere between the old
+   kernel's shutdown and the new kernel's earliest boot, freezing
+   `WDT_CCVR` before it reaches zero. `clk_summary` on the
+   currently-running (post-reset) kernel shows both `tclk_wdt_ns` and
+   `pclk_wdt_ns` enabled (`enable_cnt` 1, held by the bound `dw_wdt`
+   driver's `devm_clk_get_enabled()`), so — unlike item 22's
+   `pclk_pipe`, which is simply never claimed and hence gated by the
+   day's ordinary `clk_disable_unused()` — something would have to
+   *actively* re-gate an in-use clock for this theory to hold, and no
+   such write turned up in `clk-rk3568.c`'s `rk3568_clk_init()` or
+   `drivers/clk/rockchip/clk.c`'s registration path
+   (`clk_disable_unused()` itself runs at `late_initcall_sync`, long
+   after the observed 0.16 s hang, so it cannot be the direct actor).
+   The strongest evidence for this over "the reset fired but got
+   absorbed" is the total UART silence: a genuine chip-level reset
+   always restarts cleanly from the boot ROM regardless of what Linux
+   left in the CRU — proven by the runtime test itself, which reset
+   into a clean boot from the identical starting register state — so
+   four minutes with no BootROM/U-Boot output at all argues the reset
+   request never asserted, not that it fired into a wall.
+2. **Reset-domain scoping too narrow — retested, inconclusive.** See
+   the route-bit retest above: the obvious "wrong bits" theory is
+   refuted, but a finer theory — that the "first global reset" *tier*
+   structurally cannot recover a wedged AXI/APB transaction, and only a
+   fuller reset can — remains open and unconfirmed; no RK3568 TRM or
+   bit-level `cru_rk3568.h`/`rst-rk3568.c` turned up in the tree or in
+   `/gnu/store` to check against (only `drivers/clk/rockchip/softrst.c`,
+   generic, no RK3568 bit table; only `.drv` derivations for
+   `u-boot-2026.01` exist in the store, no unpacked checkout).
+   `CRU_GLB_RST_ST` (0xfdd200d4), read now on the post-reset
+   generation-4 boot, is `0x00000000` — plain zero despite this exact
+   boot having been caused by the watchdog — which is not informative
+   on its own: either the register isn't sticky past the U-Boot
+   handoff, or 0xd4 isn't the right offset/interpretation on this SoC
+   revision.
+3. **Firmware-level (ATF/BL31), unverifiable offline.**
+   `machine_shutdown()` (`arch/arm64/kernel/process.c`) is a thin
+   `smp_shutdown_nonboot_cpus()` wrapper — generic ARM64 hotplug code,
+   nothing Rockchip-specific in the Linux tree. If BL31 (EL3 firmware;
+   no source present anywhere in this checkout or the Guix store) does
+   anything clock/bus-adjacent as a side effect of the PSCI CPU_OFF
+   calls this issues, it is invisible to source review. Lowest
+   confidence; flagged rather than argued.
+
+**Safe next measurements:** done this session, read-only: confirmed no
+`resets` property on the live devicetree; confirmed both wdt clocks
+read enabled in the current `clk_summary`; confirmed `CRU_GLB_RST_CON`
+unchanged at `0x103`; read `CRU_GLB_RST_ST` (inconclusive, above). For
+a future session: (a) an operator-present but still non-destructive
+test — arm with a much shorter timeout
+(`echo 3 > /sys/class/watchdog/watchdog0/timeout` before arming) and
+wait an order of magnitude longer than the timeout before reaching for
+the power button; a reset that still never comes after ~10x the
+timeout strengthens "frozen" over "very delayed," at no more risk than
+what today's hang already recovers from (the power button); (b) if a
+JTAG/SWD probe is ever available, read `WDT_CCVR` (0xfe600008) live
+during a deliberately armed hang — the one test that would directly
+settle "frozen vs. still counting" instead of inferring it from
+silence; (c) locate the RK3568 TRM or `u-boot-2026.01`'s
+`cru_rk3568.h` (a `guix build -S` of the u-boot package was not
+attempted this session — slow, and not needed to reach the ranking
+above) to interpret `CRU_GLB_RST_ST` properly.
+
+**What has to be true first:** one of the safe next measurements above
+narrows this to a single mechanism; then either a kernel-side fix (if
+it is the WDT clock) or accepting the power button as the trial-recovery
+path and saying so plainly in the update-path docs.
 
