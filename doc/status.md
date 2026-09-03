@@ -3,6 +3,92 @@
 Last updated: 2026-09-03. Update protocol: add a dated entry at the top
 after every hardware session; entries are per-device/per-operator.
 
+## 2026-09-03 late afternoon (wkelly PineNote) — the embrace sweep on glass: the merged reader (direct kernel + broker) is generation 7 — kexec trial, suspend/cover through the broker, cold boot
+
+**Deploy (14:23–14:45 MDT / 20:23–20:45 UTC), from branch `embrace-s1`
+at commit `33a3f7e`:** `make deploy DEVICE=pinenote-os2 FLAVOR=reader
+KEEP=6`. The reader system was cached — only four profile hooks needed
+building — to system
+`/gnu/store/hrhgg5agw0xhgch1cf320lkgq9m8y7z5-system`. Transfer sent 48
+of 441 store paths; `add` registered generation 7; the extlinux menu
+rendered five generations with `DEFAULT` still gen-4. `KEEP=6` was
+chosen deliberately so pruning could not remove generation 4, the
+proven shipping-driver fallback ("nothing to prune").
+
+**Trial and promote:** kexec from generation 4 (the 7.1.8 enabling
+image, shipping-driver kernel) into generation 7 (the merged `reader`
+flavor: `linux-pinenote` now *is* the direct-mode kernel with hrdl's
+driver, the parallel-advance patch, the RECT_HINTS bounds fix and the
+probe-unwind fix; the CLUT / direct-params / splash one-shots; the
+platform-controls broker) with the proven
+`initcall_blacklist=rockchip_grf_init`. The UART showed the designed
+sequence: `rockchip_ebc` probe first fails with "Unable to load
+custom_wf.bin" (-22, no CLUT yet), `pinenote-ebc-clut` compiles the
+CLUT, the driver is rebound, second probe "Loaded 4-bit PVI waveform
+version 0x19". Health check ok; **PROMOTED, `DEFAULT` gen-7.** Services
+on gen-7, 40 s after boot: `reader-session` running,
+`pinenote-platform-controls` running, `pinenote-ebc-clut` and
+`pinenote-ebc-direct-params` completed (one-shot), module parameters
+`default_hint=32`, `temp_override=22`, `dclk_select=0`. No crash loop,
+no oops; dmesg noise unchanged from before (panfrost cooling device,
+ws8100_pen status property -74, the rockchip-drm "No available vop"
+line).
+
+**Operator on the panel** (verbatim-ish): missed the splash moment, but
+"it settled with no artifacting"; page turns work with **no flashing**,
+transitions look similar to the study image; rotations work, they DO
+flash ("I think that is acceptable"), rotation feels sluggish ("did
+before too"); pen strokes and touch work.
+
+**Power button and cover — the first broker + direct-driver suspend on
+any hardware:** the first three taps were REJECTED by the broker
+("power tap … accepted=false detail=globally inhibited") because the
+working session had left `enabled=0` in
+`/data/wilkbook/autosuspend.conf` — the broker honours that file for
+the button too (trap recorded in `doc/device-access.md`: while paused,
+the power button and cover do nothing, by design). With `enabled=1`
+the next tap ran a clean transaction: tap accepted (held 321 ms) →
+`KEY_SLEEP` emitted → KOReader "ready" request 4 s later → "EBC
+quiesce: no REFRESH_BARRIER on this driver; waiting for interrupt
+quiescence" → "idle (no interrupts for 250 ms, 250 ms total)" →
+suspended → "resumed after 6s" on the next press → "transaction
+complete ok=true detail=button" → `KEY_WAKEUP`. Screen settled, slept,
+woke intact. Cover: closed → "transaction start trigger=cover" →
+slept; opened → "resumed after 5s" → woke. `/sys/power/suspend_stats`:
+3 successes, 0 failures at the end; 0 cyttsp5 "Validation of the
+wakeup response failed" lines. The RK817 PMIC's `SYS_CFG3` read `0x20`
+after the resume (the resume path restores the sleep-pin function —
+consistent with the PMIC root cause recorded in the entry below).
+
+**Cold boot:** `reboot` over SSH. The UART was briefly unplugged by the
+operator during that reboot (the cable is physically fragile and had
+to come out for the rotation test), so the UART watcher could not pick
+os2 and U-Boot's default booted os1 (stock Debian 6.12) — the standing
+fact that U-Boot defaults to os1 and only the UART pick is hands-off.
+Recovery: `pinenote/scripts/uart/uboot-pick-slot.sh LOG --slot os2
+--reboot pinenote-os1` rebooted os1 and picked os2 at poll 23;
+generation 7 booted COLD: `[promoted] [booted]`, `reader-session`
+running 14 s after boot, waveform loaded. Note for
+`doc/device-access.md`: a UART unplug kills the host-side `cat`
+reader; restart it with `stty -F /dev/ttyUSB0 1500000 raw -echo
+-crtscts` then `cat`, and exactly ONE reader per port (two readers
+split the bytes — the slot picker starts its own, so kill the extra).
+
+**End state:** `DEFAULT` gen-7; generations 3–7 registered (gen-4 kept
+as fallback); auto-suspend paused again (`enabled=0`) for the rest of
+the working session — must be set back to 1 (or the file removed)
+before the device is handed back to reading.
+
+**What this closes:** the embrace sweep's S6 glass gate
+(`doc/embrace-sweep-plan.md`) for the kexec/cold-boot/suspend path, and
+the direct-mode adoption ladder's "one shipping image" step
+(`doc/direct-mode-adoption.md`) — and it is the first hardware session
+of the broker + direct driver together. **NOT closed:** the
+shipping-reader list R1–R7 in `doc/glass-plan-2026-08.md` was not run
+item by item this session — only what is listed above. Merge of
+PR #50/#56 is the operators' decision, not made here; this is the
+glass proof for it, not the merge.
+
 ## 2026-09-03 afternoon (wkelly PineNote) — the watchdog self-reset root-caused: a kexec leaves the PMIC sleep pin on power-down; restored, the armed dog reboots the chip
 
 **The discriminating test (12:00 MDT):** the watchdog was armed on the

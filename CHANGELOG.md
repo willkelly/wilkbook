@@ -17,6 +17,28 @@ says otherwise.
 
 ## Unreleased
 
+### One reader, on the direct-mode driver — glass-proven, on the embrace branch, not yet merged
+
+- **On the embrace branch (PR #56), not yet merged.** A single reader
+  image — no more direct-vs-shipping split — booted on wkelly's
+  PineNote 2026-09-03 (`doc/status.md`), deployed over the update path
+  with no cable.
+- **What a tester on this image would notice:** page turns have **no
+  flashing**; rotations still flash and feel a little sluggish, as
+  before; pen and touch work; sleep now goes through the same broker as
+  today's shipping reader — the power button and the cover both put the
+  device to sleep and wake it cleanly (three suspend cycles this
+  session, zero failures).
+- **How it got there:** `make deploy` sent only the missing pieces over
+  the air, kexec-trialled the new kernel and command line, and promoted
+  it once it answered a health check; a follow-up reboot proved a cold
+  boot too (a UART hiccup needed one manual slot pick — the boot itself
+  needed no cable, `doc/update-path.md`).
+- **Not yet run this session:** the full shipping-reader validation
+  checklist (`doc/glass-plan-2026-08.md`) item by item, or an optics
+  check — this proved the boot/update/suspend path, not full
+  read-quality acceptance.
+
 ### Suspend and wake: the platform-controls broker (first outside contribution)
 
 - **Sleep is now a conversation with the reader instead of a rug-pull**

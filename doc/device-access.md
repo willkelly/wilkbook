@@ -132,6 +132,20 @@ device is awake; it is the recovery channel if auto-suspend misbehaves.
    then write the bytes to the port. Details and the semantics trap
    behind the two-stage shape: `doc/kernel-forward-port.md`.
 
+4. (2026-09-03) **Unplugging the cable kills the host-side reader, and
+   two readers on one port split the bytes.** Discovered mid-session on
+   the embrace branch's glass proof: the debug cable is physically
+   fragile and had to come out for a rotation test, which killed the
+   `cat` process reading `/dev/ttyUSB0` and left the UART watcher
+   (`uboot-pick-slot.sh`) unable to pick a slot for the next reboot —
+   U-Boot's default landed on os1 instead. Restart the host-side reader
+   after any unplug: `stty -F /dev/ttyUSB0 1500000 raw -echo -crtscts`
+   then `cat /dev/ttyUSB0`. Keep to exactly **one** reader per port —
+   the slot picker starts its own listener, so a leftover manual `cat`
+   splits the output between the two and neither sees a complete
+   stream. And the watcher needs the UART plugged in and live for the
+   whole reboot it is meant to catch, not just at the start.
+
 ### Proving the link end to end (2026-08-06)
 
 Silence on the host does not say *where* the link is broken. The SoC's
@@ -214,6 +228,15 @@ first kexec on glass).
   pause on `/data/wilkbook/autosuspend.conf` survives reflashes and is
   writable from os1, so set it there before a deploy rather than racing
   a 20 s window afterwards.
+- **`enabled=0` also inhibits the power button and the cover, by
+  design** (2026-09-03, on the embrace branch's broker + direct-driver
+  session, `doc/status.md`): the platform-controls broker reads the
+  same `enabled=0` before honouring *any* transaction, not just the
+  autosuspend timer, so a power tap while paused logs "accepted=false
+  detail=globally inhibited" and does nothing — closing the cover does
+  nothing either. If the button or the cover stops responding, check
+  `/data/wilkbook/autosuspend.conf` before assuming a hang; set
+  `enabled=1` to get them back.
 - After a broken scp, sshd's `PerSourcePenalties` can temporarily ban the
   host — pings fine, TCP accepted, handshake drops. Rapid retries DEEPEN
   the ban: stop for 5+ minutes, then one clean try.
