@@ -1058,3 +1058,26 @@ tree still has the bare return (our patch is a snapshot); the pin
 `make direct-probe-quirk-check` goes red when we port the fix or rebase
 over theirs, by design.
 
+## 25. RK3566 (PineNote): the DesignWare watchdog arms, expires, and does not reset the chip — enabler unknown
+
+**What:** `rockchip,rk3568-wdt` / `snps,dw-wdt` at `0xfe600000` arms
+(`/sys/class/watchdog/watchdog0/state` = active, timeout 44 s), keeps
+running through a kexec ("watchdog did not stop!"), and when the next
+kernel hangs 0.16 s into boot nothing feeds it — and no reset comes, in
+four minutes, twice (2026-09-02 23:24, 2026-09-03 01:34). The obvious
+suspect, the PX30-style route bits in `CRU_GLB_RST_CON` (CRU + 0xdc)
+that mainline U-Boot sets for the PX30 ("Make TSADC and WDT trigger a
+first global reset"), is refuted: the register already reads `0x103`
+on this board and setting bits 0–1 changes nothing.
+
+**Open:** whether the watchdog resets the SoC at all as configured, or
+whether the kexec path stops it (a kexec'd kernel's early clock init
+could gate `tclk_wdt_ns` before the driver probes). The next
+measurement is a runtime test with no kexec: arm from a running kernel,
+read `WDT_CCVR` for 15 s, wait for the reset. Then the TRM's bit table
+for `CRU_GLB_RST_CON` and `GLB_CNT_TH` (0xd0).
+
+**What has to be true first:** that measurement; a second board; then
+either a report ("the watchdog cannot reset the RK3568 without X") or a
+fix in the CRU driver.
+
