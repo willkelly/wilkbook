@@ -246,12 +246,12 @@ the hang.
   watchdog armed, kept running through the kexec, expired — and reset
   nothing: on the RK3568 the watchdog's reset reaches the chip's global
   reset only when `CRU_GLB_RST_CON` (CRU + 0xdc) bits 0–1 are set,
-  which stock U-Boot and the kernel leave clear; mainline U-Boot sets
-  exactly those bits for the PX30 ("Make TSADC and WDT trigger a first
-  global reset"). The helper now sets them by read-modify-write through
-  `/dev/mem` right before arming; the proof (a deliberately hanging
-  armed trial that resets itself) is the first item of the next glass
-  visit, and the kernel-side version is its own patch.
+  — that was the theory, from the PX30 precedent in mainline U-Boot.
+  Refuted the next night: the register already read `0x103` (bits 0–1
+  set) and the armed hang still did not reset. The enabler for a
+  watchdog reset on this SoC is unknown; the arm stays in the helper as
+  harmless, and the next experiment is a runtime watchdog test with no
+  kexec involved plus a readout of the watchdog's counter.
 - **Recovery is what the design said.** A trial that hangs leaves
   `DEFAULT` on the last good generation; the power button plus the
   UART slot pick (`pinenote/scripts/uart/uboot-pick-slot.sh`) brought
