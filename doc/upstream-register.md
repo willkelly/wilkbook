@@ -1010,9 +1010,18 @@ domain was on.
 regmap-mmio enables the clock around each access — the mechanism
 already used for other clocked syscons; (2) `CLK_IGNORE_UNUSED` on
 `pclk_pipe` in `clk-rk3568.c`, as `clk_pcie*_pipe_dft` already are.
-(1) is the minimal one. Our workaround skips the initcall on the kexec
-command line only (the GRF retains the cold boot's values across a
-kexec).
+**Correction, the same night:** (1) was tried on glass (PR #46: the
+built DTB carries the `clocks` reference, verified with fdtget) and a
+kexec into that kernel with no skip *still* hung in `rockchip_grf_init`;
+the PIPE power domain was measured on throughout. So the gated
+`pclk_pipe` is a true observation but **not the mechanism**, and neither
+is the domain. Established: the write into the pipe GRF from a kexec'd
+kernel never completes, cold boots are fine, and skipping the initcall
+on the kexec command line boots every time (the GRF retains the cold
+boot's values). Next: a register diff (CRU, PMU, GRFs) between a cold
+and a kexec'd boot, and a watchdog-armed userspace write into the block.
+Until the mechanism is known, what goes upstream is the observation and
+the workaround, not a fix.
 
 **Related, same session (a known upstream limitation, not a bug
 report):** the GICv3 LPI tables are reserved for the next kernel only
