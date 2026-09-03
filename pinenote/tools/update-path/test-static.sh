@@ -73,3 +73,14 @@ echo "PASS: the kexec path skips the GRF init that hangs a warm RK3566; cold boo
 grep -q 'cat /boot/gen-$gen/system)/profile/bin/wilkbook-generation trial $gen' "$deploy"
 ! grep -q '"wilkbook-generation trial $gen"' "$deploy"
 echo "PASS: the deployer's trial runs the helper shipped by the generation on trial"
+# kexec hardening (2026-09-02, offline; glass proof pending): the trial holds the
+# PIPE power domain up (dwc3 runtime "on") after the gadget unbind and arms the
+# SoC watchdog as the very last thing before kexec -e, both best-effort.
+after 'write_file(UDC, "' 'write_file(DWC3_CONTROL, "on' "$helper"
+after 'write_file(DWC3_CONTROL, "on' 'kexec -l %s/Image' "$helper"
+after 'remount,ro' 'io.open(WATCHDOG, "w")' "$helper"
+after 'io.open(WATCHDOG, "w")' 'sbin/kexec -e")' "$helper"
+grep -q 'wd:write("1"); wd:close()' "$helper"
+! grep -q 'wd:write("V")' "$helper"
+grep -q 'needs the power button' "$helper"
+echo "PASS: the trial holds the PIPE domain up and arms the watchdog last, both best-effort"

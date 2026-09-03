@@ -216,6 +216,30 @@ the hang.
   U-Boot on the first power-cycle and booted the promoted generation;
   after `promote 3` and a plain reboot it booted generation 3 cold with
   no key pressed at the extlinux stage.
+- **Hardening, designed offline the same night — glass proof pending.**
+  Two more facts drove it. (a) The clock patch alone did not stop the
+  hang: a kexec into the patched generation 5 with no skip still stalled
+  in `rockchip_grf_init` (named by `initcall_debug`). The trial's gadget
+  unbind lets the USB controller runtime-suspend and genpd gate the PIPE
+  power *domain* — the "domain was on" snapshot had been taken before
+  the unbind — and a powered-off block hangs the bus whatever its clock
+  does. dwc3 has no shutdown hook, so the helper now sets the controller
+  runtime-PM `on` after the unbind and the domain should survive into the
+  next kernel; the measurement (domain state 4 s after unbind, then
+  held) and the kexec are one power-cycle away. (b) A kernel that dies
+  before its drivers probe can only be recovered by the power button, so
+  the helper now arms the SoC watchdog as the last thing before
+  `kexec -e`. The RK3566's DesignWare watchdog cannot be stopped without
+  a reset line (this node has none), a kexec'd kernel finds it running
+  and pings it from the moment the driver probes
+  (`CONFIG_WATCHDOG_HANDLE_BOOT_ENABLED=y`), and a kernel that never
+  gets there resets into U-Boot after the hardware timeout (30 s
+  requested; the reset lands on the second expiry). U-Boot's own default
+  then lands on **os1**; the UART watcher picks os2 when attended. Both
+  are best-effort (no such device on QEMU virt) and pinned. Whether the
+  DT clock patch (`pinenote-7.0-pipegrf-clock`, PR #46) is needed at all
+  is decided by a kexec with the domain held into the *unpatched*
+  generation.
 - **Recovery is what the design said.** A trial that hangs leaves
   `DEFAULT` on the last good generation; the power button plus the
   UART slot pick (`pinenote/scripts/uart/uboot-pick-slot.sh`) brought

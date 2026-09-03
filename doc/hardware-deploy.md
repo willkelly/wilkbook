@@ -330,7 +330,11 @@ notes"):**
   serial driver is up; the debug cable has no reset line): hold the
   power button, then let `uboot-pick-slot.sh --slot os2` choose os2 at
   the U-Boot menu; extlinux's `DEFAULT` is still the last promoted
-  generation.
+  generation. Since the helper arms the SoC watchdog before `kexec -e`
+  (designed 2026-09-02, glass proof pending), a kernel that never
+  reaches its drivers resets itself into U-Boot after ~45–90 s — whose
+  default is os1, so an unattended failed trial ends on stock os1 with
+  SSH; boot os2 from the menu to get back.
 - Anything that changes early boot (kernel, DTB, command line) wants
   both proofs: the kexec trial and a cold boot from the menu.
 - While a session needs stable SSH, pause auto-suspend
