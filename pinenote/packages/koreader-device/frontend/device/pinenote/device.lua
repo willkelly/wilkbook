@@ -2,7 +2,8 @@
 Device abstraction for the Pine64 PineNote running wilkbook
 (mainline-ish kernel, rockchip-ebc DRM driver).
 
-Runs directly on the fbdev emulation (/dev/fb0, 32bpp XR24) with evdev
+Runs directly on the fbdev emulation (/dev/fb0; the format is discovered at
+runtime -- RGB565 on the direct-mode driver, XR24 on the retired one) with evdev
 input — no compositor, no SDL. Partial screen updates reach the e-ink
 panel through the fbdev deferred-io path, published explicitly at each
 refresh call via fsync on the fb fd (publish-on-call) with the deferred-io
@@ -379,7 +380,7 @@ function PineNote:init()
     -- settings.reader.lua).  G_reader_settings is initialized in
     -- reader.lua before the device module loads (reader.lua:39 vs the
     -- device require), but nil-guard anyway: host harnesses stub it.
-    local flash_area_fraction = 0.60
+    local flash_area_fraction = 0.98
     do
         local ok, v = pcall(function()
             return G_reader_settings and G_reader_settings.readSetting

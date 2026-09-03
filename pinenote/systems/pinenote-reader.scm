@@ -8,11 +8,13 @@
   #:use-module (gnu system)
   #:use-module (gnu system file-systems)
   #:use-module (guix gexp)
+  #:use-module (pinenote packages firmware)
   #:use-module (pinenote packages fonts)
   #:use-module (pinenote packages koreader)
   #:use-module (pinenote packages orientation)
   #:use-module (pinenote packages platform-controls)
   #:use-module (pinenote packages update-path)
+  #:use-module (pinenote services ebc-direct)
   #:use-module (pinenote services orientation)
   #:use-module (pinenote services koreader-profile)
   #:use-module (pinenote services reader-session)
@@ -56,6 +58,10 @@ root ALL=(ALL) ALL
 ;; exactly the packages that are on the device and nothing else.
 (define %pinenote-reader-packages
   (append (list koreader-bin pinenote-orientation-bridge
+                ;; The CLUT compiler: per-device calibration data is
+                ;; compiled on the device from its own waveform (never
+                ;; bundled), then the EBC driver is rebound to it.
+                pinenote-wbf-clut
                 pinenote-platform-controls
                 ;; The update path (doc/update-path.md): kexec for the
                 ;; trial boot, and the generation helper.
@@ -115,6 +121,16 @@ root ALL=(ALL) ALL
                  ;; physical/cover triggers and every /sys/power/state write;
                  ;; KOReader owns idle policy and screen preparation.
                  (service pinenote-platform-controls-service-type)
+                 ;; The direct-mode driver's wiring, graduated from the
+                 ;; reader-direct study flavor by the embrace sweep's S2
+                 ;; (2026-09-03): validated parameters through sysfs before
+                 ;; the rebind, the on-device CLUT compile + rebind, and the
+                 ;; white page that replaces the tty fbcon=map:1 keeps off
+                 ;; the glass.  Each succeeds doing nothing on a machine
+                 ;; without the panel (the QEMU rig).
+                 (service pinenote-ebc-direct-params-service-type)
+                 (service pinenote-ebc-clut-service-type)
+                 (service pinenote-ebc-splash-service-type)
                  (service pinenote-reader-session-service-type)
                  ;; The update path (doc/update-path.md): the daemon comes
                  ;; back as a STORE IMPORTER for `guix copy`, never a
@@ -283,7 +299,14 @@ over the serial console.  See doc/install.md in the wilkbook repository.
     ;; No console=tty0: the panel is the product surface, not a printk
     ;; sink.  See pinenote-reader-kernel-arguments for why this is also a
     ;; display-integrity change and not just cosmetics.
-    (kernel-arguments pinenote-reader-kernel-arguments)
+    ;; fbcon=map:1 keeps the framebuffer console off fb0 for good: the
+    ;; panel never shows a tty (operator directive 2026-08-27, after a
+    ;; night of console text burning into the ghost ledger during every
+    ;; reader stop and rebind; graduated to the reader by S2, decision 8).
+    ;; The pinenote-ebc-splash one-shot paints the white page that
+    ;; replaces it.  Serial console and sysrq are untouched.
+    (kernel-arguments (append pinenote-reader-kernel-arguments
+                              '("fbcon=map:1")))
     ;; The persistent data partition at /data: the library lives in
     ;; /data/books and survives os2 reflashes.  Addressed by GPT partlabel
     ;; (the PineNote community convention; same key pinenote-wifi uses) --

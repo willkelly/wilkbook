@@ -102,6 +102,11 @@ code review — before a single reboot. That's the standard.
 - `doc/direct-mode-adoption.md` — the staged plan for adopting hrdl's
   direct-mode driver, its blockers, and its bail-out criteria. Written
   because handwriting needs latency the LUT path cannot reach.
+- `doc/embrace-sweep-plan.md` — the reviewable plan for the embrace
+  sweep (2026-09-02): the ten deltas between the flavors, the twelve
+  decisions with recommendations, the six steps with their offline
+  proofs, and the bail-out. Read before touching anything
+  direct-related.
 - `doc/driver-findings-report.md` — the community-facing writeup of driver
   bugs the host tools found.
 - `doc/upstream-register.md` — the standing list of what we owe the
@@ -258,7 +263,10 @@ gitignored `build/`, or the reader's static address.
   new information** — the embrace sweep (the `reader` flavor moves to
   the direct kernel, the scaffolding is deleted, one shipping image) is
   now the work; the bail-out criteria stay live as what could reverse
-  it (`doc/direct-mode-adoption.md`, `doc/status.md`).
+  it (`doc/direct-mode-adoption.md`, `doc/status.md`). **S1+S2 of that
+  sweep are glass-proven** as generation 7 on wkelly's device
+  2026-09-03 (branch `embrace-s1`, PR #56, not yet merged;
+  `doc/status.md`).
 - **Update path — on glass since 2026-09-02.** os2 carries an image
   with the guix importer daemon, kexec, the `wilkbook-generation`
   helper, first-boot root growth and the signing-key ACL; from there
@@ -269,7 +277,15 @@ gitignored `build/`, or the reader's static address.
   `initcall_blacklist=rockchip_grf_init` to the kexec command line
   only (the next kernel's GRF init writes the PIPE GRF, whose clock the
   running kernel gated; upstream register 22), and every flavor boots
-  with `irqchip.gicv3_nolpi=1`. A hung trial is the power button plus
+  with `irqchip.gicv3_nolpi=1`. **With kernel patch 8 (kexec-hardening,
+  PR #48, pending the operator's review) in the KEXECING kernel, a
+  trial that halts self-resets by watchdog into DEFAULT, hands-off; a
+  panicking trial already reboots itself (`PANIC_TIMEOUT=1`)** — proven
+  end to end 2026-09-03 evening (`doc/status.md`). The GRF bus wedge is
+  prevented by the blacklist above and is the one class the reset
+  cannot recover; the very first trial into a newly-patched generation,
+  kexec'd from an unpatched kernel, is not covered either. Until
+  patch 8 merges, a hung trial otherwise is the power button plus
   `pinenote/scripts/uart/uboot-pick-slot.sh`; DEFAULT stays on the last
   promoted generation. Generations that predate the fix cannot be
   kexec'd into. Suspend/resume on a kexec'd kernel is proven.
@@ -303,8 +319,11 @@ gitignored `build/`, or the reader's static address.
   off (`DEFAULT_ENABLE=0x0`), BREAK+`sysrq` arms, BREAK+key fires —
   the sequence is an arming toggle, NOT a per-use guard
   (`doc/kernel-forward-port.md`). 6.6.30 remains regression-isolation only.
-  Seven patches; the 7.1 move *deleted* two hunks mainline absorbed.
-  Inventory in `doc/kernel-forward-port.md`.
+  Seven patches; the 7.1 move *deleted* two hunks mainline absorbed. An
+  eighth (`linux-pinenote-7.1-rk8xx-kexec-sleep-pin.patch`, the RK817
+  kexec/sleep-pin fix) is on the kexec-hardening branch, glass proof
+  pending — not yet merged into `%linux-pinenote-patches`. Inventory in
+  `doc/kernel-forward-port.md`.
 - **Suspend**: **ultra suspend is the shipping suspend** (2026-08-08,
   R12): hrdl's configuration adopted whole — standing
   `rockchip,suspend-state-override = <5>` + three `*_pmu` rails
@@ -349,8 +368,11 @@ gitignored `build/`, or the reader's static address.
   (`suspend_while_charging=1` opts out); `enabled=0` still pauses
   everything (the broker re-reads it continuously). Hardware-accepted
   on rpedde's device (shipping flavor); the v0.2.0 image on OUR os2
-  predates it and still runs the 5-min daemon, and the broker +
-  direct-driver combination has had no hardware session. Still
+  predates it and still runs the 5-min daemon. The broker +
+  direct-driver combination ran its first hardware session 2026-09-03
+  (wkelly's device, generation 7 on the embrace branch: power button
+  and cover both suspended and woke cleanly through the broker, three
+  cycles, zero failures — `doc/status.md`). Still
   unexplained: the TPS `ENABLE` 2f→20 delta after suspend, and one
   13.09 mA idle segment in the soak.
 - **Power**: awake reader idle ~157 mA after the vdd_cpu auto-PFM fix
@@ -406,3 +428,9 @@ gitignored `build/`, or the reader's static address.
   or a park is pending, so those procedures stop being load-bearing. That
   fix is harness-proven only; **no panel has run it.** Until a hardware
   session says otherwise, keep the procedures.
+- **Never glob `/sys/kernel/debug/regmap/*`** — that glob includes
+  `dummy-syscon@fdc50000`, the PIPE GRF whose pclk the running kernel
+  gates (upstream register item 22), and reading it wedges the bus just
+  like the GRF-write kexec hang does, only reached from a debugfs read
+  instead of a kexec (2026-09-03, `doc/status.md`). Name the one regmap
+  you want.

@@ -252,13 +252,9 @@ from the device's own waveform.")
           (use-modules (guix build utils))
            (let* ((out #$output)
                   (bin (string-append out "/bin"))
-                  (modprobe (string-append out "/etc/modprobe.d"))
                   (waveform-script
-                   (string-append bin "/pinenote-install-waveform"))
-                  (params-script (string-append bin "/pinenote-apply-ebc-params"))
-                  (config (string-append modprobe "/rockchip_ebc.conf")))
+                   (string-append bin "/pinenote-install-waveform")))
              (mkdir-p bin)
-             (mkdir-p modprobe)
              (call-with-output-file waveform-script
                (lambda (port)
                  (display "#!/bin/sh\n" port)
@@ -326,92 +322,9 @@ from the device's own waveform.")
                   (display "mv -- \"$temporary\" \"$destination\"\n" port)
                   (display "trap - EXIT HUP INT TERM\n" port)
                   (display "echo \"installed waveform at $destination\"\n" port)))
-             (chmod waveform-script #o555)
-             (call-with-output-file params-script
-               (lambda (port)
-                (display "#!/bin/sh\n" port)
-                (display "set -eu\n" port)
-                ;; see waveform-script: shepherd runs this with no PATH
-                (display "export PATH=\"/run/current-system/profile/bin${PATH:+:$PATH}\"\n" port)
-                (display "directory=/sys/module/rockchip_ebc/parameters\n" port)
-                (display "if [ ! -d \"$directory\" ]; then\n" port)
-                (display "  echo 'rockchip_ebc parameters are not available yet' >&2\n" port)
-                (display "  exit 1\n" port)
-                (display "fi\n" port)
-                (display "parameter_matches() {\n" port)
-                (display "  current=$1\n" port)
-                (display "  desired=$2\n" port)
-                (display "  case \"$desired:$current\" in\n" port)
-                (display "    0:0|0:N|1:1|1:Y) return 0 ;;\n" port)
-                (display "  esac\n" port)
-                (display "  [ \"$current\" = \"$desired\" ]\n" port)
-                (display "}\n" port)
-                (display "set_parameter() {\n" port)
-                (display "  name=$1\n" port)
-                (display "  value=$2\n" port)
-                (display "  path=$directory/$name\n" port)
-                (display "  if [ ! -e \"$path\" ]; then\n" port)
-                (display "    return 0\n" port)
-                (display "  fi\n" port)
-                (display "  current=$(cat \"$path\")\n" port)
-                (display "  if parameter_matches \"$current\" \"$value\"; then\n" port)
-                (display "    return 0\n" port)
-                (display "  fi\n" port)
-                (display "  printf '%s' \"$value\" > \"$path\"\n" port)
-                (display "  current=$(cat \"$path\")\n" port)
-                (display "  if parameter_matches \"$current\" \"$value\"; then\n" port)
-                (display "    return 0\n" port)
-                (display "  fi\n" port)
-                (display "  echo \"EBC parameter $name stayed at $current, wanted $value\" >&2\n" port)
-                (display "  exit 1\n" port)
-                (display "}\n" port)
-                (display "set_parameter direct_mode 0\n" port)
-                (display "# auto_refresh=0 (2026-07-12, optics finding 10): the driver's\n" port)
-                (display "# threshold-triggered auto-globals CORRUPT panel state (2x2 +\n" port)
-                (display "# on-camera evidence, doc/refresh-policy.md); ioctl-fired globals\n" port)
-                (display "# are clean, so userspace owns all full refreshes.\n" port)
-                (display "set_parameter auto_refresh 0\n" port)
-                (display "set_parameter refresh_threshold 60\n" port)
-                (display "set_parameter split_area_limit 0\n" port)
-                (display "set_parameter panel_reflection 1\n" port)
-                (display "set_parameter prepare_prev_before_a2 0\n" port)
-                (display "set_parameter dclk_select 0\n" port)
-                ;; Global refreshes use GL16 (enum 6) instead of GC16:
-                ;; decoded from the device's own waveform
-                ;; (doc/refresh-policy.md), GL16 is GC16 minus the
-                ;; white->white drive — the page background stays white
-                ;; through a full wash instead of flashing to a negative
-                ;; for ~220 ms, at identical duration and ghost-clearing
-                ;; everywhere else.  Residue in believed-white pixels is
-                ;; the one thing GL16 never scrubs; the reader-session
-                ;; boot blank runs one deliberate GC16 deep clean to
-                ;; cover the boot console, and a user-facing deep-clean
-                ;; action can follow if hardware shows it accumulating.
-                ;; This must live here, not on the kernel cmdline: the
-                ;; initrd raw-loads the module, so module.param= tokens
-                ;; never apply (hardware-confirmed 2026-07-05).
-                (display "set_parameter refresh_waveform 6\n" port)
-                ;; defio_delay_ms=250 (2026-08-01 sweep, hardware-proven):
-                ;; the deferred-io flush window.  At the vanilla 50 ms a
-                ;; portrait repaint (98-145 ms of writes) straddles the
-                ;; window and costs TWO full refresh passes; at 250 ms
-                ;; every measured span <= 250 ms costs one, and eight of
-                ;; eight portrait page turns cost exactly one pass on
-                ;; glass.  The reader publishes explicitly via fsync at
-                ;; every refresh call (publish-on-call,
-                ;; doc/refresh-policy.md), so the raised window adds no
-                ;; reader latency; it is only the fallback cadence for
-                ;; out-of-band framebuffer writers.  1000 also works but
-                ;; makes non-publishing writers (probes, fbcon in debug)
-                ;; visibly laggy for no additional benefit.  Must live
-                ;; here for the same initrd raw-load reason as above.
-                (display "set_parameter defio_delay_ms 250\n" port)))
-            (chmod params-script #o555)
-            (call-with-output-file config
-              (lambda (port)
-                (display "options rockchip_ebc direct_mode=0 auto_refresh=0 refresh_threshold=60 split_area_limit=0 panel_reflection=1 prepare_prev_before_a2=0 dclk_select=0 refresh_waveform=6 defio_delay_ms=250\n" port)))))))
+             (chmod waveform-script #o555)))))
     (home-page "https://github.com/PNDeb/pinenote-debian-image")
-    (synopsis "PineNote firmware helper scripts and EBC module options")
+    (synopsis "PineNote firmware helper scripts (the waveform installer)")
     (description
      "Install PineNote firmware support files without bundling private firmware
 or waveform blobs.  The waveform helper copies the first 2 MiB of the local

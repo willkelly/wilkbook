@@ -143,19 +143,20 @@
   ;; "mandatory" ones certain widgets request regardless; this key
   ;; suppresses the mandatory class too.  Found live 2026-08-27: with
   ;; flash_ui already false, menu opens still GC16-flashed until this
-  ;; was set (doc/status.md part 20d).  Default #f preserves the
-  ;; shipping flavor's validated behavior; the DIRECT flavor overrides
-  ;; both this and flash-area-fraction (ghosting is resolved there, so
-  ;; flash promotion is no longer load-bearing).
+  ;; was set (doc/status.md part 20d).  Default #t since the embrace
+  ;; sweep's S2 (2026-09-03, operator decision 7): the direct driver
+  ;; resolved ghosting, so flash promotion is no longer load-bearing and
+  ;; the reader gets fewer flashes.  (#f was the shipping driver's value.)
   (avoid-flashing-ui? pinenote-koreader-profile-avoid-flashing-ui?
-                      (default #f))
+                      (default #t))
   ;; Our own device layer's promotion threshold: flash intents covering
   ;; at least this fraction of the panel become a full GC16 wash
   ;; (device.lua flash_policy).  0.60 was load-bearing while ghosting
-  ;; accumulated; with ghosting resolved on the canon image the
-  ;; promotion is reserved for genuinely full-screen intents.
+  ;; accumulated on the old driver; with ghosting resolved the promotion
+  ;; is reserved for genuinely full-screen intents.  0.98 since S2
+  ;; (2026-09-03, decision 7), validated on glass 2026-08-27.
   (flash-area-fraction pinenote-koreader-profile-flash-area-fraction
-                       (default 0.60))
+                       (default 0.98))
   ;; ReaderRolling:showEngineProgress() paints a progress bar during a
   ;; crengine re-render and calls Screen:refreshFast() every 500 ms.
   ;; publish() is fsync on the fbdev fd and deferred-io tracks dirty

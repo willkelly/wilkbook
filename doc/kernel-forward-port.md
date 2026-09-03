@@ -68,8 +68,11 @@ All live in `pinenote/packages/kernel.scm`:
 
 `%linux-pinenote-patches` in `pinenote/packages/kernel.scm` is the
 authoritative list; the comments there carry each patch's rationale and
-revert instruction. As of 2026-08-08 it is seven patches, applied in list
-order on top of the vanilla source:
+revert instruction. As of 2026-09-03 it is eleven patches, applied in list
+order on top of the vanilla source (the last four are the direct-mode
+driver and our fixes on it). **There is a twelfth** (item 12 below) —
+it lives on the kexec-hardening branch until that merges, so the array
+in the tree at this commit is these eleven:
 
 1. `linux-pinenote-7.0-forward-port.patch` — the EBC display stack,
    WS8100 pen, PineNote DTS, `pinenote_defconfig`; the permanent core
@@ -112,6 +115,31 @@ order on top of the vanilla source:
    hourly RTC backstop, idle standby is **5.47 mA** over a 6.17-day
    unplugged soak with 170 cycles and no failures
    (`doc/artifacts/pinenote-ultra-soak-20260815/`).
+8. `linux-pinenote-7.1-hrdl-direct-mode.patch` — hrdl's direct-mode EBC
+   driver, swapping out the forward-port patch's `rockchip_ebc.c`
+   (per-pixel software TCON, NEON blitters, offline CLUT; the swap's own
+   `cpll_333m` DT hunk). Embraced 2026-09-02 (`doc/direct-mode-adoption.md`).
+9. `linux-pinenote-7.1-ebc-parallel-advance.patch` — ours: the banded
+   parallel NORMAL advance (18.4 → 11.9 ms full-panel, glass 2026-08-26)
+   and its instruments; `queue_work`'s return checked.
+10. `linux-pinenote-7.1-rect-hints-bounds.patch` — ours: the RECT_HINTS
+    ioctl bounded (`doc/upstream-register.md` 24; `make direct-rect-hints-check`).
+11. `linux-pinenote-7.1-probe-unwind.patch` — ours: the probe unwinds when
+    `drm_init` fails (item 23; `make direct-probe-quirk-check`).
+12. `linux-pinenote-7.1-rk8xx-kexec-sleep-pin.patch` — mfd rk8xx: adds
+   `if (kexec_in_progress) return;` at the top of `rk8xx_shutdown()`
+   (`drivers/mfd/rk8xx-core.c`, `#include <linux/kexec.h>`). Without it,
+   `kernel_kexec()`'s `device_shutdown()` call runs the same shutdown
+   hook a power-off uses, which switches the RK817 PMIC's SLEEP pin to
+   its power-down function (`SYS_CFG3` bit pattern `NULL_FUN` → `DN_FUN`)
+   and nothing in the new kernel restores it — so any SoC-level reset
+   after a kexec that asserts that pin (the watchdog's global reset does)
+   powers the chip off instead of rebooting it, register-proven
+   2026-09-03 (`doc/upstream-register.md` item 25, `doc/status.md`).
+    **Glass-proven 2026-09-03 17:05** (a halted trial kernel was reset by
+    the armed watchdog and DEFAULT booted hands-off; the GRF bus-wedge
+    hang is the one class the reset cannot recover — the blacklist
+    prevents it). On the kexec-hardening branch until that merges.
 
 `linux-pinenote-debug` stacks `linux-pinenote-debug-extract-fbs.patch`
 on top of the same seven.
@@ -150,6 +178,13 @@ are restored after local failure, PM completion, and driver teardown. Kconfig
 requires `SUSPEND`, closing the ARM64 `CPU_PM` dependency for the linked backend.
 Host fixtures exercise the same model and executor with fakes only.
 It does not change Linux 7.0's `ROCKCHIP_SLEEP_PD_CONFIG=0xff` pmdomain ABI.
+
+**The direct-mode driver is in the shipping list since the embrace
+sweep's S1 (2026-09-03):** items 8–11 below. `linux-pinenote-hrdl-direct`
+and `linux-pinenote-debug` are retired (the direct driver registers
+`EXTRACT_FBS` natively); `linux-pinenote-debug-extract-fbs.patch` stays
+only as the ebc-logic harness's dbg fixture over the retained forward-port
+driver source (`doc/embrace-sweep-plan.md`, decision 4).
 
 ## What the forward-port patch carries
 

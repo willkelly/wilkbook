@@ -115,8 +115,6 @@ case "$system_store" in
 esac
 store_listing=$(debugfs -R 'ls -l /gnu/store' "$rootfs_image" 2>/dev/null) || \
   fail "could not list the image's Guix store"
-require_image_path "$system_store/profile/bin/pinenote-ebc-sleep-frame-test" \
-  "packaged EBC sleep-frame test"
 require_image_path "$system_store/profile/bin/pinenote-wifi-control" \
   "packaged PineNote Wi-Fi control"
 
@@ -141,14 +139,6 @@ require_image_path "$system_store/profile/sbin/kexec" "packaged kexec-tools"
 require_image_path "$system_store/profile/bin/guix" "packaged guix (store importer for guix copy)"
 require_image_path "$system_store/profile/bin/wilkbook-generation" "packaged generation helper (update path)"
 
-debugfs -R "dump $system_store/profile/bin/pinenote-ebc-sleep-frame-test $tmpdir/barrier-link" \
-  "$rootfs_image" >/dev/null 2>&1 || fail "could not resolve packaged EBC sleep-frame test"
-barrier_target=$(tr -d '\n' <"$tmpdir/barrier-link")
-case "$barrier_target" in
-  /gnu/store/*-pinenote-ebc-barrier-test-*/bin/pinenote-ebc-sleep-frame-test) ;;
-  *) fail "packaged EBC sleep-frame test has invalid target: $barrier_target" ;;
-esac
-require_image_path "$barrier_target" "packaged EBC sleep-frame executable"
 
 debugfs -R "dump $system_store/profile/bin/pinenote-wifi-control $tmpdir/wifi-link" \
   "$rootfs_image" >/dev/null 2>&1 || fail "could not resolve packaged PineNote Wi-Fi control"
