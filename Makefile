@@ -64,22 +64,19 @@ ARTIFACTS ?= /tmp/wilkbook/pinenote-rootfs-artifacts
 #   empty        no Debian home at all (reprovisioned p7)
 FIXTURE ?= os1-used
 
-# reader-debug = reader with the EXTRACT_FBS diagnostic kernel
-# (linux-pinenote-debug); remove with the debug patch when done.
-# reader-direct = reader with hrdl's direct-mode EBC driver
-# (linux-pinenote-hrdl-direct).  A STUDY flavor: it builds, it has never
-# run, and it is expected NOT to reach a working reader on a first boot
-# (doc/pinenote-flavors.md says why).  Never a deploy candidate; remove
-# with the direct-mode patch if the adoption bails out.
-FLAVORS = minimal slim networked dev usb-console usb-console-linux-6-6 reader reader-debug reader-direct
+# One reader, on the direct-mode EBC driver (the embrace sweep, S1+S2,
+# 2026-09-03: doc/embrace-sweep-plan.md).  reader-direct and reader-debug
+# are gone -- their wiring is the reader's, and the driver carries
+# EXTRACT_FBS natively.
+FLAVORS = minimal slim networked dev usb-console usb-console-linux-6-6 reader
 
 .PHONY: help packages kernel kernel-drv reader-system-drv qemu-smoke qemu-virt qemu-virt-check qemu-update-check qemu-pageturn-campaign refresh-episodes-check refresh-trigger-check \
-         check-host wbf-check wbf-notice clut-check ebc-logic-check ebc-barrier-check rastersim-check koreader-input-check orientation-check platform-controls-check optics-check optics-audit-dataset power-check rockchip-pm-check activation-positive-check suspend-check \
+         check-host wbf-check wbf-notice clut-check ebc-logic-check rastersim-check koreader-input-check orientation-check platform-controls-check optics-check optics-audit-dataset power-check rockchip-pm-check activation-positive-check suspend-check \
         battery-dtb-check time-machine-check gexp-modules-check \
         timezone-check kernel-version-check library-check \
         manuals-check ultra-coupling-check timesync-check \
         settings-check koreader-profile-check ebc-modprobe-options-check \
-        ebc-clut-check ebc-card-resolution-check ebc-ioctl-roster-check direct-probe-quirk-check update-path-check deploy reader-stop-check pen-check ebc-lab-check \
+        ebc-clut-check ebc-card-resolution-check ebc-ioctl-roster-check direct-probe-quirk-check direct-rect-hints-check update-path-check deploy reader-stop-check pen-check ebc-lab-check \
         $(FLAVORS) $(addprefix image-,$(FLAVORS)) $(addprefix rootfs-,$(FLAVORS))
 
 help:
@@ -102,11 +99,11 @@ help:
 	@echo "  ebc-clut-check    the direct-mode CLUT installer one-shot, driven through every branch"
 	@echo "  ebc-ioctl-roster-check  every on-device EBC ioctl against the driver(s) it runs on (both UAPI headers from the patches)"
 	@echo "  direct-probe-quirk-check  quirk: the direct driver's probe returns bare after a failed drm_init (pinned, reported)"
+	@echo "  direct-rect-hints-check   quirk: hrdl's RECT_HINTS ioctl is unbounded; our bounds patch is present and applied after it"
 	@echo "  update-path-check the update path: generation ledger, extlinux rendering, trial/promote pins"
 	@echo "  deploy            DEVICE=<ssh host>: build, guix copy, add generation, kexec trial, health, promote"
 	@echo "  qemu-update-check ROOTFS=<ext4> [SYSTEM_B=..]: the update flow end to end in QEMU (rung 4u)"
 	@echo "  ebc-logic-check   extracted EBC driver logic checks ([WBF=..])"
-	@echo "  ebc-barrier-check supervised EBC sleep-frame command host tests"
 	@echo "  rastersim-check   raster/waveform simulation checks ([WBF=..])"
 	@echo "  koreader-input-check  KOReader input, touch, and virtual-node lifecycle tests"
 	@echo "  orientation-check SC7A20 classifier and uinput bridge tests"
@@ -204,7 +201,7 @@ kernel:
 	  -e '(@ (pinenote packages kernel) linux-pinenote)'
 
 packages:
-	$(GUIX) build $(GUIX_FLAGS) pinenote-ebc-test pinenote-ebc-barrier-test pinenote-diagnostics \
+	$(GUIX) build $(GUIX_FLAGS) pinenote-ebc-test pinenote-diagnostics \
 	  pinenote-firmware-support pinenote-broadcom-wifi-firmware \
 	  pinenote-broadcom-bt-firmware pinenote-wbf-clut
 
@@ -367,13 +364,13 @@ refresh-trigger-check:
 # The rung-1 roster.  Single source of truth: CI shards it with SKIP_CHECKS=
 # rather than restating it, so a suite added here is picked up automatically
 # instead of quietly missing from CI.
-CHECK_HOST_TARGETS = clut-check ebc-logic-check ebc-barrier-check rastersim-check \
+CHECK_HOST_TARGETS = clut-check ebc-logic-check rastersim-check \
         koreader-input-check orientation-check platform-controls-check optics-check power-check \
         rockchip-pm-check activation-positive-check suspend-check \
         library-check koreader-profile-check manuals-check ultra-coupling-check \
         battery-dtb-check time-machine-check gexp-modules-check \
         timezone-check refresh-trigger-check timesync-check settings-check \
-        ebc-modprobe-options-check ebc-clut-check ebc-card-resolution-check ebc-ioctl-roster-check direct-probe-quirk-check \
+        ebc-modprobe-options-check ebc-clut-check ebc-card-resolution-check ebc-ioctl-roster-check direct-probe-quirk-check direct-rect-hints-check \
         update-path-check reader-stop-check pen-check ebc-lab-check
 
 # Parse time, not recipe time: a recipe-level guard would run only AFTER every
@@ -465,12 +462,6 @@ ebc-logic-check:
 	@# above is blind to the deferred-io drain and to its ordering against
 	@# the wash. That ordering is worth one whole visible refresh pass.
 	sh pinenote/scripts/preflight/validate-ebc-global-arm-order-hunk.sh
-
-# Host-only fake-operation coverage for the separately invoked sleep-frame
-# diagnostic.  It extracts the barrier UAPI from the permanent kernel patch;
-# this target never invokes --run or opens device nodes.
-ebc-barrier-check:
-	$(call guix-shell,gcc-toolchain python) $(MAKE) -C pinenote/tools/ebc-barrier check
 
 # Gray8->Y4 raster library + waveform simulator tests (offline ladder
 # rung 3). WBF optional; without it the waveform-dependent tests are
@@ -598,6 +589,12 @@ ebc-ioctl-roster-check:
 direct-probe-quirk-check:
 	sh pinenote/scripts/preflight/validate-direct-probe-quirk.sh
 
+# quirk: the inherited RECT_HINTS ioctl wrote past the hint plane on an
+# inverted rectangle and over-read a short copy; our patch bounds it.
+# Pinned both ways: the inherited shape and our fix, in order.
+direct-rect-hints-check:
+	sh pinenote/scripts/preflight/validate-direct-rect-hints-fix.sh
+
 # The update path's pure decisions (generation ledger, extlinux rendering,
 # promote/prune/health) and the structural pins on its imperative halves
 # (the trial boot's teardown order, the deployer's promote-only-after-health).
@@ -610,8 +607,8 @@ update-path-check:
 # touches os1, p7 or the partition table; a failed health check leaves the
 # previous generation as DEFAULT.
 deploy:
-	@test -n "$(DEVICE)" || { echo "usage: make deploy DEVICE=<ssh host> [FLAVOR=reader-direct] [KEEP=3]"; exit 2; }
-	sh pinenote/tools/deploy/deploy.sh "$(DEVICE)" "$(or $(FLAVOR),reader-direct)" "$(or $(KEEP),3)"
+	@test -n "$(DEVICE)" || { echo "usage: make deploy DEVICE=<ssh host> [FLAVOR=reader] [KEEP=3]"; exit 2; }
+	sh pinenote/tools/deploy/deploy.sh "$(DEVICE)" "$(or $(FLAVOR),reader)" "$(or $(KEEP),3)"
 
 # reader-session's stop must be INT-first: TERM truncates the crengine
 # cache to zero bytes and re-arms a 30 s re-parse of the manuals book

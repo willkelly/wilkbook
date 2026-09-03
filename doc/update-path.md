@@ -216,11 +216,149 @@ the hang.
   U-Boot on the first power-cycle and booted the promoted generation;
   after `promote 3` and a plain reboot it booted generation 3 cold with
   no key pressed at the extlinux stage.
-- **Recovery is what the design said.** A trial that hangs leaves
-  `DEFAULT` on the last good generation; the power button plus the
-  UART slot pick (`pinenote/scripts/uart/uboot-pick-slot.sh`) brought
-  it back three times. A generation is proven only by *both* boots: the
-  kexec trial and, for anything that changes early boot, a cold one.
+- **Hardening, designed offline the same night — glass-proven end to
+  end 2026-09-03 evening (below).**
+  Two more facts drove it. (a) The clock patch alone did not stop the
+  hang: a kexec into the patched generation 5 with no skip still stalled
+  in `rockchip_grf_init` (named by `initcall_debug`). The trial's gadget
+  unbind lets the USB controller runtime-suspend and genpd gate the PIPE
+  power *domain* — the "domain was on" snapshot had been taken before
+  the unbind — and a powered-off block hangs the bus whatever its clock
+  does. dwc3 has no shutdown hook, so the helper now sets the controller
+  runtime-PM `on` after the unbind and the domain should survive into the
+  next kernel; the measurement (domain state 4 s after unbind, then
+  held) and the kexec are one power-cycle away. (b) A kernel that dies
+  before its drivers probe can only be recovered by the power button, so
+  the helper now arms the SoC watchdog as the last thing before
+  `kexec -e`. The RK3566's DesignWare watchdog cannot be stopped without
+  a reset line (this node has none), a kexec'd kernel finds it running
+  and pings it from the moment the driver probes
+  (`CONFIG_WATCHDOG_HANDLE_BOOT_ENABLED=y`), and a kernel that never
+  gets there resets into U-Boot after the hardware timeout (44 s, per
+  `/sys/class/watchdog/watchdog0/timeout`) — nominally: on the one
+  proof run (2026-09-03 17:05, doc/status.md) the reset landed about
+  3.5 minutes after the arm, not 44 s, and SSH to the recovered DEFAULT
+  came 5 min 13 s after the launch; the stretch is unexplained (the
+  driverless measurement earlier that day showed a 44 s period, so it
+  is something the new kernel's dw_wdt probe did before the panic).
+  Any wait on this path must budget for it. U-Boot's own default
+  then lands on **os1**; the UART watcher picks os2 when attended. Both
+  are best-effort (no such device on QEMU virt) and pinned.
+  **Both measured the same night, both negative, both recorded in
+  `doc/status.md`:** the PIPE domain stayed *on* through the unbind, the
+  hold and the kexec, and the patched generation still hung in
+  `rockchip_grf_init` — so neither the clock reference nor the domain is
+  the mechanism, and the kexec-only skip remains the only proven fix
+  (`doc/upstream-register.md` 22 is corrected accordingly). And the
+  watchdog armed, kept running through the kexec, expired — and reset
+  nothing, twice (2026-09-02 23:24, 2026-09-03 01:34 MDT). The obvious
+  suspect — on the RK3568 the watchdog's reset reaches the chip's
+  global reset only when `CRU_GLB_RST_CON` (CRU + 0xdc) bits 0–1 are
+  set, the PX30 precedent in mainline U-Boot — is refuted: the register
+  already read `0x103` (bits 0–1 set) and the armed hang still did not
+  reset.
+  **Updated 2026-09-03 morning: the watchdog does reset the SoC.** A
+  runtime test with no kexec involved (arm from the running kernel,
+  read `WDT_CCVR`, wait) got a real reset ~58 s after arming — DDR
+  init, U-Boot menu, the watcher picking os2, a clean boot
+  (`doc/status.md`). So the identical arm sequence resets the chip when
+  nothing else happens and does not reset it when a kexec intervenes:
+  the kexec transition itself is what defeats it, not the watchdog's
+  configuration. Two candidate mechanisms remain — the transition stops or
+  freezes the dog before the hang, or the reset fires into the bus the
+  PIPE GRF write wedged and the BootROM stalls before TPL prints — and
+  the discriminating test (arm, then a blacklisted kexec trial into the
+  running generation, then read the counter in the new kernel) is in
+  `doc/upstream-register.md` item 25. The
+  arm stays in the helper as harmless — it is what will deliver the
+  self-reset once the kexec-path mechanism is found — but today it does
+  not recover a trial that dies before its drivers probe; that still
+  needs the power button.
+  **Updated 2026-09-03 afternoon: kernel patch 8
+  (`linux-pinenote-7.1-rk8xx-kexec-sleep-pin.patch`, `%linux-pinenote-patches`)
+  landed — `rk8xx_shutdown()` returns early `if (kexec_in_progress)`, so
+  the outgoing kernel's kexec no longer flips the RK817 sleep pin to its
+  power-down function (SYS_CFG3, the PMIC's I2C regmap register 0xf4)
+  before jumping to the next kernel — and the self-reset test still
+  failed with the patch *confirmed* present in the kernel that ran it.
+  Confirmed offline from the exact store derivation generation 8 was
+  built from (not just the source tree): the `linux-7.1.8.tar.zst`
+  source derivation gen-8's kernel `.drv` references lists the patch
+  file as a direct input, and the realized source's
+  `drivers/mfd/rk8xx-core.c` carries the guard; `kernel/kexec_core.c`
+  sets `kexec_in_progress = true` immediately before
+  `kernel_restart_prepare()` in `kernel_kexec()`, so the guard is live
+  by the time `device_shutdown()` reaches the PMIC; both generation 7's
+  and generation 8's on-device `.config` carry `CONFIG_KEXEC_CORE=y`.
+  15:19:32 MDT, from gen-8 (patched, SYS_CFG3 read `0x20` immediately
+  before): armed the watchdog (timeout 44 s), then `kexec -e` into
+  generation 7's kernel *without* the `rockchip_grf_init` skip — the
+  designed hang, confirmed on the UART at 0.165 s kernel-relative time.
+  A dedicated UART watch (grep for `DDR Version`) found **no reset in
+  200 s** — more than 4x the watchdog's own timeout — and a parallel
+  SSH-reconnect poll found nothing for another 200 s (script log:
+  `NO RESET within 200 s of launch`, then `ssh: connect ... Connection
+  timed out`). The device was still unreachable and silent on the UART
+  at 15:28:16, and was not confirmed fully back (fresh boot into
+  generation 7, `DDR Version`/SPL/U-Boot with no `PM-STATE:` resume
+  prefix, i.e. a cold-style reset rather than a resume) until sometime
+  before 16:04 — at least 9 minutes of proven dead silence, bounded
+  above by roughly 45 minutes, far past anything the 44 s watchdog
+  timeout explains on its own; the recovery bears every mark of the
+  power button, not a watchdog fire. **So: the patch is proven present
+  and correctly wired, and it does not recover a target hung on the
+  GRF bus wedge specifically** — this test kexec'd deliberately
+  *without* `initcall_blacklist=rockchip_grf_init` to reproduce that
+  exact hang. That is a narrower result than "the self-reset doesn't
+  work": the helper's blacklist already prevents this hang on every
+  real trial (it is unconditional, applied to every generation the
+  helper prepares), so this class of failure is designed out of the
+  update path rather than left for the watchdog to catch. The wedge
+  from writing the clock-gated PIPE GRF (item 22) stays the leading
+  suspect for *why the watchdog itself doesn't reach the chip here* —
+  either it freezes the watchdog's own reset-assertion logic before it
+  can fire, or the reset fires but the BootROM stalls before it can
+  print anything — and the two remain undistinguished; this reads as a
+  TRM-level question about what a first-stage global reset reaches on a
+  wedged interconnect, not one this patch can answer. What this test
+  left open was the mechanism's positive case: does the self-reset work
+  at all, against a target that halts for some *other* reason, with
+  patch 8 in the kexecing kernel.
+
+  **Updated 2026-09-03 evening: yes, proven end to end
+  (`doc/status.md`, top entry; `doc/upstream-register.md` item 25).**
+  From a generation whose kexecing kernel carried patch 8, armed
+  (`echo 1 > /dev/watchdog0`), kexec'd (with the proven GRF blacklist)
+  into a target built to boot far enough to run patch 8's guard and
+  then halt cleanly (`rdinit=/nonexistent…
+  init=/nonexistent… panic=0`, so no root and no panic reboot): the new
+  kernel started, printed its command line, went silent — then,
+  unattended, `DDR Version`, U-Boot, the slot pick, and the target
+  generation up, `[promoted] [booted]`, `SYS_CFG3` back at `0x20`. Two
+  more facts from the same evening round it out: (1) a target that
+  *panics* instead of halting cleanly already self-recovers independent
+  of the watchdog — `CONFIG_PANIC_TIMEOUT=1` (`pinenote_defconfig`)
+  reboots it through firmware within a second, confirmed the same
+  evening; (2) the self-reset needs the *kexecing* kernel to carry
+  patch 8 — the very first kexec into a newly-patched generation is
+  still done by the old, unpatched one, and a hang in that one trial
+  still powers the board off (observed live, unplanned, 16:25 the same
+  evening). So the update path's coverage as of patch 8: bus wedge →
+  prevented outright by the blacklist; panic → the kernel reboots
+  itself; any other halt or deadlock in a kernel kexec'd *from* a
+  patched generation → the watchdog. The one gap is the first hop onto
+  a newly-patched generation.
+- **Recovery, updated.** A trial that halts now self-recovers by
+  watchdog when patch 8 is in the kexecing kernel (above) — `DEFAULT`
+  boots hands-off, no cable, no power button. The power button plus the
+  UART slot pick (`pinenote/scripts/uart/uboot-pick-slot.sh`) remains
+  the recovery for the cases the self-reset does not reach: the GRF
+  bus-wedge hang (prevented by the blacklist on any real trial, but not
+  self-recovering if it does happen), and the first kexec onto a
+  generation that doesn't have patch 8 yet. It brought the device back
+  three times this investigation. A generation is proven only by *both*
+  boots: the kexec trial and, for anything that changes early boot, a
+  cold one.
 
 ## Rig notes (what the QEMU flow taught, 2026-09-02)
 

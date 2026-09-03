@@ -4,8 +4,8 @@
 ;; guest (`hostname`, /run/current-system) and the closure delta that
 ;; `guix copy` moves is small.  Never deployed to a device.
 (use-modules (gnu system)
-             (pinenote systems pinenote-reader-direct))
+             (pinenote systems pinenote-reader))
 
 (operating-system
-  (inherit pinenote-reader-direct-operating-system)
-  (host-name "pinenote-reader-direct-genb"))
+  (inherit pinenote-reader-operating-system)
+  (host-name "pinenote-reader-genb"))

@@ -68,8 +68,6 @@ ROSTER = [
      r"local DRM_GLOBAL_REFRESH = (0x[0-9A-Fa-f]+)", "GLOBAL_REFRESH", {"shipping", "direct"}),
     ("pinenote/services/reader-session.scm",
      r"C\.ioctl\(card, (0x[0-9A-Fa-f]+), arg\)", "GLOBAL_REFRESH", {"shipping", "direct"}),
-    ("pinenote/tools/ebc-barrier/pinenote-ebc-sleep-frame-test.c",
-     r"DRM_IOCTL_ROCKCHIP_EBC_REFRESH_BARRIER == (0x[0-9A-Fa-f]+)UL", "REFRESH_BARRIER", {"shipping"}),
     ("pinenote/tools/ebc-lab/test-ebc-lab.lua",
      r"lib\.(?P<name>GLOBAL_REFRESH|EXTRACT_FBS)_IOCTL == (?P<lit>0x[0-9A-Fa-f]+)", None, {"shipping", "direct"}),
     ("pinenote/tools/ebc-lab/test-ebc-lab.lua",

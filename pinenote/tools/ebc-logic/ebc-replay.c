@@ -365,7 +365,7 @@ static void synth_default(struct synth_params *sp)
 	sp->menus = 2;
 	sp->full_every = 6;
 	sp->seed = 42;
-	sp->flash_frac = 0.60;
+	sp->flash_frac = 0.98;	/* device.lua flash_area_fraction (S2, 2026-09-03) */
 }
 
 static void synth_line(FILE *f, double t, enum replay_intent in,
@@ -461,7 +461,7 @@ static void policy_ship(struct policy *p)
 	 * now pins these three values against ebc.scm, so the next drift is
 	 * a build failure rather than a silent reprice. */
 	memset(p, 0, sizeof(*p));
-	p->flash_frac = 0.60;
+	p->flash_frac = 0.98;
 	p->default_wf = DRM_EPD_WF_GC16;
 	p->refresh_wf = DRM_EPD_WF_GL16;
 	p->auto_refresh = false;	/* shipped since 2026-07-11 (b9bbc0e) */
@@ -1448,14 +1448,17 @@ static void test_policy(void)
 	ev.intent = IN_FULL;
 	check(policy_global(&p, &ev) == 1, "policy: full always washes");
 
+	/* The promotion boundary is the policy's own flash_frac (device.lua's
+	 * flash_area_fraction; 0.60 on the old driver, 0.98 since the embrace
+	 * sweep's S2), so the test follows the model rather than a literal. */
 	ev.intent = IN_FLASHUI;
 	ev.w = PANEL_W;
-	ev.h = ceil(0.60 * PANEL_H);
+	ev.h = ceil(p.flash_frac * PANEL_H);
 	check(policy_global(&p, &ev) == 1,
-	      "policy: flashui at the 60%% boundary washes");
-	ev.h = floor(0.60 * PANEL_H) - 1;
+	      "policy: flashui at the promotion boundary washes");
+	ev.h = floor(p.flash_frac * PANEL_H) - 1;
 	check(policy_global(&p, &ev) == 0,
-	      "policy: flashui just under 60%% stays partial");
+	      "policy: flashui just under the boundary stays partial");
 
 	ev.intent = IN_UI;
 	ev.h = PANEL_H;

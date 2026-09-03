@@ -179,6 +179,10 @@ def run(script, compiler, source, destination, stamp=None, env=None,
     environ = dict(os.environ)
     if env is not None:
         environ = env
+    # The installer does nothing on a machine without the EBC device (the
+    # QEMU rig); the branches below want the PineNote behaviour, so point it
+    # at something that exists unless a case says otherwise.
+    environ.setdefault("EBC_DEVICE", os.path.dirname(os.path.abspath(script)))
     proc = subprocess.run(argv, capture_output=True, env=environ)
     out = (proc.stdout + proc.stderr).decode("utf-8", "replace")
     return proc.returncode, out
@@ -279,6 +283,18 @@ def branch_tests(script, tmp, label="", strict=True):
           rc != 0 and not os.path.exists(fx2.destination)
           and "no waveform" in out and "-EINVAL" in out and len(fx2.calls) == 0,
           out)
+
+    # 7b. No EBC device at all: the rig, or a bringup flavor.  Nothing to
+    #     compile, nothing to rebind, and it must SUCCEED -- reader-session
+    #     requires this one-shot since S2, so a failure here would keep the
+    #     reader from starting on the rig.
+    fx2b = Fixture(tmp, "no-device")
+    env = dict(os.environ)
+    env["EBC_DEVICE"] = os.path.join(tmp, "no-such-device")
+    rc, out = run(script, fx2b.compiler, fx2b.source, fx2b.destination, env=env)
+    check(label + "no EBC device: succeeds, compiles nothing, creates nothing",
+          rc == 0 and not os.path.exists(fx2b.destination)
+          and "no EBC device" in out and len(fx2b.calls) == 0, out)
 
     # 8. No compiler.
     fx3 = Fixture(tmp, "no-compiler")
@@ -654,13 +670,12 @@ def structural(repo, service):
           "the start lambda no longer hands the script DRIVER_DIR/DEVICE -- "
           "the service would install the CLUT and never rebind")
 
-    # Rule 4 of the direct-mode work, in POSITIVE form: EXACTLY the
-    # reader-direct flavor instantiates the CLUT service.  The old negative
-    # pin ("no flavor outside the study...") passed green while NO flavor
-    # instantiated it -- which is precisely the image the 2026-08-25
-    # session booted: no clut service, D1 by hand (doc/status.md).  This
-    # fires both when the wiring is dropped again and when it leaks toward
-    # a shipping flavor.
+    # Since the embrace sweep's S2 (2026-09-03) the reader itself carries
+    # the CLUT service -- in POSITIVE form: exactly the reader instantiates
+    # it (a negative pin passed green while NO flavor instantiated it, which
+    # is the image the 2026-08-25 session booted: no clut service, D1 by
+    # hand).  This fires both when the wiring is dropped and when it leaks
+    # into a bringup flavor.
     systems = os.path.join(repo, "pinenote", "systems")
     users = []
     for name in sorted(os.listdir(systems)):
@@ -670,9 +685,9 @@ def structural(repo, service):
             body = fh.read()
         if "ebc-direct" in body or "pinenote-ebc-clut" in body:
             users.append(name)
-    check("exactly the reader-direct flavor instantiates the CLUT service",
-          users == ["pinenote-reader-direct.scm"], str(users))
-    flavor_path = os.path.join(systems, "pinenote-reader-direct.scm")
+    check("exactly the reader flavor instantiates the CLUT service",
+          users == ["pinenote-reader.scm"], str(users))
+    flavor_path = os.path.join(systems, "pinenote-reader.scm")
     flavor = ""
     if os.path.isfile(flavor_path):
         with open(flavor_path) as fh:
@@ -681,10 +696,13 @@ def structural(repo, service):
           "(service pinenote-ebc-clut-service-type)" in flavor,
           "importing (pinenote services ebc-direct) without instantiating "
           "pinenote-ebc-clut-service-type is the 2026-08-25 gap again")
-    check("and it swaps in the direct modprobe options",
-          "%pinenote-ebc-direct-modprobe-options" in flavor,
-          "the flavor keeps the shipping nine-parameter options line, whose "
-          "intents the kernel would warn-and-ignore against hrdl's module")
+    session_path = os.path.join(repo, "pinenote", "services", "reader-session.scm")
+    with open(session_path) as fh:
+        session = fh.read()
+    check("and reader-session requires the CLUT one-shot (decision 9)",
+          "pinenote-ebc-clut" in session,
+          "reader-session no longer waits for the CLUT and rebind; the first "
+          "paint can race the probe again")
 
     # The ordering premise D7 records.  Both halves are mechanism, not prose:
     # if either moves, the direct-mode plan's account of when probe happens

@@ -355,7 +355,7 @@ falls out of who calls fsync; the timer is only the safety net.
  		int offset = y * pixel_pitch + x_start;
  		u8 *packed_inner_outer_nextprev_line = ebc->packed_inner_outer_nextprev + offset * 3;
  		u8 *phases_line = phase_buffer + y * phase_pitch +
-@@ -693,17 +707,197 @@
+@@ -693,17 +707,201 @@
  	u16 *maxs = (u16 *)&u64_maxs;
  	vst1_lane_u64(&u64_mins, vreinterpret_u64_u16(q16s_mins), 0);
  	vst1_lane_u64(&u64_maxs, vreinterpret_u64_u16(q16s_maxs), 0);
@@ -534,7 +534,11 @@ falls out of who calls fsync; the timer is only the safety net.
 +			init_completion(&w->done);
 +			INIT_WORK_ONSTACK(&w->work,
 +					  rockchip_ebc_advance_work_fn);
-+			queue_work(system_unbound_wq, &w->work);
++			/* Fresh on-stack work cannot be pending, but the
++			 * contract allows false; then nobody would ever
++			 * complete() it.  Run the band here instead. */
++			if (!queue_work(system_unbound_wq, &w->work))
++				rockchip_ebc_advance_work_fn(&w->work);
 +		}
 +	}
 +

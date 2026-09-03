@@ -154,12 +154,12 @@ guix system image -t raw-with-offset -L . --target=aarch64-linux-gnu \
 ```
 
 Substitute any other flavor entrypoint from `pinenote/systems/`. Every
-flavor carries the hardware-validated primary 7.0 kernel except the three
-that exist to vary it: `usb-console-linux-6-6` (regression isolation
-only; see `doc/status.md`), `reader-debug` (the diagnostic kernel), and
-`reader-direct` (hrdl's direct-mode EBC driver — a study flavor that has
-never run and is expected not to boot to a working reader on a first try;
-`doc/pinenote-flavors.md`, `doc/direct-mode-adoption.md`).
+flavor carries the primary kernel — since the embrace sweep (2026-09-03)
+that is the direct-mode EBC driver, `doc/embrace-sweep-plan.md` — except
+`usb-console-linux-6-6`, which exists to vary it (regression isolation
+only; see `doc/status.md`). `reader-debug` and `reader-direct` are gone:
+the driver carries `EXTRACT_FBS` natively and the reader carries the
+direct-mode wiring itself (`doc/pinenote-flavors.md`).
 `usb-console` is the bring-up/debug image — the gadget console without
 KOReader.
 

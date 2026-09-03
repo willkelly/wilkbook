@@ -26,4 +26,11 @@ awk '
   /^ err_disable_pm:/ { label_kept = 1 }
   END { exit !(removed_goto && bare_return && removed_label && removed_stop && label_kept) }
 ' "$patch" || { echo "FAIL: the direct-mode patch no longer carries the bare-return probe error path (quirk fixed or changed? re-approve: doc/kernel-forward-port.md quirks, upstream-register 23)" >&2; exit 1; }
-echo "PASS: quirk: direct-mode probe returns bare after a failed drm_init (runtime PM left enabled, refresh kthread leaked) -- inherited, pinned, reported"
+# ...and our fix on top, applied after hrdl's patch.
+fix="$here/../../patches/linux-pinenote-7.1-probe-unwind.patch"
+kernel="$here/../../packages/kernel.scm"
+[ -f "$fix" ] || { echo "FAIL: $fix missing" >&2; exit 2; }
+grep -q '^+[[:space:]]*goto err_stop_kthread;' "$fix" && grep -q '^+err_stop_kthread:' "$fix" && grep -q '^+[[:space:]]*kthread_stop(ebc->refresh_thread);' "$fix" || { echo "FAIL: the probe-unwind fix no longer restores the label and the goto" >&2; exit 1; }
+d=$(grep -n 'linux-pinenote-7.1-hrdl-direct-mode.patch' "$kernel" | head -1 | cut -d: -f1); f=$(grep -n 'linux-pinenote-7.1-probe-unwind.patch' "$kernel" | head -1 | cut -d: -f1)
+[ -n "$d" ] && [ -n "$f" ] && [ "$f" -gt "$d" ] || { echo "FAIL: the probe-unwind patch is not listed after the direct-mode patch in kernel.scm" >&2; exit 1; }
+echo "PASS: quirk: direct-mode probe returns bare after a failed drm_init (inherited, pinned, reported); our unwind fix is present, after it"

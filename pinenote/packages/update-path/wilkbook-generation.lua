@@ -23,7 +23,8 @@ local EXTLINUX = "/boot/extlinux/extlinux.conf"
 local READY = "/run/wilkbook-power/ready"
 local WIFI = "/run/current-system/profile/bin/pinenote-wifi-control"
 local UDC = "/sys/kernel/config/usb_gadget/pinenote-acm/UDC"
-
+local DWC3_CONTROL = "/sys/bus/platform/devices/fcc00000.usb/power/control"
+local WATCHDOG = "/dev/watchdog0"
 local function die(fmt, ...) io.stderr:write("wilkbook-generation: " .. fmt:format(...) .. "\n"); os.exit(1) end
 local function log(fmt, ...) io.stderr:write("wilkbook-generation: " .. fmt:format(...) .. "\n") end
 local function read_file(path) local f = io.open(path, "r"); if not f then return nil end; local s = f:read("*a"); f:close(); return s end
@@ -181,6 +182,14 @@ function commands.trial(n)
     run("herd stop reader-session >/dev/null 2>&1")
     run(WIFI .. " off >/dev/null 2>&1")
     if read_file(UDC) and read_file(UDC) ~= "" then write_file(UDC, "\n") end
+    -- Hold the PIPE power domain up through the kexec.  The USB controller
+    -- is its only live device; once the gadget is unbound it runtime-
+    -- suspends and genpd gates the domain, and the next kernel's early GRF
+    -- init writes into a powered-off block -- the bus never answers.  dwc3
+    -- has no shutdown hook, so a runtime-PM "on" set here survives to the
+    -- new kernel (U-Boot hands a cold boot every domain on; hand the
+    -- kexec'd kernel the same).  Best-effort: absent on other machines.
+    if exists(DWC3_CONTROL) then write_file(DWC3_CONTROL, "on\n") end
     -- The EBC must be idle before the kernel is replaced under it -- on a
     -- PineNote.  On any other machine (the QEMU virt rig, rung 4) there is
     -- no EBC interrupt line and nothing to quiesce; likewise the
@@ -222,6 +231,23 @@ function commands.trial(n)
     run("mount -o remount,ro / 2>/dev/null")
     log("kexec -e into generation %d", n)
     run("sync")
+    -- Arm the SoC watchdog last.  A kernel that dies before its drivers
+    -- probe (the 2026-09-02 hangs: 0.12 s in, no serial driver, so no
+    -- sysrq, no ssh -- only the power button) never pings it, and the SoC
+    -- SHOULD reset into U-Boot after the hardware timeout.  On glass it
+    -- did not (2026-09-02/03: armed, expired, nothing; CRU_GLB_RST_CON
+    -- was already 0x103, so the PX30-style route bit is not the enabler).
+    -- The arm stays: it is harmless, and it is what delivers the
+    -- self-reset once the real enabler is found (doc/upstream-register.md
+    -- 25).  A kernel that
+    -- boots finds it running and pings it from the moment the driver
+    -- probes (watchdog.handle_boot_enabled=y); it cannot be stopped again
+    -- without a reset line, so it simply stays kernel-fed.  Closing
+    -- without the magic character keeps it running on purpose.
+    -- Best-effort: no /dev/watchdog0 (QEMU virt) means no cover.
+    local wd = io.open(WATCHDOG, "w")
+    if wd then wd:write("1"); wd:close(); log("watchdog armed: a trial that never boots resets into U-Boot")
+    else log("no %s: a trial that never boots needs the power button", WATCHDOG) end
     os.execute("/run/current-system/profile/sbin/kexec -e")
     die("kexec -e returned; the running system is unchanged")
 end

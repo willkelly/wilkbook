@@ -6,7 +6,6 @@
   #:use-module (pinenote packages firmware)
   #:use-module (pinenote services ebc)
   #:export (%pinenote-ebc-direct-modprobe-options
-            pinenote-ebc-direct-modprobe-service
             pinenote-ebc-clut-service-type
             pinenote-ebc-clut-configuration
             pinenote-ebc-clut-configuration?
@@ -198,9 +197,17 @@
            (define (put name value)
              (call-with-output-file (string-append dir "/" name)
                (lambda (port) (display value port))))
-           (put "temp_override" "22")
-           (put "default_hint" "32")
-           #t)))
+           ;; A machine without the module (the QEMU rig, a bringup
+           ;; flavor) has nothing to tune; say so and succeed.  On a
+           ;; PineNote the module is raw-loaded by the initrd, so an
+           ;; absent directory there is the loud failure it should be.
+           (if (file-exists? dir)
+               (begin (put "temp_override" "22")
+                      (put "default_hint" "32")
+                      #t)
+               (begin (format (current-error-port)
+                              "pinenote-ebc-direct-params: ~a absent (no rockchip_ebc on this machine); nothing to apply~%" dir)
+                      #t)))))
     (stop #~(const #t)))))
 
 (define pinenote-ebc-direct-params-service-type
@@ -234,6 +241,10 @@
     (one-shot? #t)
     (start
      #~(lambda _
+         (if (not (file-exists? "/sys/class/graphics/fb0/stride"))
+             (begin (format (current-error-port)
+                            "pinenote-ebc-splash: no /dev/fb0 on this machine; nothing to paint~%")
+                    #t)
          (let* ((stride
                  (call-with-input-file "/sys/class/graphics/fb0/stride"
                    (lambda (port) (string->number
@@ -255,7 +266,7 @@
                    (loop (+ y 1))))
                (force-output port)
                (fsync port)))
-           #t)))
+           #t))))
     (stop #~(const #t)))))
 
 (define pinenote-ebc-splash-service-type
@@ -395,7 +406,9 @@
 ;;;    Nothing here can load, let alone display, until both are fixed.
 
 (define %pinenote-ebc-direct-modprobe-options
-  "softdep panfrost pre: rockchip_ebc\n")
+  ;; Since S2 this IS the shipping string ((pinenote services ebc) owns it);
+  ;; the alias survives for the gates that read it by this name.
+  pinenote-ebc-modprobe-options)
 
 ;; A direct-mode flavor should REPLACE the shipping instance rather than add
 ;; a second one -- both write /etc/modprobe.d/rockchip_ebc.conf, so two
@@ -409,7 +422,3 @@
 ;;
 ;; This constructor is the standalone form, for a flavor that assembles its
 ;; bringup list itself.
-(define (pinenote-ebc-direct-modprobe-service)
-  (service pinenote-ebc-modprobe-service-type
-           (pinenote-ebc-modprobe-configuration
-            (options %pinenote-ebc-direct-modprobe-options))))

@@ -145,7 +145,7 @@ cur=$(vm readlink -f /run/current-system)
 boot_b=$(vm cat /proc/sys/kernel/random/boot_id)
 [ -n "$boot_b" ] && [ "$boot_b" != "$boot_a1" ] && pass "after kexec: a new boot id (the kernel really was replaced)" || fail "boot id unchanged after the trial: the kexec did not happen"
 hn=$(vm hostname)
-[ "$hn" = "pinenote-reader-direct-genb" ] && pass "after kexec: hostname is generation B's" || fail "hostname $hn"
+[ "$hn" = "pinenote-reader-genb" ] && pass "after kexec: hostname is generation B's" || fail "hostname $hn"
 if vm "wilkbook-generation health --expect $sys_b" >/dev/null; then pass "health check passes on B"; else fail "health on B"; fi
 dflt=$(vm 'sed -n "s/^DEFAULT gen-//p" /boot/extlinux/extlinux.conf')
 [ "$dflt" = "1" ] && pass "DEFAULT still gen-1 while B is only on trial" || fail "DEFAULT during trial: $dflt"

@@ -97,6 +97,9 @@ For a trace through suspend entry, `no_console_suspend` on the cmdline is
 required — the runtime `console_suspend=N` knob does not hold the 8250 up
 through its own dev_pm_ops. UART gives passwordless root whenever the
 device is awake; it is the recovery channel if auto-suspend misbehaves.
+**That passwordless serial getty is a standing security item, not yet
+decided** — flagged 2026-09-03 after a session that leaned on it for
+hours; see `doc/alpha-checklist.md` for the open decision.
 
 3. (2026-08-26) **A hung shutdown answers the UART like a live system —
    and reconnecting over ssh is what causes the hang.** Root-caused
@@ -131,6 +134,37 @@ device is awake; it is the recovery channel if auto-suspend misbehaves.
    fd=os.open("/dev/ttyUSB0",os.O_RDWR); termios.tcsendbreak(fd,0)'`
    then write the bytes to the port. Details and the semantics trap
    behind the two-stage shape: `doc/kernel-forward-port.md`.
+
+4. (2026-09-03) **Unplugging the cable kills the host-side reader, and
+   two readers on one port split the bytes.** Discovered mid-session on
+   the embrace branch's glass proof: the debug cable is physically
+   fragile and had to come out for a rotation test, which killed the
+   `cat` process reading `/dev/ttyUSB0` and left the UART watcher
+   (`uboot-pick-slot.sh`) unable to pick a slot for the next reboot —
+   U-Boot's default landed on os1 instead. Restart the host-side reader
+   after any unplug: `stty -F /dev/ttyUSB0 1500000 raw -echo -crtscts`
+   then `cat /dev/ttyUSB0`. Keep to exactly **one** reader per port —
+   the slot picker starts its own listener, so a leftover manual `cat`
+   splits the output between the two and neither sees a complete
+   stream. And the watcher needs the UART plugged in and live for the
+   whole reboot it is meant to catch, not just at the start.
+
+5. (2026-09-03) **A suspended console swallows typed input.** KOReader's
+   idle timer suspended the device (UART: `PM: suspend entry (deep)`)
+   while a script was launched over the serial console; the launch did
+   nothing — the operator's press woke the device, but the console had
+   not queued the keystrokes, it had simply not been listening. Pause
+   auto-suspend (`enabled=0` in `/data/wilkbook/autosuspend.conf`)
+   before any console-driven procedure, the same rule as for SSH below.
+
+6. (2026-09-03) **Wi-Fi may not survive a power-button suspend/resume.**
+   Observed on the reader-direct study flavor (generation 8): after
+   resume, UART showed `brcmfmac: brcmf_sdio_bus_rxctl: resumed on
+   timeout` then `brcmfmac: brcmf_sdio_firmware_callback: brcmf_att…`
+   (attach failed) — the SDIO firmware did not reload. A second
+   suspend/resume cycle on the same boot did not recover it either; SSH
+   stayed unreachable for the rest of that boot. A cold boot restores
+   it. Observed once, on one flavor; not yet root-caused.
 
 ### Proving the link end to end (2026-08-06)
 
@@ -214,6 +248,15 @@ first kexec on glass).
   pause on `/data/wilkbook/autosuspend.conf` survives reflashes and is
   writable from os1, so set it there before a deploy rather than racing
   a 20 s window afterwards.
+- **`enabled=0` also inhibits the power button and the cover, by
+  design** (2026-09-03, on the embrace branch's broker + direct-driver
+  session, `doc/status.md`): the platform-controls broker reads the
+  same `enabled=0` before honouring *any* transaction, not just the
+  autosuspend timer, so a power tap while paused logs "accepted=false
+  detail=globally inhibited" and does nothing — closing the cover does
+  nothing either. If the button or the cover stops responding, check
+  `/data/wilkbook/autosuspend.conf` before assuming a hang; set
+  `enabled=1` to get them back.
 - After a broken scp, sshd's `PerSourcePenalties` can temporarily ban the
   host — pings fine, TCP accepted, handshake drops. Rapid retries DEEPEN
   the ban: stop for 5+ minutes, then one clean try.
@@ -237,6 +280,15 @@ first kexec on glass).
 - Diagnose "blank page" issues by dumping `/dev/fb0` (32bpp XR24, stride
   7488) and looking at it — separates render-side from glass-side
   instantly.
+- **Never read a regmap debugfs dump wholesale.** A glob over every
+  `registers` file under `/sys/kernel/debug/regmap/` hung the device
+  (2026-09-03, 13:55 MDT): the glob includes
+  `dummy-syscon@fdc50000`, the PIPE GRF whose `pclk` is gated on this
+  board — reading it wedges the bus exactly like the item-22 kexec hang
+  (`doc/upstream-register.md`), except this time nothing was kexec'd at
+  all, just read. Power button needed. Name the one regmap you want
+  (`/sys/kernel/debug/regmap/0-0020/registers` for the RK817 PMIC, etc.)
+  and never `cat`/`grep -r` the directory.
 
 ## Launching KOReader by hand (bypassing reader-session)
 

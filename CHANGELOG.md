@@ -17,6 +17,40 @@ says otherwise.
 
 ## Unreleased
 
+### One reader, on the direct-mode driver — glass-proven, on the embrace branch, not yet merged
+
+- **On the embrace branch (PR #56), not yet merged.** A single reader
+  image — no more direct-vs-shipping split — booted on wkelly's
+  PineNote 2026-09-03 (`doc/status.md`), deployed over the update path
+  with no cable.
+- **What a tester on this image would notice:** page turns have **no
+  flashing**; rotations still flash and feel a little sluggish, as
+  before; pen and touch work; sleep now goes through the same broker as
+  today's shipping reader — the power button and the cover both put the
+  device to sleep and wake it cleanly (three suspend cycles this
+  session, zero failures).
+- **How it got there:** `make deploy` sent only the missing pieces over
+  the air, kexec-trialled the new kernel and command line, and promoted
+  it once it answered a health check; a follow-up reboot proved a cold
+  boot too (a UART hiccup needed one manual slot pick — the boot itself
+  needed no cable, `doc/update-path.md`).
+- **Not yet run this session:** the full shipping-reader validation
+  checklist (`doc/glass-plan-2026-08.md`) item by item, or an optics
+  check — this proved the boot/update/suspend path, not full
+  read-quality acceptance.
+
+### A failed cable-free update now recovers by itself
+
+- **On the kexec-hardening branch (PR #48), not yet merged.** If a
+  cable-free update (`make deploy`) trials a kernel that hangs instead
+  of booting, the device now brings itself back — the armed SoC
+  watchdog resets it and the last promoted version boots on its own, no
+  cable and no power button, proven end to end on wkelly's PineNote
+  2026-09-03 evening (`doc/status.md`). One class still needs the power
+  button (a specific bus-wedge hang the update path already avoids by
+  default), and the very first update to a device that doesn't have
+  this fix yet isn't covered by it.
+
 ### Suspend and wake: the platform-controls broker (first outside contribution)
 
 - **Sleep is now a conversation with the reader instead of a rug-pull**
@@ -61,6 +95,19 @@ says otherwise.
   shipping flavor is unaffected. Until #42 lands, this image is
   read-plugged-in only; v0.2.0 remains the last direct image that
   sleeps.
+
+### Direct driver: a bounds bug in the rectangle-hint ioctl, fixed in tree
+
+- **A malformed rectangle hint could corrupt kernel memory.** The direct
+  driver's `RECT_HINTS` ioctl (what the pen and UI hint paths will use)
+  took an inverted rectangle as a huge unsigned width and wrote a whole
+  row from its left edge — past the hint plane on the last row; a short
+  copy from userspace walked records that were never copied. Both are
+  fixed by a small patch of ours on top of hrdl's driver, with the
+  inherited shape pinned so a rebase re-approves on purpose
+  (`doc/upstream-register.md` item 24). Nothing in the shipped reader
+  sends malformed rectangles today; this closes the door before the
+  semantic-hint work opens it wider.
 
 ### The update path (designed, enabled, proven in QEMU, and on glass: the first cable-free deploy)
 
