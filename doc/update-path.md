@@ -216,7 +216,8 @@ the hang.
   U-Boot on the first power-cycle and booted the promoted generation;
   after `promote 3` and a plain reboot it booted generation 3 cold with
   no key pressed at the extlinux stage.
-- **Hardening, designed offline the same night — glass proof pending.**
+- **Hardening, designed offline the same night — glass-proven end to
+  end 2026-09-03 evening (below).**
   Two more facts drove it. (a) The clock patch alone did not stop the
   hang: a kexec into the patched generation 5 with no skip still stalled
   in `rockchip_grf_init` (named by `initcall_debug`). The trial's gadget
@@ -299,23 +300,59 @@ the hang.
   above by roughly 45 minutes, far past anything the 44 s watchdog
   timeout explains on its own; the recovery bears every mark of the
   power button, not a watchdog fire. **So: the patch is proven present
-  and correctly wired, and the self-reset still does not happen when
-  the target kernel hangs before `rockchip_grf_init`.** This refines
-  rather than reopens the open question: it was never that the sleep
-  pin fix was missing, it is that a *hang* (as opposed to the
-  2026-09-03 morning runtime test's healthy, non-hanging kexec target)
-  defeats the watchdog's own recovery regardless of the sleep-pin
-  state. The wedge from writing the clock-gated PIPE GRF (item 22)
-  stays the leading suspect for *why* — either it freezes the
-  watchdog's own reset-assertion logic before it can fire, or the reset
-  fires but the BootROM stalls before it can print anything — and the
-  two remain undistinguished. A hung trial still needs the power
-  button.
-- **Recovery is what the design said.** A trial that hangs leaves
-  `DEFAULT` on the last good generation; the power button plus the
-  UART slot pick (`pinenote/scripts/uart/uboot-pick-slot.sh`) brought
-  it back three times. A generation is proven only by *both* boots: the
-  kexec trial and, for anything that changes early boot, a cold one.
+  and correctly wired, and it does not recover a target hung on the
+  GRF bus wedge specifically** — this test kexec'd deliberately
+  *without* `initcall_blacklist=rockchip_grf_init` to reproduce that
+  exact hang. That is a narrower result than "the self-reset doesn't
+  work": the helper's blacklist already prevents this hang on every
+  real trial (it is unconditional, applied to every generation the
+  helper prepares), so this class of failure is designed out of the
+  update path rather than left for the watchdog to catch. The wedge
+  from writing the clock-gated PIPE GRF (item 22) stays the leading
+  suspect for *why the watchdog itself doesn't reach the chip here* —
+  either it freezes the watchdog's own reset-assertion logic before it
+  can fire, or the reset fires but the BootROM stalls before it can
+  print anything — and the two remain undistinguished; this reads as a
+  TRM-level question about what a first-stage global reset reaches on a
+  wedged interconnect, not one this patch can answer. What this test
+  left open was the mechanism's positive case: does the self-reset work
+  at all, against a target that halts for some *other* reason, with
+  patch 8 in the kexecing kernel.
+
+  **Updated 2026-09-03 evening: yes, proven end to end
+  (`doc/status.md`, top entry; `doc/upstream-register.md` item 25).**
+  From a generation whose kexecing kernel carried patch 8, armed
+  (`echo 1 > /dev/watchdog0`), kexec'd (with the proven GRF blacklist)
+  into a target built to boot far enough to run patch 8's guard and
+  then halt cleanly (`rdinit=/nonexistent…
+  init=/nonexistent… panic=0`, so no root and no panic reboot): the new
+  kernel started, printed its command line, went silent — then,
+  unattended, `DDR Version`, U-Boot, the slot pick, and the target
+  generation up, `[promoted] [booted]`, `SYS_CFG3` back at `0x20`. Two
+  more facts from the same evening round it out: (1) a target that
+  *panics* instead of halting cleanly already self-recovers independent
+  of the watchdog — `CONFIG_PANIC_TIMEOUT=1` (`pinenote_defconfig`)
+  reboots it through firmware within a second, confirmed the same
+  evening; (2) the self-reset needs the *kexecing* kernel to carry
+  patch 8 — the very first kexec into a newly-patched generation is
+  still done by the old, unpatched one, and a hang in that one trial
+  still powers the board off (observed live, unplanned, 16:25 the same
+  evening). So the update path's coverage as of patch 8: bus wedge →
+  prevented outright by the blacklist; panic → the kernel reboots
+  itself; any other halt or deadlock in a kernel kexec'd *from* a
+  patched generation → the watchdog. The one gap is the first hop onto
+  a newly-patched generation.
+- **Recovery, updated.** A trial that halts now self-recovers by
+  watchdog when patch 8 is in the kexecing kernel (above) — `DEFAULT`
+  boots hands-off, no cable, no power button. The power button plus the
+  UART slot pick (`pinenote/scripts/uart/uboot-pick-slot.sh`) remains
+  the recovery for the cases the self-reset does not reach: the GRF
+  bus-wedge hang (prevented by the blacklist on any real trial, but not
+  self-recovering if it does happen), and the first kexec onto a
+  generation that doesn't have patch 8 yet. It brought the device back
+  three times this investigation. A generation is proven only by *both*
+  boots: the kexec trial and, for anything that changes early boot, a
+  cold one.
 
 ## Rig notes (what the QEMU flow taught, 2026-09-02)
 

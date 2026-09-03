@@ -342,21 +342,45 @@ notes"):**
   was confirmed present and live in generation 8's actual kernel (traced
   to the exact store derivation, not just the source tree; both gen-7
   and gen-8's on-device `.config` carry `CONFIG_KEXEC_CORE=y`), then
-  tested: armed watchdog, kexec from patched gen-8 into gen-7's kernel
-  *without* the grf_init skip (the designed hang). No reset appeared on
-  the UART in 200 s of dedicated watching (4x the 44 s timeout) or in a
-  further 200 s of SSH polling; the device needed a power cycle to come
-  back. So the sleep-pin fix does not by itself deliver the self-reset —
-  it was never missing, a *hang* defeats the watchdog's recovery
-  regardless of the pin state (`doc/update-path.md` "Hardening").
-  Until the kexec-path mechanism is found, a hung trial still needs the
-  power button. U-Boot's default is os1, so: with
+  tested against the GRF bus-wedge hang specifically: armed watchdog,
+  kexec from patched gen-8 into gen-7's kernel *without* the grf_init
+  skip (the designed hang). No reset appeared on the UART in 200 s of
+  dedicated watching (4x the 44 s timeout) or in a further 200 s of SSH
+  polling; the device needed a power cycle to come back. That result
+  stands and is narrower than it first read: the GRF wedge is a hang
+  the helper's blacklist already *prevents* on every real trial (it is
+  applied unconditionally), so this test proved the patch doesn't
+  rescue you from a hang it was never meant to reach, not that the
+  self-reset doesn't work.
+  **2026-09-03 evening: the positive case — proven.** From a generation
+  whose *kexecing* kernel carried patch 8, armed the watchdog, kexec'd
+  (with the GRF blacklist in place) a target built to boot far enough
+  to run patch 8's guard and then halt cleanly instead of hanging or
+  panicking (`rdinit=/nonexistent… init=/nonexistent… panic=0`): the new
+  kernel started, went silent, and — unattended — `DDR Version`,
+  U-Boot, the slot pick, and the target generation came up
+  `[promoted] [booted]` with `SYS_CFG3` back at `0x20`
+  (`doc/status.md`, `doc/upstream-register.md` item 25). Also pinned
+  the same evening: a target that *panics* (rather than halting
+  cleanly) already self-recovers without the watchdog at all —
+  `CONFIG_PANIC_TIMEOUT=1` reboots it through firmware in about a
+  second — and the self-reset needs the **kexecing** kernel to carry
+  patch 8, so the very first kexec onto a freshly-patched generation
+  (done by the old, unpatched kernel) is not covered: a hang in that
+  one trial still powers the board off, observed live the same evening.
+  **Net coverage with patch 8 in place:** GRF bus wedge → prevented by
+  the blacklist; panic → self-reboots; any other halt/deadlock in a
+  kernel kexec'd from an already-patched generation → the watchdog
+  resets it into `DEFAULT`, hands-off. Still needing the power button:
+  a GRF-wedge hang if it somehow still happens, and the first hop onto
+  a newly-patched generation. U-Boot's default is os1, so: with
   the cable attached and `WILKBOOK_UART=/dev/ttyUSB0` set, `make deploy`
   drives the menu back to os2 itself and reports the device back on the
   previous `DEFAULT`; without the cable, a failed trial ends on stock
   os1 with SSH — change the default from there if you want
   (`rescue-generation.sh`), and pick os2 at the on-device menu. Before
-  the watchdog: the power button, then `uboot-pick-slot.sh --slot os2`.
+  the watchdog resets it (or if it doesn't): the power button, then
+  `uboot-pick-slot.sh --slot os2`.
 - Anything that changes early boot (kernel, DTB, command line) wants
   both proofs: the kexec trial and a cold boot from the menu.
 - While a session needs stable SSH, pause auto-suspend
