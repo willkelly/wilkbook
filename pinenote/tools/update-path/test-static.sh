@@ -73,3 +73,22 @@ echo "PASS: the kexec path skips the GRF init that hangs a warm RK3566; cold boo
 grep -q 'cat /boot/gen-$gen/system)/profile/bin/wilkbook-generation trial $gen' "$deploy"
 ! grep -q '"wilkbook-generation trial $gen"' "$deploy"
 echo "PASS: the deployer's trial runs the helper shipped by the generation on trial"
+# kexec hardening (2026-09-02, offline; glass proof pending): the trial holds the
+# PIPE power domain up (dwc3 runtime "on") after the gadget unbind and arms the
+# SoC watchdog as the very last thing before kexec -e, both best-effort.
+after 'write_file(UDC, "' 'write_file(DWC3_CONTROL, "on' "$helper"
+after 'write_file(DWC3_CONTROL, "on' 'kexec -l %s/Image' "$helper"
+after 'remount,ro' 'io.open(WATCHDOG, "w")' "$helper"
+after 'io.open(WATCHDOG, "w")' 'sbin/kexec -e")' "$helper"
+grep -q 'wd:write("1"); wd:close()' "$helper"
+! grep -q 'wd:write("V")' "$helper"
+grep -q 'needs the power button' "$helper"
+echo "PASS: the trial holds the PIPE domain up and arms the watchdog last, both best-effort"
+# A trial that never answers is recovered, not just reported: with a UART the
+# deployer drives the menu back to os2 after the watchdog reset; without one it
+# says what to do.  Never promotes on that path.
+grep -q 'recover_after_failed_trial "$gen"' "$deploy"
+after 'recover_after_failed_trial() {' 'uboot-pick-slot.sh" "$log" --slot os2' "$deploy"
+sed -n '/^recover_after_failed_trial() {/,/^}/p' "$deploy" | grep -q '^  exit 1$'
+! grep -q 'never answered; a power-cycle boots' "$deploy"
+echo "PASS: a trial that never answers is recovered over the UART when one is configured, and never promoted"

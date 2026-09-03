@@ -171,7 +171,15 @@
         ;; the by-construction first probe no longer leaks and the rebind
         ;; stops logging "Unbalanced pm_runtime_enable!".  Item 23; pinned
         ;; by make direct-probe-quirk-check.
-        (local-file "../patches/linux-pinenote-7.1-probe-unwind.patch")))
+        (local-file "../patches/linux-pinenote-7.1-probe-unwind.patch")
+        ;; Ours, for upstream: mfd rk8xx keeps the RK817 sleep pin's
+        ;; function across a kexec (kernel_kexec() runs device_shutdown()
+        ;; like a reboot, and the PMIC's shutdown hook switches the pin to
+        ;; power-down; nothing in the next kernel restores it, so the SoC
+        ;; watchdog's reset after a kexec was a power-off).  Glass-proven
+        ;; 2026-09-03: a halted trial kernel self-resets and DEFAULT boots.
+        ;; doc/upstream-register.md item 25; doc/kernel-forward-port.md 12.
+        (local-file "../patches/linux-pinenote-7.1-rk8xx-kexec-sleep-pin.patch")))
 
 (define %linux-pinenote-source
   (origin
