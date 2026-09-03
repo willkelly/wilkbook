@@ -336,6 +336,19 @@ notes"):**
   itself defeats it, not the watchdog's configuration; the enabler is
   not the PX30-style `CRU_GLB_RST_CON` route bits (already set here).
   Ranked candidate mechanisms are in `doc/upstream-register.md` item 25.
+  **2026-09-03 afternoon:** kernel patch 8
+  (`linux-pinenote-7.1-rk8xx-kexec-sleep-pin.patch`) — `rk8xx_shutdown()`
+  skips the PMIC sleep-pin power-down write `if (kexec_in_progress)` —
+  was confirmed present and live in generation 8's actual kernel (traced
+  to the exact store derivation, not just the source tree; both gen-7
+  and gen-8's on-device `.config` carry `CONFIG_KEXEC_CORE=y`), then
+  tested: armed watchdog, kexec from patched gen-8 into gen-7's kernel
+  *without* the grf_init skip (the designed hang). No reset appeared on
+  the UART in 200 s of dedicated watching (4x the 44 s timeout) or in a
+  further 200 s of SSH polling; the device needed a power cycle to come
+  back. So the sleep-pin fix does not by itself deliver the self-reset —
+  it was never missing, a *hang* defeats the watchdog's recovery
+  regardless of the pin state (`doc/update-path.md` "Hardening").
   Until the kexec-path mechanism is found, a hung trial still needs the
   power button. U-Boot's default is os1, so: with
   the cable attached and `WILKBOOK_UART=/dev/ttyUSB0` set, `make deploy`

@@ -267,6 +267,50 @@ the hang.
   self-reset once the kexec-path mechanism is found — but today it does
   not recover a trial that dies before its drivers probe; that still
   needs the power button.
+  **Updated 2026-09-03 afternoon: kernel patch 8
+  (`linux-pinenote-7.1-rk8xx-kexec-sleep-pin.patch`, `%linux-pinenote-patches`)
+  landed — `rk8xx_shutdown()` returns early `if (kexec_in_progress)`, so
+  the outgoing kernel's kexec no longer flips the RK817 sleep pin to its
+  power-down function (SYS_CFG3, the PMIC's I2C regmap register 0xf4)
+  before jumping to the next kernel — and the self-reset test still
+  failed with the patch *confirmed* present in the kernel that ran it.
+  Confirmed offline from the exact store derivation generation 8 was
+  built from (not just the source tree): the `linux-7.1.8.tar.zst`
+  source derivation gen-8's kernel `.drv` references lists the patch
+  file as a direct input, and the realized source's
+  `drivers/mfd/rk8xx-core.c` carries the guard; `kernel/kexec_core.c`
+  sets `kexec_in_progress = true` immediately before
+  `kernel_restart_prepare()` in `kernel_kexec()`, so the guard is live
+  by the time `device_shutdown()` reaches the PMIC; both generation 7's
+  and generation 8's on-device `.config` carry `CONFIG_KEXEC_CORE=y`.
+  15:19:32 MDT, from gen-8 (patched, SYS_CFG3 read `0x20` immediately
+  before): armed the watchdog (timeout 44 s), then `kexec -e` into
+  generation 7's kernel *without* the `rockchip_grf_init` skip — the
+  designed hang, confirmed on the UART at 0.165 s kernel-relative time.
+  A dedicated UART watch (grep for `DDR Version`) found **no reset in
+  200 s** — more than 4x the watchdog's own timeout — and a parallel
+  SSH-reconnect poll found nothing for another 200 s (script log:
+  `NO RESET within 200 s of launch`, then `ssh: connect ... Connection
+  timed out`). The device was still unreachable and silent on the UART
+  at 15:28:16, and was not confirmed fully back (fresh boot into
+  generation 7, `DDR Version`/SPL/U-Boot with no `PM-STATE:` resume
+  prefix, i.e. a cold-style reset rather than a resume) until sometime
+  before 16:04 — at least 9 minutes of proven dead silence, bounded
+  above by roughly 45 minutes, far past anything the 44 s watchdog
+  timeout explains on its own; the recovery bears every mark of the
+  power button, not a watchdog fire. **So: the patch is proven present
+  and correctly wired, and the self-reset still does not happen when
+  the target kernel hangs before `rockchip_grf_init`.** This refines
+  rather than reopens the open question: it was never that the sleep
+  pin fix was missing, it is that a *hang* (as opposed to the
+  2026-09-03 morning runtime test's healthy, non-hanging kexec target)
+  defeats the watchdog's own recovery regardless of the sleep-pin
+  state. The wedge from writing the clock-gated PIPE GRF (item 22)
+  stays the leading suspect for *why* — either it freezes the
+  watchdog's own reset-assertion logic before it can fire, or the reset
+  fires but the BootROM stalls before it can print anything — and the
+  two remain undistinguished. A hung trial still needs the power
+  button.
 - **Recovery is what the design said.** A trial that hangs leaves
   `DEFAULT` on the last good generation; the power button plus the
   UART slot pick (`pinenote/scripts/uart/uboot-pick-slot.sh`) brought
