@@ -257,7 +257,15 @@ for the panel-corruption investigations.")))
                       ;; swap) plus the frame_period_us / advance_bands
                       ;; instruments.  See the patch header.
                       (local-file
-                       "../patches/linux-pinenote-7.1-ebc-parallel-advance.patch"))))))
+                       "../patches/linux-pinenote-7.1-ebc-parallel-advance.patch")
+                      ;; Ours, on top of hrdl's: the RECT_HINTS ioctl
+                      ;; bounded (an inverted rectangle wrote a whole
+                      ;; pitch past the hint plane; a short copy over-read
+                      ;; the batch; -ENOMEM).  Found by review 2026-09-02,
+                      ;; doc/upstream-register.md item 24; pinned by
+                      ;; make direct-rect-hints-check.
+                      (local-file
+                       "../patches/linux-pinenote-7.1-rect-hints-bounds.patch"))))))
     (synopsis "PineNote kernel with hrdl's direct-mode EBC driver (study)")
     (description
      "The linux-pinenote kernel with our EBC driver replaced by hrdl's

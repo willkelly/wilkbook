@@ -2,7 +2,8 @@
 Device abstraction for the Pine64 PineNote running wilkbook
 (mainline-ish kernel, rockchip-ebc DRM driver).
 
-Runs directly on the fbdev emulation (/dev/fb0, 32bpp XR24) with evdev
+Runs directly on the fbdev emulation (/dev/fb0; the format is discovered at
+runtime -- RGB565 on the direct-mode driver, XR24 on the retired one) with evdev
 input — no compositor, no SDL. Partial screen updates reach the e-ink
 panel through the fbdev deferred-io path, published explicitly at each
 refresh call via fsync on the fb fd (publish-on-call) with the deferred-io

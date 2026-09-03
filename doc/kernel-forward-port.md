@@ -151,6 +151,15 @@ requires `SUSPEND`, closing the ARM64 `CPU_PM` dependency for the linked backend
 Host fixtures exercise the same model and executor with fakes only.
 It does not change Linux 7.0's `ROCKCHIP_SLEEP_PD_CONFIG=0xff` pmdomain ABI.
 
+**The direct kernel's own patches** (`linux-pinenote-hrdl-direct`, on top
+of the eight): `linux-pinenote-7.1-hrdl-direct-mode.patch` (hrdl's driver
+swap), `linux-pinenote-7.1-ebc-parallel-advance.patch` (ours: the banded
+parallel NORMAL advance and its instruments; `queue_work`'s return
+checked since 2026-09-02) and `linux-pinenote-7.1-rect-hints-bounds.patch`
+(ours, 2026-09-02: the RECT_HINTS ioctl bounded — `doc/upstream-register.md`
+item 24, pinned by `make direct-rect-hints-check`). The embrace sweep
+(`doc/embrace-sweep-plan.md`) moves them into the shipping list.
+
 ## What the forward-port patch carries
 
 - the `rockchip_ebc` DRM driver (EBC e-ink controller),
