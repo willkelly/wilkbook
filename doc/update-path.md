@@ -233,8 +233,8 @@ the hang.
   a reset line (this node has none), a kexec'd kernel finds it running
   and pings it from the moment the driver probes
   (`CONFIG_WATCHDOG_HANDLE_BOOT_ENABLED=y`), and a kernel that never
-  gets there resets into U-Boot after the hardware timeout (30 s
-  requested; the reset lands on the second expiry). U-Boot's own default
+  gets there resets into U-Boot after the hardware timeout (44 s, per
+  `/sys/class/watchdog/watchdog0/timeout`). U-Boot's own default
   then lands on **os1**; the UART watcher picks os2 when attended. Both
   are best-effort (no such device on QEMU virt) and pinned.
   **Both measured the same night, both negative, both recorded in
@@ -244,14 +244,26 @@ the hang.
   the mechanism, and the kexec-only skip remains the only proven fix
   (`doc/upstream-register.md` 22 is corrected accordingly). And the
   watchdog armed, kept running through the kexec, expired — and reset
-  nothing: on the RK3568 the watchdog's reset reaches the chip's global
-  reset only when `CRU_GLB_RST_CON` (CRU + 0xdc) bits 0–1 are set,
-  — that was the theory, from the PX30 precedent in mainline U-Boot.
-  Refuted the next night: the register already read `0x103` (bits 0–1
-  set) and the armed hang still did not reset. The enabler for a
-  watchdog reset on this SoC is unknown; the arm stays in the helper as
-  harmless, and the next experiment is a runtime watchdog test with no
-  kexec involved plus a readout of the watchdog's counter.
+  nothing, twice (2026-09-02 23:24, 2026-09-03 01:34 MDT). The obvious
+  suspect — on the RK3568 the watchdog's reset reaches the chip's
+  global reset only when `CRU_GLB_RST_CON` (CRU + 0xdc) bits 0–1 are
+  set, the PX30 precedent in mainline U-Boot — is refuted: the register
+  already read `0x103` (bits 0–1 set) and the armed hang still did not
+  reset.
+  **Updated 2026-09-03 morning: the watchdog does reset the SoC.** A
+  runtime test with no kexec involved (arm from the running kernel,
+  read `WDT_CCVR`, wait) got a real reset ~58 s after arming — DDR
+  init, U-Boot menu, the watcher picking os2, a clean boot
+  (`doc/status.md`). So the identical arm sequence resets the chip when
+  nothing else happens and does not reset it when a kexec intervenes:
+  the kexec transition itself is what defeats it, not the watchdog's
+  configuration. Ranked candidate mechanisms (leading one: the
+  watchdog's counting clock freezes somewhere in the transition, not
+  yet located in source) are in `doc/upstream-register.md` item 25. The
+  arm stays in the helper as harmless — it is what will deliver the
+  self-reset once the kexec-path mechanism is found — but today it does
+  not recover a trial that dies before its drivers probe; that still
+  needs the power button.
 - **Recovery is what the design said.** A trial that hangs leaves
   `DEFAULT` on the last good generation; the power button plus the
   UART slot pick (`pinenote/scripts/uart/uboot-pick-slot.sh`) brought

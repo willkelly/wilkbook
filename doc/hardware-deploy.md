@@ -329,10 +329,15 @@ notes"):**
 - A hung trial cannot be reset over the UART (it stalls before the
   serial driver is up; the debug cable has no reset line). The helper arms the SoC watchdog before `kexec -e` so that a
   kernel that never reaches its drivers would reset itself into U-Boot;
-  on glass the armed watchdog expired without resetting the chip, twice
-  (2026-09-02/03), and the enabler is not the PX30-style
-  `CRU_GLB_RST_CON` route bits (already set here). Until that is found,
-  a hung trial still needs the power button. U-Boot's default is os1, so: with
+  through a kexec the armed watchdog expired without resetting the
+  chip, twice (2026-09-02/03), yet the identical arm sequence **does**
+  reset the chip when armed on a running kernel with no kexec involved
+  (2026-09-03 runtime test, `doc/status.md`) — so the kexec transition
+  itself defeats it, not the watchdog's configuration; the enabler is
+  not the PX30-style `CRU_GLB_RST_CON` route bits (already set here).
+  Ranked candidate mechanisms are in `doc/upstream-register.md` item 25.
+  Until the kexec-path mechanism is found, a hung trial still needs the
+  power button. U-Boot's default is os1, so: with
   the cable attached and `WILKBOOK_UART=/dev/ttyUSB0` set, `make deploy`
   drives the menu back to os2 itself and reports the device back on the
   previous `DEFAULT`; without the cable, a failed trial ends on stock
