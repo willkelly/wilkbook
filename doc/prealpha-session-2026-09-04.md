@@ -74,8 +74,12 @@ earlier generation it is a kernel spin.
    *Run on generation 14 (2026-09-04): both trials booted, neither note
    arrived — the helper logged them after its own radio-off, so no ssh
    watcher could ever see them. Fixed in the candidate (notes before the
-   teardown, pinned); the proof of the notice is a trial from the fixed
-   generation, not from 14.*
+   teardown, pinned). The proof is two-part and neither part is anything
+   generation 14 did: the first deploy of the fixed candidate from 14
+   shows the model line and the kexec'd-kernel note only (its DTB is
+   14's, so the "differs" note cannot fire); the "differs" note is
+   proven by a hand-run `trial 9` from the fixed generation, whose DTB
+   does differ.*
 6. **Suspend rig, KOReader path weighted.** `wifi-cycle.sh koreader-idle
    120`, then `wifi-cycle-host.sh 15 45 300` (settle 300 s so KOReader's
    idle timer wins every cycle), then `koreader-idle 900`. Verdicts from

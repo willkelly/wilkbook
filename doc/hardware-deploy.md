@@ -312,7 +312,10 @@ then `kexec -e`; the ssh link dies at the Wi-Fi off, before the kexec
 — by design, so nothing the helper says after that point reaches the
 deployer, and a helper that dies after it, say on an EBC that never
 goes idle, leaves the reader stopped and the radio off with no message
-delivered: a known gap, not yet closed), waits for the new generation to
+delivered — and a power-button sleep/wake does not bring the radio
+back, since the broker restores only a radio it saw on; only a reboot
+or a hand `pinenote-wifi-control on` from the UART does: a known gap,
+not yet closed), waits for the new generation to
 answer, runs `health` (`/run/current-system` is the new system, the
 broker is ready, the reader started), and only then `promote`s it and
 prunes to KEEP generations plus the promoted and booted ones, then

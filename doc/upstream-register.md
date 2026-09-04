@@ -1048,6 +1048,16 @@ fails there by construction (the CLUT is compiled on-device after the
 module is loaded, then the driver is rebound), so every boot logs
 `rockchip-ebc fdec0000.ebc: Unbalanced pm_runtime_enable!` at the
 rebind. Benign in effect; still a leak on every failed probe.
+**Glass, 2026-09-04:** with the unwind patch in the kernel the message
+still prints at every boot, because the by-construction failure is not
+at `drm_init` but earlier, in `rockchip_ebc_waveform_init` (the
+`custom_wf.bin` load, before the kthreads exist), whose own bare
+`return ret` leaks `pm_runtime_enable`, the two `vmalloc`s
+(`hints_ioctl`, `packed_inner_outer_nextprev`) and the two phase DMA
+mappings; a successful probe then leaks `lut_custom.luts` (one
+`vzalloc` of `num_temp_ranges × sizeof(struct drm_epd_lut_temp_v2)`,
+228 kB here, never freed). The fix is the resource-lifetime pass the
+third-party audit's item 2 asks for, not the two-line goto.
 
 **Fix:** restore `goto err_stop_kthread;` and the label
 (`kthread_stop(ebc->refresh_thread);` falling into `err_disable_pm`).

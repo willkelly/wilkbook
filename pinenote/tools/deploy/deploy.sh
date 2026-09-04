@@ -66,7 +66,7 @@ trial_health_promote() {
     watcher=$!
     echo "== UART watcher armed on $WILKBOOK_UART (pid $watcher): a dead trial resets into U-Boot and is picked back to os2"
   fi
-  echo "== trial: kexec into generation $gen (DEFAULT unchanged; the ssh link dies with the old kernel)"
+  echo "== trial: kexec into generation $gen (DEFAULT unchanged; the ssh link dies at the helper's Wi-Fi off, before the kexec)"
   # The trial runs the helper the TARGET generation ships, not the running
   # one: a fix to how a kexec is prepared must apply to the first kexec that
   # needs it (2026-09-02: the running helper could not skip the GRF init).

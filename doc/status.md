@@ -52,10 +52,29 @@ four seconds apart): kthreads 2 throughout, `runtime_status` suspended,
 no `Unbalanced pm_runtime_enable`, no `WARNING`, and `VmallocUsed` up
 by 276 / 244 / 212 / 244 kB per cycle (31 980 → 32 956 kB) —
 `rockchip_ebc_ctx_release`/`ctx_free` printed **once**, before the
-first re-probe, and never for the four later unbinds. What is retained
-and whether it matters is the audit's item 2 territory; the source
-reading is in the same-day review workflow record below. The product
-rebinds once per boot.
+first re-probe, and never for the four later unbinds. **Resolved from
+source the same afternoon** (a review workflow, two refuters per
+claim): the once-only `ctx_free` is the reader-era CRTC context (six
+`vmalloc`s of one plane each, ~15 MB — the same 15 MB `VmallocUsed`
+*dropped* on cycle 1) being freed when the first unbind's
+`drm_atomic_helper_shutdown` disables the still-enabled CRTC; with the
+reader stopped nothing sets a mode on the re-probed device, so no
+later cycle creates a context to free. The per-cycle residue is
+`lut_custom.luts`: one `vzalloc` of 14 temperature bins ×
+16 408 B = 228 kB per *successful* probe, freed nowhere (the
+212–276 kB spread is VMAP kernel-stack jitter). `/proc/vmallocinfo`
+on the running generation shows exactly one 57-page entry for this
+boot's single successful probe. And the boot's dmesg settles a doc
+error: the by-construction first probe fails at
+`rockchip_ebc_waveform_init` (`Unable to load custom_wf.bin`, 2.8 s),
+not at `drm_init`, so the probe-unwind patch never runs on the boot
+path and the rebind still logs `Unbalanced pm_runtime_enable!` (8.2 s)
+— the audit's item 2, glass-confirmed; `doc/kernel-forward-port.md`
+and upstream-register item 23 corrected. Suspend is balanced so far:
+`rockchip_ebc_ctx_free` count equals `PM: suspend entry` count (9/9
+mid-rig), one context freed and re-made per cycle. The product takes
+one failed and one successful probe per boot; nothing in the image
+unbinds repeatedly.
 
 **5. Device-tree notice — the notes could never arrive.** Trials
 14 → 9 → 14 both booted (health said 9, then 14), and neither trial's

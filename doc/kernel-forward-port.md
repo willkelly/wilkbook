@@ -884,12 +884,24 @@ pinned by `make direct-probe-quirk-check`:** the probe's error path after
 a failed `rockchip_ebc_drm_init` is a bare `return ret` — hrdl's patch
 replaced `goto err_stop_kthread` and deleted that label — so a probe that
 fails there leaves runtime PM enabled and the parked refresh kthread
-alive. On the direct image the *first* probe fails there by construction
+alive. On the direct image the *first* probe fails by construction
 (no CLUT until the one-shot compiles it), and the rebind's second
 `pm_runtime_enable` prints `Unbalanced pm_runtime_enable!` on every boot.
-Benign (runtime PM still works; one parked kthread leaked per boot), and
-the driver's lineage owns the two-line fix (`doc/upstream-register.md`
-item 23).
+**Correction from glass, 2026-09-04 (generation 14, the probe-unwind
+patch applied):** the boot's first probe does not fail at `drm_init` —
+it fails earlier, in `rockchip_ebc_waveform_init` (`Direct firmware
+load for rockchip/custom_wf.bin failed`, `*ERROR* Unable to load
+custom_wf.bin`, 2.8 s), whose bare `return ret` the unwind patch does
+not reach, so the rebind still logs `Unbalanced pm_runtime_enable!`
+(8.2 s) and that path still leaks the two plain vmallocs
+(`hints_ioctl`, `packed_inner_outer_nextprev`, ~10 MB) and the runtime-PM
+count — the audit's item 2, glass-confirmed (`doc/status.md`). Each
+*successful* probe additionally leaks `lut_custom.luts` (one
+`vzalloc`, 228 kB for this device's 14 temperature bins, freed
+nowhere): the rebind ×5 slope of the same session. Both are once per
+boot in the product and reclaimed at the next boot. The driver's
+lineage owns the fix (`doc/upstream-register.md` item 23, which now
+records the real failure site).
 
 ## Why the base is vanilla, not linux-libre (history)
 

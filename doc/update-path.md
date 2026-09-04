@@ -192,7 +192,10 @@ hand-run helper — is on that radio, so nothing logged after it ever
 arrives (2026-09-04: two trials in a row "never captured" the notes
 until this was seen; `test-static.sh` now pins the order). The lines
 that follow the radio-off (`kexec -e into generation N`, `watchdog
-armed`) reach only the UART. Until a cold boot has run, treat a
+armed`, the kexec binary's own stderr) reach only a UART login that
+ran the helper itself — the deployer never sees them, and the ACM
+console loses the same lines one statement later when the gadget is
+unbound. Until a cold boot has run, treat a
 device-tree change as undeployed — the Wi-Fi power-sequence delay
 (`doc/networking.md` §8) is the first one to wait for that.
 
@@ -408,8 +411,9 @@ the hang.
   from the passwd home and ignores `$HOME`; the signed nar pipe over
   OpenSSH (what `guix copy` does internally) is used instead, and sends
   only what `guix archive --missing` reports on the far side.
-- The `trial` ssh session dies with the old kernel, and kexec never
-  closes its TCP connection: a client without keepalives waits forever
+- The `trial` ssh session dies without a FIN — on QEMU with the old
+  kernel, on a PineNote earlier still, at the helper's own Wi-Fi off —
+  and nothing closes its TCP connection: a client without keepalives waits forever
   (the harness did, twice, with the guest already up as the new
   generation). `ServerAliveInterval` makes the replacement kernel answer
   the next probe with a reset within seconds; the caller's `timeout` is

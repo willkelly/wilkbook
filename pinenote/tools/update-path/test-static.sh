@@ -52,8 +52,9 @@ grep -q 'guix archive --missing' "$deploy"
 ! grep -q 'guix archive --export -r' "$deploy"
 grep -q 'guix archive --import' "$deploy"
 echo "PASS: deployer promotes only after health, cross-builds, sends only the missing paths, and reports refusals"
-# The trial's ssh session dies with the old kernel and kexec never closes the
-# TCP connection; without keepalives the client hangs forever (2026-09-02).
+# The trial's ssh session dies without a FIN (on QEMU with the old kernel, on a
+# PineNote at the helper's Wi-Fi off) and nothing closes the TCP connection;
+# without keepalives the client hangs forever (2026-09-02).
 harness="$here/../../scripts/qemu/run-virt-update-flow.sh"
 [ "$(grep -c '^vm_trial "wilkbook-generation trial' "$harness")" -eq 2 ]
 ! grep -q '^vm "wilkbook-generation trial' "$harness"
