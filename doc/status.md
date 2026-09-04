@@ -3,6 +3,41 @@
 Last updated: 2026-09-03. Update protocol: add a dated entry at the top
 after every hardware session; entries are per-device/per-operator.
 
+## 2026-09-03 night (wkelly PineNote) — merged main deployed as generation 9: the twelve-patch reader is DEFAULT
+
+`make deploy DEVICE=pinenote-os2 FLAVOR=reader KEEP=6` from `main` at
+`478e228` (the sync merge of PRs #50, #56, #48 and the day's docs),
+driven by a Sonnet subagent with a self-contained brief. Preamble: the
+device was awake on generation 7 but off the network — Wi-Fi had not
+survived a resume again — so the subagent logged in on the serial
+console (passwordless root getty) and issued `sync; reboot` with the
+UART watcher armed; U-Boot's menu was picked to os2 in 15 s and SSH
+answered 15 s after that. Then: build (cached; the manuals rebuilt —
+the deployed system is `50mf7by0…-system`, not the `h6gsq5qa…` built an
+hour earlier from a pre-docs commit), 18 of 441 store paths moved,
+`add` → generation 9, kexec trial from generation 7's eleven-patch
+kernel with the target's arming helper, `health=ok`
+(`booted_generation=9`, `broker_ready=true`, `reader_started=true`),
+**promoted**, generation 3 pruned (generations 4–9 remain; 4 is the
+old fallback). UART: `Linux version 7.1.8 … PREEMPT_RT`, first EBC
+probe fails on `custom_wf.bin` at 2.9 s by design, the rebind loads the
+4-bit PVI waveform at 8.0 s, login prompt. Verified over SSH:
+reader-session and pinenote-platform-controls running, the CLUT and
+direct-params one-shots completed, `default_hint=32`,
+`temp_override=22`, watchdog `inactive`, no oops/BUG/panic in dmesg.
+PMIC `SYS_CFG3` reads `0x30` — expected: the kexec into 9 was done by
+the unpatched generation-7 kernel; a cold boot or one suspend/resume
+returns it to `0x20`, and every trial launched FROM generation 9 is
+now watchdog-covered. Auto-suspend restored (`enabled=1`).
+
+Two process notes: a mid-task instruction sent to a running subagent
+that contradicted its own forbidden list (a console `reboot`) was
+refused as suspected prompt injection — put every allowed recovery
+action in the brief up front; and Wi-Fi failing to return after a
+resume is now three-for-three on these images today (two on the
+generation-8 study flavor, one on generation 7) — a cold boot restores
+it every time, a second suspend cycle did not.
+
 ## 2026-09-03 evening (wkelly PineNote) — the watchdog self-reset PROVEN end to end (kernel patch 8): a trial kernel that halts is reset by the dog and DEFAULT boots, hands-off; what it cannot recover
 
 **The proof (17:05:17 MDT / 23:05:17 UTC device time).** From the
