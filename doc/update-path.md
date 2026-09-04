@@ -184,7 +184,15 @@ own DTB. The helper says so at trial time (`NOTE: generation N's device
 tree differs from the booted gen-M's …`) by comparing the target's
 staged DTB with the booted generation's, and adds a second note whenever
 the running kernel was itself kexec'd (its tree is the last cold boot's,
-which may be older still); the deployer prints both. Until a cold boot has run, treat a
+which may be older still); the deployer prints both. Both notes, and
+the machine-model line, are logged **before** the trial's teardown
+begins: the teardown turns the radio off right after stopping the
+reader, and whoever watches a trial over ssh — the deployer, or a
+hand-run helper — is on that radio, so nothing logged after it ever
+arrives (2026-09-04: two trials in a row "never captured" the notes
+until this was seen; `test-static.sh` now pins the order). The lines
+that follow the radio-off (`kexec -e into generation N`, `watchdog
+armed`) reach only the UART. Until a cold boot has run, treat a
 device-tree change as undeployed — the Wi-Fi power-sequence delay
 (`doc/networking.md` §8) is the first one to wait for that.
 

@@ -177,32 +177,19 @@ function commands.trial(n)
     append = append:gsub("\n$", "")
     if not exists("/run/current-system/profile/sbin/kexec") then die("kexec-tools is not in this image") end
     log("trial boot of generation %d: DEFAULT is unchanged; a power-cycle returns to it", n)
-    -- The same teardown a suspend runs: stop the reader cleanly (INT-first
-    -- destructor), radio off, gadget unbound, panel idle, disk synced.
-    run("herd stop reader-session >/dev/null 2>&1")
-    run(WIFI .. " off >/dev/null 2>&1")
-    if read_file(UDC) and read_file(UDC) ~= "" then write_file(UDC, "\n") end
-    -- Hold the PIPE power domain up through the kexec.  The USB controller
-    -- is its only live device; once the gadget is unbound it runtime-
-    -- suspends and genpd gates the domain, and the next kernel's early GRF
-    -- init writes into a powered-off block -- the bus never answers.  dwc3
-    -- has no shutdown hook, so a runtime-PM "on" set here survives to the
-    -- new kernel (U-Boot hands a cold boot every domain on; hand the
-    -- kexec'd kernel the same).  Best-effort: absent on other machines.
-    if exists(DWC3_CONTROL) then write_file(DWC3_CONTROL, "on\n") end
-    -- The EBC must be idle before the kernel is replaced under it -- on a
-    -- PineNote.  On any other machine (the QEMU virt rig, rung 4) there is
-    -- no EBC interrupt line and nothing to quiesce; likewise the
-    -- generation's DTB is the PineNote's, and kexec-tools reuses the
-    -- running device tree when --dtb is omitted.
     local model = (read_file("/proc/device-tree/model") or ""):gsub("%z", "")
     local pinenote = model:find("PineNote", 1, true) ~= nil
-    if pinenote then
-        if not ebc_quiesce() then die("EBC did not go idle; refusing to replace the kernel under a refresh") end
-    else
-        log("machine model %q: no EBC to quiesce", model)
-    end
+    -- The generation's DTB is the PineNote's; on any other machine (the
+    -- QEMU virt rig, rung 4) kexec-tools reuses the running device tree
+    -- when --dtb is omitted.
     local dtb_arg = pinenote and string.format(" --dtb=%s/%s", dir, L.DTB_NAME) or ""
+    -- Everything the operator must hear is said HERE, before the teardown.
+    -- The teardown's first act after stopping the reader is the radio, and
+    -- an operator watching a trial over ssh (the deployer, or a hand-run
+    -- helper) is on that radio: no line logged after it ever arrives.
+    -- 2026-09-04: the two device-tree notes below went "uncaptured" through
+    -- two trials for exactly this reason.  Only the UART sees the later lines.
+    log("machine model %q -> %s", model, dtb_arg ~= "" and "generation DTB" or "running device tree reused")
     -- A trial boots on the RUNNING kernel's device tree, whatever --dtb says:
     -- kexec-tools (2.0.31) tries kexec_file_load first and its arm64 loader
     -- drops a user DTB on that path ("(ignored)", kexec-arm64.c), and the
@@ -228,6 +215,27 @@ function commands.trial(n)
             log("NOTE: the running kernel was kexec'd; its device tree is the last cold boot's, not gen-%d's -- a device-tree change is proven only by a cold boot", booted or 0)
         end
     end
+    -- The same teardown a suspend runs: stop the reader cleanly (INT-first
+    -- destructor), radio off, gadget unbound, panel idle, disk synced.
+    run("herd stop reader-session >/dev/null 2>&1")
+    run(WIFI .. " off >/dev/null 2>&1")
+    if read_file(UDC) and read_file(UDC) ~= "" then write_file(UDC, "\n") end
+    -- Hold the PIPE power domain up through the kexec.  The USB controller
+    -- is its only live device; once the gadget is unbound it runtime-
+    -- suspends and genpd gates the domain, and the next kernel's early GRF
+    -- init writes into a powered-off block -- the bus never answers.  dwc3
+    -- has no shutdown hook, so a runtime-PM "on" set here survives to the
+    -- new kernel (U-Boot hands a cold boot every domain on; hand the
+    -- kexec'd kernel the same).  Best-effort: absent on other machines.
+    if exists(DWC3_CONTROL) then write_file(DWC3_CONTROL, "on\n") end
+    -- The EBC must be idle before the kernel is replaced under it -- on a
+    -- PineNote.  On any other machine there is no EBC interrupt line and
+    -- nothing to quiesce.
+    if pinenote then
+        if not ebc_quiesce() then die("EBC did not go idle; refusing to replace the kernel under a refresh") end
+    else
+        log("machine model %q: no EBC to quiesce", model)
+    end
     -- On the RK3566 a kexec'd kernel hangs, silently, 0.12 s into boot: its
     -- early rockchip_grf_init writes three USB3-OTG bits into the PIPE GRF,
     -- whose APB clock (pclk_pipe) the previous kernel gated as unused --
@@ -248,7 +256,6 @@ function commands.trial(n)
         append = append:gsub("console=ttyS2,%d+n%d", "console=ttyAMA0")
         log("machine model %q: console argument rewritten for the PL011", model)
     end
-    log("machine model %q -> %s", model, dtb_arg ~= "" and "generation DTB" or "running device tree reused")
     local load = string.format("/run/current-system/profile/sbin/kexec -l %s/Image --initrd=%s/initrd.cpio.gz%s --command-line='%s'",
                                dir, dir, dtb_arg, append)
     if not run(load) then die("kexec -l failed for generation %d", n) end

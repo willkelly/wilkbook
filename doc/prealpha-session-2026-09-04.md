@@ -64,12 +64,18 @@ earlier generation it is a kernel spin.
    regression guard for what the rebind does take). Restart the reader.
 5. **Device-tree notice.** From generation 14, the RUNNING helper:
    `wilkbook-generation trial 9` — stderr must carry `NOTE: generation
-   9's device tree differs from DEFAULT gen-14's …` (generation 9's DTB
-   lacks the sdio_pwrseq delay). Wait for SSH (five-minute budget),
+   9's device tree differs from the booted gen-14's …` (generation 9's
+   DTB lacks the sdio_pwrseq delay) and the second note (the running
+   kernel was itself kexec'd). Wait for SSH (five-minute budget),
    `health` must say `booted_generation=9`. Back with generation 14's
    helper: `$(cat /boot/gen-14/system)/profile/bin/wilkbook-generation
    trial 14`; `health` must say 14 and `current_system` the candidate.
    If SSH never returns: stop; the reader is on os1 until the UART.
+   *Run on generation 14 (2026-09-04): both trials booted, neither note
+   arrived — the helper logged them after its own radio-off, so no ssh
+   watcher could ever see them. Fixed in the candidate (notes before the
+   teardown, pinned); the proof of the notice is a trial from the fixed
+   generation, not from 14.*
 6. **Suspend rig, KOReader path weighted.** `wifi-cycle.sh koreader-idle
    120`, then `wifi-cycle-host.sh 15 45 300` (settle 300 s so KOReader's
    idle timer wins every cycle), then `koreader-idle 900`. Verdicts from

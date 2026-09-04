@@ -23,6 +23,13 @@ grep -q 'model:find("PineNote", 1, true)' "$helper"
 grep -q 'running device tree reused' "$helper"
 grep -q 'console=ttyS2,%d+n%d", "console=ttyAMA0"' "$helper"
 echo "PASS: trial boot tears down like a suspend, quiesces the EBC, and never touches DEFAULT"
+# What the operator must hear is logged BEFORE the reader stop that leads the
+# teardown: the radio goes off next, and whoever watches a trial over ssh is on
+# that radio (2026-09-04: both device-tree notes lost through two trials).
+after 'machine model %q -> %s' 'herd stop reader-session' "$helper"
+after 'NOTE: generation %d' 'herd stop reader-session' "$helper"
+after 'NOTE: the running kernel was kexec' 'herd stop reader-session' "$helper"
+echo "PASS: the device-tree notes are logged before the radio goes off"
 # add materializes every profile generation's payload (the shipped one has no /boot/gen-N).
 grep -q 'ensure_payload(g)' "$helper"
 grep -q 'ledger_with_payloads()' "$helper"
