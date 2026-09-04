@@ -3,6 +3,65 @@
 Last updated: 2026-09-03. Update protocol: add a dated entry at the top
 after every hardware session; entries are per-device/per-operator.
 
+## 2026-09-03/04 overnight (wkelly PineNote, operator away) — the Wi-Fi fix's four layers held for 65 hands-off cycles; generations 11 and 12 are console-enabled convenience builds
+
+**Access.** With the UART unplugged and the operator away, the reader's
+USB gadget console was made real: generation 11 is generation 10's code
+rebuilt with `WILKBOOK_VERY_INSECURE_FOR_CONVENIENCE=1` (a no-login
+`reader` shell with passwordless sudo on `/dev/ttyACM1`; the build
+marker in `/etc/wilkbook-build` says so). Two traps recorded: the port
+exists only while the reader is awake (the broker unbinds the gadget for
+suspend), and ModemManager on the workstation probes a new ACM port with
+AT commands and leaves the remote shell in a continuation prompt — two
+Ctrl-C bytes reset it (`scratchpad/acm.sh` does that first). `/dev/ttyACM0`
+here is a MOTU audio interface; never write to it.
+
+**Layer 4, deployed as generation 12** (branch `wifi-koreader-memory`,
+PR #70, console kept): the device layer reasserts KOReader's
+`wifi_was_on` from the control script's own record on every resume
+(`doc/networking.md` §8 — the root cause of every idle-sleep loss
+today); the script's association retry runs detached and every message
+also lands in `/run/wilkbook-power/wifi.log`; the broker takes an
+`rtc_settle=` config key. Deploy: 24 paths, trial from generation 11,
+health ok, promoted, generation 6 pruned (7–12 remain).
+
+**Rig v2, judged from the device's own logs** (`wifi-cycle.sh` v2: one
+injected power tap, then the broker suspends, RTC-wakes after the
+backstop, restores Wi-Fi, stays awake `rtc_settle` seconds and
+re-suspends; `report` counts the broker log and `wifi.log`):
+
+| phase | config | transactions ok | RTC wakes | KOReader-initiated | `on` calls / associated within 15 s | restore failures | dmesg |
+|---|---|---|---|---|---|---|---|
+| A, broker path | backstop 45, settle 60, 12 cycles (~25 min) | 30 | 26 | 2 | 14 / 14 | 0 | 0 warnings |
+| B, KOReader path | idle timer 120 s, backstop 45, settle 200, 12 cycles (~57 min) | 43 | 39 | 2 | 13 / 13 | 0 | 4 × `suspend_test_finish` |
+
+Zero rebinds were needed (the driver-attach failure of 16:42 did not
+recur in 65 resumes), zero association retries, `wifi_was_on` true at
+the end, `suspend_stats` 27/0, no `rxctl`/`attach failed` lines.
+**Two caveats, stated plainly.** (1) Phase B was meant to make KOReader
+initiate every sleep (its idle timer set to 120 s, shorter than the
+broker's 200 s settle), but the broker logged only two
+KOReader-initiated transactions in each phase — most sleeps were still
+the broker's own RTC re-suspends. Both KOReader-initiated wakes
+restored Wi-Fi, which is the path the bug lived on, but two samples is
+thin; why the idle timer rarely won the race is not understood (a
+KOReader AutoSuspend rule about external power is the first suspect —
+the reader was on USB throughout). (2) `wifi_was_on` read false in the
+settings file for the first minutes after the boot despite the device
+layer's start-up assertion: the file reflects KOReader's memory only at
+its next flush (it flipped true after the first cycle) — consistent with
+the design, but the start-up half is proven only indirectly. The four
+kernel warnings are `kernel/power/suspend_test.c:53`, the PM debug
+timer: a suspend or resume phase took longer than its 10 s budget four
+times in phase B ("suspend devices took 9.8 s" is already routine on
+this image); a performance note, not a failure.
+
+**End state:** generation 12 DEFAULT and booted, awake on USB power,
+auto-suspend config `enabled=1` (charging inhibits suspend), KOReader's
+idle timer back at 900 s. Generations 11 and 12 are convenience builds
+— a normal build of the same code must be deployed before the reader
+is handed back to reading.
+
 ## 2026-09-03 late night (wkelly PineNote) — the Wi-Fi-after-resume fix is generation 10; a trial cannot deliver a device tree; the cycle rig's first run
 
 **Deploy.** Branch `wifi-after-resume` (532b509; PR #66: the control
