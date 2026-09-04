@@ -395,6 +395,76 @@ seen on glass**, so both belong in the QC cycle.
       `doc/power-management.md`. The product fact is good news: a third
       wake source, and a complete cover gesture.
 
+### 11. ~~The embrace sweep: one reader flavor, on the direct-mode kernel~~ — MERGED AND GLASS-PROVEN 2026-09-03
+
+The two-flavor split (shipping-driver reader vs. direct-mode study
+image) is gone: `linux-pinenote` **is** the direct-mode kernel now
+(PR #56, merged to `main` via #64). Glass-proven the same day as
+generation 7 on wkelly's device: flash-free page turns, all four
+rotations (still flashing, still feeling a little sluggish — unchanged
+from the study image), pen and touch, and the platform-controls broker
+suspending/waking cleanly through both the power button and the cover
+(three cycles, zero failures — the first hardware session of the
+broker and the direct driver together), followed by a cold boot.
+`doc/status.md` 2026-09-03 late afternoon.
+
+**What it opened, not yet closed:**
+
+- [ ] The shipping-reader validation checklist R1–R7 and the optics
+      check (`doc/glass-plan-2026-08.md`) have not been run since the
+      switch — only what's listed above was exercised.
+- [ ] The third-party audit's item 2: the direct driver's probe/remove
+      path doesn't release everything it acquires when a probe fails —
+      six vmalloc planes, two DMA maps, and the custom LUT (the LUT is
+      never freed even on a clean remove). Confirmed against the source
+      2026-09-03 (`doc/reviews/2026-09-03-third-party-audit.md`); not
+      yet fixed — the review calls it "the most important substantive
+      follow-up."
+- [ ] Kernel patch 14 (four correctness fixes from that same audit) has
+      compiled and passed the host checks but has never run on a
+      device; a smoke test is planned before the tag.
+
+### 12. ~~The update path: deploy without a cable~~ — GLASS-PROVEN 2026-09-02, self-recovery PROVEN 2026-09-03
+
+`make deploy` moves only the missing store paths over the network,
+kexecs the result as a trial, health-checks it, and promotes it —
+proven end to end in QEMU and on glass 2026-09-02 (`doc/update-path.md`,
+`doc/status.md`). **Kernel patch 8 (kexec-hardening, PR #48, merged via
+#64) closes the worst failure mode**: a trial kernel that halts is now
+reset by the SoC watchdog and the last promoted generation boots on its
+own, hands-off — proven end to end 2026-09-03 evening. A trial that
+dies in the specific GRF bus-wedge hang (`doc/upstream-register.md`
+item 22) is *prevented* by the standing initcall blacklist rather than
+recovered by the reset; that class still needs the power button if the
+blacklist is ever wrong on a future kernel change.
+
+**What it opened, not yet closed:**
+
+- [ ] The deployer's own UART watcher does not start looking for a
+      stuck trial until five minutes have passed — a failed unattended
+      trial spends that whole window looking stuck before recovery
+      begins, and if the watchdog reset doesn't happen either, it lands
+      on os1 rather than the reader.
+- [ ] Generation pruning (`KEEP=`) has no guard against deleting the
+      last generation known to work — nothing currently pins one.
+- [ ] The os1-based rescue script (PR #51) has never been run against
+      os1 itself.
+- [ ] Wi-Fi reassociating after a resume is well-exercised for the
+      broker's own sleep/wake path (65 unattended cycles, 0 restore
+      failures, overnight 2026-09-03/04) but thin for the case where
+      KOReader's own idle timer is what triggers the sleep — only 4
+      samples in that same run.
+- [ ] The watchdog self-reset's timing is not fully understood: the
+      reset that proved it landed roughly 3.5 minutes after the dog was
+      armed, not the ~44 s the configured timeout predicts. Harmless,
+      but unexplained.
+- [ ] wkelly's own device is currently running a "convenience" build
+      (`WILKBOOK_VERY_INSECURE_FOR_CONVENIENCE=1` — a passwordless root
+      shell over USB) on generations 11–12, for debugging the Wi-Fi fix
+      above. The product build does not carry this flag; it's recorded
+      here as a live reminder that the flag exists and is easy to leave
+      on, not as a defect in the shipping build.
+
 ## Explicitly deferred to the pre-1.0 optimization pass
 
 On the record as decisions, not oversights.
