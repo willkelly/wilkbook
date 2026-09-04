@@ -18,6 +18,12 @@ if [ ! -x "$wpa_supplicant_bin" ]; then wpa_supplicant_bin=$(command -v wpa_supp
 if [ ! -x "$rfkill_bin" ]; then rfkill_bin=$(command -v rfkill 2>/dev/null || true); fi
 if [ ! -x "$dhcpcd_bin" ]; then dhcpcd_bin=$(command -v dhcpcd 2>/dev/null || true); fi
 kill_cmd=${PINENOTE_WIFI_KILL:-kill}
+logfile="$run_dir/wifi.log"
+watchpid="$run_dir/wifi.watch"
+# Every message goes to stderr (the caller's log) AND to $run_dir/wifi.log
+# with a timestamp: the broker's log does not capture this script's output,
+# and the cycle rig judges from this file.
+say() { echo "pinenote-wifi: $*" >&2; printf '%s pinenote-wifi: %s\n' "$(date +%Y-%m-%dT%H:%M:%S)" "$*" >> "$logfile" 2>/dev/null || true; }
 
 # Waits, in tenths of a second (overridable so the host harness runs in
 # milliseconds): the interface after a resume's firmware reload, the interface
@@ -53,7 +59,7 @@ adopt_pid() {
         candidate=${process##*/}
         matching_pid "$candidate" || continue
         [ -z "$found" ] || {
-            echo "pinenote-wifi: multiple matching supplicants; refusing ownership" >&2
+            say "multiple matching supplicants; refusing ownership"
             return 1
         }
         found=$candidate
@@ -61,7 +67,7 @@ adopt_pid() {
     [ -n "$found" ] || return 1
     printf '%s\n' "$found" > "$pidfile"
     pid=$found
-    echo "pinenote-wifi: adopted existing supplicant pid=$pid" >&2
+    say "adopted existing supplicant pid=$pid"
 }
 
 wifi_on() {
@@ -86,20 +92,20 @@ wait_iface() {
 # does the work) reruns exactly the path a clean resume takes.
 rebind_driver() {
     drv="$sys_root/bus/sdio/drivers/brcmfmac"
-    [ -d "$drv" ] || { echo "pinenote-wifi: no brcmfmac driver to rebind" >&2; return 1; }
+    [ -d "$drv" ] || { say "no brcmfmac driver to rebind"; return 1; }
     func=
     for candidate in "$sys_root"/bus/sdio/devices/*:2; do
         [ -e "$candidate" ] || continue
         func=${candidate##*/}
     done
-    [ -n "$func" ] || { echo "pinenote-wifi: no SDIO function 2 to rebind" >&2; return 1; }
+    [ -n "$func" ] || { say "no SDIO function 2 to rebind"; return 1; }
     if [ -e "$sys_root/bus/sdio/devices/$func/driver" ]; then
         printf '%s\n' "$func" > "$drv/unbind" 2>/dev/null || true
     fi
     printf '%s\n' "$func" > "$drv/bind" 2>/dev/null || {
-        echo "pinenote-wifi: bind of $func failed" >&2; return 1
+        say "bind of $func failed"; return 1
     }
-    echo "pinenote-wifi: rebound brcmfmac on $func" >&2
+    say "rebound brcmfmac on $func"
 }
 
 start_supplicant() {
@@ -112,7 +118,7 @@ stop_supplicant() {
     "$kill_cmd" "$pid" 2>/dev/null || true
     i=0
     while [ -e "$proc_root/$pid" ] && [ "$i" -lt 50 ]; do sleep 0.1; i=$((i + 1)); done
-    [ ! -e "$proc_root/$pid" ] || { echo "pinenote-wifi: supplicant did not exit" >&2; return 1; }
+    [ ! -e "$proc_root/$pid" ] || { say "supplicant did not exit"; return 1; }
     rm -f "$pidfile"
 }
 
@@ -132,55 +138,69 @@ status)
     echo off; exit 1
     ;;
 on)
-    if wifi_on; then echo "pinenote-wifi: already on pid=$pid"; exit 0; fi
-    [ -f "$conf" ] || { echo "pinenote-wifi: missing $conf" >&2; exit 1; }
+    if wifi_on; then say "already on pid=$pid"; exit 0; fi
+    [ -f "$conf" ] || { say "missing $conf"; exit 1; }
     if [ -e "$pidfile" ]; then
-        echo "pinenote-wifi: removing stale or foreign pid file" >&2
+        say "removing stale or foreign pid file"
         rm -f "$pidfile"
     fi
     [ -z "$rfkill_bin" ] || "$rfkill_bin" unblock wifi || true
     if ! wait_iface "$iface_wait"; then
-        echo "pinenote-wifi: wlan0 absent after $((iface_wait / 10)) s; rebinding the driver" >&2
-        rebind_driver || { echo "pinenote-wifi: wlan0 unavailable" >&2; exit 1; }
-        wait_iface "$rebind_wait" || { echo "pinenote-wifi: wlan0 unavailable after rebind" >&2; exit 1; }
+        say "wlan0 absent after $((iface_wait / 10)) s; rebinding the driver"
+        rebind_driver || { say "wlan0 unavailable"; exit 1; }
+        wait_iface "$rebind_wait" || { say "wlan0 unavailable after rebind"; exit 1; }
     fi
-    [ -n "$wpa_supplicant_bin" ] || { echo "pinenote-wifi: wpa_supplicant unavailable" >&2; exit 1; }
-    start_supplicant || { echo "pinenote-wifi: supplicant pid validation failed" >&2; exit 1; }
-    # One association retry: a supplicant that comes up against a radio still
-    # settling after the reload can sit unassociated; a fresh start fixes it.
-    # No AP in range looks the same and is not a fault, so the result is
-    # reported, not fatal.
-    if [ "$assoc_wait" -gt 0 ] && ! wait_assoc "$assoc_wait"; then
-        echo "pinenote-wifi: no association within $((assoc_wait / 10)) s; restarting the supplicant once" >&2
-        if stop_supplicant && start_supplicant; then
-            wait_assoc "$assoc_wait" || echo "pinenote-wifi: still no association (no AP in range?)" >&2
-        else
-            echo "pinenote-wifi: supplicant restart failed" >&2; exit 1
-        fi
-    fi
+    [ -n "$wpa_supplicant_bin" ] || { say "wpa_supplicant unavailable"; exit 1; }
+    start_supplicant || { say "supplicant pid validation failed"; exit 1; }
     if [ -n "$dhcpcd_bin" ]; then
         "$dhcpcd_bin" -n "$iface" >/dev/null 2>&1 || "$dhcpcd_bin" -b "$iface" >/dev/null 2>&1 || true
     fi
     printf 'on\n' > "$state"
-    echo "pinenote-wifi: on pid=$pid"
+    say "on pid=$pid"
+    # The association retry runs detached: `on` is called synchronously on
+    # KOReader's UI thread and by the broker's resume path, neither of which
+    # may block for the wait.  `off` kills the watcher.
+    if [ "$assoc_wait" -gt 0 ]; then
+        setsid "$0" assoc-watch </dev/null >/dev/null 2>&1 &
+        printf '%s\n' "$!" > "$watchpid"
+    fi
+    ;;
+assoc-watch)
+    # One association retry: a supplicant that comes up against a radio still
+    # settling after the reload can sit unassociated; a fresh start fixes it.
+    # No AP in range looks the same and is not a fault, so the result is
+    # reported, not fatal.
+    if wait_assoc "$assoc_wait"; then say "associated within $((assoc_wait / 10)) s"; exit 0; fi
+    valid_pid || { say "association watch: no validated supplicant to restart"; exit 0; }
+    say "no association within $((assoc_wait / 10)) s; restarting the supplicant once"
+    if stop_supplicant && start_supplicant; then
+        if wait_assoc "$assoc_wait"; then say "associated after the restart"
+        else say "still no association after the restart (no AP in range?)"; fi
+    else
+        say "supplicant restart failed"; exit 1
+    fi
     ;;
 off)
+    if [ -r "$watchpid" ]; then
+        "$kill_cmd" "$(sed -n '1p' "$watchpid")" 2>/dev/null || true
+        rm -f "$watchpid"
+    fi
     if valid_pid; then
         printf 'on\n' > "$state"
         if [ "${PINENOTE_WIFI_NO_KILL:-0}" != 1 ]; then
             "$kill_cmd" "$pid"
             i=0
             while [ -e "$proc_root/$pid" ] && [ "$i" -lt 50 ]; do sleep 0.1; i=$((i + 1)); done
-            [ -e "$proc_root/$pid" ] && { echo "pinenote-wifi: supplicant did not exit" >&2; exit 1; }
+            [ -e "$proc_root/$pid" ] && { say "supplicant did not exit"; exit 1; }
         fi
         rm -f "$pidfile"
     else
-        [ ! -e "$pidfile" ] || echo "pinenote-wifi: refusing to signal unvalidated pid file" >&2
+        [ ! -e "$pidfile" ] || say "refusing to signal unvalidated pid file"
         rm -f "$pidfile"
         printf 'off\n' > "$state"
     fi
     [ -z "$rfkill_bin" ] || "$rfkill_bin" block wifi || true
-    echo "pinenote-wifi: off"
+    say "off"
     ;;
-*) echo "usage: pinenote-wifi-control on|off|status" >&2; exit 2;;
+*) echo "usage: pinenote-wifi-control on|off|status|assoc-watch" >&2; exit 2;;
 esac

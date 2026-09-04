@@ -17,8 +17,10 @@ says otherwise.
 
 ## Unreleased
 
-- **Wi-Fi comes back after sleep on its own** (branch `wifi-after-resume`,
-  not yet merged): when the radio's driver gives up during the resume
+- **Wi-Fi comes back after sleep on its own** (branches `wifi-after-resume`
+  and `wifi-koreader-memory`, not yet merged): KOReader's memory of having
+  had Wi-Fi on is repaired from the reader's own record on every wake, so
+  an idle sleep no longer leaves the radio off until the menu toggle; when the radio's driver gives up during the resume
   (it happened once in ten sleeps on 2026-09-03 and needed a full
   reboot), the reader now rebinds the driver and retries the
   association by itself; a failure is logged. The kernel also gives the

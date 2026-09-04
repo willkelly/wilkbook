@@ -20,6 +20,8 @@ echo "PASS: broker is the single power-state writer and watches only power/cover
 echo "PASS: standalone broker can load staged PineNote modules"
 echo "PASS: packaged broker paths can be supplied by the Shepherd service"
 echo "PASS: resume clears the RTC backstop alarm"
+grep -q 'key == "rtc_settle"' "$broker" && grep -q 'protocol.rtc_settle = config.rtc_settle' "$broker" || { echo "FAIL: rtc_settle is not a config key applied to the protocol" >&2; exit 1; }
+echo "PASS: rtc_settle is a config key (floor 20) applied to the protocol each loop"
 # Issue #42: the shipping-only REFRESH_BARRIER must never be the only
 # quiesce; the broker chooses by driver and the choice is a pure module.
 grep -q 'require("broker_quiesce")' "$broker"

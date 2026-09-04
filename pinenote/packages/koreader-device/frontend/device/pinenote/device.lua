@@ -755,6 +755,33 @@ function PineNote:initNetworkManager(NetworkMgr)
     function NetworkMgr:getNetworkInterfaceName() return "wlan0" end
     function NetworkMgr:isWifiOn() return run("status") end
     NetworkMgr.isConnected = NetworkMgr.ifHasAnAddress
+    -- KOReader restores Wi-Fi on resume only when its own memory of having
+    -- brought the radio up (`wifi_was_on`) is true, and it clears that
+    -- memory whenever a restore's connectivity check times out (manager.lua
+    -- _abortWifiConnection).  Our radio is brought up by the pinenote-wifi
+    -- service, not by KOReader, so the memory is seeded once and never
+    -- re-earned: one slow resume clears it for good and every idle sleep
+    -- after that leaves the reader offline until the menu (glass,
+    -- 2026-09-03: a whole evening).  If the service has the radio on when
+    -- KOReader starts, that IS the fact the memory encodes.  Policy stays
+    -- KOReader's: auto_restore_wifi still gates the restore.
+    if G_reader_settings and run("status") then
+        G_reader_settings:makeTrue("wifi_was_on")
+    end
+end
+
+-- The control script records, when it takes the radio down for a sleep,
+-- whether a validated supplicant was running: /run/wilkbook-power/wifi.state
+-- reads "on" exactly when the radio was on before this sleep.  Reassert
+-- KOReader's memory from that record before its NetworkListener decides.
+function PineNote:restoreWifiMemory()
+    local f = io.open("/run/wilkbook-power/wifi.state", "r")
+    if not f then return end
+    local state = f:read("*l"); f:close()
+    if state ~= "on" then return end
+    local ok, NetworkMgr = pcall(require, "ui/network/manager")
+    if ok and NetworkMgr then NetworkMgr.wifi_was_on = true end
+    if G_reader_settings then G_reader_settings:makeTrue("wifi_was_on") end
 end
 
 function PineNote:setEventHandlers(uimgr)
@@ -762,7 +789,10 @@ function PineNote:setEventHandlers(uimgr)
     -- honors KOReader's auto_restore_wifi preference.  Do not impose a
     -- platform-specific restore policy here.
     uimgr.event_handlers.Suspend = function() self:onPowerEvent("Suspend") end
-    uimgr.event_handlers.Resume = function() self:onPowerEvent("Resume") end
+    uimgr.event_handlers.Resume = function()
+        self:restoreWifiMemory()
+        self:onPowerEvent("Resume")
+    end
 end
 
 -- Battery sysfs node differs between kernels; probe once.

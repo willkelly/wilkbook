@@ -71,10 +71,18 @@ ASSOC_WAIT=2 run2 on >/dev/null 2>&1 && pass "on starts the supplicant when wlan
 [ "$(cat "$t2/run/wpa_supplicant-wlan0.pid")" = 1 ] || fail "first supplicant pid"
 run2 off >/dev/null 2>&1 || fail "off after on"
 
-# 3. wlan0 present but never associated: the supplicant is restarted exactly once, and on still succeeds
+# 3. wlan0 present but never associated: `on` returns at once (it runs on
+#    KOReader's UI thread); the detached association watcher restarts the
+#    supplicant exactly once and reports; both are in the script's own log.
 printf '0\n' > "$t2/sys/class/net/wlan0/carrier"
 err=$(ASSOC_WAIT=2 run2 on 2>&1 >/dev/null) && pass "on succeeds without an AP in range" || fail "on without association: $err"
+[ "$(cat "$t2/run/wpa_supplicant-wlan0.pid")" = 2 ] || fail "on started the supplicant once (pid $(cat "$t2/run/wpa_supplicant-wlan0.pid"))"
+sleep 1
+err=$(ASSOC_WAIT=2 run2 assoc-watch 2>&1 >/dev/null) || fail "assoc-watch: $err"
 case "$err" in *"restarting the supplicant once"*"still no association"*) pass "one association retry, reported";; *) fail "association retry messages: $err";; esac
-[ "$(cat "$t2/run/wpa_supplicant-wlan0.pid")" = 3 ] || fail "supplicant restarted once (pid $(cat "$t2/run/wpa_supplicant-wlan0.pid"))"
+pid_now=$(cat "$t2/run/wpa_supplicant-wlan0.pid")
+[ "$pid_now" -ge 3 ] || fail "supplicant restarted once (pid $pid_now)"
 [ ! -e "$t2/proc/2" ] || fail "first supplicant of the retry not stopped"
 run2 status >/dev/null && pass "status reports on after the retry" || fail "status after retry"
+grep -q "restarting the supplicant once" "$t2/run/wifi.log" && grep -q "rebound brcmfmac" "$t2/run/wifi.log" && pass "the script logs its own messages to wifi.log" || fail "wifi.log: $(cat "$t2/run/wifi.log" 2>/dev/null)"
+run2 off >/dev/null 2>&1 || fail "off after the watch"
