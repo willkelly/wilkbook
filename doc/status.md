@@ -3,6 +3,60 @@
 Last updated: 2026-09-03. Update protocol: add a dated entry at the top
 after every hardware session; entries are per-device/per-operator.
 
+## 2026-09-03 late night (wkelly PineNote) — the Wi-Fi-after-resume fix is generation 10; a trial cannot deliver a device tree; the cycle rig's first run
+
+**Deploy.** Branch `wifi-after-resume` (532b509; PR #66: the control
+script rebinds the SDIO driver and retries the association, the broker
+logs a failed restore, kernel patch 13 adds `post-power-on-delay-ms =
+<100>` on `sdio_pwrseq`) deployed by a Sonnet subagent with no UART:
+20 of 441 paths moved, generation 10, trial from generation 9, health
+ok, promoted; generation 4 pruned (seven registered, KEEP=6; 5–10
+remain). The first attempt stopped at its gate because the device was
+unreachable: it had slept, the charger woke it, and the old restore lost
+the radio — the operator's KOReader Wi-Fi toggle (the same script's
+`on`) brought it back seconds later. Second class of failure, seen
+twice today: driver fine, the resume-time `on` gives up.
+
+**A trial runs on the running device tree.** Generation 10's staged
+DTB carries the new property (one match; generation 9's none); the
+kexec'd kernel's `/sys/firmware/fdt` did not, and it carried U-Boot's
+`serial-number`. kexec-tools 2.0.31 tries `kexec_file_load` first and
+its arm64 loader ignores `--dtb` on that path (source, `kexec.c:1481`,
+`kexec-arm64.c:184–190`). Every trial so far has booted the running
+tree; DTB changes only land on a cold boot. The helper now says so at
+trial time when the two staged DTBs differ (PR #67);
+`doc/update-path.md`.
+
+**The cycle rig, first run.** `wifi-cycle.sh start 60` (autosuspend
+config `enabled=1 suspend_while_charging=1 backstop=60`, one KEY_POWER
+tap injected into the rk805 pwrkey evdev node — the first version split
+each 24-byte event across five writes and evdev refused them with
+EINVAL; one write per event works). The broker then cycled by itself:
+suspend, RTC wake after 60 s, restore, 20 s settle, re-suspend —
+**eleven RTC cycles, thirteen transactions, all `ok=true`, zero
+`Wi-Fi restore failed`**. Nothing else is known: the control script's
+own messages do not reach the broker's log (its stdout is not
+captured), and the host never got an SSH window in the ~25 s the
+device stayed awake (one-second retries for five minutes; ARP and DHCP
+after a fresh association eat most of it). So the userspace layer
+returned success eleven times in a row on the kexec'd generation 10;
+whether it ever had to rebind or retry is not recorded. Rig v2: make
+the broker's RTC settle a config key so windows can be long, have the
+script log to its own file, judge from the device's log only.
+
+**Recovery and the cold boot.** The device was left cycling
+unreachable until the UART came back; the capture and watcher were
+restarted, a reset at 20:23 (DDR init on the UART) brought U-Boot's
+menu, the watcher picked os2, and **generation 10 cold-booted on its
+own tree: `sdio-pwrseq/post-power-on-delay-ms` reads 0x64, no
+`linux,booted-from-kexec` in chosen, Wi-Fi up, PMIC `SYS_CFG3` 0x20.**
+Config restored to `enabled=1` (charging inhibits suspend). Layer 3 is
+live from this boot; unproven against the failure it targets.
+
+**End state:** generation 10 DEFAULT and cold-booted, awake on charge,
+auto-suspend normal. Open: rig v2 and its run; the association-retry
+class; upstreaming patches 8 and 13.
+
 ## 2026-09-03 night (wkelly PineNote) — merged main deployed as generation 9: the twelve-patch reader is DEFAULT
 
 `make deploy DEVICE=pinenote-os2 FLAVOR=reader KEEP=6` from `main` at
