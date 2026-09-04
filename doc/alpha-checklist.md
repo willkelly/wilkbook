@@ -412,7 +412,11 @@ broker and the direct driver together), followed by a cold boot.
 
 - [ ] The shipping-reader validation checklist R1–R7 and the optics
       check (`doc/glass-plan-2026-08.md`) have not been run since the
-      switch — only what's listed above was exercised.
+      switch — only what's listed above was exercised. R3 as the reader
+      ships means the inert check (no server, one log line, clock =
+      RTC) — run and held 2026-09-04; the with-server sync and the
+      alarm re-arm are a separate row (R3s) on a rebuilt generation and
+      not a tag blocker. R4 held the same day.
 - [ ] The third-party audit's item 2: the direct driver's probe/remove
       path doesn't release everything it acquires when a probe fails —
       six vmalloc planes, two DMA maps, and the custom LUT (the LUT is

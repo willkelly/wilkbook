@@ -145,6 +145,12 @@ sleep instead of occasionally needing a manual toggle.
 - Settings you change in KOReader menus persist across suspends but
   **reset on a reflash** (they live on the OS partition; your books and
   reading positions live on the data partition and survive).
+- **The clock is whatever the device's own RTC holds.** Nothing on the
+  image sets it: it *can* ask a time server, but ships with none
+  configured, so out of the box it talks to nothing. Expect it to drift
+  a little; if the battery ever runs completely flat it can come back
+  reading 1970. Tell the operator, who can set it over SSH or name your
+  router as the time server in your next build (`doc/networking.md`).
 - **We haven't re-run the full page-turn/ghosting quality check since
   switching to the direct-mode driver as standard.** It should look and
   feel like v0.2.0 did; say something if it doesn't.
