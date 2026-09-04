@@ -68,10 +68,11 @@ All live in `pinenote/packages/kernel.scm`:
 
 `%linux-pinenote-patches` in `pinenote/packages/kernel.scm` is the
 authoritative list; the comments there carry each patch's rationale and
-revert instruction. As of 2026-09-03 it is thirteen patches, applied in list
+revert instruction. As of 2026-09-03 it is fourteen patches, applied in list
 order on top of the vanilla source (items 8–11 are the direct-mode
 driver and our fixes on it; item 12 is the mfd rk8xx kexec fix that
-makes the update path's watchdog self-reset work):
+makes the update path's watchdog self-reset work; item 14 is a further
+correctness pass on the direct-mode driver from a third-party audit):
 
 1. `linux-pinenote-7.0-forward-port.patch` — the EBC display stack,
    WS8100 pen, PineNote DTS, `pinenote_defconfig`; the permanent core
@@ -146,6 +147,22 @@ makes the update path's watchdog self-reset work):
     cold and one resume in ten timed out on the first control exchange
     after the firmware download (2026-09-03, `doc/networking.md` §8).
     Written for upstream. Glass proof pending (the cycle rig).
+14. `linux-pinenote-7.1-direct-correctness.patch` — ours, on top of
+    hrdl's: four correctness fixes from the 2026-09-03 third-party audit
+    (`doc/reviews/2026-09-03-third-party-audit.md`): the parallel
+    advance no longer runs a band inline when `queue_work()` returns
+    false (`WARN_ON_ONCE` instead — that return means the work is
+    already queued and owns the completion); the 32×32 dither's second
+    16-byte half now loads 16 bytes into the row instead of repeating
+    the first half, in all three pixel-format copies;
+    `rect_hint_batch` is validated (1..4096) and the rectangle count is
+    capped at 65536 (`-E2BIG`); `OFF_SCREEN`/`EXTRACT_FBS` return
+    `-EFAULT` on any short user copy instead of leaking a byte count or
+    OR-ing residuals with errnos. Compiled clean
+    (`mwycbl5a…-linux-pinenote-7.1.8-pinenote.drv`); no host harness
+    executes the direct-mode driver's actual source (`ebc-logic`
+    compiles only the forward-port patch's LUT-walk driver), so this is
+    unexercised even by the offline ladder; glass proof pending.
 
 `linux-pinenote-debug` stacks `linux-pinenote-debug-extract-fbs.patch`
 on top of the same seven.

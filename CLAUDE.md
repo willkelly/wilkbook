@@ -319,9 +319,10 @@ gitignored `build/`, or the reader's static address.
   off (`DEFAULT_ENABLE=0x0`), BREAK+`sysrq` arms, BREAK+key fires —
   the sequence is an arming toggle, NOT a per-use guard
   (`doc/kernel-forward-port.md`). 6.6.30 remains regression-isolation only.
-  Thirteen patches as of 2026-09-03 (seven from the 7.0/7.1 series, four for the direct-mode driver and our fixes on it, one mfd rk8xx kexec fix, one Wi-Fi power-sequence settle delay); the 7.1 move *deleted* two hunks mainline absorbed. The
-  rk8xx one is glass-proven and merged (2026-09-03). Inventory in
-  `doc/kernel-forward-port.md`.
+  Fourteen patches as of 2026-09-03 (seven from the 7.0/7.1 series, four for the direct-mode driver and our fixes on it, one mfd rk8xx kexec fix, one Wi-Fi power-sequence settle delay, one further direct-driver correctness pass from a third-party audit); the 7.1 move *deleted* two hunks mainline absorbed. The
+  rk8xx one is glass-proven and merged (2026-09-03); the sdio-pwrseq-delay
+  and direct-correctness patches are not (`prealpha-scratch`, unmerged).
+  Inventory in `doc/kernel-forward-port.md`.
 - **Suspend**: **ultra suspend is the shipping suspend** (2026-08-08,
   R12): hrdl's configuration adopted whole — standing
   `rockchip,suspend-state-override = <5>` + three `*_pmu` rails

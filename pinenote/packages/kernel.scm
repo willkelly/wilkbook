@@ -186,7 +186,13 @@
         ;; re-enumerates the card from cold, and one resume in ten timed out
         ;; on the first control exchange after the firmware download
         ;; (2026-09-03).  doc/networking.md.
-        (local-file "../patches/linux-pinenote-7.1-sdio-pwrseq-delay.patch")))
+        (local-file "../patches/linux-pinenote-7.1-sdio-pwrseq-delay.patch")
+        ;; Ours, on top of hrdl's: four correctness fixes from the 2026-09-03
+        ;; third-party audit (doc/reviews/2026-09-03-third-party-audit.md):
+        ;; no inline band on queue_work() false (WARN instead), the 32x32
+        ;; dither's second half loaded 16 bytes in, rect_hint_batch
+        ;; validated and the count capped, -EFAULT on short user copies.
+        (local-file "../patches/linux-pinenote-7.1-direct-correctness.patch")))
 
 (define %linux-pinenote-source
   (origin
