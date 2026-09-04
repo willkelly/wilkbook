@@ -1,7 +1,7 @@
 # Pre-alpha test session, 2026-09-04 — for the `v0.3.0-prealpha` tag
 
 The candidate is branch `prealpha-candidate` (main + PRs #66, #70, #67,
-#69). This is the session that decides whether it is tagged: an
+#69, plus the adversarial review's fixes, `doc/reviews/2026-09-04-adversarial-review.md`). This is the session that decides whether it is tagged: an
 unattended half a subagent runs over SSH tonight, and an operator half
 that needs eyes, hands and the UART. The inventory behind it (what each
 tool needs and observes) is in the 2026-09-04 tooling review; the
@@ -27,8 +27,10 @@ earlier generation it is a kernel spin.
    from a worktree at the candidate commit, no convenience opt-in.
    Expect generation 14 promoted; generations 7–14 kept (nothing
    pruned). Record the built system path and confirm its kernel is the
-   candidate's derivation (`g4pc5rck…-linux-pinenote-7.1.8-pinenote.drv`
-   — that lineage is the only proof patch 14 is in the running kernel).
+   candidate's derivation (`6rhnmj09…-linux-pinenote-7.1.8-pinenote.drv`,
+   the rebuild after the adversarial review's braces fix — that lineage
+   is the only proof patch 14 is in the running kernel; and read that
+   derivation's build log for warnings in `rockchip_ebc*.c` first).
 1. **Baseline.** `wilkbook-generation list`, `health`, `dmesg` saved to
    `/root/dmesg-0.txt`, `/sys/power/suspend_stats`, thread count
    `ps -eo comm | grep -c '^ebc-'` (expect 2), `grep Vmalloc
