@@ -48,10 +48,24 @@ function Protocol:ready(request_id)
     local ok, detail = self.suspend(false, request_id, self.trigger or "koreader")
     self.state, self.deadline, self.trigger = "IDLE", nil, nil
     self.emit_wakeup()
-    if ok and detail == "rtc" then
-        self.resuspend_at = self.now() + self.rtc_settle
-    end
+    self:settle_after(ok, detail, self.now())
     return ok, detail
+end
+
+-- An RTC backstop wake is unattended: the device settles for rtc_settle
+-- seconds and goes back to sleep by itself.  Any OTHER wake -- button,
+-- cover, or a suspend that failed -- ends with a person or a fault in the
+-- loop, and must clear whatever settle deadline an earlier RTC wake left
+-- behind.  Glass, 2026-09-04: an RTC wake set the deadline, KOReader's
+-- own idle timer suspended the device inside the window, and the next
+-- BUTTON wake -- 37 minutes later -- was re-suspended seven seconds in by
+-- the stale deadline; the reader looked dead to the operator.
+function Protocol:settle_after(ok, detail, now)
+    if ok and detail == "rtc" then
+        self.resuspend_at = now + self.rtc_settle
+    else
+        self.resuspend_at = nil
+    end
 end
 
 function Protocol:tick()
@@ -66,7 +80,7 @@ function Protocol:tick()
     local ok, detail = self.suspend(true, nil, self.trigger)
     self.state, self.deadline, self.trigger = "IDLE", nil, nil
     self.emit_wakeup()
-    if ok and detail == "rtc" then self.resuspend_at = now + self.rtc_settle end
+    self:settle_after(ok, detail, now)
     return ok, detail
 end
 

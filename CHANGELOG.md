@@ -166,6 +166,12 @@ too, above.
 
 ### Also fixed since v0.2.0
 
+- **A wake by the power button could be followed by an automatic
+  re-sleep seconds later**, leaving the reader looking dead until a
+  second press. The device's hourly self-wake leaves behind a short
+  "go back to sleep" deadline; if anything else put the device to sleep
+  inside that window, the deadline survived and fired on the next real
+  wake. Seen on glass 2026-09-04 (a 7-second wake), fixed the same day.
 - **A malformed rectangle hint could corrupt kernel memory** in the
   direct driver's `RECT_HINTS` ioctl (the pen/UI hint path). Nothing in
   the shipped reader sends malformed rectangles today, but this closes

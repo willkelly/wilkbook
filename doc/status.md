@@ -104,7 +104,66 @@ operator's power press was rejected `globally inhibited` and the
 screensaver drew and undrew. The tester brief already names this trap;
 the session's wrap-up restores `enabled=1`.
 
-**6. The rig, part 2** — _see the addendum below once it completes_.
+**6. The rig, part 2 — the KOReader idle path, at last.** `wifi-cycle.sh
+koreader-idle 120`, then `wifi-cycle-host.sh 15 45 300` (backstop
+45 s, settle 300 s), 20:18–21:50 UTC. The first 45 minutes ran with the
+USB cable in and produced broker-path cycles only: **KOReader's
+AutoSuspend never fires while the battery reports charging** (its own
+rule — it reschedules by the full timeout instead of counting idle), and
+`rk817-battery/status` flaps to `Charging` with the cable in even at
+99 %. That is also why the overnight phase B saw "2 KOReader-initiated
+of 43". The operator unplugged the cable at 20:48 and the path fired
+every cycle from then on.
+
+| | |
+|---|---|
+| transactions ok | **32** (29 RTC wakes, 3 button) |
+| KOReader-initiated / RTC-initiated / power | **28** / 3 / 1 |
+| `on` calls / associated within 15 s | 32 / 31 (the one miss is the wake below) |
+| driver rebinds / supplicant restarts / restore failures / rejected requests | 0 / 0 / 0 / 0 |
+| `suspend_stats` | 32 / 0 (failed_prepare 0, failed_suspend 0) |
+| `PM: suspend entry` vs `rockchip_ebc_ctx_free` | 32 vs 32 — one context freed and re-made per cycle, balanced |
+| cyttsp5 `Validation of the wakeup response failed` (R6) | 31 of 32 resumes, plus one `HID power cmd execution timed out` at the first resume — the known handshake quirk, handled by the resume workaround |
+| `rxctl` / `attach failed` | 0 / 0 |
+| dmesg `WARNING` | 1: `dwc3 … No resource for ep0out` at the rig's first suspend (20:18:41), while the host still held the gadget on the cable — the gadget unbind under an attached host, not the display; harmless, the transaction completed |
+
+Wi-Fi after resume, on the direct kernel, through KOReader's own idle
+sleep: 28 of 28. Combined with the overnight run, that is 97 hands-off
+cycles with zero restore failures; the rebind and the association retry
+have still never fired on glass.
+
+**The rig also found a broker bug, on the operator's own button.** After
+the rig's `stop`, the last RTC wake at 21:48:44 had set the settle
+deadline (300 s); KOReader's idle timer suspended the device at
+21:50:51, inside that window; the operator pressed the power button at
+22:27:42 (37 minutes later), the broker resumed — and its next tick saw
+the *stale* deadline as due, emitted `KEY_SLEEP` in the same second, and
+re-suspended the reader at 22:27:49 with `trigger=rtc`. Seven seconds of
+wake, then dark: the reader looked dead. Only the second press at
+22:44:39 held (the deadline had been consumed). In `broker_protocol.lua`
+the deadline was set after an RTC-detail suspend and never cleared by a
+suspend that ended any other way; in the product the window is the
+20-second `rtc_settle` after the hourly backstop, so a button or cover
+sleep inside that window would arm the same trap for the next wake.
+**Fixed in the candidate**: every suspend completion clears the deadline
+unless its wake was the RTC (`settle_after`), pinned by four new
+`test-broker-protocol.lua` cases (button wake, cover wake, a failed
+settle re-suspend, and the RTC re-arm that must survive).
+
+**Post-resume page turns, after those 32 cycles** (`turn-check.sh 6`, the
+book open, `fb0/state=0`): 47 frames per turn again, the framebuffer's
+own hash and the driver's belief both different after every turn,
+runtime status `active` at 0.6 s — the fbdev damage path is intact
+after a day of rails-off resumes on the kernel that deleted the
+forward-port's fbdev resume barrier. `fb-damage-gates.sh`: G1 open, the
+reader holds DRM master on card1, plane fb=40, CRTC active.
+
+**Housekeeping the rig taught.** `wifi-cycle.sh report` counted every
+run since the *first* start mark (an awk latch) — fixed to the last
+mark; earlier reports over-count if the broker log was never rotated.
+And the rig's `koreader-idle 900` restore did not land before the
+device slept (the settings file still said 120 at the end): the reader
+came back at 15 minutes only after the post-rig restart.
 
 ## 2026-09-03/04 overnight (wkelly PineNote, operator away) — the Wi-Fi fix's four layers held for 65 hands-off cycles; generations 11 and 12 are console-enabled convenience builds
 
