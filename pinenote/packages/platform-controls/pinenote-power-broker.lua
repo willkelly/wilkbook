@@ -50,10 +50,11 @@ end
 local function sleep_ms(ms) C.poll(nil, 0, ms) end
 local function run(command) return os.execute(command) == 0 end
 
-local config = { enabled = true, charging = false, backstop = BACKSTOP }
+local RTC_SETTLE = 20
+local config = { enabled = true, charging = false, backstop = BACKSTOP, rtc_settle = RTC_SETTLE }
 local warned_idle = false
 local function reload_config()
-    config.enabled, config.charging, config.backstop = true, false, BACKSTOP
+    config.enabled, config.charging, config.backstop, config.rtc_settle = true, false, BACKSTOP, RTC_SETTLE
     for _, path in ipairs(CONFIGS) do
         local f = io.open(path, "r")
         if f then
@@ -62,6 +63,10 @@ local function reload_config()
                 if key == "enabled" then config.enabled = not (value == "0" or value == "false" or value == "no")
                 elseif key == "backstop" and tonumber(value) and tonumber(value) >= 30 then config.backstop = math.floor(value)
                 elseif key == "suspend_while_charging" then config.charging = value == "1" or value == "true" or value == "yes"
+                -- How long an RTC backstop wake stays awake before re-suspending
+                -- (default 20 s): the cycle rig raises it so Wi-Fi restore, DHCP
+                -- and a host ssh sample fit in the window.  Floor 20, cap 3600.
+                elseif key == "rtc_settle" and tonumber(value) and tonumber(value) >= 20 then config.rtc_settle = math.min(3600, math.floor(value))
                 elseif key == "idle" and not warned_idle then
                     warned_idle = true; log("ignoring obsolete idle= setting; KOReader AutoSuspend owns idle timing")
                 end
@@ -334,7 +339,7 @@ local protocol = Protocol.new{
 local pollfds = ffi.new("struct pollfd[?]", #inputs + 1)
 local buffer, pending, press_ms = ffi.new("uint8_t[4096]"), "", nil
 while true do
-    reload_config(); protocol:set_enabled(config.enabled)
+    reload_config(); protocol:set_enabled(config.enabled); protocol.rtc_settle = config.rtc_settle
     pollfds[0].fd, pollfds[0].events = request_fd, POLLIN
     for i, input in ipairs(inputs) do pollfds[i].fd, pollfds[i].events = input.fd, POLLIN end
     C.poll(pollfds, #inputs + 1, 250)

@@ -799,6 +799,34 @@ Three layers, cheapest first:
    value for the same module family; mainline's PineNote DTS has none.
    100 ms per power-on, nothing else.
 
+**The second class, root-caused the same night (2026-09-03 21:00):**
+KOReader restores Wi-Fi on resume only when `auto_restore_wifi` (which
+the profile seeds true) AND its own memory `wifi_was_on` are true
+(`networklistener.lua`); that memory is set only by KOReader's own
+successful connect or restore and is cleared, together with the radio,
+by `_abortWifiConnection` when a restore's 45 s connectivity check
+times out (`manager.lua`). Our radio is brought up by the service, not
+by KOReader, so the memory was seeded once (only when the settings file
+is absent) and never re-earned; the generation-8 driver failure at
+16:42 made a restore fail, the flag went false in
+`/root/.config/koreader/settings.reader.lua` (shared by every
+generation), and from then on every idle or charger-wake suspend
+(KOReader-initiated: it turns the radio off first, so the broker's
+`had_wifi` is false and it stays out) left the reader offline until the
+menu toggle. Button-initiated suspends go through the broker and always
+restored (eleven for eleven in the rig). Layer 4, on branch
+`wifi-koreader-memory`: the device layer reasserts KOReader's memory
+from the control script's own record (`/run/wilkbook-power/wifi.state`
+reads `on` when a validated supplicant was taken down for the sleep) in
+the Resume handler, before KOReader's listener decides, and sets the
+setting at start-up when the service has the radio on. Policy stays
+KOReader's: `auto_restore_wifi` still gates. Alongside: the control
+script's association retry now runs as a detached watcher (`on` is
+synchronous on KOReader's UI thread and must return in seconds), every
+message also lands in `/run/wilkbook-power/wifi.log`, and the broker
+takes an `rtc_settle=` config key so the cycle rig can hold long awake
+windows.
+
 What is proven offline: layers 1–2 by the harness. What needs glass:
 the hands-off cycle rig (`wifi-cycle.sh` in the session scratchpad:
 a short `backstop=` in `/data/wilkbook/autosuspend.conf` plus one
