@@ -179,7 +179,13 @@
         ;; watchdog's reset after a kexec was a power-off).  Glass-proven
         ;; 2026-09-03: a halted trial kernel self-resets and DEFAULT boots.
         ;; doc/upstream-register.md item 25; doc/kernel-forward-port.md 12.
-        (local-file "../patches/linux-pinenote-7.1-rk8xx-kexec-sleep-pin.patch")))
+        (local-file "../patches/linux-pinenote-7.1-rk8xx-kexec-sleep-pin.patch")
+        ;; Ours, on top of hrdl's: four correctness fixes from the 2026-09-03
+        ;; third-party audit (doc/reviews/2026-09-03-third-party-audit.md):
+        ;; no inline band on queue_work() false (WARN instead), the 32x32
+        ;; dither's second half loaded 16 bytes in, rect_hint_batch
+        ;; validated and the count capped, -EFAULT on short user copies.
+        (local-file "../patches/linux-pinenote-7.1-direct-correctness.patch")))
 
 (define %linux-pinenote-source
   (origin
