@@ -163,6 +163,29 @@ teardown as a suspend (EBC quiesce, gadget unbind, Wi-Fi off) before
 - Whether the nar transfer over Wi-Fi is fast enough for a kernel-sized
   delta (~100 MB) to feel routine.
 
+## Device-tree changes do not ride a trial (2026-09-03)
+
+A trial boots on the **running** kernel's device tree, whatever the
+helper's `--dtb` says. kexec-tools (2.0.31) tries `kexec_file_load`
+first, and its arm64 loader drops a user DTB on that path (it prints
+"(ignored)" only under `-d`; `kexec/arch/arm64/kexec-arm64.c`); the
+kernel then builds the next tree from the current one — U-Boot's
+`serial-number` and memory layout included, which is also why forcing
+the legacy syscall with `-c` is not the fix: our DTB files carry no
+memory node and no firmware reservations, U-Boot adds those at a cold
+boot. Proven 2026-09-03: generation 10's staged DTB carried a new
+`sdio-pwrseq` property, the kexec'd kernel's `/sys/firmware/fdt` did
+not, and it did carry U-Boot's `serial-number`.
+
+So a trial half-tests a generation whose device tree differs from the
+promoted one: the kernel, the userspace and the health check all run,
+the tree does not. Only a cold boot of the promoted generation runs its
+own DTB. The helper says so at trial time (`NOTE: generation N's device
+tree differs from DEFAULT gen-M's …`) by comparing the two staged
+files; the deployer prints it. Until a cold boot has run, treat a
+device-tree change as undeployed — the Wi-Fi power-sequence delay
+(`doc/networking.md` §8) is the first one to wait for that.
+
 ## Glass notes (what the first kexecs on the PineNote taught, 2026-09-02)
 
 Three kexecs hung identically before the fourth booted; each hang cost
