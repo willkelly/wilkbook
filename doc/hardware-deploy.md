@@ -259,7 +259,12 @@ this tree after that date does — the guix importer daemon, kexec, the
 `wilkbook-generation` helper, first-boot root growth and the signing-key
 ACL; `doc/update-path.md`). After that, a new build reaches the device
 over Wi-Fi as a Guix system *generation*: registered, kexec'd as a
-trial, health-checked, and promoted only then. A trial that never
+trial, health-checked, and promoted only then. One limit, found
+2026-09-03: the trial runs on the running kernel's device tree
+(`kexec_file_load` ignores a user DTB), so a generation that changes
+the DTB is only fully exercised by a cold boot; the helper prints a
+NOTE at trial time when the two staged DTBs differ
+(`doc/update-path.md`). A trial that never
 answers leaves the boot menu's default on the last good generation.
 
 **Once, per workstation:**

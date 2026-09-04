@@ -203,6 +203,26 @@ function commands.trial(n)
         log("machine model %q: no EBC to quiesce", model)
     end
     local dtb_arg = pinenote and string.format(" --dtb=%s/%s", dir, L.DTB_NAME) or ""
+    -- A trial boots on the RUNNING kernel's device tree, whatever --dtb says:
+    -- kexec-tools (2.0.31) tries kexec_file_load first and its arm64 loader
+    -- drops a user DTB on that path ("(ignored)", kexec-arm64.c), and the
+    -- kernel then builds the next tree from the current one -- U-Boot's
+    -- serial-number and memory layout included, which is also why forcing
+    -- the legacy syscall is not the fix.  Proven 2026-09-03: a generation
+    -- whose DTB carried a new property booted without it.  So a trial
+    -- half-tests a generation whose device tree differs from the promoted
+    -- one; only a cold boot of that generation runs its own tree.  Say so.
+    if pinenote then
+        local gens = ledger_with_payloads()
+        local default = default_number(gens)
+        if default and default ~= n then
+            local ours = read_file(dir .. "/" .. L.DTB_NAME)
+            local theirs = read_file(L.gen_dir(default) .. "/" .. L.DTB_NAME)
+            if ours and theirs and ours ~= theirs then
+                log("NOTE: generation %d's device tree differs from DEFAULT gen-%d's; this trial runs on the running tree (kexec_file_load ignores --dtb) -- cold-boot generation %d before trusting a device-tree change", n, default, n)
+            end
+        end
+    end
     -- On the RK3566 a kexec'd kernel hangs, silently, 0.12 s into boot: its
     -- early rockchip_grf_init writes three USB3-OTG bits into the PIPE GRF,
     -- whose APB clock (pclk_pipe) the previous kernel gated as unused --
