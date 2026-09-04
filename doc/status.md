@@ -64,7 +64,10 @@ later cycle creates a context to free. The per-cycle residue is
 16 408 B = 228 kB per *successful* probe, freed nowhere (the
 212–276 kB spread is VMAP kernel-stack jitter). `/proc/vmallocinfo`
 on the running generation shows exactly one 57-page entry for this
-boot's single successful probe. And the boot's dmesg settles a doc
+boot's single successful probe — and the failed first probe's leak as
+well: two 1926-page `packed_inner_outer_nextprev` buffers where one is
+live, and eight 642-page buffers where seven are accounted for (six
+context planes, the live `hints_ioctl`), i.e. ~10 MB per boot. And the boot's dmesg settles a doc
 error: the by-construction first probe fails at
 `rockchip_ebc_waveform_init` (`Unable to load custom_wf.bin`, 2.8 s),
 not at `drm_init`, so the probe-unwind patch never runs on the boot
