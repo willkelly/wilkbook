@@ -108,17 +108,29 @@ earlier generation it is a kernel spin.
 
 ## Operator half (eyes, hands, UART)
 
+The unattended half ran 2026-09-04 (results inline above and in
+`doc/status.md`); the candidate on the device is now **generation 15**
+(347a7b1: the unattended half's two fixes on top of 14 — the notice
+before the teardown, and the broker's stale settle deadline). Open the
+book first: a reader restart or boot lands in the library by design.
+
 1. UART capture and the menu watcher armed before anything reboots.
-2. **Visual pass on generation 14**: the 32×32 dither on a grey image
+2. **Visual pass on generation 15**: the 32×32 dither on a grey image
    or gradient (patch 14's second-half load: the blue-noise pattern must
-   not repeat every 16 pixels), text edges on a real page, ghosting
-   after twenty real turns, rotation flash in all four orientations.
+   not repeat every 16 pixels — no person has looked at this yet), text
+   edges on a real page, ghosting after twenty real turns, rotation
+   flash in all four orientations.
 3. Pen: strokes, fast scribble, erase, settling after pen-up.
 4. Cover close and open; power button; suspend immediately after a turn
-   and during pen activity (R5's hardware half).
+   and during pen activity (R5's hardware half). Then the bug the rig
+   found, on the fixed broker: let the hourly backstop wake it (or set
+   `backstop=60` in `autosuspend.conf` for the test), press the button
+   to sleep it inside the settle window, wake it again with the button —
+   it must stay awake.
 5. **Cold boot with the UART**: `reboot`, the watcher picks os2,
-   generation 14 boots cold — the only proof a device-tree change is
-   live (patch 13 is already proven this way on generation 10).
+   generation 15 boots cold — the tag candidate without a kexec in its
+   lineage (patch 13's device-tree change is already proven live this
+   way on generation 10; 15's tree is 14's, i.e. 10's plus nothing).
 6. **The os1 rescue (#51)**: let a boot land on os1, run
    `rescue-generation.sh list` and `log` read-only, then `promote` of
    the already-promoted generation (a no-op), pick os2 at the menu,

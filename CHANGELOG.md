@@ -152,7 +152,7 @@ too, above.
   was already working. Rolling back is the identical move in reverse.
 - **Proven end to end**, both in an automated QEMU rig and on glass:
   the first cable-free deploy landed 2026-09-02, and every generation
-  cited elsewhere in this release (7 through 12) moved onto the device
+  cited elsewhere in this release (7 through 15) moved onto the device
   the same way afterward.
 - One dd-from-os1 reflash is still needed to put this capability on a
   device that doesn't already have it; after that, it's `make deploy
@@ -162,7 +162,8 @@ too, above.
   generation does. The deployer now says so at trial time whenever it
   applies — that notice used to be printed after the device had already
   turned its own radio off, so nobody watching over the network could
-  ever have seen it (found and fixed 2026-09-04).
+  ever have seen it (found and fixed 2026-09-04, and seen for real on
+  the generation-15 deploy the same evening).
 
 ### Also fixed since v0.2.0
 

@@ -89,7 +89,19 @@ candidate at 2cf0520: the two notes and the machine-model line are
 logged before the teardown, `test-static.sh` pins the order,
 `doc/update-path.md` says which lines reach ssh and which only the
 UART. The notice is therefore **proven only by a trial from a fixed
-generation** (15+), not by anything generation 14 did.
+generation** (15+), not by anything generation 14 did — **and it is,
+the same evening: generation 15** (`39khzlc4z03if3jr5wsp3vi4p0cjrlfc-system`,
+the candidate at 347a7b1 with the notice fix and the broker fix below;
+15 of 439 paths sent, trial from 14, health ok, promoted, generation 7
+pruned, 8–15 remain). The deployer's own trial output now carries
+`machine model "Pine64 PineNote v1.2" -> generation DTB` and the
+kexec'd-kernel NOTE before ssh's timeout line — and correctly no
+"differs" note, 14 and 15 sharing a DTB. A hand-run `trial 9` from 15
+printed the "differs" note (9's tree lacks the sdio_pwrseq delay) plus
+the kexec'd one, booted 9 (ssh back in 21 s); `trial 15` from 9's
+kernel with 15's helper printed both the other way and came back
+(21 s). DEFAULT stayed on 15 throughout. Every note the deployer can
+show has now been shown.
 
 **7. R3/R4.** The SNTP service logs `no --server configured`: the
 reader flavor ships `pinenote-timesync-service-type` with no server on
