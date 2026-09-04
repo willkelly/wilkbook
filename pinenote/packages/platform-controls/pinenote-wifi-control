@@ -17,6 +17,14 @@ dhcpcd_bin=${PINENOTE_WIFI_DHCPCD:-/run/current-system/profile/sbin/dhcpcd}
 if [ ! -x "$wpa_supplicant_bin" ]; then wpa_supplicant_bin=$(command -v wpa_supplicant 2>/dev/null || true); fi
 if [ ! -x "$rfkill_bin" ]; then rfkill_bin=$(command -v rfkill 2>/dev/null || true); fi
 if [ ! -x "$dhcpcd_bin" ]; then dhcpcd_bin=$(command -v dhcpcd 2>/dev/null || true); fi
+kill_cmd=${PINENOTE_WIFI_KILL:-kill}
+
+# Waits, in tenths of a second (overridable so the host harness runs in
+# milliseconds): the interface after a resume's firmware reload, the interface
+# after a driver rebind, and the association after the supplicant starts.
+iface_wait=${PINENOTE_WIFI_IFACE_WAIT:-50}
+rebind_wait=${PINENOTE_WIFI_REBIND_WAIT:-150}
+assoc_wait=${PINENOTE_WIFI_ASSOC_WAIT:-150}
 
 matching_pid() {
     pid=$1
@@ -61,6 +69,63 @@ wifi_on() {
     [ -e "$sys_root/class/net/$iface" ]
 }
 
+wait_iface() {
+    i=0
+    while [ ! -e "$sys_root/class/net/$iface" ] && [ "$i" -lt "$1" ]; do
+        sleep 0.1; i=$((i + 1))
+    done
+    [ -e "$sys_root/class/net/$iface" ]
+}
+
+# The ultra suspend powers the SDIO card off (cap-power-off-card), so every
+# resume is a full brcmfmac re-probe: firmware download, then attach.  When
+# the attach's first control exchange times out ("brcmf_sdio_bus_rxctl:
+# resumed on timeout", 2026-09-03) the driver releases both SDIO functions
+# and nothing rebinds them -- wlan0 never returns until a cold boot.  The
+# device nodes stay in sysfs, so a rebind of function 2 (the one whose probe
+# does the work) reruns exactly the path a clean resume takes.
+rebind_driver() {
+    drv="$sys_root/bus/sdio/drivers/brcmfmac"
+    [ -d "$drv" ] || { echo "pinenote-wifi: no brcmfmac driver to rebind" >&2; return 1; }
+    func=
+    for candidate in "$sys_root"/bus/sdio/devices/*:2; do
+        [ -e "$candidate" ] || continue
+        func=${candidate##*/}
+    done
+    [ -n "$func" ] || { echo "pinenote-wifi: no SDIO function 2 to rebind" >&2; return 1; }
+    if [ -e "$sys_root/bus/sdio/devices/$func/driver" ]; then
+        printf '%s\n' "$func" > "$drv/unbind" 2>/dev/null || true
+    fi
+    printf '%s\n' "$func" > "$drv/bind" 2>/dev/null || {
+        echo "pinenote-wifi: bind of $func failed" >&2; return 1
+    }
+    echo "pinenote-wifi: rebound brcmfmac on $func" >&2
+}
+
+start_supplicant() {
+    "$wpa_supplicant_bin" -B -P "$pidfile" -i "$iface" -c "$conf"
+    valid_pid
+}
+
+stop_supplicant() {
+    valid_pid || return 0
+    "$kill_cmd" "$pid" 2>/dev/null || true
+    i=0
+    while [ -e "$proc_root/$pid" ] && [ "$i" -lt 50 ]; do sleep 0.1; i=$((i + 1)); done
+    [ ! -e "$proc_root/$pid" ] || { echo "pinenote-wifi: supplicant did not exit" >&2; return 1; }
+    rm -f "$pidfile"
+}
+
+associated() {
+    [ "$(cat "$sys_root/class/net/$iface/carrier" 2>/dev/null || echo 0)" = 1 ]
+}
+
+wait_assoc() {
+    i=0
+    while ! associated && [ "$i" -lt "$1" ]; do sleep 0.1; i=$((i + 1)); done
+    associated
+}
+
 case "$action" in
 status)
     if wifi_on; then echo "on pid=$pid"; exit 0; fi
@@ -74,14 +139,25 @@ on)
         rm -f "$pidfile"
     fi
     [ -z "$rfkill_bin" ] || "$rfkill_bin" unblock wifi || true
-    i=0
-    while [ ! -e "$sys_root/class/net/$iface" ] && [ "$i" -lt 50 ]; do
-        sleep 0.2; i=$((i + 1))
-    done
-    [ -e "$sys_root/class/net/$iface" ] || { echo "pinenote-wifi: wlan0 unavailable" >&2; exit 1; }
+    if ! wait_iface "$iface_wait"; then
+        echo "pinenote-wifi: wlan0 absent after $((iface_wait / 10)) s; rebinding the driver" >&2
+        rebind_driver || { echo "pinenote-wifi: wlan0 unavailable" >&2; exit 1; }
+        wait_iface "$rebind_wait" || { echo "pinenote-wifi: wlan0 unavailable after rebind" >&2; exit 1; }
+    fi
     [ -n "$wpa_supplicant_bin" ] || { echo "pinenote-wifi: wpa_supplicant unavailable" >&2; exit 1; }
-    "$wpa_supplicant_bin" -B -P "$pidfile" -i "$iface" -c "$conf"
-    valid_pid || { echo "pinenote-wifi: supplicant pid validation failed" >&2; exit 1; }
+    start_supplicant || { echo "pinenote-wifi: supplicant pid validation failed" >&2; exit 1; }
+    # One association retry: a supplicant that comes up against a radio still
+    # settling after the reload can sit unassociated; a fresh start fixes it.
+    # No AP in range looks the same and is not a fault, so the result is
+    # reported, not fatal.
+    if [ "$assoc_wait" -gt 0 ] && ! wait_assoc "$assoc_wait"; then
+        echo "pinenote-wifi: no association within $((assoc_wait / 10)) s; restarting the supplicant once" >&2
+        if stop_supplicant && start_supplicant; then
+            wait_assoc "$assoc_wait" || echo "pinenote-wifi: still no association (no AP in range?)" >&2
+        else
+            echo "pinenote-wifi: supplicant restart failed" >&2; exit 1
+        fi
+    fi
     if [ -n "$dhcpcd_bin" ]; then
         "$dhcpcd_bin" -n "$iface" >/dev/null 2>&1 || "$dhcpcd_bin" -b "$iface" >/dev/null 2>&1 || true
     fi
@@ -92,7 +168,7 @@ off)
     if valid_pid; then
         printf 'on\n' > "$state"
         if [ "${PINENOTE_WIFI_NO_KILL:-0}" != 1 ]; then
-            kill "$pid"
+            "$kill_cmd" "$pid"
             i=0
             while [ -e "$proc_root/$pid" ] && [ "$i" -lt 50 ]; do sleep 0.1; i=$((i + 1)); done
             [ -e "$proc_root/$pid" ] && { echo "pinenote-wifi: supplicant did not exit" >&2; exit 1; }

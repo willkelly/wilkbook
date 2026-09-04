@@ -215,6 +215,13 @@ end
 local function wifi_was_on()
     return run(WIFI .. " status >/dev/null 2>&1")
 end
+-- The restore is the control script's job (it rebinds the SDIO driver when
+-- wlan0 never returns from the resume's firmware reload, and retries the
+-- association once); here the outcome is logged instead of swallowed, so a
+-- reader that comes back without a radio leaves a trace.
+local function restore_wifi()
+    if not run(WIFI .. " on") then log("Wi-Fi restore failed after resume (pinenote-wifi-control on)") end
+end
 
 local function suspend_transaction(fallback)
     local allowed, reason = suspend_allowed()
@@ -228,12 +235,12 @@ local function suspend_transaction(fallback)
     if had_wifi and not run(WIFI .. " off") then cleanup_display(); return false, "Wi-Fi quiesce failed" end
     local lights, gadget = frontlight_off(), gadget_off()
     if not arm_rtc() then
-        gadget_restore(gadget); frontlight_restore(lights); if had_wifi then run(WIFI .. " on") end
+        gadget_restore(gadget); frontlight_restore(lights); if had_wifi then restore_wifi() end
         cleanup_display(); return false, "RTC backstop unavailable"
     end
     write_value("/sys/power/mem_sleep", "deep")
     if not (read_line("/sys/power/mem_sleep") or ""):find("%[deep%]") then
-        gadget_restore(gadget); frontlight_restore(lights); if had_wifi then run(WIFI .. " on") end
+        gadget_restore(gadget); frontlight_restore(lights); if had_wifi then restore_wifi() end
         cleanup_display(); return false, "deep suspend unavailable"
     end
     run("/run/current-system/profile/bin/sync")
@@ -241,7 +248,7 @@ local function suspend_transaction(fallback)
     if not write_value("/sys/power/state", "mem") then
         write_value("/sys/class/rtc/rtc0/wakealarm", "0")
         gadget_restore(gadget); cleanup_display(); frontlight_restore(lights)
-        if had_wifi then run(WIFI .. " on") end
+        if had_wifi then restore_wifi() end
         return false, "kernel refused suspend"
     end
     local slept = os.time() - started
@@ -252,7 +259,7 @@ local function suspend_transaction(fallback)
         log("RTC backstop clear failed after resume")
     end
     gadget_restore(gadget); cleanup_display(); frontlight_restore(lights)
-    if had_wifi then run(WIFI .. " on") end
+    if had_wifi then restore_wifi() end
     log("resumed after %ds", slept)
     return true, slept >= config.backstop - 5 and "rtc" or "button"
 end

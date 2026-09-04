@@ -757,3 +757,56 @@ so first.
 `not-before` is a constant rather than the build date on purpose:
 stamping the build date into a default would make the derivation
 unreproducible. It therefore ages, and the field is how you move it.
+
+## 8. Wi-Fi after a resume (2026-09-03)
+
+The ultra suspend powers the SDIO card off (`cap-power-off-card`), so
+every resume is a full `brcmfmac` re-probe: the mmc core re-enumerates
+the card, the driver downloads the firmware again and attaches. On
+2026-09-03 one resume in ten (generation 8, the study flavor; the UART
+capture holds all ten) downloaded the firmware and then timed out on the
+first control exchange — `brcmf_sdio_bus_rxctl: resumed on timeout`,
+`brcmf_bus_started: failed: -110`, `brcmf_attach failed` — whereupon
+the driver's failure path released both SDIO functions
+(`device_release_driver()` in `brcmf_sdio_firmware_callback`) and
+nothing ever rebound them: `wlan0` stayed absent through two more
+suspend cycles until a cold boot. The same boot's `mmc_sdio_suspend`
+had warned `WARN_ON(host->sdio_irqs && !mmc_card_keep_power(host))`
+eight seconds before that resume; at cold boot the first probe of the
+same function fails with -5 and a 12 ms retry saves it. So the power
+sequence is marginal at the edges, and the reset/enable lines sit on
+`gpio0`, whose pad rail is one of the three cut in ultra suspend, with
+no settle delay configured on the power sequence.
+
+Three layers, cheapest first:
+
+1. **`pinenote-wifi-control on` recovers the driver itself.** If
+   `wlan0` has not appeared within 5 s of the resume, it rebinds SDIO
+   function 2 (`mmc1:0001:2`, the one whose probe does the work) through
+   `/sys/bus/sdio/drivers/brcmfmac/{unbind,bind}` — the device nodes
+   survive the driver's failure path, so this reruns exactly the probe a
+   clean resume takes — and waits 15 s more. Once the supplicant is up
+   it waits up to 15 s for association (`carrier`) and restarts the
+   supplicant once if none comes; no AP in range looks the same and is
+   reported, not fatal. Waits are env-overridable so the host harness
+   runs them at zero: `make platform-controls-check` pins the rebind, the
+   no-rebind-when-present case, and the single association retry.
+2. **The broker logs a failed restore** (`Wi-Fi restore failed after
+   resume`) instead of discarding the exit status at its four restore
+   sites.
+3. **Kernel patch 13** (`linux-pinenote-7.1-sdio-pwrseq-delay.patch`):
+   `post-power-on-delay-ms = <100>` on `sdio_pwrseq`, the Quartz64's
+   value for the same module family; mainline's PineNote DTS has none.
+   100 ms per power-on, nothing else.
+
+What is proven offline: layers 1–2 by the harness. What needs glass:
+the hands-off cycle rig (`wifi-cycle.sh` in the session scratchpad:
+a short `backstop=` in `/data/wilkbook/autosuspend.conf` plus one
+injected power tap makes the broker suspend, RTC-wake, restore Wi-Fi,
+settle 20 s and re-suspend by itself) run for tens of cycles on the
+image that carries all three, counting `Wi-Fi restore failed`,
+`rebinding the driver` and `restarting the supplicant` in the broker's
+log. Not observed yet: a second failure class on generation 7 the same
+evening (driver attach fine per the UART, no SSH afterwards) — layer 1's
+association retry is aimed at it, unproven.
+

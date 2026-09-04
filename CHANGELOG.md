@@ -17,6 +17,13 @@ says otherwise.
 
 ## Unreleased
 
+- **Wi-Fi comes back after sleep on its own** (branch `wifi-after-resume`,
+  not yet merged): when the radio's driver gives up during the resume
+  (it happened once in ten sleeps on 2026-09-03 and needed a full
+  reboot), the reader now rebinds the driver and retries the
+  association by itself; a failure is logged. The kernel also gives the
+  Wi-Fi module 100 ms to settle after power-on.
+
 ### One reader, on the direct-mode driver — glass-proven, on the embrace branch, not yet merged
 
 - **On the embrace branch (PR #56), not yet merged.** A single reader

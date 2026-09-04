@@ -179,7 +179,14 @@
         ;; watchdog's reset after a kexec was a power-off).  Glass-proven
         ;; 2026-09-03: a halted trial kernel self-resets and DEFAULT boots.
         ;; doc/upstream-register.md item 25; doc/kernel-forward-port.md 12.
-        (local-file "../patches/linux-pinenote-7.1-rk8xx-kexec-sleep-pin.patch")))
+        (local-file "../patches/linux-pinenote-7.1-rk8xx-kexec-sleep-pin.patch")
+        ;; Ours, for upstream: 100 ms of settle after the Wi-Fi module's
+        ;; reset line is released (mmc-pwrseq-simple post-power-on-delay-ms,
+        ;; the Quartz64's value) -- with cap-power-off-card every resume
+        ;; re-enumerates the card from cold, and one resume in ten timed out
+        ;; on the first control exchange after the firmware download
+        ;; (2026-09-03).  doc/networking.md.
+        (local-file "../patches/linux-pinenote-7.1-sdio-pwrseq-delay.patch")))
 
 (define %linux-pinenote-source
   (origin
