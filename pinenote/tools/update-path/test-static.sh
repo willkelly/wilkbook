@@ -29,6 +29,12 @@ echo "PASS: trial boot tears down like a suspend, quiesces the EBC, and never to
 after 'machine model %q -> %s' 'herd stop reader-session' "$helper"
 after 'NOTE: generation %d' 'herd stop reader-session' "$helper"
 after 'NOTE: the running kernel was kexec' 'herd stop reader-session' "$helper"
+# Stated against the radio-off literally too (the reader-stop pin above chains
+# to it, but the requirement is the radio), and the notes' wording is pinned:
+# until 2026-09-04 nothing held either NOTE's text.
+after 'NOTE: the running kernel was kexec' 'WIFI .. " off' "$helper"
+grep -q 'kexec_file_load ignores --dtb' "$helper"
+grep -q 'linux,booted-from-kexec' "$helper"
 echo "PASS: the device-tree notes are logged before the radio goes off"
 # add materializes every profile generation's payload (the shipped one has no /boot/gen-N).
 grep -q 'ensure_payload(g)' "$helper"

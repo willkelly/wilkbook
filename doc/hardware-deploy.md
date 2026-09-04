@@ -263,8 +263,10 @@ trial, health-checked, and promoted only then. One limit, found
 2026-09-03: the trial runs on the running kernel's device tree
 (`kexec_file_load` ignores a user DTB), so a generation that changes
 the DTB is only fully exercised by a cold boot; the helper prints a
-NOTE at trial time when the two staged DTBs differ
-(`doc/update-path.md`). A trial that never
+NOTE at trial time when the target's staged DTB differs from the
+booted generation's, and a second when the running kernel was itself
+kexec'd — both before its teardown starts, which is the only place an
+ssh watcher can see them (`doc/update-path.md`). A trial that never
 answers leaves the boot menu's default on the last good generation.
 
 **Once, per workstation:**
@@ -304,9 +306,13 @@ the device lacks (guix's signed nar stream over plain OpenSSH; a
 KOReader change is megabytes, a kernel ~100 MB), registers generation
 N+1 (`add`: profile link, `/boot/gen-N+1/{Image,initrd,dtb,append}`,
 the extlinux menu re-rendered with `DEFAULT` unchanged), kexecs into
-it (`trial`: the reader stopped INT-first, Wi-Fi off, gadget unbound,
-EBC quiescent, then `kexec -e`; the panel goes idle and the ssh link
-dies with the old kernel — by design), waits for the new generation to
+it (`trial`: the device-tree notes and the model line first, then the
+reader stopped INT-first, Wi-Fi off, gadget unbound, EBC quiescent,
+then `kexec -e`; the ssh link dies at the Wi-Fi off, before the kexec
+— by design, so nothing the helper says after that point reaches the
+deployer, and a helper that dies after it, say on an EBC that never
+goes idle, leaves the reader stopped and the radio off with no message
+delivered: a known gap, not yet closed), waits for the new generation to
 answer, runs `health` (`/run/current-system` is the new system, the
 broker is ready, the reader started), and only then `promote`s it and
 prunes to KEEP generations plus the promoted and booted ones, then
