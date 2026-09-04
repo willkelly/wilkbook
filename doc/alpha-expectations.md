@@ -3,8 +3,25 @@
 You have a PineNote running wilkbook's reader image. This page says what
 it should *feel* like, what is known-broken, and what to report. It is
 the operator's calibration, written 2026-08-08 and revised 2026-08-15
-with the measured soak figures — if your device does
-worse than this, that's a bug report; if it does better, brag.
+with the measured soak figures and 2026-09-04 for the v0.3.0-prealpha
+changes below — if your device does worse than this, that's a bug
+report; if it does better, brag.
+
+## Since v0.2.0
+
+Two things changed about how this device *stays* current, not just how
+it reads. First, it can now update itself: a new build reaches your
+PineNote over `make deploy` — no cable, no reflash — and if the new
+version ever fails to come up, the device notices on its own and reboots
+back to the version that was already working. Second, there is only one
+reader image now: the direct-mode display driver, previously an
+experiment running alongside the original driver, is the shipping
+driver on every build — page turns should feel the same or better
+(no flashing), rotations still flash a little and feel a touch slower,
+same as before. Sleep and wake (power button, cover, KOReader's own idle
+timer) still go through the same broker as v0.2.0, now proven on this
+driver too, and Wi-Fi should reconnect on its own after almost every
+sleep instead of occasionally needing a manual toggle.
 
 ## The feel
 
@@ -119,6 +136,35 @@ worse than this, that's a bug report; if it does better, brag.
 - Settings you change in KOReader menus persist across suspends but
   **reset on a reflash** (they live on the OS partition; your books and
   reading positions live on the data partition and survive).
+- **We haven't re-run the full page-turn/ghosting quality check since
+  switching to the direct-mode driver as standard.** It should look and
+  feel like v0.2.0 did; say something if it doesn't.
+- **If a wireless update ever seems to hang**, give it a few minutes —
+  the device is designed to notice and put itself back on the version
+  that was already working, with no cable and no button press. Two
+  rough edges in that recovery: it takes about five minutes before the
+  update tool itself starts looking for a stuck device, and in the rare
+  case the device's own self-recovery doesn't fire either, it can land
+  back on the stock rescue system (os1) instead of your reader.
+- **Old versions aren't yet protected from automatic cleanup** — there's
+  no "never delete this one" pin on a known-good version yet.
+- **The rescue procedure for a badly broken update has never actually
+  been run**, only written and reasoned about.
+- **Wi-Fi reconnecting after sleep is well-tested for the ordinary
+  case** (power button, cover, the automatic wake) but only lightly
+  tested for the case where KOReader's own idle timer is what puts the
+  device to sleep.
+- **If the display driver's very first startup attempt is interrupted**
+  (it is *expected* to fail once and recover a moment later — that part
+  is normal and not a bug), it can leak a small amount of memory instead
+  of freeing it. Found by an outside code review, not yet fixed.
+- **The debug serial port still logs in as root with no password**, if
+  someone has physical access and the right cable.
+- If you're handed a device with the console-debug build flag on (a
+  no-login root shell over USB, meant for the operator's own
+  debugging), that's deliberate and isn't what a normal build ships
+  with — don't mistake it for a security bug, and don't keep using that
+  build day to day.
 
 ## Reporting
 
