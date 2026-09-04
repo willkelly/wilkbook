@@ -607,8 +607,8 @@ update-path-check:
 # touches os1, p7 or the partition table; a failed health check leaves the
 # previous generation as DEFAULT.
 deploy:
-	@test -n "$(DEVICE)" || { echo "usage: make deploy DEVICE=<ssh host> [FLAVOR=reader] [KEEP=3]"; exit 2; }
-	sh pinenote/tools/deploy/deploy.sh "$(DEVICE)" "$(or $(FLAVOR),reader)" "$(or $(KEEP),3)"
+	@test -n "$(DEVICE)" || { echo "usage: make deploy DEVICE=<ssh host> [FLAVOR=reader] [KEEP=5]"; exit 2; }
+	sh pinenote/tools/deploy/deploy.sh "$(DEVICE)" "$(or $(FLAVOR),reader)" "$(or $(KEEP),5)"
 
 # reader-session's stop must be INT-first: TERM truncates the crengine
 # cache to zero bytes and re-arms a 30 s re-parse of the manuals book

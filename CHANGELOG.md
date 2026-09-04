@@ -49,7 +49,9 @@ not yet been repeated on this lineage.
 - **If the Wi-Fi driver itself gives up during a resume**, the device
   now rebinds it and retries the association on its own, logging the
   attempt either way; earlier this showed up about once in ten sleeps
-  and needed a full reboot to clear.
+  and needed a full reboot to clear. That recovery is proven in the
+  offline harness only: the failure did not recur in the 65 cycles, so
+  the rebind has never fired on a real device.
 - **The kernel gives the Wi-Fi module 100 ms to settle** after its power
   rail comes up, closing a race that could otherwise show up as the
   same symptom.
@@ -57,8 +59,26 @@ not yet been repeated on this lineage.
   through the device's own broker-driven path, zero Wi-Fi restore
   failures, zero driver rebinds needed. The path where KOReader's own
   idle timer — rather than the power button, the cover, or the RTC
-  backstop — triggers the sleep is the same fix, but only fired four
-  times in that run: thinner evidence, not a different code path.
+  backstop — triggers the sleep is exactly the path the memory repair is
+  for, and it fired only four times in that run: thin evidence for the
+  case that matters most.
+
+### Display driver corrections from an outside review
+
+- A third-party source review of the driver (recorded, with every claim
+  checked, in `doc/reviews/2026-09-03-third-party-audit.md`) found four
+  correctness bugs; all four are fixed in this tag's kernel: the
+  blue-noise dither pattern no longer repeats its first half every
+  16 pixels (you may notice greys and images dither slightly
+  differently), a malformed rectangle-hint request can no longer wedge
+  the display ioctl, and two diagnostic ioctls return proper errors.
+  These fixes reached a device for the first time in this tag's own
+  test session; the dither change is a visible one nobody had seen
+  before it.
+- **Still open from that review**: the driver leaks memory and DMA
+  mappings when its probe fails, and the direct-mode image's first probe
+  fails by design once per boot; the leak is bounded per boot and is
+  the next kernel fix, not in this tag.
 
 ### One reader, on the direct-mode driver
 
@@ -85,12 +105,16 @@ not yet been repeated on this lineage.
 ### A failed cable-free update now recovers by itself
 
 - **If a wireless update boots a kernel that hangs instead of coming
-  up, the device brings itself back.** The SoC's own watchdog resets
-  it, and the last version that was actually working boots on its
-  own — no cable, no power button. Proven end to end on glass
-  2026-09-03 evening: an intentionally broken trial kernel hung, and a
-  few minutes later, untouched, the device was back on the last good
-  version and reading again.
+  up, the device resets itself** — the SoC's own watchdog fires and the
+  chip reboots into U-Boot. Proven on glass 2026-09-03 evening: an
+  intentionally broken trial kernel hung, and a few minutes later,
+  untouched, the device had reset. **What still needs the cable**: this
+  U-Boot's default slot is the stock Debian one, so after that reset
+  the last good reader boots only if something answers U-Boot's menu —
+  the deployer does that itself when a debug cable is attached
+  (`WILKBOOK_UART`); without the cable the device comes up in stock
+  Debian and waits for you. Self-reset yes; hands-off return to the
+  reader, only with the cable.
 - **One narrower class of failure is prevented rather than recovered
   from**: a specific hard hang tied to a USB clock the outgoing kernel
   leaves off, which the update tool already avoids by default — you

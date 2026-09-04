@@ -88,7 +88,11 @@ echo "PASS: the trial holds the PIPE domain up and arms the watchdog last, both 
 # deployer drives the menu back to os2 after the watchdog reset; without one it
 # says what to do.  Never promotes on that path.
 grep -q 'recover_after_failed_trial "$gen"' "$deploy"
-after 'recover_after_failed_trial() {' 'uboot-pick-slot.sh" "$log" --slot os2' "$deploy"
+# 2026-09-04: the watcher is armed BEFORE the kexec (the watchdog reset comes
+# within minutes and U-Boot's menu shows for 15 s); recovery then waits on it.
+after 'trial_health_promote() {' 'uboot-pick-slot.sh" "$uart_log" --slot os2' "$deploy"
+after 'uboot-pick-slot.sh" "$uart_log" --slot os2' 'wilkbook-generation trial' "$deploy"
+after 'recover_after_failed_trial() {' 'wait "$watcher" && wait_for_ssh' "$deploy"
 sed -n '/^recover_after_failed_trial() {/,/^}/p' "$deploy" | grep -q '^  exit 1$'
 ! grep -q 'never answered; a power-cycle boots' "$deploy"
 echo "PASS: a trial that never answers is recovered over the UART when one is configured, and never promoted"

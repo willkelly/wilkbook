@@ -726,6 +726,11 @@ function PineNote:suspend()
     return true
 end
 
+-- Present while the user has turned Wi-Fi off from the menu (see
+-- initNetworkManager); /run, so a reboot -- where the service brings the
+-- radio up regardless -- starts clean.
+local USER_OFF_MARKER = "/run/wilkbook-power/wifi.user-off"
+
 function PineNote:initNetworkManager(NetworkMgr)
     local helper = "/run/current-system/profile/bin/pinenote-wifi-control"
     -- Keep the archived Phase 1 overlay usable for historical recovery;
@@ -768,6 +773,23 @@ function PineNote:initNetworkManager(NetworkMgr)
     if G_reader_settings and run("status") then
         G_reader_settings:makeTrue("wifi_was_on")
     end
+    -- The control script cannot tell a sleep's radio-off from the user's:
+    -- both reach turnOffWifi.  KOReader knows (disableWifi's `interactive`),
+    -- so remember it here: a marker while the user has the radio off, gone
+    -- when they turn it on again.  restoreWifiMemory() honours it, so a menu
+    -- choice survives a sleep -- the half of the flag KOReader reserves for
+    -- direct user interaction stays the user's.
+    local disableWifi, enableWifi = NetworkMgr.disableWifi, NetworkMgr.enableWifi
+    function NetworkMgr:disableWifi(cb, interactive)
+        if interactive then
+            local f = io.open(USER_OFF_MARKER, "w"); if f then f:close() end
+        end
+        return disableWifi(self, cb, interactive)
+    end
+    function NetworkMgr:enableWifi(cb, interactive)
+        if interactive then os.remove(USER_OFF_MARKER) end
+        return enableWifi(self, cb, interactive)
+    end
 end
 
 -- The control script records, when it takes the radio down for a sleep,
@@ -775,6 +797,8 @@ end
 -- reads "on" exactly when the radio was on before this sleep.  Reassert
 -- KOReader's memory from that record before its NetworkListener decides.
 function PineNote:restoreWifiMemory()
+    local marker = io.open(USER_OFF_MARKER, "r")
+    if marker then marker:close(); return end  -- the user turned it off; leave it off
     local f = io.open("/run/wilkbook-power/wifi.state", "r")
     if not f then return end
     local state = f:read("*l"); f:close()

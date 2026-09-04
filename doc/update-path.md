@@ -181,8 +181,10 @@ So a trial half-tests a generation whose device tree differs from the
 promoted one: the kernel, the userspace and the health check all run,
 the tree does not. Only a cold boot of the promoted generation runs its
 own DTB. The helper says so at trial time (`NOTE: generation N's device
-tree differs from DEFAULT gen-M's …`) by comparing the two staged
-files; the deployer prints it. Until a cold boot has run, treat a
+tree differs from the booted gen-M's …`) by comparing the target's
+staged DTB with the booted generation's, and adds a second note whenever
+the running kernel was itself kexec'd (its tree is the last cold boot's,
+which may be older still); the deployer prints both. Until a cold boot has run, treat a
 device-tree change as undeployed — the Wi-Fi power-sequence delay
 (`doc/networking.md` §8) is the first one to wait for that.
 

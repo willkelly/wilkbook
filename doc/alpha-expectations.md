@@ -2,7 +2,7 @@
 
 You have a PineNote running wilkbook's reader image. This page says what
 it should *feel* like, what is known-broken, and what to report. It is
-the operator's calibration, written 2026-08-08 and revised 2026-08-15
+the operator's calibration, written 2026-08-08, revised 2026-08-15 and 2026-09-04
 with the measured soak figures and 2026-09-04 for the v0.3.0-prealpha
 changes below — if your device does worse than this, that's a bug
 report; if it does better, brag.
@@ -27,7 +27,9 @@ sleep instead of occasionally needing a manual toggle.
 
 - **Page turns should feel snappier than the stock Debian image.** One
   pass per turn: the page draws once, completely. No settle-then-redraw.
-- **Few or no full-screen flashes.** The black-white-black inversion
+- **Few or no full-screen flashes on page turns; rotations do flash and
+  feel sluggish** (the operator's own verdict on the direct-mode kernel,
+  2026-09-03). The black-white-black inversion
   flash should be rare — not on ordinary page turns, not on menus. An
   occasional deliberate full wash (ghost-clearing) is normal after many
   pages or on resume.
@@ -78,7 +80,7 @@ sleep instead of occasionally needing a manual toggle.
 
   | | draw | from a full charge |
   |---|---|---|
-  | Sitting idle, suspending itself | 5.47 mA | **~30 days** |
+  | Sitting idle, suspending itself | 5.47 mA | **~30 days** (measured on the v0.1.0 image with the retired 5-minute daemon; not yet re-measured on the direct-mode kernel with the broker) |
   | Actually being read (~40 min/day) | 10.07 mA | **~16 days** |
 
   If you read more than that, expect less than 16. The honest way to
@@ -97,13 +99,16 @@ sleep instead of occasionally needing a manual toggle.
   over those six days, unattended. That is the number to weigh against
   the warnings below about a device that will not wake — the failure is
   taken seriously because it would be bad, not because it is common.
-- The device suspends itself after ~5 idle minutes (page + SUSPENDED
+- The device suspends itself after 15 idle minutes (KOReader's own timer,
+  settable in its menu; it will NOT auto-sleep while on the charger — that
+  is the default, not a fault) (page + SUSPENDED
   banner, frontlight off), and a short power press suspends or wakes it
   on demand.
 - **If it never sleeps at all** — no banner, Wi-Fi stays up, the power
   button does nothing — auto-suspend is *paused*, not broken. Check
   `/data/wilkbook/autosuspend.conf` and
-  `/var/lib/pinenote/autosuspend.conf`; either holding `enabled=0`
+  `/var/lib/pinenote/autosuspend.conf`; either holding `enabled=0` (which also silences the power button and the
+  cover: the broker treats it as "do not sleep, do not react")
   pauses everything, and the second one wins. Set `enabled=1` or delete
   it (no restart needed). An earlier version of the install page told
   people to create that file and never told them to undo it, so this is
@@ -125,10 +130,14 @@ sleep instead of occasionally needing a manual toggle.
 
 ## Known not-working (told to you rather than discovered by you)
 
-- **The Wi-Fi UI does not work.** There is no on-device network picker.
+- **The Wi-Fi UI is an on/off toggle, not a picker.** Networks are
+  configured out of band (`doc/networking.md`); the menu toggle works and
+  "restore Wi-Fi after resume" is honoured. An earlier note said the UI
+  did not work at all; that is no longer true.
   Credentials are staged out of band (a file on the data partition —
   `doc/install.md`); once staged, Wi-Fi associates at boot on its own.
-- **The brightness UI may or may not work.** The frontlight comes on at
+- **The brightness UI works; level and warmth come back after a wake.**
+  (Earlier note kept for history:) The frontlight comes on at
   boot and turns off in suspend; adjusting it from KOReader's own
   slider is unvalidated. If it works for you, say so — that's data.
 - **No Wi-Fi UI also means no on-device book downloads.** Books arrive

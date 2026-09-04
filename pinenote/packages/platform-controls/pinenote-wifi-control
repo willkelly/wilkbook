@@ -166,6 +166,7 @@ on)
     fi
     ;;
 assoc-watch)
+    trap 'rm -f "$watchpid"' EXIT
     # One association retry: a supplicant that comes up against a radio still
     # settling after the reload can sit unassociated; a fresh start fixes it.
     # No AP in range looks the same and is not a fault, so the result is
@@ -182,7 +183,11 @@ assoc-watch)
     ;;
 off)
     if [ -r "$watchpid" ]; then
-        "$kill_cmd" "$(sed -n '1p' "$watchpid")" 2>/dev/null || true
+        wp=$(sed -n '1p' "$watchpid")
+        # only ever signal a live association watcher of ours, never a recycled pid
+        case "$(tr '\000' ' ' < "$proc_root/$wp/cmdline" 2>/dev/null)" in
+            *assoc-watch*) "$kill_cmd" "$wp" 2>/dev/null || true;;
+        esac
         rm -f "$watchpid"
     fi
     if valid_pid; then

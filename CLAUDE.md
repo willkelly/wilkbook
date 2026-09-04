@@ -279,7 +279,9 @@ gitignored `build/`, or the reader's static address.
   running kernel gated; upstream register 22), and every flavor boots
   with `irqchip.gicv3_nolpi=1`. **With kernel patch 8 (kexec-hardening,
   PR #48, pending the operator's review) in the KEXECING kernel, a
-  trial that halts self-resets by watchdog into DEFAULT, hands-off; a
+  trial that halts self-resets by watchdog into U-Boot (hands-off only
+  with the UART: U-Boot defaults to os1, the deployer answers the menu when
+  `WILKBOOK_UART` is set, otherwise the device sits on stock Debian); a
   panicking trial already reboots itself (`PANIC_TIMEOUT=1`)** — proven
   end to end 2026-09-03 evening (`doc/status.md`). The GRF bus wedge is
   prevented by the blacklist above and is the one class the reset

@@ -37,6 +37,10 @@ check(device:find('/run/wilkbook-power/wifi.state', 1, true)
       and device:find('makeTrue("wifi_was_on")', 1, true)
       and device:find('self:restoreWifiMemory()\n        self:onPowerEvent("Resume")', 1, true),
       "KOReader's wifi_was_on memory is reasserted from the control script's record before the Resume broadcast")
+check(device:find('wifi.user-off', 1, true)
+      and device:find('function NetworkMgr:disableWifi(cb, interactive)', 1, true)
+      and device:find('if marker then marker:close(); return end', 1, true),
+      "the user's interactive Wi-Fi off is remembered and restoreWifiMemory leaves it off")
 check(powerd:find('self.device:_beforeSuspend()', 1, true) and powerd:find('self.device:_afterResume()', 1, true),
       "powerd quarantines and restores input")
 check(powerd:find('local total = cool_level + warm_level', 1, true)

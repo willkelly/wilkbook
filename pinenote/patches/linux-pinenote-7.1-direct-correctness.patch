@@ -1,7 +1,11 @@
 drm/rockchip: ebc: four correctness fixes in the direct-mode driver
 
 From a third-party source review of the tree at generation 9
-(doc/reviews/2026-09-03-third-party-audit.md):
+(doc/reviews/2026-09-03-third-party-audit.md), with the EXTRACT_FBS
+hunks re-done after the 2026-09-04 adversarial review caught a dangling
+else in the first version (a successful extraction returned -EFAULT and
+a bad pointer returned 0; the build log carried five -Wdangling-else
+warnings that were not read).
 
 1. The parallel advance ran a band inline when queue_work() returned
    false.  False means the work is already queued and that invocation
@@ -17,7 +21,7 @@ From a third-party source review of the tree at generation 9
    is capped at 65536 (-E2BIG).
 4. OFF_SCREEN returned the uncopied byte count; EXTRACT_FBS ORed copy
    residuals and errnos together.  Both now return -EFAULT on any
-   short copy.
+   short copy, with every branch braced.
 
 --- a/drivers/gpu/drm/rockchip/rockchip_ebc_blit_neon.c	2026-09-03 21:29:21.926766425 -0600
 +++ b/drivers/gpu/drm/rockchip/rockchip_ebc_blit_neon.c	2026-09-03 21:30:37.510400707 -0600
@@ -68,7 +72,7 @@ From a third-party source review of the tree at generation 9
  				q8_tmp = q8_dither_pattern0;
  				q8_dither_pattern0 = q8_dither_pattern1;
 --- a/drivers/gpu/drm/rockchip/rockchip_ebc.c	2026-09-03 21:29:21.172750082 -0600
-+++ b/drivers/gpu/drm/rockchip/rockchip_ebc.c	2026-09-03 21:30:37.510802027 -0600
++++ b/drivers/gpu/drm/rockchip/rockchip_ebc.c	2026-09-04 13:27:47.253602450 -0600
 @@ -354,7 +354,13 @@
  
  static unsigned int rect_hint_batch = 20;
@@ -101,71 +105,87 @@ From a third-party source review of the tree at generation 9
  	} else
  		res = -EFAULT;
  	return res;
-@@ -419,43 +425,48 @@
+@@ -418,44 +424,54 @@
+ 	int refresh_index = ctx->refresh_index;
  
  	if (args->ptr_packed_inner_outer_nextprev) {
- 		if (access_ok(args->ptr_packed_inner_outer_nextprev, 3 * num_pixels))
+-		if (access_ok(args->ptr_packed_inner_outer_nextprev, 3 * num_pixels))
 -			res |= copy_to_user(
++		if (access_ok(args->ptr_packed_inner_outer_nextprev, 3 * num_pixels)) {
 +			if (copy_to_user(
  				args->ptr_packed_inner_outer_nextprev,
  				ebc->packed_inner_outer_nextprev,
 -				3 * num_pixels);
+-		else
+-			res |= -EFAULT;
 +				3 * num_pixels))
 +				res = -EFAULT;
- 		else
--			res |= -EFAULT;
++		} else {
 +			res = -EFAULT;
++		}
  	}
  	if (args->ptr_hints) {
- 		if (access_ok(args->ptr_hints, num_pixels))
+-		if (access_ok(args->ptr_hints, num_pixels))
 -			res |= copy_to_user(args->ptr_hints,
++		if (access_ok(args->ptr_hints, num_pixels)) {
 +			if (copy_to_user(args->ptr_hints,
  					    ctx->hints_buffer[refresh_index],
 -					    num_pixels);
+-		else
+-			res |= -EFAULT;
 +					    num_pixels))
 +				res = -EFAULT;
- 		else
--			res |= -EFAULT;
++		} else {
 +			res = -EFAULT;
++		}
  	}
  	if (args->ptr_prelim_target) {
- 		if (access_ok(args->ptr_prelim_target, num_pixels))
+-		if (access_ok(args->ptr_prelim_target, num_pixels))
 -			res |= copy_to_user(
++		if (access_ok(args->ptr_prelim_target, num_pixels)) {
 +			if (copy_to_user(
  				args->ptr_prelim_target,
  				ctx->prelim_target_buffer[refresh_index],
 -				num_pixels);
+-		else
+-			res |= -EFAULT;
 +				num_pixels))
 +				res = -EFAULT;
- 		else
--			res |= -EFAULT;
++		} else {
 +			res = -EFAULT;
++		}
  	}
  	if (args->ptr_phase1) {
- 		if (access_ok(args->ptr_phase1, num_pixels >> 2))
+-		if (access_ok(args->ptr_phase1, num_pixels >> 2))
 -			res |= copy_to_user(args->ptr_phase1, ebc->phase[0],
 -					    ebc->phase_size);
+-		else
+-			res |= -EFAULT;
++		if (access_ok(args->ptr_phase1, num_pixels >> 2)) {
 +			if (copy_to_user(args->ptr_phase1, ebc->phase[0],
 +					    ebc->phase_size))
 +				res = -EFAULT;
- 		else
--			res |= -EFAULT;
++		} else {
 +			res = -EFAULT;
++		}
  	}
  	if (args->ptr_phase2) {
- 		if (access_ok(args->ptr_phase2, num_pixels >> 2))
+-		if (access_ok(args->ptr_phase2, num_pixels >> 2))
 -			res |= copy_to_user(args->ptr_phase2, ebc->phase[1],
 -					    ebc->phase_size);
+-		else
+-			res |= -EFAULT;
++		if (access_ok(args->ptr_phase2, num_pixels >> 2)) {
 +			if (copy_to_user(args->ptr_phase2, ebc->phase[1],
 +					    ebc->phase_size))
 +				res = -EFAULT;
- 		else
--			res |= -EFAULT;
++		} else {
 +			res = -EFAULT;
++		}
  	}
  	return res;
  }
-@@ -476,19 +487,25 @@
+@@ -476,19 +492,25 @@
  		struct drm_rockchip_ebc_rect_hint __user *rect_hints)
  {
  	int ret = 0;

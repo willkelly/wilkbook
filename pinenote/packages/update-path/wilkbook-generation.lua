@@ -214,13 +214,18 @@ function commands.trial(n)
     -- one; only a cold boot of that generation runs its own tree.  Say so.
     if pinenote then
         local gens = ledger_with_payloads()
-        local default = default_number(gens)
-        if default and default ~= n then
+        local booted = booted_number(gens)
+        if booted and booted ~= n then
             local ours = read_file(dir .. "/" .. L.DTB_NAME)
-            local theirs = read_file(L.gen_dir(default) .. "/" .. L.DTB_NAME)
+            local theirs = read_file(L.gen_dir(booted) .. "/" .. L.DTB_NAME)
             if ours and theirs and ours ~= theirs then
-                log("NOTE: generation %d's device tree differs from DEFAULT gen-%d's; this trial runs on the running tree (kexec_file_load ignores --dtb) -- cold-boot generation %d before trusting a device-tree change", n, default, n)
+                log("NOTE: generation %d's device tree differs from the booted gen-%d's; this trial runs on the running tree (kexec_file_load ignores --dtb) -- cold-boot generation %d before trusting a device-tree change", n, booted, n)
             end
+        end
+        -- And the running tree may be older still: a kernel that was itself
+        -- kexec'd inherited the tree of whatever last cold-booted.
+        if exists("/proc/device-tree/chosen/linux,booted-from-kexec") then
+            log("NOTE: the running kernel was kexec'd; its device tree is the last cold boot's, not gen-%d's -- a device-tree change is proven only by a cold boot", booted or 0)
         end
     end
     -- On the RK3566 a kexec'd kernel hangs, silently, 0.12 s into boot: its
