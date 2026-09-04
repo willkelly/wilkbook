@@ -1,7 +1,88 @@
 # Hardware status
 
-Last updated: 2026-09-03. Update protocol: add a dated entry at the top
+Last updated: 2026-09-04. Update protocol: add a dated entry at the top
 after every hardware session; entries are per-device/per-operator.
+
+## 2026-09-04 (wkelly PineNote, operator mostly away) — the v0.3.0-prealpha candidate is generation 14: patch 14's guards behave on glass, the "zero-IRQ page turns" were the file manager, the trial notes were dying with the radio
+
+The candidate (`prealpha-candidate`: main + PRs #66, #70, #67, #69 + the
+adversarial review's fixes, `doc/reviews/2026-09-04-adversarial-review.md`)
+ran the unattended half of `doc/prealpha-session-2026-09-04.md`, no UART,
+operator away for most of it. Results by step.
+
+**0. Deploy.** `make deploy DEVICE=pinenote-os2 FLAVOR=reader KEEP=8`
+from a worktree at the review-fixed commit: 29 of 439 store paths
+missing, trial from generation 13, health ok, promoted — generation 14
+is `/gnu/store/69s3m2796p4ngzw9npmnn4isjigviw7h-system`, generations
+7–14 kept, nothing pruned. The kernel's build log was read this time:
+one warning in the EBC files, `frame_counter` unused at
+`rockchip_ebc.c:903` — hrdl's own declaration in the direct-mode patch,
+not patch 14's; the five dangling-else warnings of the first patch-14
+derivation are gone.
+
+**2. Patch 14 on glass.** EXTRACT_FBS with valid pointers still returns
+0 (three 2.6 MB belief dumps); RECT_HINTS with a well-formed batch
+applies (1 rect, then 100). The new guards: `rect_hint_batch=0` → the
+ioctl fails with errno 22 in 0.000 s (no spin, the kernel unchanged),
+70 000 rects → errno 7 (E2BIG); `dmesg` silent (no `WARNING:` from the
+queue_work assertion). The earlier `belief-grab`/`rect-hints` tools from
+`ebc-lab` need `LUA_PATH` pointed at their `ebclib.lua`.
+
+**3. Page turns — an instrument correction, not a regression.** Forty
+injected `KEY 158` turns three seconds apart produced forty-one
+`[pn-refresh] ui partial rect=0,0,1404,1872` lines and **zero** EBC
+interrupts, with the EBC runtime-suspended throughout. The panel was
+fine: a `herd restart reader-session` lands in KOReader's **file
+manager** (no `start_with` is seeded, so `lastfile` is not reopened —
+no `opening file` line after the restart, where every operator-started
+session that day has one), and 158 there is a same-screen repaint the
+driver correctly drops — the 2026-08-26 "48 clamped same-page repaints"
+trap in a new coat. Re-run with the book open (`start_with="last"` set
+for the run, restored after): six turns, **47 interrupts each**, the
+driver's belief buffer different after every turn, runtime status
+`active` at 0.6 s, the reader logging `partial partial` (a real page)
+instead of `ui partial` (a menu). The reader restart itself cost 234
+interrupts (the open plus a full wash). Lesson recorded in
+`doc/testing.md`'s traps: **confirm an `opening file` line before an
+injected-turn measurement**; `turn-check.sh` (scratchpad, staged under
+`/data/wilkbook/tools`) does the whole dance.
+
+**4. Driver rebind ×5** (reader stopped, unbind/bind of `fdec0000.ebc`
+four seconds apart): kthreads 2 throughout, `runtime_status` suspended,
+no `Unbalanced pm_runtime_enable`, no `WARNING`, and `VmallocUsed` up
+by 276 / 244 / 212 / 244 kB per cycle (31 980 → 32 956 kB) —
+`rockchip_ebc_ctx_release`/`ctx_free` printed **once**, before the
+first re-probe, and never for the four later unbinds. What is retained
+and whether it matters is the audit's item 2 territory; the source
+reading is in the same-day review workflow record below. The product
+rebinds once per boot.
+
+**5. Device-tree notice — the notes could never arrive.** Trials
+14 → 9 → 14 both booted (health said 9, then 14), and neither trial's
+output carried a NOTE — because `commands.trial` logged them **after**
+its own `pinenote-wifi-control off`, and the ssh session watching it is
+on that radio. The deployer's generation-14 trial output shows the same
+truncation (only the first line, then ssh's timeout). Fixed in the
+candidate at 2cf0520: the two notes and the machine-model line are
+logged before the teardown, `test-static.sh` pins the order,
+`doc/update-path.md` says which lines reach ssh and which only the
+UART. The notice is therefore **proven only by a trial from a fixed
+generation** (15+), not by anything generation 14 did.
+
+**7. R3/R4.** The SNTP service logs `no --server configured`: the
+reader flavor ships `pinenote-timesync-service-type` with no server on
+purpose (privacy: no public pool by default — the design comment in
+`pinenote/services/timesync.scm`), so R3's "one sync after association"
+is unverifiable as written; the clock read correct UTC throughout.
+Fonts live inside `koreader-bin`; the seeded settings (`wifi_was_on`,
+`auto_restore_wifi`, the rotation profile) were present.
+
+**Hygiene.** Part 1 left `enabled=0` in `autosuspend.conf`; at 20:07 the
+operator's power press was rejected `globally inhibited` and the
+screensaver drew and undrew. The tester brief already names this trap;
+the session's wrap-up restores `enabled=1`.
+
+**6. The rig, part 2** — _see the addendum below once it completes_.
 
 ## 2026-09-03/04 overnight (wkelly PineNote, operator away) — the Wi-Fi fix's four layers held for 65 hands-off cycles; generations 11 and 12 are console-enabled convenience builds
 

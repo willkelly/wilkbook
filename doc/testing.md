@@ -352,6 +352,20 @@ partial-path count, and never compare partial counts across a thermal
 window (the phase count is temperature-compensated; 38 and 46 are both
 one pass).
 
+**Direct mode** (the shipping driver since the embrace, 2026-09) drives
+every refresh frame by frame — there is no one-transaction global path —
+so its count is *frames*: 47 per real page turn at 22 °C (2026-09-04),
+~41.5 in the 2026-08-26 power bracket. And the counter says nothing
+about whether a turn *happened*: a `herd restart reader-session` lands
+in KOReader's file manager (no `start_with` is seeded, so the last book
+is not reopened), where an injected `KEY 158` is a same-screen repaint
+the driver drops as a no-op — forty of them cost **0** IRQs with the EBC
+runtime-suspended throughout (2026-09-04, first read as a regression).
+Before counting injected turns, confirm an `opening file` line after the
+restart, or use `turn-check.sh` (staged under `/data/wilkbook/tools`
+from the scratchpad), which opens the last book for the run, hashes the
+driver's belief buffer per turn, and restores the settings after.
+
 ## Absence of an error is not a passing test
 
 From the SC7A20 deep-suspend work, 2026-08-03
