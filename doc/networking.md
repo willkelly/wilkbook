@@ -642,6 +642,18 @@ configuration field:
           (servers '("192.168.1.1"))))
 ```
 
+With none configured the daemon logs one `no --server configured` line
+at boot and exits; shepherd then shows it stopped **and disabled** (a
+non-respawned exit), which is the shipped, healthy state (R3 in
+`doc/glass-plan-2026-08.md`, held 2026-09-04). The clock is then the
+RK817 RTC's, restored by the kernel at every boot. To set it by hand
+over SSH, write the RTC too, or the setting is lost at the next cold
+boot — this is the same pair the daemon uses after a sync:
+
+```sh
+date -u -s '2026-09-04 20:30:00' && hwclock --systohc --utc --noadjfile
+```
+
 The recommendation is a server on the LAN you already chose to join — a
 router almost always is one. An IPv4 literal takes the `inet_pton` path,
 so the daemon generates no DNS traffic either; a hostname goes through
