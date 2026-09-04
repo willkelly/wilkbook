@@ -87,15 +87,16 @@ earlier generation it is a kernel spin.
 7. **R3 and R4 over SSH.** Clock: generation 14 ships the timesync
    service with no server (the privacy default, `pinenote/services/timesync.scm`),
    so the check is that it is inert — `/var/log/pinenote-timesync.log`
-   holds one `no --server configured` line for this boot and nothing
-   else, `herd status pinenote-timesync` is stopped, and `date -u`,
-   `rtc0/since_epoch` and the log line's own timestamp agree to within
-   a minute (R3). The sync itself and the alarm re-arm need a
+   holds one `no --server configured` line stamped with this boot's
+   time (the log appends across boots) and nothing after it, `herd
+   status pinenote-timesync` is stopped and disabled, and `date -u` and
+   `rtc0/since_epoch` agree to within seconds (R3). The sync itself and the alarm re-arm need a
    generation built with `(servers …)` and are not part of tonight
    (R3s in `doc/glass-plan-2026-08.md`). Profile: the seeded settings
    present, fonts present (R4). *Run 2026-09-04: R3 inert as described
-   (one line per boot in the log — it appends across boots — and the
-   RTC and system clocks equal to the second); R4's seeds and
+   (one line per boot in the log — it appends across boots — its stamp
+   8 s after the kernel's `rk808-rtc: setting system clock` line, and
+   the RTC and system clocks equal to the second); R4's seeds and
    KOReader's bundled fonts present.*
 8. **Wrap-up.** `autosuspend.conf` back to `enabled=1`, reader running,
    `health` clean, `dmesg` diff and `pm-ground-truth.sh` saved as
