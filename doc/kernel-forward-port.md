@@ -68,7 +68,7 @@ All live in `pinenote/packages/kernel.scm`:
 
 `%linux-pinenote-patches` in `pinenote/packages/kernel.scm` is the
 authoritative list; the comments there carry each patch's rationale and
-revert instruction. As of 2026-09-03 it is twelve patches, applied in list
+revert instruction. As of 2026-09-03 it is thirteen patches, applied in list
 order on top of the vanilla source (items 8–11 are the direct-mode
 driver and our fixes on it; item 12 is the mfd rk8xx kexec fix that
 makes the update path's watchdog self-reset work):
@@ -139,6 +139,13 @@ makes the update path's watchdog self-reset work):
     the armed watchdog and DEFAULT booted hands-off; the GRF bus-wedge
     hang is the one class the reset cannot recover — the blacklist
     prevents it). Merged 2026-09-03.
+13. `linux-pinenote-7.1-sdio-pwrseq-delay.patch` — arm64 dts: 100 ms
+    `post-power-on-delay-ms` on the PineNote's `sdio_pwrseq` (the
+    Quartz64's value; mainline's PineNote DTS has none). With
+    `cap-power-off-card` every resume re-enumerates the Wi-Fi card from
+    cold and one resume in ten timed out on the first control exchange
+    after the firmware download (2026-09-03, `doc/networking.md` §8).
+    Written for upstream. Glass proof pending (the cycle rig).
 
 `linux-pinenote-debug` stacks `linux-pinenote-debug-extract-fbs.patch`
 on top of the same seven.
