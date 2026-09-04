@@ -72,9 +72,12 @@ not yet been repeated on this lineage.
   16 pixels (you may notice greys and images dither slightly
   differently), a malformed rectangle-hint request can no longer wedge
   the display ioctl, and two diagnostic ioctls return proper errors.
-  These fixes reached a device for the first time in this tag's own
-  test session; the dither change is a visible one nobody had seen
-  before it.
+  These fixes reached a device in this tag's own test session
+  (2026-09-04): the new guards behave as designed on glass — a zeroed
+  batch parameter is refused instantly instead of spinning, an
+  oversized request is refused with the right error, the healthy paths
+  unchanged. The dither change is a visible one no person has looked
+  at yet.
 - **Still open from that review**: the driver leaks memory and DMA
   mappings when its probe fails, and the direct-mode image's first probe
   fails by design once per boot; the leak is bounded per boot and is
@@ -154,6 +157,12 @@ too, above.
 - One dd-from-os1 reflash is still needed to put this capability on a
   device that doesn't already have it; after that, it's `make deploy
   DEVICE=…` from then on.
+- **A wireless update cannot change the device tree** (the hardware
+  description the kernel boots with); only a cold boot of the promoted
+  generation does. The deployer now says so at trial time whenever it
+  applies — that notice used to be printed after the device had already
+  turned its own radio off, so nobody watching over the network could
+  ever have seen it (found and fixed 2026-09-04).
 
 ### Also fixed since v0.2.0
 
@@ -179,12 +188,16 @@ too, above.
   doesn't.
 - **The os1-based rescue procedure for a badly broken update has never
   actually been run.**
-- **A stuck wireless update can look hung for a while before anything
-  tries to help**: the update tool's own recovery watcher doesn't start
-  looking for a stuck trial until about five minutes have passed, and
-  if the watchdog self-reset above doesn't fire either, the device can
-  end up back on the stock rescue system (os1) rather than on your
-  reader.
+- **A stuck wireless update without the debug cable ends on the stock
+  rescue system (os1), not on your reader**: the watchdog reset above
+  lands in U-Boot, whose default is os1, and only the deployer's serial
+  watcher (armed before every trial when the cable is attached) picks
+  the reader back. With no cable, the device waits there for you.
+- **The reader's own idle timer never fires while the device is on a
+  charger** (KOReader's rule, not ours — the device also doesn't
+  auto-sleep on the charger by our own default), so a device left
+  plugged in stays awake until you press the button or close the
+  cover. Unplugged, the 15-minute timer applies.
 - **Old versions can be cleaned up automatically even if one of them is
   the last one known to work well** — there's no "never delete this
   one" pin yet.
