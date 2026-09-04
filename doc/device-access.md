@@ -237,8 +237,18 @@ first kexec on glass).
 - **Auto-suspend makes SSH intermittent**: the device is only reachable
   for the idle window after the last input, and Wi-Fi re-association eats
   several seconds of it after each wake. To work on the device, first
-  write `enabled=0` to `/var/lib/pinenote/autosuspend.conf` (the
-  platform-controls broker re-reads it continuously; no restart needed).
+  write `enabled=0` to `/data/wilkbook/autosuspend.conf` (the
+  platform-controls broker re-reads it continuously; no restart needed;
+  the `/var/lib/pinenote/…` path recorded here until 2026-09-04 does not
+  exist on the device). Restore `enabled=1` as the LAST step of a
+  session, never earlier: with `enabled=1` on battery the reader sleeps
+  15 idle minutes later and the only hands-off windows after that are
+  the hourly backstop's ~20 s (2026-09-04: a rig that ended with
+  `enabled=1` cost an operator two button presses). If that has already
+  happened, arm a 2 s ssh poll that writes `enabled=0` and ask for a
+  button press. On generations before 15, a button wake inside a stale
+  RTC settle window re-suspended the reader seven seconds later — press
+  again; from 15 on the broker clears the deadline on any non-RTC wake.
 - **Wake it with the power button, not by waiting for the RTC.** Since
   2026-08-07 an RTC-backstop wake re-suspends after ~20 s (nobody is
   present when the alarm fires — `doc/power-management.md`, "The idle

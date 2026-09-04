@@ -3,7 +3,7 @@
 # doc/update-path.md.  Every step refuses rather than guesses; a failed
 # health check leaves DEFAULT on the previous generation and exits 1.
 #
-#   usage: deploy.sh DEVICE [FLAVOR] [KEEP]        (FLAVOR default reader, KEEP 3)
+#   usage: deploy.sh DEVICE [FLAVOR] [KEEP]        (FLAVOR default reader, KEEP 5)
 #          deploy.sh DEVICE --rollback N           trial+health+promote an existing generation
 #
 # WILKBOOK_UART=/dev/ttyUSB0 (optional): with the debug cable attached, a

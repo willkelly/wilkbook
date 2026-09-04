@@ -88,7 +88,8 @@ yourself exactly which kind of insane you are:
 - **THERE IS NO SUPPORT. NONE.** The update path exists as of
   2026-09-02 (`doc/update-path.md`: one enabling reflash, then `make
   deploy` over Wi-Fi with trial-then-promote and rollback), but it has
-  run on exactly one device, one evening. No package manager on the device. No
+  run on exactly one device — fifteen generations over three days, one
+  hung trial recovered by the watchdog. No package manager on the device. No
   issue-triage promise. NO WARRANTY OF ANY KIND (`LICENSE`, and it
   means it). If it breaks, you get to keep all the pieces, which is
   generous, because e-ink breaks into SO MANY pieces.

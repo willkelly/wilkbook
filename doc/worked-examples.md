@@ -167,6 +167,52 @@ confirm the harness actually compiles the lines you changed.
   host tools fail to compile until `shim/kernel-shim.h` stubs it
   (`fsleep` needed exactly that).
 
+## Case study 4: the notice nobody could see (2026-09-04)
+
+**Problem.** The update-path helper had just learned to say, at trial
+time, that a kexec trial cannot deliver a device tree (`NOTE: generation
+N's device tree differs …`). Two trials on the device booted fine, and
+neither trial's captured output carried the note. The first reading was
+an ssh flush race.
+
+**Approach — before theorising about the transport, read what the code
+did to it.**
+
+1. Put the evidence next to the code. The deployer's log for the
+   generation-14 trial held exactly one helper line — `trial boot of
+   generation 14 …` — then ssh's `Timeout, server … not responding`.
+   Not "the note was garbled": *everything* after the first line was
+   missing, including lines logged seconds later (`kexec -e into`,
+   `watchdog armed`).
+2. Read the statement order in `commands.trial`
+   (`pinenote/packages/update-path/wilkbook-generation.lua`): the first
+   log line, then `herd stop reader-session`, then
+   `pinenote-wifi-control off` — and only then the device-tree
+   comparison and its notes. The helper was being watched over Wi-Fi.
+   It turned the radio off, then spoke. No flush race can produce that
+   pattern; the teardown order can produce nothing else.
+3. Fix at the cause, keep what is proven. The notes and the
+   machine-model line moved ahead of the reader stop; the glass-proven
+   teardown (reader, radio, gadget, PIPE domain, EBC quiesce, `kexec
+   -l`, sync, remount, watchdog, `kexec -e`) did not change a byte.
+4. Pin the order, not the text alone: `test-static.sh` asserts the
+   three lines precede the reader stop *and* the radio-off, and holds
+   both notes' wording; the pins were run against the old helper first
+   and failed there.
+5. Prove it where it failed. The next deploy (generation 15) showed
+   the model line and the kexec'd-kernel note in the deployer's own
+   output; a hand-run trial into generation 9 and back showed the
+   "differs" note in both directions. Then a second reviewer found
+   the sentences elsewhere that still said the link "dies with the old
+   kernel" — true on the QEMU rig, false on the PineNote — and those
+   were corrected too, including the deployer's own banner.
+
+**What it took.** One deploy log read to the end, one function read in
+order, a static pin, one generation, two trials. **What it did not
+take:** a UART, a theory about ssh buffering, or a change to anything
+the kexec depends on. The recorded lesson (`CLAUDE.md`): when output
+stops, ask what the code did to the transport.
+
 ## Where the other examples live
 
 - The **2026-07-03 fix stack** (three device failures root-caused from

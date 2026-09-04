@@ -81,6 +81,20 @@ community convention and stays).
 - [ ] Retire the kexec-only `initcall_blacklist=rockchip_grf_init` with
       the kernel fix (a clock reference on the pipe GRF syscon;
       `doc/upstream-register.md` 22), then send it upstream.
+- [ ] A ledger `pin` for known-good generations: `prune` keeps the
+      newest, which are the least proven, and the only cold-booted
+      generation is kept in the `KEEP` window by hand today
+      (2026-09-04; the review's S5).
+- [ ] A trial that dies after the helper's own Wi-Fi off (an EBC that
+      never goes idle, a failed `kexec -l`) strands the reader stopped
+      and silent, and the deployer misreads it as a dead trial the
+      watchdog will reset; bring the radio and the reader back on those
+      paths, or arm the watchdog earlier (`doc/hardware-deploy.md`).
+- [ ] A trial cannot deliver a device tree (`kexec_file_load` ignores
+      `--dtb`): a DT change is proven only by a cold boot, which the
+      deployer cannot do without the UART. Either a `kexec_load`
+      path that carries the DTB or a "cold boot required" gate in the
+      deployer (`doc/update-path.md`).
 - [ ] A second operator through the update path on their own device
       (the enabling reflash, the signing key on `/data`, the alias, the
       first kexec attended).

@@ -325,6 +325,46 @@ retention, wake routing, PMIC/EBC rail state, post-resume display repair, and
 actual suspend current to this hardware-only set. Everything else should be
 squeezed onto an offline rung first.
 
+### Generational testing on glass (the shape of a hardware run since 2026-09-02)
+
+When a change does reach the device, it reaches it as a numbered Guix
+system *generation* over the update path (`doc/update-path.md`): `make
+deploy` sends the missing store paths, registers generation N, kexecs it
+as a **trial** with DEFAULT untouched, waits for ssh, runs `health`
+(the new system is current, the broker is ready, the reader started),
+and only then promotes. Rung 4u runs the same flow in QEMU with no
+device. The rules that make the glass half honest:
+
+- **Name the generation** in every status entry and every claim; "on
+  the device" without a number is not evidence. The ledger is
+  `wilkbook-generation list`; the health line says which one is booted.
+- **A trial proves the kernel, the userspace and the health check — not
+  the device tree.** `kexec_file_load` ignores `--dtb`, so every trial
+  runs on the last cold boot's tree; the helper prints a NOTE when the
+  target's DTB differs from the booted generation's and another when
+  the running kernel was itself kexec'd. Both are printed before the
+  helper's teardown, because the teardown's Wi-Fi off is where the ssh
+  link dies (2026-09-04). A device-tree change is undeployed until a
+  cold boot of that generation has run — with the UART, since U-Boot's
+  default is os1 and the deployer's watcher answers the menu only when
+  `WILKBOOK_UART` is set.
+- **Keep one cold-booted generation in the `KEEP` window by hand**;
+  `prune` keeps the newest, which are the least proven, and there is
+  no ledger pin yet (`ROADMAP.md`).
+- **A trial that never answers** is reset by the SoC watchdog into
+  U-Boot from generation 9 on (kernel patch 8); before that it is the
+  power button plus the UART. A trial that dies after the helper's own
+  Wi-Fi off strands the reader stopped and silent instead — a known
+  gap (`doc/hardware-deploy.md`).
+- **Pause suspend for the session** (`enabled=0` in
+  `/data/wilkbook/autosuspend.conf`) and restore it as the last step;
+  a session that ends with `enabled=1` on battery leaves only the
+  hourly backstop's 20 s ssh windows (`doc/device-access.md`).
+- **Back-to-back trials are cheap** (a proven generation boots in
+  ~20 s from kexec to ssh), so an instrument that needs "the other
+  generation" — the 2026-09-04 notice proof went 15 → 9 → 15 — should
+  just go there and come back rather than be argued from source.
+
 ## EBC IRQ counts: global and partial are not the same unit
 
 Verified from the driver's register programming, 2026-08-02. Every EBC

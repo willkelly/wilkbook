@@ -229,7 +229,7 @@ truth is per-device, so never overwrite another operator's entries; add
 your own. Don't commit the per-device waveform, anything under a tool's
 gitignored `build/`, or the reader's static address.
 
-## Where we are (2026-08-25)
+## Where we are (2026-09-04)
 
 - **Product**: the reader image on os2 — KOReader natively on fbdev with
   pen/finger input, four orientations, publish-on-call single-pass page
@@ -265,8 +265,9 @@ gitignored `build/`, or the reader's static address.
   now the work; the bail-out criteria stay live as what could reverse
   it (`doc/direct-mode-adoption.md`, `doc/status.md`). **S1+S2 of that
   sweep are glass-proven** as generation 7 on wkelly's device
-  2026-09-03 (branch `embrace-s1`, PR #56, not yet merged;
-  `doc/status.md`).
+  2026-09-03 and merged to main the same day (PR #64, the sync of
+  everything exercised; `doc/status.md`). The `reader` flavor IS the
+  direct kernel now; S3–S5 (deleting the scaffolding) are not started.
 - **Update path — on glass since 2026-09-02.** os2 carries an image
   with the guix importer daemon, kexec, the `wilkbook-generation`
   helper, first-boot root growth and the signing-key ACL; from there
@@ -278,19 +279,34 @@ gitignored `build/`, or the reader's static address.
   only (the next kernel's GRF init writes the PIPE GRF, whose clock the
   running kernel gated; upstream register 22), and every flavor boots
   with `irqchip.gicv3_nolpi=1`. **With kernel patch 8 (kexec-hardening,
-  PR #48, pending the operator's review) in the KEXECING kernel, a
-  trial that halts self-resets by watchdog into U-Boot (hands-off only
-  with the UART: U-Boot defaults to os1, the deployer answers the menu when
-  `WILKBOOK_UART` is set, otherwise the device sits on stock Debian); a
-  panicking trial already reboots itself (`PANIC_TIMEOUT=1`)** — proven
-  end to end 2026-09-03 evening (`doc/status.md`). The GRF bus wedge is
-  prevented by the blacklist above and is the one class the reset
-  cannot recover; the very first trial into a newly-patched generation,
-  kexec'd from an unpatched kernel, is not covered either. Until
-  patch 8 merges, a hung trial otherwise is the power button plus
+  PR #48, merged 2026-09-03; every generation from 9 on carries it) in
+  the KEXECING kernel, a trial that halts self-resets by watchdog into
+  U-Boot (hands-off only with the UART: U-Boot defaults to os1, the
+  deployer's watcher — armed BEFORE the kexec since 2026-09-04 — answers
+  the menu when `WILKBOOK_UART` is set, otherwise the device sits on
+  stock Debian); a panicking trial already reboots itself
+  (`PANIC_TIMEOUT=1`)** — proven end to end 2026-09-03 evening
+  (`doc/status.md`). The GRF bus wedge is prevented by the blacklist
+  above and is the one class the reset cannot recover; the very first
+  trial into a newly-patched generation, kexec'd from an unpatched
+  kernel, is not covered either. On a generation older than 9 a hung
+  trial is the power button plus
   `pinenote/scripts/uart/uboot-pick-slot.sh`; DEFAULT stays on the last
-  promoted generation. Generations that predate the fix cannot be
-  kexec'd into. Suspend/resume on a kexec'd kernel is proven.
+  promoted generation. Suspend/resume on a kexec'd kernel is proven.
+  **Generational testing, the rules (2026-09-04):** every hardware run
+  of a change is a numbered generation and every status entry names
+  it; a trial proves the kernel, the userspace and the health check but
+  **not the device tree** (`kexec_file_load` ignores `--dtb`, so a trial
+  runs on the last cold boot's tree — the helper says so with a NOTE,
+  printed before its teardown because the teardown's Wi-Fi off is where
+  the ssh link dies; `doc/update-path.md`); only a cold boot of a
+  generation proves its tree, so keep one cold-booted generation in the
+  `KEEP` window by hand (there is no ledger pin yet; `prune` keeps the
+  newest, the least proven). The device is on **generation 15 = the
+  v0.3.0-prealpha candidate** (kexec'd; 10 is the last cold-booted one;
+  8–15 kept). Pause suspend (`enabled=0`) before a session and restore
+  it after; a session that ends with `enabled=1` on battery leaves only
+  the hourly backstop's 20 s ssh windows (`doc/device-access.md`).
 - **Kernel — read this carefully, the tree and the device differ.**
   `%linux-pinenote-base` is `nongnu:linux-7.1` and `make kernel`
   cross-builds **7.1.8** clean (both DTBs, both modules linked). The
@@ -323,8 +339,13 @@ gitignored `build/`, or the reader's static address.
   (`doc/kernel-forward-port.md`). 6.6.30 remains regression-isolation only.
   Fourteen patches as of 2026-09-03 (seven from the 7.0/7.1 series, four for the direct-mode driver and our fixes on it, one mfd rk8xx kexec fix, one Wi-Fi power-sequence settle delay, one further direct-driver correctness pass from a third-party audit); the 7.1 move *deleted* two hunks mainline absorbed. The
   rk8xx one is glass-proven and merged (2026-09-03); the sdio-pwrseq-delay
-  and direct-correctness patches are not (`prealpha-scratch`, unmerged).
-  Inventory in `doc/kernel-forward-port.md`.
+  and direct-correctness patches are glass-exercised on generations
+  10–15 (the sdio delay's device-tree half only on the cold-booted 10)
+  and reach main with the v0.3.0-prealpha sync PR (branch
+  `prealpha-candidate`), which wants the operator's review for them.
+  Inventory in `doc/kernel-forward-port.md`. The probe-unwind patch's
+  claim is corrected there: the boot's failed first probe is at
+  `waveform_init`, which it does not cover (audit item 2, still open).
 - **Suspend**: **ultra suspend is the shipping suspend** (2026-08-08,
   R12): hrdl's configuration adopted whole — standing
   `rockchip,suspend-state-override = <5>` + three `*_pmu` rails
@@ -429,6 +450,21 @@ gitignored `build/`, or the reader's static address.
   or a park is pending, so those procedures stop being load-bearing. That
   fix is harness-proven only; **no panel has run it.** Until a hardware
   session says otherwise, keep the procedures.
+- **A reader restart lands in the file manager, not the book** (no
+  `start_with` is seeded, by design): forty injected page turns there
+  cost 0 EBC IRQs and looked like a display regression (2026-09-04).
+  Confirm an `opening file` line before counting injected turns;
+  `doc/testing.md`'s IRQ-units section has the procedure.
+- **KOReader's idle timer never fires while the battery reports
+  charging** (its own rule), and `rk817-battery/status` flaps to
+  `Charging` with the USB cable in even at 99 % — a rig meant to weight
+  the KOReader-initiated sleep path measures the broker path instead
+  unless the cable is out (2026-09-04; the overnight "2 of 43" was this).
+- **Whatever the trial helper says after its own Wi-Fi off, nobody on
+  ssh will ever read** — the deployer included. Two trials "never
+  captured" the device-tree notice for that reason before the source
+  order was read (2026-09-04). When output stops, ask what the code
+  did to the transport before suspecting a flush.
 - **Never glob `/sys/kernel/debug/regmap/*`** — that glob includes
   `dummy-syscon@fdc50000`, the PIPE GRF whose pclk the running kernel
   gates (upstream register item 22), and reading it wedges the bus just

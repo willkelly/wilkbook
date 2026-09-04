@@ -298,7 +298,7 @@ answers leaves the boot menu's default on the last good generation.
 **Every update:**
 
 ```
-make deploy DEVICE=pinenote-os2 [FLAVOR=reader] [KEEP=3]
+make deploy DEVICE=pinenote-os2 [FLAVOR=reader] [KEEP=5]
 ```
 
 builds the flavor (cross, `--no-grafts`), sends only the store paths
