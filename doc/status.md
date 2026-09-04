@@ -28,7 +28,8 @@ direct-params one-shots completed, `default_hint=32`,
 PMIC `SYS_CFG3` reads `0x30` — expected: the kexec into 9 was done by
 the unpatched generation-7 kernel; a cold boot or one suspend/resume
 returns it to `0x20`, and every trial launched FROM generation 9 is
-now watchdog-covered. Auto-suspend restored (`enabled=1`).
+now watchdog-covered. Auto-suspend restored (`enabled=1`). Operator on
+the panel afterwards: "page turn looks good".
 
 Two process notes: a mid-task instruction sent to a running subagent
 that contradicted its own forbidden list (a console `reboot`) was
