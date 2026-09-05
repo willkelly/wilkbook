@@ -64,9 +64,11 @@ echo "PASS: pin/unpin mark a generation inside its own /boot/gen-N and prune hon
 harness="$here/../../scripts/qemu/run-virt-update-flow.sh"
 grep -q 'vm "wilkbook-generation pin 1"' "$harness"
 grep -q 'vm "wilkbook-generation unpin 1"' "$harness"
-[ "$(grep -c 'vm "wilkbook-generation prune --keep 1"' "$harness")" -eq 2 ]
+grep -q 'vm "wilkbook-generation prune --keep 1"' "$harness"
+grep -q 'vm "wilkbook-generation prune --keep 0"' "$harness"
 after 'wilkbook-generation pin 1' 'wilkbook-generation unpin 1' "$harness"
 after 'wilkbook-generation unpin 1' 'wilkbook-generation trial 1' "$harness"
+after 'wilkbook-generation trial 1' 'wilkbook-generation prune --keep 0' "$harness"
 echo "PASS: the QEMU rig pins, prunes around the pin, unpins, and prunes for real after the rollback"
 # deployer: promote only after a passing health check; failure exits 1 without promoting.
 after 'wilkbook-generation health --expect' 'wilkbook-generation promote' "$deploy"

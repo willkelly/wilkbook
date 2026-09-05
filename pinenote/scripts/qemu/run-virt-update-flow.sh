@@ -13,7 +13,8 @@
 #   -> pin 1; prune --keep 1; unpin 1 (the pinned A survives a prune that would
 #      otherwise delete it -- the ledger pin, 2026-09-04)
 #   -> trial A; health --expect A; promote A   (rollback is the same move)
-#   -> prune --keep 1                 (the positive control: B, unpinned, goes)
+#   -> prune --keep 0                 (the positive control: B, unpinned, goes;
+#      keep 1 would keep it as the newest -- the first run of this step said so)
 #
 # Proves the mechanism -- transfer, registration, menu, kexec, health,
 # promote, rollback -- with no glass.  What it cannot prove is the SoC:
@@ -188,10 +189,12 @@ dflt=$(vm 'sed -n "s/^DEFAULT gen-//p" /boot/extlinux/extlinux.conf')
 [ "$dflt" = "1" ] && pass "DEFAULT is gen-1 after rollback" || fail "DEFAULT after rollback: $dflt"
 
 # 6b. the positive control for 5b: nothing pinned, DEFAULT and booted back on
-# A, so the same `prune --keep 1` now deletes B (and runs guix gc in the guest).
-out=$(vm "wilkbook-generation prune --keep 1" 2>&1 || true)
+# A, so `prune --keep 0` deletes B (and runs guix gc in the guest).  Not
+# `--keep 1`: B is the newest and the window keeps it -- the planner answered
+# "nothing to prune" to that, correctly, on this step's first run (2026-09-04).
+out=$(vm "wilkbook-generation prune --keep 0" 2>&1 || true)
 printf '%s\n' "$out" | sed "s/^/        prune> /"
-printf '%s\n' "$out" | grep -q "pruned generation $n" && pass "prune --keep 1 with nothing pinned: generation $n pruned" || fail "positive control: $out"
+printf '%s\n' "$out" | grep -q "pruned generation $n" && pass "prune --keep 0 with nothing pinned: generation $n pruned" || fail "positive control: $out"
 vm "test ! -e /boot/gen-$n && test ! -e /var/guix/profiles/system-$n-link && test -f /boot/gen-1/Image" \
   && pass "gen-$n's payload and profile link are gone, gen-1's stay" || fail "prune left gen-$n or took gen-1"
 dflt=$(vm 'sed -n "s/^DEFAULT gen-//p" /boot/extlinux/extlinux.conf')
