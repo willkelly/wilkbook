@@ -76,7 +76,7 @@ FLAVORS = minimal slim networked dev usb-console usb-console-linux-6-6 reader
         timezone-check kernel-version-check library-check \
         manuals-check ultra-coupling-check timesync-check \
         settings-check koreader-profile-check ebc-modprobe-options-check \
-        ebc-clut-check ebc-card-resolution-check ebc-ioctl-roster-check direct-probe-quirk-check direct-rect-hints-check update-path-check deploy reader-stop-check pen-check ebc-lab-check \
+        ebc-clut-check ebc-card-resolution-check ebc-ioctl-roster-check direct-probe-quirk-check direct-rect-hints-check update-path-check uart-pick-check deploy reader-stop-check pen-check ebc-lab-check \
         $(FLAVORS) $(addprefix image-,$(FLAVORS)) $(addprefix rootfs-,$(FLAVORS))
 
 help:
@@ -101,6 +101,7 @@ help:
 	@echo "  direct-probe-quirk-check  quirk: the direct driver's probe returns bare after a failed drm_init (pinned, reported)"
 	@echo "  direct-rect-hints-check   quirk: hrdl's RECT_HINTS ioctl is unbounded; our bounds patch is present and applied after it"
 	@echo "  update-path-check the update path: generation ledger, extlinux rendering, trial/promote pins"
+	@echo "  uart-pick-check   the U-Boot menu picker against a pty replaying the real captured menu bytes (termios, handle file, keystrokes, timeout)"
 	@echo "  deploy            DEVICE=<ssh host>: build, guix copy, add generation, kexec trial, health, promote"
 	@echo "  qemu-update-check ROOTFS=<ext4> [SYSTEM_B=..]: the update flow end to end in QEMU (rung 4u)"
 	@echo "  ebc-logic-check   extracted EBC driver logic checks ([WBF=..])"
@@ -371,7 +372,7 @@ CHECK_HOST_TARGETS = clut-check ebc-logic-check rastersim-check \
         battery-dtb-check time-machine-check gexp-modules-check \
         timezone-check refresh-trigger-check timesync-check settings-check \
         ebc-modprobe-options-check ebc-clut-check ebc-card-resolution-check ebc-ioctl-roster-check direct-probe-quirk-check direct-rect-hints-check \
-        update-path-check reader-stop-check pen-check ebc-lab-check
+        update-path-check uart-pick-check reader-stop-check pen-check ebc-lab-check
 
 # Parse time, not recipe time: a recipe-level guard would run only AFTER every
 # prerequisite had already completed, so it could not prevent the mistake it
@@ -600,6 +601,15 @@ direct-rect-hints-check:
 # (the trial boot's teardown order, the deployer's promote-only-after-health).
 update-path-check:
 	$(call guix-shell,luajit) $(MAKE) -C pinenote/tools/update-path check
+
+# The UART slot picker (the deployer's watcher and the hand-run recovery)
+# against a pseudo-terminal replaying the REAL bytes of the 2026-09-04 cold
+# boot -- SPL, U-Boot's earlier CTRL+C prompt, the ANSI-drawn slot menu with
+# its mid-line drops, extlinux's own generation menu.  Pins the port setup,
+# the pid/pgid handle file the deployer reaps by, the keystrokes per slot,
+# the no-menu timeout (WILKBOOK_UBOOT_MENU_TIMEOUT).  python3 + setsid + stty.
+uart-pick-check:
+	sh pinenote/scripts/uart/test-uboot-pick-slot.sh
 
 # Deploy a flavor to a running reader over ssh: build, guix copy, add a
 # generation, kexec trial boot, health check, promote, prune
