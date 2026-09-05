@@ -169,8 +169,10 @@ reader restart or boot lands in the library by design.
    `backstop=60` in `autosuspend.conf` for the test), press the button
    to sleep it inside the settle window, wake it again with the button —
    it must stay awake.
-5. **Cold boot with the UART**: `reboot`, the watcher picks os2,
-   generation 16 boots cold — the tag candidate without a kexec in its
+5. **Cold boot with the UART** — *run 20:50 MDT: the watcher picked
+   os2 in 8 s, ssh back in 41 s, generation 16 up with no kexec property
+   and no GRF blacklist; capture in the artifacts directory* — `reboot`,
+   the watcher picks os2, generation 16 boots cold — the tag candidate without a kexec in its
    lineage (patch 13's device-tree change is already proven live this
    way on generation 10; 15's tree is 14's, i.e. 10's plus nothing).
 6. **The os1 rescue (#51)**: let a boot land on os1, run

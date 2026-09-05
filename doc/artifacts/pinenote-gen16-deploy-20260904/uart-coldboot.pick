@@ -1,0 +1,8 @@
+== watching /dev/ttyUSB0 beyond byte 0 of /tmp/claude-1000/-home-wkelly-src-forgejo-wkelly-wilkbook/a6ec72b3-2707-4d6a-bda5-44d8066bb9d8/scratchpad/session2/gen16-coldboot/uart-coldboot.log for the U-Boot menu (reader pid 1401156)
+== menu seen at poll 184: selected os2
+Retrieving file: /boot/extli
+Retrieving file: /boot/ge
+Retrieving file: /bo20533760 bytes read i
+Retrieving file: /boot/ge
+Starting kernel ...
+== capture continues in /tmp/claude-1000/-home-wkelly-src-forgejo-wkelly-wilkbook/a6ec72b3-2707-4d6a-bda5-44d8066bb9d8/scratchpad/session2/gen16-coldboot/uart-coldboot.log (kill 1401156 to stop it)

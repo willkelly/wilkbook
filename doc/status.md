@@ -204,6 +204,29 @@ both in `doc/artifacts/pinenote-gen16-deploy-20260904/`. Still to run:
 the four rotations, the settle-window check of the broker fix, the cold
 boot of 16 with the UART, #51, R1/R2/R7.
 
+**Generation 16 COLD-BOOTED with the UART watcher (20:50 MDT) — the
+tag candidate without a kexec in its lineage, and the watcher's
+menu-pick half on glass for the first time.** `uboot-pick-slot.sh` armed
+in its own process group, `sync; reboot` over ssh: the watcher saw
+U-Boot's menu and picked os2 eight seconds later (`== menu seen at poll
+184: selected os2`, then `Retrieving file: /boot/extlinux/…`, `Starting
+kernel …`), ssh answered 41 s after the reboot command, and the device
+reports `booted_generation=16`, the same `current_system`, **no**
+`linux,booted-from-kexec`, **no** `initcall_blacklist` on the command
+line (a cold boot keeps the GRF init), zero `WARNING`/`timed out`, the
+one `Unbalanced pm_runtime_enable!`, the reader running. The capture
+(`doc/artifacts/pinenote-gen16-deploy-20260904/uart-coldboot.log`, 37 kB,
+address-redacted) holds SPL, U-Boot, the menu with both slots, extlinux,
+and the 7.1.8 boot line; a fragment reading "generation 15" in it is the
+extlinux menu's own entry list garbled by cursor escapes, not a wrong
+pick. Generations 9–16 remain; 16 is the only cold-booted one in the
+window (10 was pruned by this deploy's `KEEP=8`). One trap for hand-run
+watchers, not for the deployer: from a shell with job control a
+backgrounded `setsid` forks and `$!` is the wrapper, not the script;
+the script's own pid is the group to reap (the deployer runs from
+`make`, no job control, where `$!` is right and the reap was verified
+clean after the generation-16 deploy).
+
 **The rig also found a broker bug, on the operator's own button.** After
 the rig's `stop`, the last RTC wake at 21:48:44 had set the settle
 deadline (300 s); KOReader's idle timer suspended the device at
