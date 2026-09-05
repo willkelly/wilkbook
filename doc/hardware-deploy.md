@@ -308,25 +308,46 @@ N+1 (`add`: profile link, `/boot/gen-N+1/{Image,initrd,dtb,append}`,
 the extlinux menu re-rendered with `DEFAULT` unchanged), kexecs into
 it (`trial`: the device-tree notes and the model line first, then the
 reader stopped INT-first, Wi-Fi off, gadget unbound, EBC quiescent,
-then `kexec -e`; the ssh link dies at the Wi-Fi off, before the kexec
+root and data partitions remounted read-only, then `kexec -e`; the ssh link dies at the Wi-Fi off, before the kexec
 — by design, so nothing the helper says after that point reaches the
-deployer, and a helper that dies after it, say on an EBC that never
-goes idle, leaves the reader stopped and the radio off with no message
-delivered — and a power-button sleep/wake does not bring the radio
-back, since the broker restores only a radio it saw on; only a reboot
-or a hand `pinenote-wifi-control on` from the UART does: a known gap,
-not yet closed), waits for the new generation to
+deployer live. Since 2026-09-04 the trial's output is captured to a
+temp file and echoed with a `trial>` prefix once the ssh link returns
+(≤90 s: the keepalives give up, or the timeout fires), so the
+device-tree notes still arrive, but not live. A helper that refuses
+after that point — an EBC that never goes idle, a failed `kexec -l`,
+a `kexec -e` that returns — used to leave the reader stopped and the
+radio off with no message delivered, and a power-button sleep/wake
+did not bring the radio back,
+since the broker restores only a radio it saw on; since 2026-09-04 it
+**bails out** instead: the teardown is undone in reverse (gadget
+re-bound, `pinenote-wifi-control on`, `herd start reader-session`)
+before the refusal is said, so the reader comes back on its own and
+the message, with the kexec binary's own words, travels over the
+restored radio — or, when the deployer's keepalives had already given
+the link up, into a record the deployer reads back
+(`wilkbook-generation last-trial`, valid for that boot only). Rig-proven
+(rung 4u, a forced `kexec -l` failure); on glass not yet — see
+`doc/update-path.md`), waits for the new generation to
 answer, runs `health` (`/run/current-system` is the new system, the
 broker is ready, the reader started), and only then `promote`s it and
 prunes to KEEP generations plus the promoted and booted ones, then
 `guix gc`. Every refusal is printed as `NOT PROMOTED: …` and the
-default is untouched. Expect the device to be silent for ~30 s around
-the kexec; the reader is back with the page it had.
+default is untouched: a trial the helper refused says `the trial
+helper refused (exit N)` — reader and radio back, no wait, no
+watchdog — and only a trial that truly never answers gets the
+five-minute wait and the watchdog-recovery wording. Expect the device
+to be silent for ~30 s around the kexec; the reader is back with the
+page it had.
 
 **On the device**, `wilkbook-generation list | add | trial N | health
-[--expect S] | promote N | demote | prune --keep K` are the same
-verbs; `deploy.sh DEVICE --rollback N` is trial+health+promote of an
-existing generation.
+[--expect S] | promote N | demote | prune --keep K | last-trial` are
+the same verbs; `deploy.sh DEVICE --rollback N` is trial+health+promote of an
+existing generation. The bail-out lives in the helper the *target*
+generation ships (the deployer runs
+`$(cat /boot/gen-N/system)/profile/bin/wilkbook-generation trial N`),
+so the very first deploy of a generation built with it already
+exercises it, and a trial into an older generation runs that
+generation's helper, without it.
 
 **Rules learned on glass (2026-09-02, `doc/update-path.md` "Glass
 notes"):**

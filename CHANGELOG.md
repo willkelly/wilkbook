@@ -20,10 +20,39 @@ claim under **v0.3.0-prealpha** below is from wkelly's device across the
 sessions it cites, moved onto the device generation-by-generation by
 `make deploy` rather than by a single `dd`'d image; what has *not* been
 run is listed under **Known broken**, and no second operator has run
-this lineage. **Unreleased** above it is empty until the next round of
-work lands.
+this lineage. **Unreleased** above it holds what has landed since the
+tag.
 
 ## Unreleased
+
+- **A wireless update no longer leaves your library's partition
+  unclean.** The update tool put the system partition to bed before
+  handing over to the new kernel but not the data partition (books,
+  settings, Wi-Fi credentials), so from the filesystem's point of view
+  every update was a crash there. Its journal covered for that until
+  2026-09-04, when one update came up with an empty library and
+  auto-sleep stuck off because the partition failed to mount in time.
+  Now both partitions are remounted read-only first, and if the update
+  has to give up, both come back read-write. Found on generation 18;
+  the fix rides every update from the next one on.
+- **An update that has to give up partway through its own shutdown
+  now puts the reader back on its own.** Before, if the trial stalled
+  after the device had already turned its radio off — the screen
+  refusing to go quiet, or the new kernel failing to load — the reader
+  stayed stopped with Wi-Fi off and nothing to say, and the update tool
+  waited five minutes and then blamed a self-reset that was never
+  coming (the v0.3.0 known-broken item). Now the device undoes its own
+  shutdown in reverse (USB console back, Wi-Fi back, reader restarted)
+  before it reports why, the report carries the kernel loader's own
+  error text, and `make deploy` prints `NOT PROMOTED: the trial helper
+  refused` at once — or, if the network link had already dropped, reads
+  the reason back from the device the moment it answers. Proven in the
+  QEMU rig with a deliberately broken kernel image; **not yet on a
+  PineNote** — the glass check is a trial forced to fail while the
+  screen is busy, coming back with the book open and Wi-Fi up. What it
+  does not cover: an update that dies *after* the new kernel has been
+  told to start is the new kernel's failure, handled by the self-reset
+  as before.
 
 ## v0.3.0-prealpha — 2026-09-04
 

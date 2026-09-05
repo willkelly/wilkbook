@@ -21,6 +21,14 @@ device=${1:?usage: deploy.sh DEVICE [FLAVOR] [KEEP] | DEVICE --rollback N}
 repo=$(cd "$(dirname "$0")/../../.." && pwd)
 ssh_cmd() { ssh -o ConnectTimeout=10 -o BatchMode=yes "root@$device" "$@"; }
 
+# The UART watcher (armed in trial_health_promote) is reaped as a process
+# group on EVERY exit from the trial -- success, refusal, recovery -- and
+# never through a bare kill: under set -e a kill of an already-exited
+# watcher (the very case the watcher exists for -- it picked os2 and left)
+# aborted the deployer between a passed ssh wait and health/promote,
+# silently (review 2026-09-04).
+reap_watcher() { [ -z "${watcher:-}" ] || kill -- -"$watcher" 2>/dev/null || true; }
+
 wait_for_ssh() {
   i=0
   while [ "$i" -lt 60 ]; do
@@ -48,7 +56,7 @@ recover_after_failed_trial() {
       echo "the device did not come back on its own: power-cycle it; the U-Boot default is os1 and extlinux's DEFAULT is still the previous generation" >&2
     fi
     # the picker's UART reader outlives it by design; reap it once the boot is captured
-    kill -- -"$watcher" 2>/dev/null || true
+    reap_watcher
   else
     echo "NOT PROMOTED: generation $gen never answered; the watchdog resets it into U-Boot (default os1) -- pick os2 at the menu, or set WILKBOOK_UART=/dev/ttyUSB0 to have this done for you" >&2
   fi
@@ -77,16 +85,40 @@ trial_health_promote() {
   # The trial runs the helper the TARGET generation ships, not the running
   # one: a fix to how a kexec is prepared must apply to the first kexec that
   # needs it (2026-09-02: the running helper could not skip the GRF init).
-  timeout 90 ssh -o ConnectTimeout=10 -o BatchMode=yes -o ServerAliveInterval=5 -o ServerAliveCountMax=2 "root@$device" "\$(cat /boot/gen-$gen/system)/profile/bin/wilkbook-generation trial $gen" || true
+  # The helper's words are kept in a file so its exit status survives: 255
+  # (ssh gave up on its keepalives) or 124 (the timeout) is the link dying
+  # with the old kernel -- the SUCCESS signature; anything else is the helper
+  # itself exiting, which it only does to refuse -- undoing its teardown
+  # first, if it had begun one (radio back, reader back).  That is not a
+  # dead trial, no watchdog is counting, and the five-minute wait would only
+  # obscure it (2026-09-04).
+  trial_log=${TMPDIR:-/tmp}/wilkbook-trial-$$.log
+  trial_rc=0
+  timeout 90 ssh -o ConnectTimeout=10 -o BatchMode=yes -o ServerAliveInterval=5 -o ServerAliveCountMax=2 "root@$device" "\$(cat /boot/gen-$gen/system)/profile/bin/wilkbook-generation trial $gen" > "$trial_log" 2>&1 || trial_rc=$?
+  sed 's/^/   trial> /' "$trial_log"
+  case $trial_rc in
+    0|255|124) ;;
+    *)
+      reap_watcher
+      echo "NOT PROMOTED: the trial helper refused (exit $trial_rc); if it had begun its teardown it undid it (reader and radio back), DEFAULT is unchanged -- its reason is in the trial output above" >&2
+      exit 1;;
+  esac
   echo "== waiting for the new generation to answer ssh"
   sleep 15
   if wait_for_ssh; then
-    # `|| true`: under set -e a kill of an already-exited watcher (the very
-    # case the watcher exists for -- it picked os2 and left) aborted the
-    # deployer between a passed ssh wait and health/promote, silently.
-    [ -z "$watcher" ] || kill -- -"$watcher" 2>/dev/null || true
+    reap_watcher
   else
     recover_after_failed_trial "$gen" "$watcher"
+  fi
+  # A refusal said after the link had already dropped (the keepalives give
+  # the helper ~15 s past its radio-off; an EBC that never goes idle alone
+  # takes 10 of them) looks like a success up to here: the helper leaves a
+  # record for this boot, and the reconnected system is the OLD one.  Ask
+  # the target generation's helper -- the one that ran the trial.
+  if refusal=$(ssh_cmd "\$(cat /boot/gen-$gen/system)/profile/bin/wilkbook-generation last-trial" 2>/dev/null); then
+    echo "NOT PROMOTED: the trial helper refused after the ssh link had dropped; it undid its teardown (reader and radio back), DEFAULT is unchanged" >&2
+    printf '%s\n' "$refusal" | sed 's/^/   /' >&2
+    exit 1
   fi
   echo "== health"
   if ! ssh_cmd "wilkbook-generation health --expect $expect"; then

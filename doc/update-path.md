@@ -97,7 +97,7 @@ change is megabytes; a kernel change ~100 MB; never the 2 GB closure.
 
 **On the device** (`pinenote/packages/update-path/`, shipped like
 platform-controls): `wilkbook-generation` — `add`, `list`, `trial`,
-`promote`, `demote`, `prune`. The generation ledger is
+`promote`, `demote`, `prune`, `health`, `last-trial`. The generation ledger is
 `/var/guix/profiles/system-*-link` (Guix's own) plus
 `/boot/gen-*/`; `extlinux.conf` is rendered from the ledger. The trial
 reuses the broker's quiesce (the EBC must be idle before the kernel is
@@ -135,9 +135,13 @@ teardown as a suspend (EBC quiesce, gadget unbind, Wi-Fi off) before
   and package pins in the image inspection.
 - **Rung 4 — the whole flow in QEMU virt** (`make qemu-update-check ROOTFS=…`): boot generation A, `guix
   archive --export | ssh | guix archive --import` generation B into the
-  VM (the guix copy nar pipe over plain OpenSSH), `add`, `trial` (kexec
-  inside the VM), verify B answers as `/run/current-system`, `promote`,
-  then roll back to A. The mechanism end-to-end, no glass.
+  VM (the guix copy nar pipe over plain OpenSSH), `add`, a trial the
+  helper must refuse (B's `Image` moved away, so `kexec -l` fails after
+  the teardown: the guest must answer on the same boot with health
+  passing and the helper's exit 1 — the bail-out, 2026-09-04), `trial`
+  (kexec inside the VM), verify B answers as `/run/current-system` and
+  the stale refusal record does not, `promote`, then roll back to A.
+  The mechanism end-to-end, no glass.
 - **Glass** (UART-attended) — **done 2026-09-02**: the enabling image
   was written to os2 by the dd protocol, generation 3 (a cross-built
   system) was promoted and cold-booted from the helper's own extlinux
@@ -193,10 +197,65 @@ hand-run helper — is on that radio, so nothing logged after it ever
 arrives (2026-09-04: two trials in a row "never captured" the notes
 until this was seen; `test-static.sh` now pins the order). The lines
 that follow the radio-off (`kexec -e into generation N`, `watchdog
-armed`, the kexec binary's own stderr) reach only a UART login that
+armed`) reach only a UART login that
 ran the helper itself — the deployer never sees them, and the ACM
 console loses the same lines one statement later when the gadget is
-unbound. Until a cold boot has run, treat a
+unbound.
+
+**A refusal after the radio-off comes back on its own (2026-09-04).**
+The same review found the other half: a helper that *died* past the
+radio-off — an EBC that never went idle, a failed `kexec -l`, a
+`kexec -e` that returned — left the reader stopped, the radio off and
+the gadget unbound with no message deliverable, and the deployer,
+hearing nothing for five minutes, called it a dead trial the watchdog
+would reset (it would not: the dog is armed later). Now every one of
+those sites bails out: the teardown is undone in reverse — loaded
+kernel unloaded, root writable, watchdog handed back with the magic
+close (the dw_wdt has no reset line, so the kernel keeps feeding it
+rather than stopping it — either way it stops counting down), the
+PIPE-domain hold released, the gadget re-bound the way the broker and
+the usb-gadget service do it (the saved UDC name written back into
+configfs), `pinenote-wifi-control on`, `herd start reader-session` —
+and only then is the refusal said, with the kexec binary's own stderr
+in it. Only what was up comes back (a reader that was not running
+stays stopped). The restores write nothing to the session, which may
+already be gone (an EPIPE would abort the control script's `set -e`),
+and SIGPIPE is ignored for the trial so a dead session cannot kill the
+helper mid-restore. The teardown order itself is untouched. The
+bail-out lives in the helper the *target* generation ships (the
+deployer runs
+`$(cat /boot/gen-N/system)/profile/bin/wilkbook-generation trial N`),
+so the very first deploy of a generation built with it already
+exercises it, and a trial into an older generation — a rollback —
+runs that generation's helper, without it.
+
+Whether the message *arrives* is a race against the deployer's
+keepalives (`ServerAliveInterval=5`, `CountMax=2`: ~15 s past the
+radio-off), and an EBC that never goes idle alone spends 10 of them —
+so the helper also leaves a record, `/run/wilkbook-generation/last-trial`
+(boot id, generation, reason), which `wilkbook-generation last-trial`
+prints only when it belongs to the running boot (a trial that went
+through is a new boot, so a stale record never passes) and which
+every trial removes as it begins, so a later trial in the same boot
+that dies without leaving one is never read as the earlier refusal.
+The deployer
+reads the trial ssh's exit status: 255 or 124 is the link dying with
+the old kernel — the success signature — and proceeds to the ssh wait;
+any other non-zero is the helper refusing, printed as `NOT PROMOTED:
+the trial helper refused (exit N)` with the helper's output, no wait,
+no watchdog wording. After the ssh wait it asks the *target*
+generation's helper (the one that ran the trial) for `last-trial`
+before health, so a refusal said after the link had dropped is
+reported as one too. Rung 4u forces a refusal (B's `Image` moved away,
+so `kexec -l` fails after the teardown) and requires the guest back on
+the same boot with health passing; the glass proof — a trial forced to
+fail at the EBC quiesce with the reader deliberately painting, coming
+back with the reader running, Wi-Fi up and the deployer printing
+"refused" — has not been run. What this does NOT cover: a helper that
+dies after `kexec -e` was *issued* is the next kernel's problem (the
+watchdog's, then the UART watcher's), not this bail-out's.
+
+Until a cold boot has run, treat a
 device-tree change as undeployed — the Wi-Fi power-sequence delay
 (`doc/networking.md` §8) is the first one to wait for that.
 

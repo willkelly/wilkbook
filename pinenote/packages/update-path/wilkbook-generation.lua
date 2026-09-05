@@ -10,6 +10,7 @@
 --   demote               promote the newest generation older than DEFAULT
 --   health [--expect S]  report; exit 0 iff the running system is healthy
 --   prune --keep K       delete generations beyond K (never DEFAULT/booted), guix gc
+--   last-trial           the record of a trial this boot bailed out of, if any
 --
 -- Every write is confined to p6's /boot, /var/guix/profiles and, through
 -- guix gc, the store.  Nothing here touches p7, os1 or the partition table.
@@ -35,6 +36,67 @@ local function readlink(path)
     local p = io.popen("readlink -f " .. path .. " 2>/dev/null"); local s = p:read("*l"); p:close(); return s
 end
 local function sleep_ms(ms) run(string.format("sleep %.3f", ms / 1000)) end
+-- Run a command and keep what it says (stdout and stderr together) instead
+-- of letting it reach a session that may already be gone; the exit status
+-- rides on a trailer line because luajit's popen close does not carry it.
+local function capture(cmd)
+    local p = io.popen("( " .. cmd .. " ) 2>&1; echo \"__rc=$?\"", "r")
+    local out = p:read("*a") or ""; p:close()
+    local rc = tonumber(out:match("__rc=(%d+)%s*$"))
+    out = (out:gsub("__rc=%d+%s*$", "")); out = (out:gsub("%s+$", ""))
+    return rc == 0, rc, out
+end
+local function boot_id() return ((read_file("/proc/sys/kernel/random/boot_id") or ""):gsub("%s+$", "")) end
+
+-- The trial's teardown, remembered so that a refusal after it can be undone.
+-- Past `pinenote-wifi-control off` the session that ran the helper is on a
+-- dead radio, and until 2026-09-04 every die() there -- an EBC that never
+-- went idle, a failed kexec -l, a kexec -e that returned -- left the reader
+-- stopped, the radio off and the gadget unbound, with no message
+-- deliverable (found by review; doc/hardware-deploy.md).  bail() is what
+-- those sites use now: it writes the refusal record first (so it exists
+-- even if a restore hangs), then undoes the teardown in REVERSE -- loaded
+-- kernel unloaded, root writable again, watchdog handed back to the kernel,
+-- PIPE-domain hold released, gadget re-bound the way the broker and the
+-- usb-gadget service do it (the saved UDC name written back into configfs),
+-- radio on, reader started -- and only then dies with the message.  The
+-- glass-proven teardown order itself is untouched (test-static.sh pins it).
+--
+-- Nothing in the restore writes to the session: it may be gone (the
+-- deployer's keepalives give up ~15 s after the radio-off), a write there
+-- is EPIPE, and the control script's `set -e` would abort on its own first
+-- message.  When the session did survive, the die message travels over the
+-- restored radio; when it did not, `last-trial` hands the record to whoever
+-- reconnects (the deployer checks it before health).
+local torn = {}
+local RECORD_DIR = "/run/wilkbook-generation"
+local RECORD = RECORD_DIR .. "/last-trial"
+local function record_refusal(n, message)
+    run("mkdir -p " .. RECORD_DIR)
+    pcall(write_file, RECORD, string.format("boot_id=%s\ngeneration=%d\nresult=refused\nreason=%s\n", boot_id(), n, message))
+end
+local function bail(fmt, ...)
+    local message = fmt:format(...)
+    if torn.readonly then run("mount -o remount,rw / >/dev/null 2>&1") end
+    if torn.data_readonly then run("mount -o remount,rw /data >/dev/null 2>&1") end
+    record_refusal(torn.generation or 0, message)
+    if torn.loaded then run("/run/current-system/profile/sbin/kexec -u >/dev/null 2>&1") end
+    -- The magic close: the core stops the dog, or -- the dw_wdt has no
+    -- reset line, so it cannot stop -- keeps feeding it from the kernel.
+    -- Either way it stops counting down under a system that is staying.
+    if torn.armed then pcall(write_file, WATCHDOG, "V") end
+    if torn.dwc3 then pcall(write_file, DWC3_CONTROL, torn.dwc3) end
+    if torn.udc then
+        pcall(write_file, UDC, torn.udc .. "\n")
+        if not (read_file(UDC) or ""):find(torn.udc, 1, true) then run("herd start pinenote-usb-acm-gadget >/dev/null 2>&1") end
+    end
+    if torn.wifi then run(WIFI .. " on >/dev/null 2>&1") end
+    if torn.reader then run("herd start reader-session >/dev/null 2>&1") end
+    log("trial abandoned: teardown undone (%s%s%s%s); the running system is unchanged, DEFAULT untouched",
+        torn.udc and "gadget re-bound, " or "", torn.wifi and "radio on, " or "",
+        torn.reader and "reader started" or "reader was not running", torn.armed and ", watchdog handed back" or "")
+    die("%s", message)
+end
 
 -- ledger from Guix's own profile links
 local function profile_generations()
@@ -177,6 +239,15 @@ function commands.trial(n)
     append = append:gsub("\n$", "")
     if not exists("/run/current-system/profile/sbin/kexec") then die("kexec-tools is not in this image") end
     log("trial boot of generation %d: DEFAULT is unchanged; a power-cycle returns to it", n)
+    torn.generation = n
+    -- A record left by a trial this boot refused is stale from here on: a
+    -- later trial that dies without leaving one must not be read as that
+    -- earlier refusal.  Removed at the start; only bail() writes it.
+    os.remove(RECORD)
+    -- The session that ran this helper may be gone by the time a refusal is
+    -- reported; a write to its pipe must come back EPIPE, not kill the
+    -- helper mid-restore (SIGPIPE's default).  Best-effort: no ffi, no change.
+    pcall(function() local ffi = require("ffi"); ffi.cdef("void *signal(int, void *);"); ffi.C.signal(13, ffi.cast("void *", 1)) end)
     local model = (read_file("/proc/device-tree/model") or ""):gsub("%z", "")
     local pinenote = model:find("PineNote", 1, true) ~= nil
     -- The generation's DTB is the PineNote's; on any other machine (the
@@ -217,9 +288,15 @@ function commands.trial(n)
     end
     -- The same teardown a suspend runs: stop the reader cleanly (INT-first
     -- destructor), radio off, gadget unbound, panel idle, disk synced.
+    -- Each step remembers what it undid, for bail(): only what was up comes
+    -- back (a reader that was not running stays stopped, a radio that was
+    -- off stays off).
+    torn.reader = run("herd status reader-session 2>/dev/null | grep -q running")
     run("herd stop reader-session >/dev/null 2>&1")
+    torn.wifi = run(WIFI .. " status >/dev/null 2>&1")
     run(WIFI .. " off >/dev/null 2>&1")
-    if read_file(UDC) and read_file(UDC) ~= "" then write_file(UDC, "\n") end
+    local bound = (read_file(UDC) or ""):gsub("%s+$", "")
+    if bound ~= "" then torn.udc = bound; write_file(UDC, "\n") end
     -- Hold the PIPE power domain up through the kexec.  The USB controller
     -- is its only live device; once the gadget is unbound it runtime-
     -- suspends and genpd gates the domain, and the next kernel's early GRF
@@ -227,12 +304,12 @@ function commands.trial(n)
     -- has no shutdown hook, so a runtime-PM "on" set here survives to the
     -- new kernel (U-Boot hands a cold boot every domain on; hand the
     -- kexec'd kernel the same).  Best-effort: absent on other machines.
-    if exists(DWC3_CONTROL) then write_file(DWC3_CONTROL, "on\n") end
+    if exists(DWC3_CONTROL) then torn.dwc3 = read_file(DWC3_CONTROL); write_file(DWC3_CONTROL, "on\n") end
     -- The EBC must be idle before the kernel is replaced under it -- on a
     -- PineNote.  On any other machine there is no EBC interrupt line and
     -- nothing to quiesce.
     if pinenote then
-        if not ebc_quiesce() then die("EBC did not go idle; refusing to replace the kernel under a refresh") end
+        if not ebc_quiesce() then bail("EBC did not go idle; refusing to replace the kernel under a refresh") end
     else
         log("machine model %q: no EBC to quiesce", model)
     end
@@ -258,9 +335,23 @@ function commands.trial(n)
     end
     local load = string.format("/run/current-system/profile/sbin/kexec -l %s/Image --initrd=%s/initrd.cpio.gz%s --command-line='%s'",
                                dir, dir, dtb_arg, append)
-    if not run(load) then die("kexec -l failed for generation %d", n) end
+    -- The kexec binary's own words come back with the refusal (until
+    -- 2026-09-04 they went to a session already off the air).
+    local loaded, load_rc, load_said = capture(load)
+    if not loaded then bail("kexec -l failed for generation %d (exit %s): %s", n, tostring(load_rc), load_said) end
+    torn.loaded = true
     run("sync")
-    run("mount -o remount,ro / 2>/dev/null")
+    if run("mount -o remount,ro / 2>/dev/null") then torn.readonly = true end
+    -- The data partition too (2026-09-04, generation 18).  Every kexec
+    -- had left p7 mounted read-write -- a crash, from ext4's point of
+    -- view -- and its journal covered for that until one boot's recovery
+    -- raced udev's probe of the same partition: blkid saw a superblock
+    -- changing under it ("incorrect ext4 checksum"), the label link never
+    -- appeared, and /data fell back to the library's placeholder.  A
+    -- read-only remount commits the journal and marks the filesystem
+    -- clean, so the next boot mounts it with nothing to recover.
+    if run("mount -o remount,ro /data 2>/dev/null") then torn.data_readonly = true
+    else log("/data did not remount read-only (busy, or not mounted): the next boot recovers its journal") end
     log("kexec -e into generation %d", n)
     run("sync")
     -- Arm the SoC watchdog last.  A kernel that dies before its drivers
@@ -278,10 +369,20 @@ function commands.trial(n)
     -- without the magic character keeps it running on purpose.
     -- Best-effort: no /dev/watchdog0 (QEMU virt) means no cover.
     local wd = io.open(WATCHDOG, "w")
-    if wd then wd:write("1"); wd:close(); log("watchdog armed: a trial that never boots resets into U-Boot")
+    if wd then wd:write("1"); wd:close(); torn.armed = true; log("watchdog armed: a trial that never boots resets into U-Boot")
     else log("no %s: a trial that never boots needs the power button", WATCHDOG) end
-    os.execute("/run/current-system/profile/sbin/kexec -e")
-    die("kexec -e returned; the running system is unchanged")
+    local _, exec_rc, exec_said = capture("/run/current-system/profile/sbin/kexec -e")
+    bail("kexec -e returned (exit %s): %s; the running system is unchanged", tostring(exec_rc), exec_said)
+end
+
+-- The record bail() leaves, for a caller whose link had already dropped
+-- when the refusal was said: printed, exit 0, only when it belongs to THIS
+-- boot (a trial that went through is a new boot, so a stale record can
+-- never pass for a fresh one).
+commands["last-trial"] = function()
+    local rec = read_file(RECORD)
+    if not rec or rec:match("boot_id=(%S+)") ~= boot_id() then die("no trial refused in this boot") end
+    io.write(rec)
 end
 
 function commands.health(flag, expected)
@@ -321,7 +422,7 @@ end
 
 local cmd = commands[arg[1] or ""]
 if not cmd then
-    io.stderr:write("usage: wilkbook-generation list|add SYSTEM|render|trial N|promote N|demote|health [--expect S]|prune [--keep K]\n")
+    io.stderr:write("usage: wilkbook-generation list|add SYSTEM|render|trial N|promote N|demote|health [--expect S]|prune [--keep K]|last-trial\n")
     os.exit(2)
 end
 cmd(arg[2], arg[3])
