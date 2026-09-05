@@ -147,7 +147,10 @@ hours; see `doc/alpha-checklist.md` for the open decision.
    the slot picker starts its own listener, so a leftover manual `cat`
    splits the output between the two and neither sees a complete
    stream. And the watcher needs the UART plugged in and live for the
-   whole reboot it is meant to catch, not just at the start.
+   whole reboot it is meant to catch, not just at the start. (The
+   picker's own leftover `cat` is the other way to get here: reap it by
+   the pgid in `LOG.watcher`, not by `$!` — the handle-file section
+   below.)
 
 5. (2026-09-03) **A suspended console swallows typed input.** KOReader's
    idle timer suspended the device (UART: `PM: suspend entry (deep)`)
@@ -168,6 +171,83 @@ hours; see `doc/alpha-checklist.md` for the open decision.
    2026-09-03: a marginal SDIO power sequence on resume — kernel patch
    13 and the control script's rebind, `doc/networking.md` §8; not seen
    again in the 59 rig cycles since.]
+
+### The capture is lossy at 1.5 Mbaud — and it is not termios (2026-09-04)
+
+Both captures from the generation-16 session
+(`doc/artifacts/pinenote-gen16-deploy-20260904/uart-trial-boot.log` and
+`uart-coldboot.log`) drop bytes mid-line: `CPUs=00000] ftrace:` where the
+kernel wrote `CPUs=4, Nodes=1\r\n[    0.000000] ftrace:`. Measured
+offline from those two files (branch `uart-watcher-termios`): in the cold
+boot's kernel region **121 of 313 lines are broken**, roughly **one drop
+every 150–250 bytes** (median gap 153 bytes), each drop losing **19–29
+bytes** (five aligned against intact copies of the same lines: 19, 22,
+22, 24, 29); the trial capture runs at one per ~244 bytes. The status
+entry that called it "the raw `cat` of a 1.5 Mbaud port with no termios
+setup" was wrong about the cause: `uboot-pick-slot.sh` has always run
+`stty -F … 1500000 cs8 -cstopb -parenb -crtscts clocal -echo raw` before
+its `cat` (and now records the result as `termios=` in its handle file,
+below), and none of the termios translations would produce this signature
+anyway — `icrnl`/`inlcr` would *translate* bytes, `ixon` would eat only
+`^S`/`^Q`, canonical mode would lose only lines over 4095 bytes. What fits
+it: a ~25-byte hole every millisecond or two at 150 kB/s is the shape of
+the **CH340 adapter's receive buffer overrunning between USB polls** — the
+chip has no flow control wired to the SoC and only a small FIFO, and
+character loss under continuous output at the top of its baud range is
+its widely reported weakness. That is the hypothesis the captures
+support, not a measurement of the chip. Ruled out by the captures: the
+reader's chunking (`cat` reads whatever the line discipline has queued;
+the discipline's 4 KiB buffer never fills with a reader that fast), and a
+second reader (two `cat`s on one port would split the stream roughly in
+half, not clip ~10 % of it; both captures show the same rate, and the
+deployer's reap was verified by `pgrep` that night). So: the capture is
+**enough to see a boot and to catch the menu, not a clean transcript**.
+The menu is caught anyway because U-Boot redraws it every second of its
+countdown and the picker now matches any of the three entry lines (in
+that cold boot each redraw had a *different* entry clipped and never all
+three). A clean transcript needs a different adapter (an FT232H or
+CP2102N is rated for 1.5 Mbaud with a real FIFO), or the console at a
+lower baud — which the device side fixes at 1500000 in the kernel command
+line and U-Boot, so that is a build change, not a host one. **Glass proof
+still owed:** a capture with no mid-line drops, from whichever of those
+two is tried first.
+
+### The picker's handle file, and the hand-run trap (2026-09-04)
+
+`uboot-pick-slot.sh LOG …` writes **`LOG.watcher`** before it opens the
+port and appends to it at exit:
+
+```
+pid=NNN        the script
+pgid=NNN       its process group (== pid under setsid or from a job-control shell)
+termios=...    `stty -a` of the port after setup, as evidence
+reader=NNN     the `cat` of the tty, which outlives the pick by design
+exit=N         once the script has a status (0 = menu seen, slot chosen)
+```
+
+`kill -- -PGID` from that file reaps script and reader together; that is
+the only reap that works in every way the script gets started. The trap
+it exists for: **from a shell with job control, `setsid sh
+uboot-pick-slot.sh … &` forks** — `setsid` finds itself already a process
+group leader and cannot call `setsid(2)` in place, so it forks and the
+parent exits at once — and `$!` is that exited wrapper: `kill -- -$!`
+reaches nothing, `wait $!` returns immediately, and the `cat` is left
+holding the port for the next reboot (trap 4 above, now from a different
+direction). From `make` (no job control) `setsid` execs in place and `$!`
+is the script. The deployer reads the file after arming its watcher and
+falls back to `$!` only if the file never appears (`deploy.sh`
+`watcher_handle`/`watcher_wait`/`watcher_reap`, pinned in
+`pinenote/tools/update-path/test-static.sh`); a hand-run watcher is reaped
+the same way: `kill -- -$(sed -n 's/^pgid=//p' LOG.watcher)`. Both shapes
+are exercised offline — `make uart-pick-check` drives the script against a
+pseudo-terminal replaying the real captured U-Boot bytes, started both
+ways, and pins the file, the port setup, the keystrokes per slot, and that
+nothing is sent for U-Boot's earlier `Hit key to stop autoboot('CTRL+C')`
+prompt or for extlinux's generation menu (which the same bootmenu code
+draws with the same title and "Press UP/DOWN" line — matching either
+would answer the wrong menu). **Glass proof still owed:** the next deploy
+or cold boot with the UART attached, reaped by the recorded pgid and
+leaving no `cat /dev/ttyUSB0` behind (`pgrep -f 'cat /dev/ttyUSB'`).
 
 ### Proving the link end to end (2026-08-06)
 
@@ -216,7 +296,13 @@ UART or a human at the menu.
 the menu is drawn, two DOWNs + ENTER, and the capture keeps running so
 the whole boot lands in LOG (it used to live in a session scratchpad and
 was lost with it; 2026-09-02 it picked os2 at poll 23 and recorded the
-first kexec on glass).
+first kexec on glass; 2026-09-04 it picked os2 on a cold boot eight
+seconds after the menu). It matches any of the menu's three entry lines
+(`Search for extlinux.conf on all partitions`, `Boot OS1 (part 5)`,
+`Boot OS2 (part 6)`) and nothing else, records itself in `LOG.watcher`
+(the pid/pgid handle above), and gives up after
+`WILKBOOK_UBOOT_MENU_TIMEOUT` seconds (default 900). Offline suite:
+`make uart-pick-check`.
 
 ## SSH to the deployed reader
 

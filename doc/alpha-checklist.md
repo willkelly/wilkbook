@@ -474,6 +474,18 @@ blacklist is ever wrong on a future kernel change.
       since 2026-09-04 (review S4) it is armed before the `kexec -e` and
       the recovery path waits on it, pinned in the update-path
       `test-static.sh`. With no cable the landing is still os1.
+- [x] (offline, 2026-09-04) The watcher's menu match rode on one short
+      string in a capture that drops ~25 bytes every 150–250 (the
+      adapter at 1.5 Mbaud, not termios — `doc/device-access.md`), and a
+      hand-run watcher's `$!` was a dead `setsid` wrapper so its `cat`
+      outlived the session. Now: any of the three menu entry lines
+      triggers (never the title or "Press UP/DOWN", which extlinux's
+      generation menu shares), the picker writes its pid/pgid/reader to
+      `LOG.watcher` and the deployer reaps by that; `make
+      uart-pick-check` replays the real captured menu bytes through a
+      pty. **Glass still owed:** one deploy or cold boot with the UART
+      reaped by the recorded pgid, and a capture with no mid-line drops
+      (a different adapter, or a lower console baud).
 - [ ] A trial that dies *after* the helper's own Wi-Fi off — an EBC that
       never goes idle, a failed `kexec -l` — strands the reader stopped
       and radio-off with no message delivered, and the deployer reports

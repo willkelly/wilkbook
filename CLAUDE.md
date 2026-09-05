@@ -490,6 +490,16 @@ gitignored `build/`, or the reader's static address.
   captured" the device-tree notice for that reason before the source
   order was read (2026-09-04). When output stops, ask what the code
   did to the transport before suspecting a flush.
+- **The UART capture drops ~25 bytes every 150–250 at 1.5 Mbaud, and it
+  is the adapter, not termios** (2026-09-04, measured from the two
+  generation-16 captures): `uboot-pick-slot.sh` has always set the port
+  up (`stty … 1500000 … raw -echo`), the drop size and cadence are the
+  CH340's, and a second reader would halve the stream rather than clip
+  it. Read a capture as a boot you can see, not a transcript. **Reap the
+  picker by the pgid in `LOG.watcher`, never by `$!`**: from a
+  job-control shell `setsid … &` forks and `$!` is a wrapper that has
+  already exited (`doc/device-access.md`; `make uart-pick-check` pins
+  both start shapes against the real captured menu bytes).
 - **Never glob `/sys/kernel/debug/regmap/*`** — that glob includes
   `dummy-syscon@fdc50000`, the PIPE GRF whose pclk the running kernel
   gates (upstream register item 22), and reading it wedges the bus just
