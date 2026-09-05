@@ -52,7 +52,7 @@ not yet been repeated on this lineage.
   now rebinds it and retries the association on its own, logging the
   attempt either way; earlier this showed up about once in ten sleeps
   and needed a full reboot to clear. That recovery is proven in the
-  offline harness only: the failure did not recur in the 65 cycles, so
+  offline harness only: the failure did not recur in the 59 cycles, so
   the rebind has never fired on a real device.
 - **The kernel gives the Wi-Fi module 100 ms to settle** after its power
   rail comes up, closing a race that could otherwise show up as the

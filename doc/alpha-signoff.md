@@ -27,7 +27,9 @@ That phrasing is the actual specification, so it is worth making precise:
 - [ ] A **fresh image built from the tag being signed off**, not from a
       working tree. The deployed 2026-08-07 image predates the library
       service, the quickstart fix, the conditional fonts, and the banner
-      geometry fix, so it cannot be the alpha artifact.
+      geometry fix, so it cannot be the alpha artifact. Since 2026-09-02
+      the artifact may be a generation deployed from the tag instead of
+      a dd'd image (`doc/release.md`).
 - [ ] `make check-host` green, `make qemu-virt-check` green, and
       `make qemu-data-check` green on **all three** fixtures
       (`os1-used`, `with-library`, `empty` — `doc/testing.md` rung 4d).
@@ -49,7 +51,7 @@ resource. Listed so the human knows what is *not* their job:
 | Already proven | Where |
 |---|---|
 | Boots, PREEMPT_RT, initrd waveform install, EBC modules, root mount, shepherd, udev | rung 4, `make qemu-virt-check` |
-| `refresh_waveform` is genuinely GL16 at runtime | rung 4 (live sysfs read, not intent) |
+| ~~`refresh_waveform` is genuinely GL16 at runtime~~ — retired with the direct driver, which has no such parameter (2026-09-03) | was rung 4 |
 | Library created on a lived-in os1 disk; pointer relative and resolving; os1's home untouched | rung 4d, `FIXTURE=os1-used` |
 | An existing library is left strictly alone across a redeploy | rung 4d, `FIXTURE=with-library` |
 | No dangling pointer on a p7 with no Debian home | rung 4d, `FIXTURE=empty` |
@@ -82,8 +84,9 @@ Debian home. Record the verdict for each. **Stop at the first covid.**
 
 ### 2.3 Sleep — the primary gesture
 - [ ] Short power press: page plus **suspend banner**. Read the banner —
-      it must be **complete, not truncated** (fixed 2026-08-07, never yet
-      seen on glass).
+      it must be **complete, not truncated** (fixed 2026-08-07; since
+      2026-08-31 the broker has KOReader paint its own sleep screen
+      instead of the daemon's banner).
 - [ ] Second press: wakes, panel intact, no corruption.
 - [ ] Leave it idle past the auto-suspend threshold, then wake. Same.
 - [ ] **Leave it asleep overnight** — several RTC backstop cycles — then
@@ -137,9 +140,13 @@ not on this list that costs them anything, it is a defect.
   touch-controller timeout on resume is absorbed by a carried
   workaround; the panel must come back clean.
 - **No on-device Wi-Fi picker.** Credentials are staged out of band.
-- **No update path.** A new version is a reflash.
-- **`herd restart reader-session` wrecks the panel.** A maintenance path
-  an alpha user has no reason to take; a reboot is clean.
+- **The first install is a reflash; updates are not.** Since 2026-09-02
+  a new version reaches an installed device by `make deploy`
+  (`doc/update-path.md`); a failed update with no debug cable attached
+  ends on os1 until a human picks os2 at the menu.
+- **`herd restart reader-session` lands in the library, not the book**
+  (2026-09-04; on the old driver it wrecked the panel). A maintenance
+  path an alpha user has no reason to take; a reboot is clean.
 - **The typography differs** from the validated images unless you stage
   the licensed fonts yourself; the build falls back to Noto.
 

@@ -77,8 +77,9 @@ master; it is a design item, not a flag change.
    R1–R7 and optics run on the current baseline; rewrite any R-test that
    assumes the retired refresh-drain driver.
 5. **Recovery and process** — merge #67's policy; prove #51 on os1;
-   keep a known-good generation (generation 7 or 9) [both since pruned;
-   the cold-booted generation 10 is the one kept by hand, 2026-09-04].
+   keep a known-good generation (generation 7 or 9) [7 since pruned, 9
+   still in the window; the cold-booted generation 10 is the one kept by
+   hand, 2026-09-04].
 6. **Wi-Fi proof** — rig v2 with captured per-cycle facts, both trigger
    paths, varied sleep lengths, after the KOReader bookkeeping fix.
    [Run 2026-09-03/04 and 2026-09-04: 27 + 32 cycles — `doc/status.md`.]

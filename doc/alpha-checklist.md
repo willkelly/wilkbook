@@ -259,10 +259,12 @@ The machinery now exists; the acts themselves wait for sign-off.
       by commit with introductions. This is the reproducibility claim:
       `guix time-machine -C channels.scm` rebuilds the identical closure.
       Regenerate with `make channels-pin` *before* building the shipping
-      artifact — and note this regeneration is currently *mandatory*,
-      not hygiene: the committed pin predates the kernel's 7.1 series
-      pin, so time-machine against it fails outright until the bump
-      (`doc/building.md`, 2026-08-25).
+      artifact — for one day (2026-08-25) that regeneration was
+      *mandatory*, not hygiene: the committed pin predated the kernel's
+      7.1 series pin and time-machine failed outright until the
+      2026-08-26 bump; re-checked 2026-09-04, the pinned and ambient
+      `make kernel-drv` resolve the identical derivation
+      (`doc/building.md`).
 - [x] **`make release-manifest ROOTFS=…`** writes `SHA256SUMS` carrying
       the hash, the git description and the channel pointer, so the hash
       lands inside signed history rather than beside a download.
@@ -287,25 +289,30 @@ tag, one channel pin and one hash clears it.
 
 ### 7. Public-repo posture
 
-- [ ] The disclaimer, stated plainly and early: hardly tested, largely
-      AI-written, will probably break your device, no support.
-- [ ] **Root posture stated, not discovered.** With the convenience flag
+- [x] The disclaimer, stated plainly and early: hardly tested, largely
+      AI-written, will probably break your device, no support. (README,
+      since the 2026-08-08 publication.)
+- [x] **Root posture stated, not discovered.** With the convenience flag
       on, any USB-C cable is an unauthenticated root shell
       (`usb-gadget.scm` execs a shell with no login prompt; `reader` has
       `NOPASSWD: ALL`). That is fine for two people who know — and only
       if they are told, in the README, not in a commit message.
-      `/etc/wilkbook-build` names the build either way.
-- [ ] **The debug-UART serial console is also an unauthenticated root
+      `/etc/wilkbook-build` names the build either way. (Stated in
+      README's build-flags section.)
+- [x] **The debug-UART serial console is also an unauthenticated root
       shell** — flagged 2026-09-03 (`doc/status.md`, `doc/device-access.md`):
       `ttyS2`'s getty logs root in with no password, same standing as the
       ACM gadget item above, but a *physical debug pad* rather than the
       convenience flag, so it is on every build regardless of
       `WILKBOOK_VERY_INSECURE_FOR_CONVENIENCE`. State it alongside the
-      root posture above, or decide it needs its own gate.
-- [ ] Merge the shippable half of `ultra-handshake-arm` to main.
-- [ ] A "what to steal" entry point: this repo's genuine value to other
+      root posture above, or decide it needs its own gate. Stated —
+      README's build-flags section and the tester brief (2026-09-04);
+      the gate decision stays open.
+- [x] Merge the shippable half of `ultra-handshake-arm` to main (§6,
+      2026-08-08).
+- [x] A "what to steal" entry point: this repo's genuine value to other
       PineNote people is the host tools and the findings, not the image.
-      Point at them from the README.
+      Point at them from the README. (README, "What to steal".)
 
 ---
 
@@ -349,9 +356,10 @@ power button and the cover.
       config path but not `enabled`, and the only paused message fires
       on a power tap, so an idle-only user gets silence. `herd status`
       showing `running` reads as healthy.
-- [ ] **Timezone at build time** — GitHub issue #6, raised in the same
+- [x] **Timezone at build time** — GitHub issue #6, raised in the same
       session: the image runs UTC, so clocks and log timestamps are off
-      for every user.
+      for every user. Built: `WILKBOOK_TIMEZONE` (README, build flags);
+      the on-glass look at the clock is R1, unrun.
 
 **The lesson worth keeping:** every offline gate in this repo passed on
 this image, and the QEMU rungs boot it three ways. None of them could
@@ -378,7 +386,10 @@ seen on glass**, so both belong in the QC cycle.
       by hand "or the box is pitch black", which *is* this bug.
 - [ ] **Verify both on glass** — QC §2.2 (cycle with the light ON and
       check `actual_brightness` after) and §2.3 (close the cover, confirm
-      it sleeps promptly; open it, confirm it wakes).
+      it sleeps promptly; open it, confirm it wakes). [Superseded by the
+      broker 2026-08-31, which owns both: its frontlight restore was
+      hardware-accepted on rpedde's device; the cover is confirmed
+      below.]
 - [x] **Cover-close-to-suspend: CONFIRMED on glass 2026-08-09**, first
       on the second tester's device and then on the author's. The switch
       is wired and armed (`gpio-23`, ACTIVE LOW, IRQ, SW_LID,
