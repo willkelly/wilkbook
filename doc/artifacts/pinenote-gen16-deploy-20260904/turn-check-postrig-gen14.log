@@ -1,0 +1,21 @@
+== 22:46:43 start N=6 irq=8759 rs=suspended fb0/state=0 suspend_stats=32/0
+rotation: closed_rotation_mode=1 sidecar=
+after reader stop: irq=8759
+settings: ["start_with"] = "last"
+injector: optics-inject: created uinput device 'wilkbook-optics'; reading /run/optics-inject.fifo 
+reader after start:
+2026-09-04 22:46:48 09/04/26-22:46:48 INFO  [pn-refresh] ui partial rect=159,844,1086,184 dither=nil t=1788562008.619655 
+2026-09-04 22:46:48 09/04/26-22:46:48 INFO  opening file /data/books/The Chronicles of Prydain - Lloyd Alexander.epub 
+2026-09-04 22:46:49 09/04/26-22:46:49 INFO  [pn-refresh] full global rect=0,0,1404,1872 dither=nil t=1788562009.226848 
+pre: irq=8994 rs=suspended fb=2e26d6124ef7 belief=f15c761c75bc1c30
+turn=1 irq@0.6s=9037 irq@3s=9041 rs@0.6s=active rs@3s=active fb=2f04669bbc21 belief=749a3cfc7c8ff097
+turn=2 irq@0.6s=9086 irq@3s=9088 rs@0.6s=active rs@3s=active fb=7ceca8dde934 belief=be97f0ccde64dd95
+turn=3 irq@0.6s=9132 irq@3s=9135 rs@0.6s=active rs@3s=active fb=61f282f7c0cc belief=e3ec8e2745ad4b14
+turn=4 irq@0.6s=9179 irq@3s=9182 rs@0.6s=active rs@3s=active fb=982fd9854011 belief=95609e7bb86d545a
+turn=5 irq@0.6s=9227 irq@3s=9229 rs@0.6s=active rs@3s=active fb=c828cefed563 belief=c0c4e8a33213e7df
+turn=6 irq@0.6s=9274 irq@3s=9276 rs@0.6s=active rs@3s=active fb=84d9fb0c70c4 belief=29572adb7ccecead
+pn-refresh lines since restart: 8
+2026-09-04 22:47:10 09/04/26-22:47:10 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1788562030.007512 
+2026-09-04 22:47:13 09/04/26-22:47:13 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1788562033.318384 
+2026-09-04 22:47:16 09/04/26-22:47:16 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1788562036.647626 
+== 22:47:25 done; settings restored (0 start_with lines); dmesg WARN/timeout: 3; threads 2

@@ -190,6 +190,20 @@ transcript; the picker's menu match rides on a single short string and
 has never fired on glass, so the recovery half of this path is still
 unproven. The device is on 16, `enabled=1`, the operator's half begins.
 
+**Operator half on generation 16, first pass (20:45 MDT, the
+operator's own words: "pages turn fine, pen works, cover and button
+slept and woke").** Items 2–4 of the plan's operator half, short of
+the rotations and the settle-window check: page turns on a real book,
+pen strokes, the cover and the power button each suspending and waking
+the reader through the broker on the fixed generation — `suspend_stats`
+2/0 on this boot. The two live-read artifacts of the earlier session
+are now files: the post-rig `turn-check.sh` run on generation 14
+(22:46 UTC, 47 IRQs a turn after 32 resumes) and a fresh
+`fb-damage-gates.sh` dump on 16 (G1 open, the reader master on card1),
+both in `doc/artifacts/pinenote-gen16-deploy-20260904/`. Still to run:
+the four rotations, the settle-window check of the broker fix, the cold
+boot of 16 with the UART, #51, R1/R2/R7.
+
 **The rig also found a broker bug, on the operator's own button.** After
 the rig's `stop`, the last RTC wake at 21:48:44 had set the settle
 deadline (300 s); KOReader's idle timer suspended the device at
