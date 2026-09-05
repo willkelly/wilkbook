@@ -318,15 +318,44 @@ or a hand `pinenote-wifi-control on` from the UART does: a known gap,
 not yet closed), waits for the new generation to
 answer, runs `health` (`/run/current-system` is the new system, the
 broker is ready, the reader started), and only then `promote`s it and
-prunes to KEEP generations plus the promoted and booted ones, then
-`guix gc`. Every refusal is printed as `NOT PROMOTED: …` and the
+prunes to KEEP generations plus the promoted, booted and pinned ones,
+then `guix gc`. Every refusal is printed as `NOT PROMOTED: …` and the
 default is untouched. Expect the device to be silent for ~30 s around
 the kexec; the reader is back with the page it had.
 
 **On the device**, `wilkbook-generation list | add | trial N | health
-[--expect S] | promote N | demote | prune --keep K` are the same
-verbs; `deploy.sh DEVICE --rollback N` is trial+health+promote of an
-existing generation.
+[--expect S] | promote N | demote | pin N | unpin N | prune --keep K`
+are the same verbs; `deploy.sh DEVICE --rollback N` is
+trial+health+promote of an existing generation.
+
+**When to pin (2026-09-04).** After a cold boot proves a generation —
+its own device tree, no kexec in its lineage — run
+`wilkbook-generation pin N` on the device: `prune` (the deployer's or
+yours) then never deletes it, whatever `KEEP` says, and `list` shows it
+`[pinned]`. Until the pin existed the only cold-booted generation was
+kept by nothing but the size of the window: the generation-16 deploy
+(`KEEP=8`) pruned generation 8 and left generation 10, the previous
+cold-booted one, as the seventh of the eight kept — the next deploy at
+the default `KEEP=5` takes it, one at `KEEP=8` the deploy after. Pin
+before the next deploy, not after it: the deployer's `prune --keep
+$KEEP` runs right after `promote`, before you can type `pin`. On the
+deploy that first lands the verb the running helper (generation 16's)
+has no `pin`; `touch /boot/gen-N/pinned` by hand is the same marker,
+and the new generation's helper — which is what runs that prune, after
+the kexec — honours it. `unpin N` when a
+newer generation has been cold-booted and pinned in its place; a pinned
+generation costs only its store delta, so there is no hurry. The marker
+is `/boot/gen-N/pinned` and goes with the generation if you ever prune
+it after unpinning. Glass proof still owed, with preconditions: `pin
+16` then a prune on 16 proves nothing while 16 is `DEFAULT` and booted
+(prune never takes either, pin or no pin), and 16's helper cannot pin
+at all. So: (1) `make deploy` a generation built from this tree — at
+the default `KEEP=5` 16 stays as the second newest and 9–12 go,
+generation 10 included, unless `/boot/gen-10/pinned` was touched first
+or `KEEP=8` is used again; (2) from that newer, promoted and booted
+generation, `pin 16` (and `pin 10` if it is to stay); (3) `prune
+--keep 1`, which deletes every unpinned generation between; (4) `list`
+still shows 16 `[pinned]`.
 
 **Rules learned on glass (2026-09-02, `doc/update-path.md` "Glass
 notes"):**
@@ -397,7 +426,8 @@ notes"):**
   the watchdog resets it (or if it doesn't): the power button, then
   `uboot-pick-slot.sh --slot os2`.
 - Anything that changes early boot (kernel, DTB, command line) wants
-  both proofs: the kexec trial and a cold boot from the menu.
+  both proofs: the kexec trial and a cold boot from the menu — then
+  `pin` it.
 - While a session needs stable SSH, pause auto-suspend
   (`/data/wilkbook/autosuspend.conf` = `enabled=0`) — and remember
   that with the pause in place KOReader's sleep screen still paints;

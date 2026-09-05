@@ -81,10 +81,12 @@ community convention and stays).
 - [ ] Retire the kexec-only `initcall_blacklist=rockchip_grf_init` with
       the kernel fix (a clock reference on the pipe GRF syscon;
       `doc/upstream-register.md` 22), then send it upstream.
-- [ ] A ledger `pin` for known-good generations: `prune` keeps the
-      newest, which are the least proven, and the only cold-booted
-      generation is kept in the `KEEP` window by hand today
-      (2026-09-04; the review's S5).
+- [x] A ledger `pin` for known-good generations (2026-09-04, the
+      review's S5): `wilkbook-generation pin N` / `unpin N`, a marker
+      in `/boot/gen-N`, honoured by `prune` alongside `DEFAULT` and the
+      booted generation, shown by `list`; offline-proven (planner cases,
+      static pins, the QEMU rig). The glass half — `pin 16`, then a
+      prune that would have taken it — is owed (`doc/hardware-deploy.md`).
 - [ ] A trial that dies after the helper's own Wi-Fi off (an EBC that
       never goes idle, a failed `kexec -l`) strands the reader stopped
       and silent, and the deployer misreads it as a dead trial the
