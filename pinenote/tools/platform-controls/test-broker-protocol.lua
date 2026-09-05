@@ -5,6 +5,7 @@ local function check(value, label)
     if not value then failures = failures + 1 end
 end
 local now, trace, outcomes, preparation_allowed, preparation_reason = 100, {}, {}, true, nil
+local suspend_advance = 0 -- how long the fake suspend "lasts" (advances now inside it)
 local p = protocol.new{
     now = function() return now end,
     can_prepare = function()
@@ -14,6 +15,7 @@ local p = protocol.new{
     emit_wakeup = function() trace[#trace + 1] = "wake" end,
     suspend = function(fallback, id, trigger)
         trace[#trace + 1] = table.concat({ "suspend", tostring(fallback), id or "-", trigger or "-" }, ":")
+        now = now + suspend_advance
         return unpack(table.remove(outcomes, 1) or { true, "button" })
     end,
     log = function(message) trace[#trace + 1] = "log:" .. message end,
@@ -82,11 +84,26 @@ now = now + 20
 outcomes[1] = { true, "cover" }
 check(p:tick() and p:ready("settle-cover-1") and p:status().resuspend_at == nil,
       "quirk: a settle re-suspend that ends in a cover wake clears the deadline too")
+-- The fix's other half: a KOReader-initiated transaction that FAILS inside a
+-- live settle window clears the deadline too -- before, the settle
+-- re-suspend still fired on top of the failed sleep.
 outcomes[1] = { true, "rtc" }
 check(p:ready("rtc-4"), "RTC wake")
-now = now + 20
 outcomes[1] = { false, "EBC busy" }
-check(p:tick() and not p:ready("settle-fail-1") and p:status().resuspend_at == nil and p:status().state == "IDLE",
-      "a settle re-suspend that fails drops the deadline instead of retrying every tick")
+ok = p:ready("koreader-fail-1")
+check(not ok and p:status().resuspend_at == nil and p:status().state == "IDLE",
+      "quirk: a KOReader-initiated transaction that fails inside the settle window drops the deadline")
+-- The fallback path (KOReader missed the ack) must measure the settle from
+-- the WAKE: computed from the tick that started a suspend an hour earlier,
+-- the deadline was already due at the next tick and the reader re-suspended
+-- before Wi-Fi could associate.
+check(p:physical_request("rtc"), "RTC request that KOReader will not answer")
+now = now + 11
+suspend_advance = 3600
+outcomes[1] = { true, "rtc" }
+check(p:tick(), "fallback suspend after ten seconds")
+suspend_advance = 0
+check(p:status().resuspend_at == now + 20,
+      "quirk: the fallback path's settle deadline is measured from the wake, not from before the suspend")
 
 os.exit(failures == 0 and 0 or 1)

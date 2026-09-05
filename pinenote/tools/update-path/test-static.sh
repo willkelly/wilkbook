@@ -110,3 +110,11 @@ after 'recover_after_failed_trial() {' 'wait "$watcher" && wait_for_ssh' "$deplo
 sed -n '/^recover_after_failed_trial() {/,/^}/p' "$deploy" | grep -q '^  exit 1$'
 ! grep -q 'never answered; a power-cycle boots' "$deploy"
 echo "PASS: a trial that never answers is recovered over the UART when one is configured, and never promoted"
+# The watcher runs in its own process group and is reaped as a group, on both
+# paths, and never through a bare kill that set -e can turn into an abort
+# (review 2026-09-04: a watcher that had done its job and exited made the
+# deployer die between a passed ssh wait and promote).
+grep -q 'setsid sh "$repo/pinenote/scripts/uart/uboot-pick-slot.sh"' "$deploy"
+[ "$(grep -c 'kill -- -"$watcher" 2>/dev/null || true' "$deploy")" -eq 2 ]
+! grep -q 'kill "$watcher"' "$deploy"
+echo "PASS: the UART watcher is reaped as a process group, and a dead watcher cannot abort a successful deploy"

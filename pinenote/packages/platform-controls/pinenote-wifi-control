@@ -140,7 +140,13 @@ status)
 on)
     if wifi_on; then say "already on pid=$pid"; exit 0; fi
     [ -f "$conf" ] || { say "missing $conf"; exit 1; }
-    if [ -e "$pidfile" ]; then
+    if valid_pid; then
+        # A live supplicant with no wlan0 -- the driver gave up under it.
+        # Stop it before the rebind hands it an interface to fight the new
+        # one for (wpa_supplicant re-attaches to its ifname on RTM_NEWLINK).
+        say "stopping the supplicant that lost its interface (pid=$pid)"
+        stop_supplicant || exit 1
+    elif [ -e "$pidfile" ]; then
         say "removing stale or foreign pid file"
         rm -f "$pidfile"
     fi
@@ -166,7 +172,8 @@ on)
     fi
     ;;
 assoc-watch)
-    trap 'rm -f "$watchpid"' EXIT
+    # only our own record: a later `on` may already have written a newer watcher's pid
+    trap 'if [ "$(sed -n 1p "$watchpid" 2>/dev/null)" = "$$" ]; then rm -f "$watchpid"; fi' EXIT
     # One association retry: a supplicant that comes up against a radio still
     # settling after the reload can sit unassociated; a fresh start fixes it.
     # No AP in range looks the same and is not a fault, so the result is
@@ -193,7 +200,7 @@ off)
     if valid_pid; then
         printf 'on\n' > "$state"
         if [ "${PINENOTE_WIFI_NO_KILL:-0}" != 1 ]; then
-            "$kill_cmd" "$pid"
+            "$kill_cmd" "$pid" 2>/dev/null || true
             i=0
             while [ -e "$proc_root/$pid" ] && [ "$i" -lt 50 ]; do sleep 0.1; i=$((i + 1)); done
             [ -e "$proc_root/$pid" ] && { say "supplicant did not exit"; exit 1; }

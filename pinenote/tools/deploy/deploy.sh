@@ -47,6 +47,8 @@ recover_after_failed_trial() {
     else
       echo "the device did not come back on its own: power-cycle it; the U-Boot default is os1 and extlinux's DEFAULT is still the previous generation" >&2
     fi
+    # the picker's UART reader outlives it by design; reap it once the boot is captured
+    kill -- -"$watcher" 2>/dev/null || true
   else
     echo "NOT PROMOTED: generation $gen never answered; the watchdog resets it into U-Boot (default os1) -- pick os2 at the menu, or set WILKBOOK_UART=/dev/ttyUSB0 to have this done for you" >&2
   fi
@@ -62,7 +64,12 @@ trial_health_promote() {
   watcher=""
   if [ -n "${WILKBOOK_UART:-}" ] && [ -e "$WILKBOOK_UART" ]; then
     uart_log=${TMPDIR:-/tmp}/wilkbook-uart-recover-$$.log
-    sh "$repo/pinenote/scripts/uart/uboot-pick-slot.sh" "$uart_log" --slot os2 --tty "$WILKBOOK_UART" > "$uart_log.pick" 2>&1 &
+    # Its own process group (setsid execs in place from a non-interactive
+    # shell, so $! IS the group leader): the picker leaves its `cat` of the
+    # UART running by design, and killing only the sh orphaned one reader
+    # per deploy -- two readers on one tty split the bytes and the menu
+    # match can miss (review 2026-09-04).
+    setsid sh "$repo/pinenote/scripts/uart/uboot-pick-slot.sh" "$uart_log" --slot os2 --tty "$WILKBOOK_UART" > "$uart_log.pick" 2>&1 &
     watcher=$!
     echo "== UART watcher armed on $WILKBOOK_UART (pid $watcher): a dead trial resets into U-Boot and is picked back to os2"
   fi
@@ -74,7 +81,10 @@ trial_health_promote() {
   echo "== waiting for the new generation to answer ssh"
   sleep 15
   if wait_for_ssh; then
-    [ -z "$watcher" ] || kill "$watcher" 2>/dev/null
+    # `|| true`: under set -e a kill of an already-exited watcher (the very
+    # case the watcher exists for -- it picked os2 and left) aborted the
+    # deployer between a passed ssh wait and health/promote, silently.
+    [ -z "$watcher" ] || kill -- -"$watcher" 2>/dev/null || true
   else
     recover_after_failed_trial "$gen" "$watcher"
   fi

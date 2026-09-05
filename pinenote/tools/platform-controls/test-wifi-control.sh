@@ -86,3 +86,17 @@ pid_now=$(cat "$t2/run/wpa_supplicant-wlan0.pid")
 run2 status >/dev/null && pass "status reports on after the retry" || fail "status after retry"
 grep -q "restarting the supplicant once" "$t2/run/wifi.log" && grep -q "rebound brcmfmac" "$t2/run/wifi.log" && pass "the script logs its own messages to wifi.log" || fail "wifi.log: $(cat "$t2/run/wifi.log" 2>/dev/null)"
 run2 off >/dev/null 2>&1 || fail "off after the watch"
+
+# 4. A live supplicant whose wlan0 vanished (the driver gave up under it):
+#    `on` must stop it before the rebind, not delete its pid file and start a
+#    second one that fights it for the re-appearing interface (2026-09-04).
+mkdir -p "$t2/sys/class/net/wlan0"; printf '1\n' > "$t2/sys/class/net/wlan0/carrier"
+ASSOC_WAIT=0 run2 on >/dev/null 2>&1 || fail "on for the orphan case"
+orphan=$(cat "$t2/run/wpa_supplicant-wlan0.pid"); before=$(cat "$t2/counter")
+rm -rf "$t2/sys/class/net/wlan0"; : > "$t2/sys/bus/sdio/drivers/brcmfmac/bind"
+err=$(run2 on 2>&1 >/dev/null) && fail "on succeeded with no interface" || true
+case "$err" in *"stopping the supplicant that lost its interface"*) pass "a supplicant without its interface is stopped, not orphaned";; *) fail "orphan messages: $err";; esac
+[ ! -e "$t2/proc/$orphan" ] || fail "the orphan supplicant (pid $orphan) is still alive"
+[ "$(cat "$t2/counter")" = "$before" ] || fail "a second supplicant was started over the orphan"
+[ ! -e "$t2/run/wpa_supplicant-wlan0.pid" ] || fail "pid file left behind"
+[ "$(cat "$t2/sys/bus/sdio/drivers/brcmfmac/bind")" = "mmc1:0001:2" ] || fail "rebind not attempted after stopping the orphan"

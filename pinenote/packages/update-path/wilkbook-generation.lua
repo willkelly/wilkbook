@@ -303,7 +303,7 @@ function commands.health(flag, expected)
 end
 
 function commands.prune(flag, keep)
-    keep = (flag == "--keep") and tonumber(keep) or 3
+    keep = (flag == "--keep") and tonumber(keep) or 5 -- the deployer's default too
     local gens = ledger_with_payloads()
     local plan = L.prune_plan(numbers_of(gens), default_number(gens), booted_number(gens), keep)
     if #plan == 0 then print("nothing to prune"); return end

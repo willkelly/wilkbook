@@ -80,7 +80,10 @@ function Protocol:tick()
     local ok, detail = self.suspend(true, nil, self.trigger)
     self.state, self.deadline, self.trigger = "IDLE", nil, nil
     self.emit_wakeup()
-    self:settle_after(ok, detail, now)
+    -- measured from the WAKE: `now` above is from before a suspend that may
+    -- have lasted the whole backstop hour, and a deadline computed from it
+    -- was already due at the next tick (review 2026-09-04)
+    self:settle_after(ok, detail, self.now())
     return ok, detail
 end
 
