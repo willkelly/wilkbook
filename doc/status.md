@@ -1,7 +1,420 @@
 # Hardware status
 
-Last updated: 2026-09-03. Update protocol: add a dated entry at the top
+Last updated: 2026-09-04. Update protocol: add a dated entry at the top
 after every hardware session; entries are per-device/per-operator.
+
+## 2026-09-04 (wkelly PineNote, operator mostly away) — the v0.3.0-prealpha candidate is generation 14: patch 14's guards behave on glass, the "zero-IRQ page turns" were the file manager, the trial notes were dying with the radio
+
+The candidate (`prealpha-candidate`: main + PRs #66, #70, #67, #69 + the
+adversarial review's fixes, `doc/reviews/2026-09-04-adversarial-review.md`)
+ran the unattended half of `doc/prealpha-session-2026-09-04.md`, no UART,
+operator away for most of it. Results by step.
+
+**0. Deploy.** `make deploy DEVICE=pinenote-os2 FLAVOR=reader KEEP=8`
+from a worktree at the review-fixed commit: 29 of 439 store paths
+missing, trial from generation 13, health ok, promoted — generation 14
+is `/gnu/store/69s3m2796p4ngzw9npmnn4isjigviw7h-system`, generations
+7–14 kept, nothing pruned. The kernel's build log was read this time:
+one warning in the EBC files, `frame_counter` unused at
+`rockchip_ebc.c:903` — hrdl's own declaration in the direct-mode patch,
+not patch 14's; the five dangling-else warnings of the first patch-14
+derivation are gone.
+
+**2. Patch 14 on glass.** EXTRACT_FBS with valid pointers still returns
+0 (three dumps: hints and prelim 2.6 MB each, packed 7.9 MB); RECT_HINTS with a well-formed batch
+applies (1 rect, then 100). The new guards: `rect_hint_batch=0` → the
+ioctl fails with errno 22 in 0.000 s (no spin, the kernel unchanged),
+70 000 rects → errno 7 (E2BIG); `dmesg` silent (no `WARNING:` from the
+queue_work assertion). The earlier `belief-grab`/`rect-hints` tools from
+`ebc-lab` need `LUA_PATH` pointed at their `ebclib.lua`.
+
+**3. Page turns — an instrument correction, not a regression.** Forty
+injected `KEY 158` turns three seconds apart produced forty-one
+`[pn-refresh] ui partial rect=0,0,1404,1872` lines and **zero** EBC
+interrupts, with the EBC runtime-suspended throughout. The panel was
+fine: a `herd restart reader-session` lands in KOReader's **file
+manager** (no `start_with` is seeded, so `lastfile` is not reopened —
+no `opening file` line after the restart, where every
+operator-started session in the log has one — the last on 2026-09-03
+at 16:53), and 158 there is a same-screen repaint the
+driver correctly drops — the 2026-08-26 "48 clamped same-page repaints"
+trap in a new coat. Re-run with the book open (`start_with="last"` set
+for the run, restored after): six turns, **47 interrupts each**, the
+driver's belief buffer different after every turn, runtime status
+`active` at 0.6 s, the reader logging `partial partial` (a real page)
+instead of `ui partial` (a menu). The reader restart itself cost 234
+interrupts (the open plus a full wash). Lesson recorded in
+`doc/testing.md`'s traps: **confirm an `opening file` line before an
+injected-turn measurement**; `turn-check.sh` (at the time a scratchpad
+script staged under `/data/wilkbook/tools`; in the tree since ad0ebca as
+`pinenote/tools/ebc-lab/turn-check.sh`) does the whole dance.
+
+**4. Driver rebind ×5** (reader stopped, unbind/bind of `fdec0000.ebc`
+four seconds apart): kthreads 2 throughout, `runtime_status` suspended,
+no `Unbalanced pm_runtime_enable`, no `WARNING`, and `VmallocUsed` up
+by 276 / 244 / 212 / 244 kB per cycle (31 980 → 32 956 kB) —
+`rockchip_ebc_ctx_release`/`ctx_free` printed **once**, before the
+first re-probe, and never for the four later unbinds. **Resolved from
+source the same afternoon** (a review workflow, two refuters per
+claim): the once-only `ctx_free` is the reader-era CRTC context (six
+`vmalloc`s of one plane each, ~15 MB — the same 15 MB `VmallocUsed`
+*dropped* on cycle 1) being freed when the first unbind's
+`drm_atomic_helper_shutdown` disables the still-enabled CRTC; with the
+reader stopped nothing sets a mode on the re-probed device, so no
+later cycle creates a context to free. The per-cycle residue is
+`lut_custom.luts`: one `vzalloc` of 14 temperature bins ×
+16 408 B = 228 kB per *successful* probe, freed nowhere (the
+212–276 kB spread is VMAP kernel-stack jitter). `/proc/vmallocinfo`
+on the running generation shows exactly one 57-page entry for this
+boot's single successful probe — and the failed first probe's leak as
+well: two 1926-page `packed_inner_outer_nextprev` buffers where one is
+live, and eight 642-page buffers where seven are accounted for (six
+context planes, the live `hints_ioctl`), i.e. ~10 MB per boot. And the boot's dmesg settles a doc
+error: the by-construction first probe fails at
+`rockchip_ebc_waveform_init` (`Unable to load custom_wf.bin`, 2.8 s),
+not at `drm_init`, so the probe-unwind patch never runs on the boot
+path and the rebind still logs `Unbalanced pm_runtime_enable!` (8.2 s)
+— the audit's item 2, glass-confirmed; `doc/kernel-forward-port.md`
+and upstream-register item 23 corrected. Suspend is balanced so far:
+`rockchip_ebc_ctx_free` count equals `PM: suspend entry` count (9/9
+mid-rig), one context freed and re-made per cycle. The product takes
+one failed and one successful probe per boot; nothing in the image
+unbinds repeatedly.
+
+**5. Device-tree notice — the notes could never arrive.** Trials
+14 → 9 → 14 both booted (health said 9, then 14), and neither trial's
+output carried a NOTE — because `commands.trial` logged them **after**
+its own `pinenote-wifi-control off`, and the ssh session watching it is
+on that radio. The deployer's generation-14 trial output shows the same
+truncation (only the first line, then ssh's timeout). Fixed in the
+candidate at 2cf0520: the two notes and the machine-model line are
+logged before the teardown, `test-static.sh` pins the order,
+`doc/update-path.md` says which lines reach ssh and which only the
+UART. The notice is therefore **proven only by a trial from a fixed
+generation** (15+), not by anything generation 14 did — **and it is,
+the same evening: generation 15** (`39khzlc4z03if3jr5wsp3vi4p0cjrlfc-system`,
+the candidate at 347a7b1 with the notice fix and the broker fix below;
+15 of 439 paths sent, trial from 14, health ok, promoted, generation 7
+pruned, 8–15 remain). The deployer's own trial output now carries
+`machine model "Pine64 PineNote v1.2" -> generation DTB` and the
+kexec'd-kernel NOTE before ssh's timeout line — and correctly no
+"differs" note, 14 and 15 sharing a DTB. A hand-run `trial 9` from 15
+printed the "differs" note (9's tree lacks the sdio_pwrseq delay) plus
+the kexec'd one, booted 9 (ssh back in 21 s); `trial 15` from 9's
+kernel with 15's helper printed both the other way and came back
+(21 s). DEFAULT stayed on 15 throughout. Every note the deployer can
+show has now been shown.
+
+**7. R3/R4.** The SNTP service logs `no --server configured`: the
+reader flavor ships `pinenote-timesync-service-type` with no server on
+purpose (privacy: no public pool by default — the design comment in
+`pinenote/services/timesync.scm`), so R3's "one sync after association"
+is unverifiable as written — R3 has since been redefined as the inert
+check this run satisfies, the with-server sync becoming R3s
+(`doc/glass-plan-2026-08.md`); the clock read correct UTC throughout.
+Fonts live inside `koreader-bin`; the seeded settings (`wifi_was_on`,
+`auto_restore_wifi`, the rotation profile) were present.
+
+**Hygiene.** Part 1 left `enabled=0` in `autosuspend.conf`; at 20:07 the
+operator's power press was rejected `globally inhibited` and the
+screensaver drew and undrew. The tester brief already names this trap;
+the session's wrap-up restores `enabled=1`.
+
+**6. The rig, part 2 — the KOReader idle path, at last.** `wifi-cycle.sh
+koreader-idle 120`, then `wifi-cycle-host.sh 15 45 300` (a
+workstation-side scratchpad wrapper, outside the repo, that starts and
+stops the device's `wifi-cycle.sh` over ssh or the ACM console and waits;
+backstop 45 s, settle 300 s), 20:18–21:50 UTC. The first three transactions
+(20:18–20:31) ran with the USB cable in and were broker-path only:
+**KOReader's AutoSuspend never fires while the battery reports
+charging** (its own rule — it reschedules by the full timeout instead of
+counting idle), and `rk817-battery/status` flaps to `Charging` with the
+cable in even at 99 %. The operator pulled the cable during that window;
+from the fourth transaction (20:33:17) on, KOReader's idle timer won
+every cycle. (The workstation only *observed* `Discharging` at 20:48,
+which is not when the cable came out; the broker log's first
+`trigger=koreader` at 20:33 is the real boundary.)
+
+| | |
+|---|---|
+| transactions ok | **32** (29 RTC wakes, 3 button) |
+| KOReader-initiated / RTC-initiated / power | **28** / 3 / 1 |
+| `on` calls / associated within 15 s | 32 / 31 (the one miss is the wake below) |
+| driver rebinds / supplicant restarts / restore failures / rejected requests | 0 / 0 / 0 / 0 |
+| `suspend_stats` | 32 / 0 (failed_prepare 0, failed_suspend 0) |
+| `PM: suspend entry` vs `rockchip_ebc_ctx_free` | 32 vs 32 — one context freed and re-made per cycle, balanced |
+| cyttsp5 `Validation of the wakeup response failed` (R6) | 31 of 32 resumes, plus one `HID power cmd execution timed out` at the first resume — the known handshake quirk, handled by the resume workaround |
+| `rxctl` / `attach failed` | 0 / 0 |
+| dmesg `WARNING` | 1: `dwc3 … No resource for ep0out` at the rig's first suspend (20:18:41), while the host still held the gadget on the cable — the gadget unbind under an attached host, not the display; harmless, the transaction completed |
+
+Wi-Fi after resume, on the direct kernel, through KOReader's own idle
+sleep: **27 of 28 measurable** — the 28th wake is the button wake below,
+whose radio came up and was torn down one second later by the stale
+settle deadline, before association could be observed; no cycle failed
+to restore. Combined with the overnight run's corrected count, that is
+**59 hands-off cycles** with zero restore failures; the rebind and the
+association retry have still never fired on glass.
+
+**Review follow-up, the same evening (branch bac9e4a; on the device as
+generation 16, below).** The tag-readiness review's userspace lens, re-run after the
+session limit killed it, found three things the day's runs could not
+have: the deployer's success branch killed its UART watcher with a bare
+`kill` under `set -e`, so the one scenario the watcher exists for (a
+dead trial reset by the dog, picked back to os2, the old DEFAULT
+answering ssh) would have aborted the deployer between the ssh wait and
+promote with no message — never seen because neither deploy today had a
+UART; the picker's `cat` of the tty outlived every deploy (two readers on
+one tty split the bytes); and `pinenote-wifi-control on`, finding a live
+supplicant with no `wlan0`, deleted its pid file and started a second
+one over it. All three fixed and pinned (`test-static.sh`, harness case
+4), plus the broker's fallback-path settle measured from the wake and
+the helper's `prune` default aligned to 5. They reach the device as
+generation 16 at the start of the operator half.
+
+**Generation 16, deployed with the UART attached — the deployer's
+watcher path on glass for the first time (20:31 MDT).** From the branch
+head (f64b093; system `8czi9ry1z0gph24n5yls7iiy83y4n0b8-system`, the
+kernel unchanged), `WILKBOOK_UART=/dev/ttyUSB0 make deploy … KEEP=8`:
+15 of 439 paths sent; `== UART watcher armed on /dev/ttyUSB0` printed
+before the trial; both helper lines (model, kexec'd-kernel note) arrived;
+the trial answered ssh on its own, health ok, promoted, generation 8
+pruned (9–16 remain). Afterwards neither the picker nor its `cat` of the
+tty was left running — the group reap works — and the watcher's capture
+holds the trial kernel's own boot console, 32 kB from `software IO TLB`
+to the Bluetooth firmware line and the EBC's temperature override:
+`doc/artifacts/pinenote-gen16-deploy-20260904/` (deploy log and capture,
+the reader's address redacted). The capture is **lossy** — bytes drop
+mid-line every few hundred (`CPUs=00000] ftrace:`), the raw `cat` of a
+1.5 Mbaud port with no termios setup — enough to see a boot, not a clean
+transcript; the picker's menu match rides on a single short string and
+has never fired on glass, so the recovery half of this path is still
+unproven. The device is on 16, `enabled=1`, the operator's half begins.
+
+**Operator half on generation 16, first pass (20:45 MDT, the
+operator's own words: "pages turn fine, pen works, cover and button
+slept and woke").** Items 2–4 of the plan's operator half, short of
+the rotations and the settle-window check: page turns on a real book,
+pen strokes, the cover and the power button each suspending and waking
+the reader through the broker on the fixed generation — `suspend_stats`
+2/0 on this boot. The two live-read artifacts of the earlier session
+are now files: the post-rig `turn-check.sh` run on generation 14
+(22:46 UTC, 47 IRQs a turn after 32 resumes) and a fresh
+`fb-damage-gates.sh` dump on 16 (G1 open, the reader master on card1),
+both in `doc/artifacts/pinenote-gen16-deploy-20260904/`. Still to run:
+the four rotations, the settle-window check of the broker fix, the cold
+boot of 16 with the UART, #51, R1/R2/R7.
+
+**Generation 16 COLD-BOOTED with the UART watcher (20:50 MDT) — the
+tag candidate without a kexec in its lineage, and the watcher's
+menu-pick half on glass for the first time.** `uboot-pick-slot.sh` armed
+in its own process group, `sync; reboot` over ssh: the watcher saw
+U-Boot's menu and picked os2 eight seconds later (`== menu seen at poll
+184: selected os2`, then `Retrieving file: /boot/extlinux/…`, `Starting
+kernel …`), ssh answered 41 s after the reboot command, and the device
+reports `booted_generation=16`, the same `current_system`, **no**
+`linux,booted-from-kexec`, **no** `initcall_blacklist` on the command
+line (a cold boot keeps the GRF init), zero `WARNING`/`timed out`, the
+one `Unbalanced pm_runtime_enable!`, the reader running. The capture
+(`doc/artifacts/pinenote-gen16-deploy-20260904/uart-coldboot.log`, 37 kB,
+address-redacted) holds SPL, U-Boot, the menu with both slots, extlinux,
+and the 7.1.8 boot line; a fragment reading "generation 15" in it is the
+extlinux menu's own entry list garbled by cursor escapes, not a wrong
+pick. Generations 9–16 remain; 16 is the only cold-booted one in the
+window (10 was pruned by this deploy's `KEEP=8`). One trap for hand-run
+watchers, not for the deployer: from a shell with job control a
+backgrounded `setsid` forks and `$!` is the wrapper, not the script;
+the script's own pid is the group to reap (the deployer runs from
+`make`, no job control, where `$!` is right and the reap was verified
+clean after the generation-16 deploy).
+
+**Operator half, second pass (21:10 MDT) — the tag's last two items.**
+All four rotations on a real page: fine. The settle-window check of the
+broker fix, on the cold-booted 16 with `backstop=60`: button sleep
+(`KEY_SLEEP` 03:08:57 UTC), the RTC woke it after 61 s (`detail=rtc`),
+the button slept it again 7 s into the settle window (03:10:10), the
+button woke it 11 s later (`detail=button`) — and it stayed awake,
+nothing re-suspended it. On generation 14 that last wake went dark after
+7 s; the fix holds on glass. `suspend_stats` 5/0 on this boot; config
+back to `enabled=1`. **`v0.3.0-prealpha` is cut here**, at the merge of
+PR #72, naming generation 16 (`8czi9ry1z0gph24n5yls7iiy83y4n0b8-system`,
+kernel `6rhnmj09…-linux-pinenote-7.1.8-pinenote.drv`). Not run for the
+tag, and listed as such: #51, R1/R2/R7, the optics check, a second
+operator on this lineage.
+
+**The rig also found a broker bug, on the operator's own button.** After
+the rig's `stop`, the last RTC wake at 21:48:44 had set the settle
+deadline (300 s); KOReader's idle timer suspended the device at
+21:50:51, inside that window; the operator pressed the power button at
+22:27:42 (37 minutes later), the broker resumed — and its next tick saw
+the *stale* deadline as due, emitted `KEY_SLEEP` in the same second, and
+re-suspended the reader at 22:27:49 with `trigger=rtc`. Seven seconds of
+wake, then dark: the reader looked dead. Only the second press at
+22:44:39 held (the deadline had been consumed). In `broker_protocol.lua`
+the deadline was set after an RTC-detail suspend and never cleared by a
+suspend that ended any other way; in the product the window is the
+20-second `rtc_settle` after the hourly backstop, so a button or cover
+sleep inside that window would arm the same trap for the next wake.
+**Fixed in the candidate**: every suspend completion clears the deadline
+unless its wake was the RTC (`settle_after`), pinned by four new
+`test-broker-protocol.lua` cases (button wake, cover wake, a failed
+settle re-suspend, and the RTC re-arm that must survive).
+
+**Post-resume page turns, after those 32 cycles** (`turn-check.sh 6` at
+22:46 UTC, the book open, `fb0/state=0`): 47 frames per turn again, the
+framebuffer's own hash and the driver's belief both different after
+every turn, runtime status `active` at 0.6 s — the fbdev damage path is
+intact after a day of rails-off resumes on the kernel that deleted the
+forward-port's fbdev resume barrier. `fb-damage-gates.sh`: G1 open, the
+reader holds DRM master on card1, plane fb=40, CRTC active. *Provenance:
+this run's output and the gate dump were read live and are on the device
+at `/root/turn-check.log`; the copy in the session's artifact directory
+is the earlier 20:15 run (before the rig), and the device was asleep
+when the later one was to be fetched. Copy both during the operator
+half.* Four other numbers in this entry — `suspend_stats`, the 20:07
+`globally inhibited` rejection, the idle-timer value at the rig's end,
+and the `/proc/vmallocinfo` page counts — were likewise read live and
+not saved as files.
+
+**Housekeeping the rig taught.** `wifi-cycle.sh report` counted every
+run since the *first* start mark (an awk latch) — fixed to the last
+mark; earlier reports over-count if the broker log was never rotated.
+And the rig's `koreader-idle 900` restore did not land before the
+device slept (the settings file still said 120 at the end): the reader
+came back at 15 minutes only after the post-rig restart.
+
+## 2026-09-03/04 overnight (wkelly PineNote, operator away) — the Wi-Fi fix's four layers held for 27 hands-off cycles; generations 11 and 12 are console-enabled convenience builds
+
+**Access.** With the UART unplugged and the operator away, the reader's
+USB gadget console was made real: generation 11 is generation 10's code
+rebuilt with `WILKBOOK_VERY_INSECURE_FOR_CONVENIENCE=1` (a no-login
+`reader` shell with passwordless sudo on `/dev/ttyACM1`; the build
+marker in `/etc/wilkbook-build` says so). Two traps recorded: the port
+exists only while the reader is awake (the broker unbinds the gadget for
+suspend), and ModemManager on the workstation probes a new ACM port with
+AT commands and leaves the remote shell in a continuation prompt — two
+Ctrl-C bytes reset it (`scratchpad/acm.sh` does that first). `/dev/ttyACM0`
+here is a MOTU audio interface; never write to it.
+
+**Layer 4, deployed as generation 12** (branch `wifi-koreader-memory`,
+PR #70, console kept): the device layer reasserts KOReader's
+`wifi_was_on` from the control script's own record on every resume
+(`doc/networking.md` §8 — the root cause of every idle-sleep loss
+today); the script's association retry runs detached and every message
+also lands in `/run/wilkbook-power/wifi.log`; the broker takes an
+`rtc_settle=` config key. Deploy: 24 paths, trial from generation 11,
+health ok, promoted, generation 6 pruned (7–12 remain).
+
+**Rig v2, judged from the device's own logs** (`wifi-cycle.sh` v2: one
+injected power tap, then the broker suspends, RTC-wakes after the
+backstop, restores Wi-Fi, stays awake `rtc_settle` seconds and
+re-suspends; `report` counts the broker log and `wifi.log`):
+
+| phase | config | transactions ok | RTC wakes | KOReader-initiated | `on` calls / associated within 15 s | restore failures | dmesg |
+|---|---|---|---|---|---|---|---|
+| A, broker path | backstop 45, settle 60, 12 cycles (~25 min) | 30 | 26 | 2 | 14 / 14 | 0 | 0 warnings |
+| B, KOReader path | idle timer 120 s, backstop 45, settle 200, 12 cycles (~57 min) | 43 | 39 | 2 | 13 / 13 | 0 | 4 × `suspend_test_finish` |
+
+**CORRECTION, 2026-09-04 (a review of this entry against its own
+artifacts).** The broker-log columns above — transactions, RTC wakes,
+KOReader-initiated — are **cumulative, not per phase**: `report`'s awk
+latched on the *first* `cycle test start` mark in the broker log, so
+phase B's figures contain phase A's and phase A's contain the previous
+night's run (the latch is fixed as of 2026-09-04; reports taken before
+that date over-count unless the log was rotated). The per-phase truth
+is in the two columns that were reset each run and in the kernel's own
+counter: **phase A = 14 cycles, phase B = 13, twenty-seven in all** —
+`wifi.log` (truncated at every start) shows 14 then 13 `on`/`associated
+within 15 s`, and `suspend_stats` reads 14/0 at the end of A and 27/0 at
+the end of B. The trigger split cannot be recovered from these logs at
+all, so the "2 KOReader-initiated" in each row is not evidence of
+anything; the KOReader-idle path's real measurement is the 2026-09-04
+rig above (28 of 32). What is unaffected: zero rebinds, zero association
+retries, zero restore failures, `wifi_was_on` true at the end, no
+`rxctl`/`attach failed`.
+
+Zero rebinds were needed (the driver-attach failure of 16:42 did not
+recur in 27 resumes), zero association retries, `wifi_was_on` true at
+the end, `suspend_stats` 27/0, no `rxctl`/`attach failed` lines.
+**Two caveats, stated plainly.** (1) Phase B was meant to make KOReader
+initiate every sleep (its idle timer set to 120 s, shorter than the
+broker's 200 s settle), but the broker logged only two
+KOReader-initiated transactions in each phase — most sleeps were still
+the broker's own RTC re-suspends. Both KOReader-initiated wakes
+restored Wi-Fi, which is the path the bug lived on, but two samples is
+thin; why the idle timer rarely won the race is not understood (a
+KOReader AutoSuspend rule about external power is the first suspect —
+the reader was on USB throughout). [Understood 2026-09-04: that rule is
+it — KOReader's AutoSuspend never fires while the battery reports
+charging, and the reader was on USB; the entry above measured the idle
+path with the cable out, 28 of 32.] (2) `wifi_was_on` read false in the
+settings file for the first minutes after the boot despite the device
+layer's start-up assertion: the file reflects KOReader's memory only at
+its next flush (it flipped true after the first cycle) — consistent with
+the design, but the start-up half is proven only indirectly. The four
+kernel warnings are `kernel/power/suspend_test.c:53`, the PM debug
+timer: a suspend or resume phase took longer than its 10 s budget four
+times in phase B ("suspend devices took 9.8 s" is already routine on
+this image); a performance note, not a failure.
+
+**End state:** generation 12 DEFAULT and booted, awake on USB power,
+auto-suspend config `enabled=1` (charging inhibits suspend), KOReader's
+idle timer back at 900 s. Generations 11 and 12 are convenience builds
+— a normal build of the same code must be deployed before the reader
+is handed back to reading.
+
+## 2026-09-03 late night (wkelly PineNote) — the Wi-Fi-after-resume fix is generation 10; a trial cannot deliver a device tree; the cycle rig's first run
+
+**Deploy.** Branch `wifi-after-resume` (532b509; PR #66: the control
+script rebinds the SDIO driver and retries the association, the broker
+logs a failed restore, kernel patch 13 adds `post-power-on-delay-ms =
+<100>` on `sdio_pwrseq`) deployed by a Sonnet subagent with no UART:
+20 of 441 paths moved, generation 10, trial from generation 9, health
+ok, promoted; generation 4 pruned (seven registered, KEEP=6; 5–10
+remain). The first attempt stopped at its gate because the device was
+unreachable: it had slept, the charger woke it, and the old restore lost
+the radio — the operator's KOReader Wi-Fi toggle (the same script's
+`on`) brought it back seconds later. Second class of failure, seen
+twice today: driver fine, the resume-time `on` gives up.
+
+**A trial runs on the running device tree.** Generation 10's staged
+DTB carries the new property (one match; generation 9's none); the
+kexec'd kernel's `/sys/firmware/fdt` did not, and it carried U-Boot's
+`serial-number`. kexec-tools 2.0.31 tries `kexec_file_load` first and
+its arm64 loader ignores `--dtb` on that path (source, `kexec.c:1481`,
+`kexec-arm64.c:184–190`). Every trial so far has booted the running
+tree; DTB changes only land on a cold boot. The helper now says so at
+trial time when the two staged DTBs differ (PR #67);
+`doc/update-path.md`.
+
+**The cycle rig, first run.** `wifi-cycle.sh start 60` (autosuspend
+config `enabled=1 suspend_while_charging=1 backstop=60`, one KEY_POWER
+tap injected into the rk805 pwrkey evdev node — the first version split
+each 24-byte event across five writes and evdev refused them with
+EINVAL; one write per event works). The broker then cycled by itself:
+suspend, RTC wake after 60 s, restore, 20 s settle, re-suspend —
+**eleven RTC cycles, thirteen transactions, all `ok=true`, zero
+`Wi-Fi restore failed`**. Nothing else is known: the control script's
+own messages do not reach the broker's log (its stdout is not
+captured), and the host never got an SSH window in the ~25 s the
+device stayed awake (one-second retries for five minutes; ARP and DHCP
+after a fresh association eat most of it). So the userspace layer
+returned success eleven times in a row on the kexec'd generation 10;
+whether it ever had to rebind or retry is not recorded. Rig v2: make
+the broker's RTC settle a config key so windows can be long, have the
+script log to its own file, judge from the device's log only.
+
+**Recovery and the cold boot.** The device was left cycling
+unreachable until the UART came back; the capture and watcher were
+restarted, a reset at 20:23 (DDR init on the UART) brought U-Boot's
+menu, the watcher picked os2, and **generation 10 cold-booted on its
+own tree: `sdio-pwrseq/post-power-on-delay-ms` reads 0x64, no
+`linux,booted-from-kexec` in chosen, Wi-Fi up, PMIC `SYS_CFG3` 0x20.**
+Config restored to `enabled=1` (charging inhibits suspend). Layer 3 is
+live from this boot; unproven against the failure it targets.
+
+**End state:** generation 10 DEFAULT and cold-booted, awake on charge,
+auto-suspend normal. Open: rig v2 and its run; the association-retry
+class; upstreaming patches 8 and 13.
 
 ## 2026-09-03 night (wkelly PineNote) — merged main deployed as generation 9: the twelve-patch reader is DEFAULT
 

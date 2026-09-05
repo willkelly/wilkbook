@@ -46,13 +46,14 @@ tested. `README.md` says so at the top and means it.
    is not optional here — it is what routes the build through
    `channels.scm`, and without it this step builds against your ambient
    `guix` and quietly forfeits the byte-identical-rebuild claim made
-   three paragraphs above. **Caveat (2026-08-25): this only works if
-   step 2 actually happened.** The pin committed today predates the
-   kernel's `nongnu:linux-7.1` series pin, so `TIME_MACHINE=1` against
-   it fails outright (`Unbound variable: nongnu:linux-7.1`). A fresh
-   `make channels-pin` in step 2 is what repairs that; do not skip it
-   and do not "work around" a time-machine failure by dropping the flag
-   here — a release built ambient is a release nobody can rebuild.
+   three paragraphs above. **This only works if step 2 actually
+   happened**: on 2026-08-25 the committed pin briefly predated the
+   kernel's `nongnu:linux-7.1` series pin and `TIME_MACHINE=1` failed
+   outright (`Unbound variable: nongnu:linux-7.1`) until the pin was
+   re-made the same day; re-checked 2026-09-04, the pinned and ambient
+   `make kernel-drv` resolve the identical derivation. Do not skip step
+   2 and do not "work around" a time-machine failure by dropping the
+   flag here — a release built ambient is a release nobody can rebuild.
 4. **Write the manifest**: `make release-manifest ROOTFS=<the .ext4>`,
    which writes `SHA256SUMS` carrying the hash, the git description, and a
    pointer to `channels.scm`. Commit it.
@@ -61,6 +62,17 @@ tested. `README.md` says so at the top and means it.
 6. **Tag, annotated**, naming the image hash in the tag message:
    `git tag -a v0.1.0-alpha -m "..."`. The hash then lives inside signed
    history rather than beside a download.
+
+**A tag that ships as generations rather than as an image**
+(`v0.3.0-prealpha`, 2026-09-04 — the first one where the device is
+updated by `make deploy` rather than by a `dd`'d image) has no single
+artifact to name, so steps 3, 4 and 6 change: the tag message names the
+**promoted generation's system store path and its kernel derivation**
+instead of a rootfs hash, and the manifest step is skipped. Steps 1, 2,
+5 and 7 are unchanged and still binding — in particular the channel pin
+(step 2) must be re-made if anything under `pinenote/packages` moved
+since the last one, because that pin is the only thing that lets a
+second person rebuild the same generation.
 7. **Commit the signed-off record** from `doc/alpha-signoff.md` §4 and
    add the `doc/status.md` entry.
 

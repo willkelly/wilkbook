@@ -23,6 +23,19 @@ grep -q 'model:find("PineNote", 1, true)' "$helper"
 grep -q 'running device tree reused' "$helper"
 grep -q 'console=ttyS2,%d+n%d", "console=ttyAMA0"' "$helper"
 echo "PASS: trial boot tears down like a suspend, quiesces the EBC, and never touches DEFAULT"
+# What the operator must hear is logged BEFORE the reader stop that leads the
+# teardown: the radio goes off next, and whoever watches a trial over ssh is on
+# that radio (2026-09-04: both device-tree notes lost through two trials).
+after 'machine model %q -> %s' 'herd stop reader-session' "$helper"
+after 'NOTE: generation %d' 'herd stop reader-session' "$helper"
+after 'NOTE: the running kernel was kexec' 'herd stop reader-session' "$helper"
+# Stated against the radio-off literally too (the reader-stop pin above chains
+# to it, but the requirement is the radio), and the notes' wording is pinned:
+# until 2026-09-04 nothing held either NOTE's text.
+after 'NOTE: the running kernel was kexec' 'WIFI .. " off' "$helper"
+grep -q 'kexec_file_load ignores --dtb' "$helper"
+grep -q 'linux,booted-from-kexec' "$helper"
+echo "PASS: the device-tree notes are logged before the radio goes off"
 # add materializes every profile generation's payload (the shipped one has no /boot/gen-N).
 grep -q 'ensure_payload(g)' "$helper"
 grep -q 'ledger_with_payloads()' "$helper"
@@ -39,8 +52,9 @@ grep -q 'guix archive --missing' "$deploy"
 ! grep -q 'guix archive --export -r' "$deploy"
 grep -q 'guix archive --import' "$deploy"
 echo "PASS: deployer promotes only after health, cross-builds, sends only the missing paths, and reports refusals"
-# The trial's ssh session dies with the old kernel and kexec never closes the
-# TCP connection; without keepalives the client hangs forever (2026-09-02).
+# The trial's ssh session dies without a FIN (on QEMU with the old kernel, on a
+# PineNote at the helper's Wi-Fi off) and nothing closes the TCP connection;
+# without keepalives the client hangs forever (2026-09-02).
 harness="$here/../../scripts/qemu/run-virt-update-flow.sh"
 [ "$(grep -c '^vm_trial "wilkbook-generation trial' "$harness")" -eq 2 ]
 ! grep -q '^vm "wilkbook-generation trial' "$harness"
@@ -88,7 +102,19 @@ echo "PASS: the trial holds the PIPE domain up and arms the watchdog last, both 
 # deployer drives the menu back to os2 after the watchdog reset; without one it
 # says what to do.  Never promotes on that path.
 grep -q 'recover_after_failed_trial "$gen"' "$deploy"
-after 'recover_after_failed_trial() {' 'uboot-pick-slot.sh" "$log" --slot os2' "$deploy"
+# 2026-09-04: the watcher is armed BEFORE the kexec (the watchdog reset comes
+# within minutes and U-Boot's menu shows for 15 s); recovery then waits on it.
+after 'trial_health_promote() {' 'uboot-pick-slot.sh" "$uart_log" --slot os2' "$deploy"
+after 'uboot-pick-slot.sh" "$uart_log" --slot os2' 'wilkbook-generation trial' "$deploy"
+after 'recover_after_failed_trial() {' 'wait "$watcher" && wait_for_ssh' "$deploy"
 sed -n '/^recover_after_failed_trial() {/,/^}/p' "$deploy" | grep -q '^  exit 1$'
 ! grep -q 'never answered; a power-cycle boots' "$deploy"
 echo "PASS: a trial that never answers is recovered over the UART when one is configured, and never promoted"
+# The watcher runs in its own process group and is reaped as a group, on both
+# paths, and never through a bare kill that set -e can turn into an abort
+# (review 2026-09-04: a watcher that had done its job and exited made the
+# deployer die between a passed ssh wait and promote).
+grep -q 'setsid sh "$repo/pinenote/scripts/uart/uboot-pick-slot.sh"' "$deploy"
+[ "$(grep -c 'kill -- -"$watcher" 2>/dev/null || true' "$deploy")" -eq 2 ]
+! grep -q 'kill "$watcher"' "$deploy"
+echo "PASS: the UART watcher is reaped as a process group, and a dead watcher cannot abort a successful deploy"

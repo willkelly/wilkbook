@@ -544,6 +544,25 @@ do
     end
 end
 
+-- The shipped default, EXECUTED rather than read: with no --server the
+-- daemon says so once and exits 0 before the main loop and before any
+-- socket (R3 as the reader ships, doc/glass-plan-2026-08.md, held on
+-- glass 2026-09-04).  Until then every invocation here carried --server,
+-- so the inert path was source-derived only.
+do
+    local out = tmp .. ".noserver"
+    os.remove(out)
+    os.execute(("{ timeout 10 %s %s --once --dry-run --skip-route-check > %s 2>&1; echo \"EXIT=$?\" >> %s; }")
+        :format(luajit, source_path, out, out))
+    local text = slurp(out) or ""
+    os.remove(out)
+    report(text:find("EXIT=0", 1, true) ~= nil, "no --server: the daemon exits 0", text)
+    local _, n = text:gsub("no %-%-server configured", "")
+    report(n == 1, "no --server: the daemon says so exactly once and does not loop", text)
+    report(text:find("WOULD%-SET") == nil and text:find("stepped") == nil,
+        "no --server: nothing was queried or set", text)
+end
+
 if failures > 0 then
     print(("\n%d check(s) failed"):format(failures))
     os.exit(1)

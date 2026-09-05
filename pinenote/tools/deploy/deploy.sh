@@ -3,7 +3,7 @@
 # doc/update-path.md.  Every step refuses rather than guesses; a failed
 # health check leaves DEFAULT on the previous generation and exits 1.
 #
-#   usage: deploy.sh DEVICE [FLAVOR] [KEEP]        (FLAVOR default reader, KEEP 3)
+#   usage: deploy.sh DEVICE [FLAVOR] [KEEP]        (FLAVOR default reader, KEEP 5)
 #          deploy.sh DEVICE --rollback N           trial+health+promote an existing generation
 #
 # WILKBOOK_UART=/dev/ttyUSB0 (optional): with the debug cable attached, a
@@ -38,15 +38,17 @@ wait_for_ssh() {
 # Without one, this reports what to do.  Either way: exit 1, nothing
 # promoted.
 recover_after_failed_trial() {
-  gen=$1
-  if [ -n "${WILKBOOK_UART:-}" ] && [ -e "$WILKBOOK_UART" ]; then
-    echo "NOT PROMOTED: generation $gen never answered; waiting for the watchdog reset and picking os2 at the U-Boot menu ($WILKBOOK_UART)" >&2
+  gen=$1; watcher=${2:-}
+  if [ -n "$watcher" ]; then
+    echo "NOT PROMOTED: generation $gen never answered; the watcher armed before the kexec waits for the watchdog reset and picks os2 at the U-Boot menu ($WILKBOOK_UART)" >&2
     log=${TMPDIR:-/tmp}/wilkbook-uart-recover-$$.log
-    if sh "$repo/pinenote/scripts/uart/uboot-pick-slot.sh" "$log" --slot os2 --tty "$WILKBOOK_UART" && wait_for_ssh; then
+    if wait "$watcher" && wait_for_ssh; then
       echo "back on $(ssh_cmd 'readlink /run/current-system') (the previous DEFAULT); UART capture in $log" >&2
     else
       echo "the device did not come back on its own: power-cycle it; the U-Boot default is os1 and extlinux's DEFAULT is still the previous generation" >&2
     fi
+    # the picker's UART reader outlives it by design; reap it once the boot is captured
+    kill -- -"$watcher" 2>/dev/null || true
   else
     echo "NOT PROMOTED: generation $gen never answered; the watchdog resets it into U-Boot (default os1) -- pick os2 at the menu, or set WILKBOOK_UART=/dev/ttyUSB0 to have this done for you" >&2
   fi
@@ -55,14 +57,37 @@ recover_after_failed_trial() {
 
 trial_health_promote() {
   gen=$1; expect=$2; keep=$3
-  echo "== trial: kexec into generation $gen (DEFAULT unchanged; the ssh link dies with the old kernel)"
+  # The UART watcher must be listening BEFORE kexec -e: a trial that dies is
+  # reset by the watchdog within minutes, U-Boot's menu shows for 15 s, and
+  # its default is os1.  Started after the ssh wait (as until 2026-09-04)
+  # the watcher always arrived after the menu was gone.
+  watcher=""
+  if [ -n "${WILKBOOK_UART:-}" ] && [ -e "$WILKBOOK_UART" ]; then
+    uart_log=${TMPDIR:-/tmp}/wilkbook-uart-recover-$$.log
+    # Its own process group (setsid execs in place from a non-interactive
+    # shell, so $! IS the group leader): the picker leaves its `cat` of the
+    # UART running by design, and killing only the sh orphaned one reader
+    # per deploy -- two readers on one tty split the bytes and the menu
+    # match can miss (review 2026-09-04).
+    setsid sh "$repo/pinenote/scripts/uart/uboot-pick-slot.sh" "$uart_log" --slot os2 --tty "$WILKBOOK_UART" > "$uart_log.pick" 2>&1 &
+    watcher=$!
+    echo "== UART watcher armed on $WILKBOOK_UART (pid $watcher): a dead trial resets into U-Boot and is picked back to os2"
+  fi
+  echo "== trial: kexec into generation $gen (DEFAULT unchanged; the ssh link dies at the helper's Wi-Fi off, before the kexec)"
   # The trial runs the helper the TARGET generation ships, not the running
   # one: a fix to how a kexec is prepared must apply to the first kexec that
   # needs it (2026-09-02: the running helper could not skip the GRF init).
   timeout 90 ssh -o ConnectTimeout=10 -o BatchMode=yes -o ServerAliveInterval=5 -o ServerAliveCountMax=2 "root@$device" "\$(cat /boot/gen-$gen/system)/profile/bin/wilkbook-generation trial $gen" || true
   echo "== waiting for the new generation to answer ssh"
   sleep 15
-  wait_for_ssh || recover_after_failed_trial "$gen"
+  if wait_for_ssh; then
+    # `|| true`: under set -e a kill of an already-exited watcher (the very
+    # case the watcher exists for -- it picked os2 and left) aborted the
+    # deployer between a passed ssh wait and health/promote, silently.
+    [ -z "$watcher" ] || kill -- -"$watcher" 2>/dev/null || true
+  else
+    recover_after_failed_trial "$gen" "$watcher"
+  fi
   echo "== health"
   if ! ssh_cmd "wilkbook-generation health --expect $expect"; then
     echo "NOT PROMOTED: health check failed on generation $gen; DEFAULT still names the previous one" >&2
@@ -82,7 +107,7 @@ if [ "${2:-}" = "--rollback" ]; then
 fi
 
 flavor=${2:-reader}
-keep=${3:-3}
+keep=${3:-5}
 echo "== 1/7 build: pinenote-$flavor (cross, aarch64-linux-gnu)"
 system=$(cd "$repo" && guix system build --no-grafts -L . --target=aarch64-linux-gnu \
            "pinenote/systems/pinenote-$flavor.scm" | tail -n 1)

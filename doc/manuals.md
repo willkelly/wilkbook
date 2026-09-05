@@ -320,5 +320,7 @@ the full 30 s again. SIGINT triggers the clean close (proven: the 8 MB
 file appears and the 1.7 s open follows). Two fix directions: the
 INT-first stop LANDED (reader-session's stop now sends SIGINT and
 polls cooperatively before the kill fallback, pinned by
-`make reader-stop-check`; on-glass validation pending the next deployed
-image); staging-time cache pre-warm remains open.
+`make reader-stop-check`; the stop itself is glass-proven — 0.484 s on
+2026-08-26, `doc/status.md` part 5 — but whether the clean close writes
+the cache on the device still wants a check with a book open);
+staging-time cache pre-warm remains open.

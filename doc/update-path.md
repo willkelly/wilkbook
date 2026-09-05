@@ -3,9 +3,10 @@
 How a running reader gets a new OS without a cable, a boot menu, or a
 1.8 GB reflash — and how it gets the old one back. Written 2026-09-02
 after the broker+direct arc showed what "flash → boot menu → verify"
-costs per iteration. Status: **designed, phase 1 in progress; nothing
-below has run on glass.** `doc/status.md` is the truth; this page is the
-intent.
+costs per iteration. Status: **on glass since 2026-09-02** — fifteen
+generations on one device by 2026-09-04, the QEMU rig alongside ("Proof
+ladder" and "Glass notes" below). `doc/status.md` is the truth; this
+page is the design and what the glass taught.
 
 ## Goal
 
@@ -156,12 +157,48 @@ teardown as a suspend (EBC quiesce, gadget unbind, Wi-Fi off) before
   TPS65185 came through four warm restarts. What kexec *does* need on
   the RK3566 is in the glass notes below.
 - Store growth policy: how many generations to keep on a 15.7 GB slot
-  (default K=3), and when `guix gc` runs (only from the deployer, never
+  (the deployer's default `KEEP` is 5), and when `guix gc` runs (only from the deployer, never
   on a timer). First data point: four generations of the reader used
   2.0 GB of the 15 GB slot; prune to two took it to the same 2.0 GB
   (the generations share nearly everything).
 - Whether the nar transfer over Wi-Fi is fast enough for a kernel-sized
   delta (~100 MB) to feel routine.
+
+## Device-tree changes do not ride a trial (2026-09-03)
+
+A trial boots on the **running** kernel's device tree, whatever the
+helper's `--dtb` says. kexec-tools (2.0.31) tries `kexec_file_load`
+first, and its arm64 loader drops a user DTB on that path (it prints
+"(ignored)" only under `-d`; `kexec/arch/arm64/kexec-arm64.c`); the
+kernel then builds the next tree from the current one — U-Boot's
+`serial-number` and memory layout included, which is also why forcing
+the legacy syscall with `-c` is not the fix: our DTB files carry no
+memory node and no firmware reservations, U-Boot adds those at a cold
+boot. Proven 2026-09-03: generation 10's staged DTB carried a new
+`sdio-pwrseq` property, the kexec'd kernel's `/sys/firmware/fdt` did
+not, and it did carry U-Boot's `serial-number`.
+
+So a trial half-tests a generation whose device tree differs from the
+promoted one: the kernel, the userspace and the health check all run,
+the tree does not. Only a cold boot of the promoted generation runs its
+own DTB. The helper says so at trial time (`NOTE: generation N's device
+tree differs from the booted gen-M's …`) by comparing the target's
+staged DTB with the booted generation's, and adds a second note whenever
+the running kernel was itself kexec'd (its tree is the last cold boot's,
+which may be older still); the deployer prints both. Both notes, and
+the machine-model line, are logged **before** the trial's teardown
+begins: the teardown turns the radio off right after stopping the
+reader, and whoever watches a trial over ssh — the deployer, or a
+hand-run helper — is on that radio, so nothing logged after it ever
+arrives (2026-09-04: two trials in a row "never captured" the notes
+until this was seen; `test-static.sh` now pins the order). The lines
+that follow the radio-off (`kexec -e into generation N`, `watchdog
+armed`, the kexec binary's own stderr) reach only a UART login that
+ran the helper itself — the deployer never sees them, and the ACM
+console loses the same lines one statement later when the gadget is
+unbound. Until a cold boot has run, treat a
+device-tree change as undeployed — the Wi-Fi power-sequence delay
+(`doc/networking.md` §8) is the first one to wait for that.
 
 ## Glass notes (what the first kexecs on the PineNote taught, 2026-09-02)
 
@@ -375,8 +412,9 @@ the hang.
   from the passwd home and ignores `$HOME`; the signed nar pipe over
   OpenSSH (what `guix copy` does internally) is used instead, and sends
   only what `guix archive --missing` reports on the far side.
-- The `trial` ssh session dies with the old kernel, and kexec never
-  closes its TCP connection: a client without keepalives waits forever
+- The `trial` ssh session dies without a FIN — on QEMU with the old
+  kernel, on a PineNote earlier still, at the helper's own Wi-Fi off —
+  and nothing closes its TCP connection: a client without keepalives waits forever
   (the harness did, twice, with the guest already up as the new
   generation). `ServerAliveInterval` makes the replacement kernel answer
   the next probe with a reset within seconds; the caller's `timeout` is

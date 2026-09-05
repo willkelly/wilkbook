@@ -8,197 +8,270 @@ means an instrument or a log said so, and anything that is division from
 a measurement is labelled as such. Depth lives in `doc/`; these entries
 are pointers, not summaries.
 
-`v0.2.0-prealpha` (2026-08-27) is the current tag: the `reader-direct`
-image — the direct-mode driver is now the pre-alpha lineage. The
+`v0.3.0-prealpha` (2026-09-04) is the current tag: the
+update path (deploy without a cable) and the embrace sweep (one reader
+flavor, on the direct-mode kernel — no more direct-vs-shipping split)
+land together, on top of `v0.2.0-prealpha` (2026-08-27), which cut the
+`reader-direct` image as the direct-mode lineage in the first place. The
 `v0.1.0-prealpha` image `9a08803e…` on Linux 7.0.11 remains the last
-shipping-driver build. Everything under
-**Unreleased** that was proven was proven on that image unless an entry
-says otherwise.
+build of the old shipping-only driver as a separate flavor; from this
+tag on there is one kernel and it is the direct-mode one. Every hardware
+claim under **v0.3.0-prealpha** below is from wkelly's device across the
+sessions it cites, moved onto the device generation-by-generation by
+`make deploy` rather than by a single `dd`'d image; what has *not* been
+run is listed under **Known broken**, and no second operator has run
+this lineage. **Unreleased** above it is empty until the next round of
+work lands.
 
 ## Unreleased
 
-### One reader, on the direct-mode driver — glass-proven, on the embrace branch, not yet merged
+## v0.3.0-prealpha — 2026-09-04
 
-- **On the embrace branch (PR #56), not yet merged.** A single reader
-  image — no more direct-vs-shipping split — booted on wkelly's
-  PineNote 2026-09-03 (`doc/status.md`), deployed over the update path
-  with no cable.
-- **What a tester on this image would notice:** page turns have **no
-  flashing**; rotations still flash and feel a little sluggish, as
-  before; pen and touch work; sleep now goes through the same broker as
-  today's shipping reader — the power button and the cover both put the
-  device to sleep and wake it cleanly (three suspend cycles this
-  session, zero failures).
-- **How it got there:** `make deploy` sent only the missing pieces over
-  the air, kexec-trialled the new kernel and command line, and promoted
-  it once it answered a health check; a follow-up reboot proved a cold
-  boot too (a UART hiccup needed one manual slot pick — the boot itself
-  needed no cable, `doc/update-path.md`).
-- **Not yet run this session:** the full shipping-reader validation
-  checklist (`doc/glass-plan-2026-08.md`) item by item, or an optics
-  check — this proved the boot/update/suspend path, not full
-  read-quality acceptance.
+**Cable-free updates, one reader flavor, and a device that puts itself
+back together when an update goes wrong.** The direct-vs-shipping split
+is gone — `linux-pinenote` **is** the direct-mode kernel now, on every
+build — and from this tag on the device stays current without a serial
+cable: `make deploy` sends only what changed, boots it as a trial, and
+only keeps it if the trial passes a health check. Suspend and wake
+(button, cover, KOReader's own idle timer) go through the same broker
+as v0.2.0, now proven on the direct-mode kernel too, and Wi-Fi should
+reconnect on its own after every sleep instead of needing a manual
+toggle. Hardware evidence below is generation-by-generation on wkelly's
+device (`doc/status.md`, 2026-09-02 through 2026-09-04); the
+second-operator validation from v0.2.0's cycle (rpedde, 2026-08-31) has
+not yet been repeated on this lineage.
+
+### Wi-Fi comes back after sleep, on its own
+
+- **The reader's own memory of "Wi-Fi was on" is now reasserted from its
+  own record on every wake**, instead of trusting KOReader's copy of
+  it — that copy was the real reason an idle sleep, or a sleep the
+  device rejected outright (e.g. while paused), could leave the radio
+  off until you opened the menu and flipped the toggle yourself.
+- **If the Wi-Fi driver itself gives up during a resume**, the device
+  now rebinds it and retries the association on its own, logging the
+  attempt either way; earlier this showed up about once in ten sleeps
+  and needed a full reboot to clear. That recovery is proven in the
+  offline harness only: the failure did not recur in the 59 cycles, so
+  the rebind has never fired on a real device.
+- **The kernel gives the Wi-Fi module 100 ms to settle** after its power
+  rail comes up, closing a race that could otherwise show up as the
+  same symptom.
+- **Run unattended twice.** Overnight 2026-09-03/04: 27 sleep/wake
+  cycles through the device's own broker-driven path, zero Wi-Fi restore
+  failures, zero driver rebinds needed. Then 2026-09-04, off the
+  charger so that KOReader's own idle timer — rather than the power
+  button, the cover, or the RTC backstop — was what triggered the
+  sleep, which is exactly the path the memory repair is for: 32 more
+  cycles, 28 of them idle-timer sleeps, the radio back on every wake
+  that could be measured. 59 hands-off cycles in all, no restore
+  failures. The recovery *underneath* that — the driver rebind and the
+  second association attempt — has still never fired on a real device;
+  it is proven in the offline harness only.
+
+### Display driver corrections from an outside review
+
+- A third-party source review of the driver (recorded, with every claim
+  checked, in `doc/reviews/2026-09-03-third-party-audit.md`) found four
+  correctness bugs; all four are fixed in this tag's kernel: the
+  blue-noise dither pattern no longer repeats its first half every
+  16 pixels, a batch size of zero can no longer spin the rectangle-hint
+  ioctl forever, an oversized hint list is refused outright instead of
+  monopolising the driver, and the sleep-image and belief-dump ioctls
+  report a failed copy as an error instead of a byte count. The guards
+  reached a device in this tag's own test session (2026-09-04) and
+  behave as designed on glass: the zeroed batch refused instantly
+  instead of spinning, the oversized list refused with the right error,
+  the healthy paths unchanged. **The dither correction is not on the
+  route the reader draws through** — reading is 16 greys with no dither
+  hint — so it should change nothing you see; it affects
+  dither-hinted 1- and 2-bit rectangles and the driver's fast mode,
+  which only pen work and the lab tools reach today.
+- **Still open from that review**: the driver leaks memory and DMA
+  mappings when its probe fails, and the direct-mode image's first probe
+  fails by design once per boot; the leak is bounded per boot and is
+  the next kernel fix, not in this tag.
+
+### One reader, on the direct-mode driver
+
+- **There is one reader image now, not two.** The direct-mode display
+  driver — previously shipped only in a separate "study" image while
+  the original driver stayed the default — is now `linux-pinenote`
+  itself, on every build.
+- **What you'll notice reading on it**: page turns have no flashing;
+  rotating the device still flashes and feels a little sluggish, same
+  as it did in the study image; pen and touch work as before.
+- **Sleep and wake go through the same broker you had in v0.2.0**,
+  proven for the first time on the direct-mode kernel: power button and
+  cover both suspend and wake the device cleanly (three cycles, zero
+  failures, on glass 2026-09-03).
+- **Glass-proven as generation 7** on wkelly's device, deployed over the
+  update path (below) rather than a cable, with a follow-up cold boot
+  proving the same image comes up clean without a kexec involved.
+  `doc/status.md`, 2026-09-03 late afternoon.
+- **Not yet re-run since the switch**: the fuller shipping-reader
+  read-quality checklist and a fresh optics (camera) check — day-to-day
+  reading should feel the same as v0.2.0, but it hasn't been
+  re-verified item by item on this exact build.
 
 ### A failed cable-free update now recovers by itself
 
-- **On the kexec-hardening branch (PR #48), not yet merged.** If a
-  cable-free update (`make deploy`) trials a kernel that hangs instead
-  of booting, the device now brings itself back — the armed SoC
-  watchdog resets it and the last promoted version boots on its own, no
-  cable and no power button, proven end to end on wkelly's PineNote
-  2026-09-03 evening (`doc/status.md`). One class still needs the power
-  button (a specific bus-wedge hang the update path already avoids by
-  default), and the very first update to a device that doesn't have
-  this fix yet isn't covered by it.
+- **If a wireless update boots a kernel that hangs instead of coming
+  up, the device resets itself** — the SoC's own watchdog fires and the
+  chip reboots into U-Boot. Proven on glass 2026-09-03 evening: an
+  intentionally broken trial kernel hung, and a few minutes later,
+  untouched, the device had reset. **What still needs the cable**: this
+  U-Boot's default slot is the stock Debian one, so after that reset
+  the last good reader boots only if something answers U-Boot's menu —
+  the deployer does that itself when a debug cable is attached
+  (`WILKBOOK_UART`); without the cable the device comes up in stock
+  Debian and waits for you. Self-reset yes; hands-off return to the
+  reader, only with the cable.
+- **One narrower class of failure is prevented rather than recovered
+  from**: a specific hard hang tied to a USB clock the outgoing kernel
+  leaves off, which the update tool already avoids by default — you
+  should not see it, but if a future kernel change reintroduces it,
+  that one class still needs the power button.
+- The very first update ever applied to a device that doesn't already
+  have this self-recovery fix isn't covered by it — the safety net only
+  exists once it has already been installed once.
 
-### Suspend and wake: the platform-controls broker (first outside contribution)
+### Suspend and wake: the platform-controls broker
 
-- **Sleep is now a conversation with the reader instead of a rug-pull**
-  (PR #41, rpedde — hardware-accepted on their own PineNote,
-  2026-08-31, `doc/status.md`). Power button, cover close, the menu's
-  Sleep item, and KOReader's AutoSuspend all reach one acknowledged
-  path: KOReader checkpoints your place, paints its sleep screen, and
-  quarantines input *before* the supervised broker writes the suspend.
-  If the reader can't answer within ten seconds, a fallback SUSPEND
-  frame is painted and the device sleeps anyway.
-- **What a tester will notice**: a real sleep screen (screensaver
-  support, including custom images); frontlight level *and* warmth come
-  back exactly after wake and survive a reader restart; the frontlight
-  toggle no longer forgets your brightness; Wi-Fi has an on/off toggle
-  in KOReader and honors its "restore Wi-Fi after resume" setting;
-  Power Off in the menu actually powers off.
-- **Policy changes, accepted deliberately**: the idle timeout is now
-  KOReader's AutoSuspend setting (default 15 min, user-settable in the
-  UI) instead of the fixed 5-minute daemon; a device on the charger no
-  longer auto-sleeps (set `suspend_while_charging=1` in
-  `autosuspend.conf` to restore the old behavior). `enabled=0` in
-  `/data/wilkbook/autosuspend.conf` still pauses everything, re-read
-  continuously; an old `idle=` line is logged once and ignored.
-- The RTC safety backstop, deep/ultra suspend machinery, and the
-  single-writer rule for `/sys/power/state` are preserved; a button
-  wake now also clears the still-armed backstop alarm. The standalone
-  autosuspend daemon is retired from the reader flavors.
-- Ron's acceptance run doubled as two independent firsts: the first
-  completed second-person install (`doc/install.md` is no longer
-  unverified), and the first validated cold boots of the
-  shipping-driver 7.1.8 reader image on glass.
-- Deployed to the author's os2 on 2026-09-01 as the first image carrying
-  both the direct-mode display stack and the broker
-  (`pinenote-reader-direct-PNGuixRoot-20260831.ext4`, SHA256
-  `2adef085…`, protocol clean — `doc/status.md`). **First boot
-  (2026-09-02): boot chain, Wi-Fi toggle, and charging inhibit all work
-  on the direct driver — but the device CANNOT SUSPEND on it**: the
-  broker's EBC barrier ioctl is a shipping-driver-only addition and
-  collides with a different ioctl on hrdl's driver (EFAULT, issue #42).
-  Each failed attempt also leaves Wi-Fi off until toggled on in the
-  menu (KOReader's restore-after-resume setting defaults off). The
-  shipping flavor is unaffected. Until #42 lands, this image is
-  read-plugged-in only; v0.2.0 remains the last direct image that
-  sleeps.
+Sleep is a conversation with the reader instead of a rug-pull: the
+power button, closing the cover, the menu's Sleep item, and KOReader's
+own AutoSuspend timer all reach one acknowledged path. KOReader
+checkpoints your place, paints a real sleep screen (including custom
+images), and quarantines input before the device actually suspends; if
+the reader doesn't answer in ten seconds, it sleeps anyway behind a
+fallback screen. Frontlight level and warmth come back exactly after a
+wake and survive a restart; a device on the charger no longer
+auto-sleeps by default; Wi-Fi has an on/off toggle in KOReader that
+honors "restore Wi-Fi after resume"; Power Off in the menu actually
+powers off. First hardware-accepted on a second operator's own device
+2026-08-31, and — new this release — proven on the direct-mode kernel
+too, above.
 
-### Direct driver: a bounds bug in the rectangle-hint ioctl, fixed in tree
+### The update path: updates without a cable
 
-- **A malformed rectangle hint could corrupt kernel memory.** The direct
-  driver's `RECT_HINTS` ioctl (what the pen and UI hint paths will use)
-  took an inverted rectangle as a huge unsigned width and wrote a whole
-  row from its left edge — past the hint plane on the last row; a short
-  copy from userspace walked records that were never copied. Both are
-  fixed by a small patch of ours on top of hrdl's driver, with the
-  inherited shape pinned so a rebase re-approves on purpose
-  (`doc/upstream-register.md` item 24). Nothing in the shipped reader
-  sends malformed rectangles today; this closes the door before the
-  semantic-hint work opens it wider.
+- **Your workstation can now push a new build to the device over the
+  network**, without a reflash: it sends only the store paths the
+  device is missing, boots the result as a trial, and only keeps it
+  once a health check passes — otherwise the device stays on whatever
+  was already working. Rolling back is the identical move in reverse.
+- **Proven end to end**, both in an automated QEMU rig and on glass:
+  the first cable-free deploy landed 2026-09-02, and every generation
+  cited elsewhere in this release (7 through 16) moved onto the device
+  the same way afterward.
+- One dd-from-os1 reflash is still needed to put this capability on a
+  device that doesn't already have it; after that, it's `make deploy
+  DEVICE=…` from then on.
+- **A wireless update cannot change the device tree** (the hardware
+  description the kernel boots with); only a cold boot of the promoted
+  generation does. The deployer now says so at trial time whenever it
+  applies — that notice used to be printed after the device had already
+  turned its own radio off, so nobody watching over the network could
+  ever have seen it (found and fixed 2026-09-04, and seen for real on
+  the generation-15 deploy the same evening).
 
-### The update path (designed, enabled, proven in QEMU, and on glass: the first cable-free deploy)
+### Also fixed since v0.2.0
 
-- **Updates without a cable are coming.** `doc/update-path.md` lays out
-  the design: the workstation cross-builds a system, guix's signed nar
-  stream sends only the store paths the reader lacks, the reader registers it as a Guix system
-  generation, kexecs into it as a *trial* (the boot menu default is
-  untouched, so a power-cycle returns to the last good one), and only
-  after it answers a health check is it promoted. Rollback is the same
-  move backwards. The image changes that make it possible are in this
-  tree: the guix daemon returns purely as a store importer (local builds
-  impossible, substitutes off), kexec is enabled in the kernel,
-  `kexec-tools` and the `wilkbook-generation` helper are packaged, and
-  the root filesystem grows to fill its 15.7 GB partition on first
-  boot. One more dd-from-os1 reflash enables it; after that, `make
-  deploy DEVICE=…`.
-- **It runs on glass (2026-09-02 evening).** The enabling image went
-  onto os2 by the usual dd protocol; from then on `make deploy
-  DEVICE=<alias>` did the rest: a cross-built system moved as a
-  13-path delta, registered as generation 4, kexec'd as a trial,
-  health-checked, promoted and the oldest generation pruned — the
-  panel re-probed on its own waveform, the reader, gadget and Wi-Fi
-  came back. What it took: the first three kexecs hung 0.12 s into the
-  new kernel, each costing a power-cycle, until the UART named the
-  cause — an early init writing the USB3 "pipe" register block whose
-  clock the previous kernel had gated off. That init is skipped on the
-  kexec path only (the values persist from the cold boot); a second,
-  real defect found on the way — the interrupt controller's LPI tables
-  are not preserved across a non-EFI kexec — is closed by never
-  enabling LPIs (nothing on the PineNote uses them). For the operator:
-  a trial that hangs is the power button, then the U-Boot menu, and
-  the last good generation is still the default. Details:
-  `doc/update-path.md` "Glass notes".
-- **The whole flow is proven end to end in QEMU (2026-09-02).** Rung 4u
-  (`make qemu-update-check`) boots generation A, grows the root
-  filesystem, authorizes the workstation's signing key, sends generation
-  B's missing paths (58 of a 444-path closure), registers it, kexecs
-  into it as a trial, health-checks and promotes it, then kexecs back
-  into A and promotes that — three distinct boot ids, every stage green.
-  What the rig taught is recorded in the design doc: a wrong serial
-  console argument leaves Guix's initrd unable to open `/dev/console`
-  and it runs away in memory (so the helper rewrites it off a PineNote),
-  `guix copy` cannot honor per-slot known-hosts files (so the deployer
-  uses the same nar pipe over plain OpenSSH), and the trial's ssh
-  session needs keepalives because kexec never closes the connection.
-
-### Suspend on the direct-mode image (issue #42) and Wi-Fi after wake
-
-- **The direct image can sleep again.** The broker's pre-suspend EBC
-  barrier was a shipping-driver-only ioctl; on hrdl's driver the same
-  command number is a different call, so every suspend aborted with
-  EFAULT (found on the first broker+direct boot, 2026-09-02). The broker
-  now quiesces the panel by driver capability: the barrier where the
-  driver has it, otherwise it waits for the EBC's interrupt line to go
-  quiet — the same idle signal the lab instruments measure frames with.
-  Offline-proven (`test-quiesce.lua`); a new host gate
-  (`make ebc-ioctl-roster-check`) reconstructs both drivers' ioctl
-  tables from the patches and checks every on-device ioctl user against
-  the driver it runs on, so this class cannot recur silently.
-- **Wi-Fi comes back after every wake, like it used to.** KOReader turns
-  the radio off before sleeping and restores it only if two of its
-  settings say so; neither was seeded, so a sleep — or a *rejected*
-  sleep request, e.g. while `enabled=0` — left the reader off the
-  network until you toggled Wi-Fi in the menu. Both settings are now
-  seeded on (the retired daemon's behavior); flip "restore Wi-Fi after
-  resume" in the Network menu if you want the radio to stay off.
-- **Validated on glass 2026-09-02**: five suspend/resume cycles on the
-  direct image — two power taps, two cover closes, one menu Sleep — each
-  with the sleep screen held on the panel, the broker logging "interrupt
-  quiescence … idle", a clean rails-off resume, and Wi-Fi back on its
-  own. The first
-  build's driver fingerprint was wrong (hrdl's driver has `no_off_screen`
-  too); corrected the same night with a fallback that makes a wrong
-  fingerprint impossible to strand on, and the gate now checks the
-  fingerprint against both drivers' real parameter registrations.
-  The corrected image (`827576fd…`) is on the author's os2 as of
-  2026-09-02; the pinch-crash fix below rides the same image.
-
-### Input
-
+- **A wake by the power button could be followed by an automatic
+  re-sleep seconds later**, leaving the reader looking dead until a
+  second press. The device's hourly self-wake leaves behind a short
+  "go back to sleep" deadline; if anything else put the device to sleep
+  inside that window, the deadline survived and fired on the next real
+  wake. Seen on glass 2026-09-04 (a 7-second wake); fixed in the sleep
+  broker the same day and pinned by its offline protocol tests — the
+  on-glass check of the fix is still to come.
+- **A malformed rectangle hint could corrupt kernel memory** in the
+  direct driver's `RECT_HINTS` ioctl (the pen/UI hint path). Nothing in
+  the shipped reader sends malformed rectangles today, but this closes
+  the door before more hint-driven work opens it.
+- **The update tool could give up silently right after a successful
+  self-recovery.** With the debug cable attached, the very case its
+  serial watcher exists for — a dead trial reset by the watchdog, picked
+  back to the reader at the boot menu, the old version answering again —
+  would have made the tool exit between "device is back" and "promote",
+  with no message, leaving the trial version un-promoted (harmless: a
+  power-cycle returns to the old one). Found by review 2026-09-04, fixed
+  and pinned; the first deploy with the cable attached ran the same
+  evening (generation 16) and the fixed path held on the success side —
+  the recovery side, where the tool answers the boot menu for you, has
+  still never fired on a device. The same watcher also used to leave a
+  reader on the serial port behind after every run.
+- **Wi-Fi could end up with two supplicant daemons after a bad resume**:
+  if the driver dropped the interface under a running daemon, the
+  recovery started a second one instead of stopping the first. Found by
+  review 2026-09-04, fixed and pinned in the offline harness.
 - **Pinch-to-font-size could crash the reader** (KOReader exited and
-  respawned in about a second, losing nothing but your gesture).
-  Root-caused offline from the device's own log and reproduced
-  deterministically on the workstation: after the font-size re-render,
-  KOReader forgets a finger that is still on the glass, and the next
-  two-finger gesture crashes on the ghost it left behind (an upstream
-  KOReader defect — `doc/upstream-register.md` item 21). The reader now
-  refuses to hand the gesture detector a touch it cannot identify, so
-  the crash is impossible; the surviving finger is simply ignored until
-  it moves on both axes or lifts. On the author's os2 as of 2026-09-02
-  (`4b55ae78…`), first boot pending.
+  respawned in about a second, losing nothing but your gesture). Fixed
+  at the source: the reader no longer hands the gesture detector a
+  touch it lost track of.
+
+### Known broken — read before you file a report
+
+- **If the direct display driver's first startup attempt is
+  interrupted** (its first probe is *expected* to fail and retry a
+  moment later — that part is normal), it can leak memory it acquired
+  before the failure instead of freeing it. Found by an outside code
+  review 2026-09-03, not yet fixed.
+- **The fuller shipping-reader validation checklist and an optics
+  (camera) check have not been re-run since the driver switch above** —
+  reading should look and feel the same as v0.2.0; say something if it
+  doesn't.
+- **The os1-based rescue procedure for a badly broken update has never
+  actually been run.**
+- **A stuck wireless update without the debug cable ends on the stock
+  rescue system (os1), not on your reader**: the watchdog reset above
+  lands in U-Boot, whose default is os1, and only the deployer's serial
+  watcher (armed before every trial when the cable is attached) picks
+  the reader back. With no cable, the device waits there for you.
+- **The reader's own idle timer never fires while the device is on a
+  charger** (KOReader's rule, not ours — the device also doesn't
+  auto-sleep on the charger by our own default), so a device left
+  plugged in stays awake until you press the button or close the
+  cover. Unplugged, the 15-minute timer applies.
+- **Old versions can be cleaned up automatically even if one of them is
+  the last one known to work well** — there's no "never delete this
+  one" pin yet.
+- **The debug serial port still logs in as root with no password**, if
+  someone has physical access and the right cable — same as before, now
+  written down plainly rather than left implicit.
+- **The self-recovery reset above is slower than its own timeout
+  suggests**: it took roughly 3.5 minutes in the session that proved it,
+  not the ~44 seconds the configured watchdog timeout would predict.
+  Harmless, but unexplained — don't assume it failed just because a
+  minute has passed.
+- **The Wi-Fi recovery underneath the restore has never fired on a real
+  device**: if the driver itself gives up during a resume, the rebind
+  and second association attempt that should fix it are proven only in
+  the offline harness. Both sleep paths themselves are well tested (59
+  unattended cycles — see above).
+- **The build this tag names (generation 16) has been cold-booted once**
+  — the evening it was cut, with the debug cable attached and the update
+  tool's boot-menu watcher doing the picking, which was also that
+  watcher's first real run. One cold boot, one device.
+- **The reader opens in the library, not in your book**, after a reboot
+  or an update — your place is kept, you tap the book.
+- **A trial that dies partway through the update tool's own shutdown**
+  (rather than in the new kernel) leaves the reader stopped with its
+  radio off and no message delivered, and the tool reports it as a
+  dead trial that the watchdog will reset — which, at that point, it
+  will not. Found by review 2026-09-04, not fixed.
+- If you're handed a device running a "convenience" build (a build flag
+  that turns the USB console into a no-login root shell for debugging),
+  that's deliberate and isn't what ships by default — don't mistake it
+  for a security bug, and don't leave it as your everyday device.
+
+### How to report
+
+Same rules as `doc/alpha-expectations.md`: a device that won't wake is
+forensic evidence — note the time, don't force a power-off until asked.
+Display artifacts (flashing on an ordinary turn, a two-part draw,
+residue that builds up) are worth a description or a photo. And if
+anything on the known-broken list above works better for you than
+described, that's useful too — say so.
 
 ## v0.2.0-prealpha — 2026-08-27
 

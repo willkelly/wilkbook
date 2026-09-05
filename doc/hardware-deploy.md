@@ -259,7 +259,14 @@ this tree after that date does — the guix importer daemon, kexec, the
 `wilkbook-generation` helper, first-boot root growth and the signing-key
 ACL; `doc/update-path.md`). After that, a new build reaches the device
 over Wi-Fi as a Guix system *generation*: registered, kexec'd as a
-trial, health-checked, and promoted only then. A trial that never
+trial, health-checked, and promoted only then. One limit, found
+2026-09-03: the trial runs on the running kernel's device tree
+(`kexec_file_load` ignores a user DTB), so a generation that changes
+the DTB is only fully exercised by a cold boot; the helper prints a
+NOTE at trial time when the target's staged DTB differs from the
+booted generation's, and a second when the running kernel was itself
+kexec'd — both before its teardown starts, which is the only place an
+ssh watcher can see them (`doc/update-path.md`). A trial that never
 answers leaves the boot menu's default on the last good generation.
 
 **Once, per workstation:**
@@ -291,7 +298,7 @@ answers leaves the boot menu's default on the last good generation.
 **Every update:**
 
 ```
-make deploy DEVICE=pinenote-os2 [FLAVOR=reader] [KEEP=3]
+make deploy DEVICE=pinenote-os2 [FLAVOR=reader] [KEEP=5]
 ```
 
 builds the flavor (cross, `--no-grafts`), sends only the store paths
@@ -299,9 +306,16 @@ the device lacks (guix's signed nar stream over plain OpenSSH; a
 KOReader change is megabytes, a kernel ~100 MB), registers generation
 N+1 (`add`: profile link, `/boot/gen-N+1/{Image,initrd,dtb,append}`,
 the extlinux menu re-rendered with `DEFAULT` unchanged), kexecs into
-it (`trial`: the reader stopped INT-first, Wi-Fi off, gadget unbound,
-EBC quiescent, then `kexec -e`; the panel goes idle and the ssh link
-dies with the old kernel — by design), waits for the new generation to
+it (`trial`: the device-tree notes and the model line first, then the
+reader stopped INT-first, Wi-Fi off, gadget unbound, EBC quiescent,
+then `kexec -e`; the ssh link dies at the Wi-Fi off, before the kexec
+— by design, so nothing the helper says after that point reaches the
+deployer, and a helper that dies after it, say on an EBC that never
+goes idle, leaves the reader stopped and the radio off with no message
+delivered — and a power-button sleep/wake does not bring the radio
+back, since the broker restores only a radio it saw on; only a reboot
+or a hand `pinenote-wifi-control on` from the UART does: a known gap,
+not yet closed), waits for the new generation to
 answer, runs `health` (`/run/current-system` is the new system, the
 broker is ready, the reader started), and only then `promote`s it and
 prunes to KEEP generations plus the promoted and booted ones, then
@@ -378,7 +392,8 @@ notes"):**
   drives the menu back to os2 itself and reports the device back on the
   previous `DEFAULT`; without the cable, a failed trial ends on stock
   os1 with SSH — change the default from there if you want
-  (`rescue-generation.sh`), and pick os2 at the on-device menu. Before
+  (`rescue-generation.sh`, PR #51 — open against main, not in this
+  tree, never run), and pick os2 at the on-device menu. Before
   the watchdog resets it (or if it doesn't): the power button, then
   `uboot-pick-slot.sh --slot os2`.
 - Anything that changes early boot (kernel, DTB, command line) wants

@@ -6,7 +6,7 @@ framebuffer — pen, finger, four orientations, single-pass page turns —
 and runs nothing else. No desktop, no compositor, no display server, no
 apps waiting to be closed. The entire OS exists so that a book is on the
 screen and the battery is spent on nothing that is not the book. Under
-it: a forward-ported vanilla-7.0.x kernel (PREEMPT_RT) carrying the
+it: a forward-ported vanilla-7.1.x kernel (PREEMPT_RT) carrying the
 PineNote display stack as explicit patches, and a one-command path from
 checkout to a deployable rootfs.
 
@@ -48,8 +48,9 @@ Which brings us to:
 eyes from left to right at a steady pace for the full effect ~*~*~*
 
 **YOU ARE VISITOR NUMBER: `[0][0][0][0][0][2]`**
-*(visitor number 000001 owns the ONLY PineNote this has ever run on.
-there has never been a visitor number 000003.)*
+*(visitor number 000001 owns the FIRST PineNote this ever ran on;
+visitor number 000002 owns the second, since 2026-08-31. there has never
+been a visitor number 000003.)*
 
 **THIS IS AI SLOP HARDLY TESTED NONSENSE. ONLY FLASH THIS IF YOU ARE
 INSANE OR HATE YOUR PINENOTE.** That sentence has survived every rewrite
@@ -88,7 +89,8 @@ yourself exactly which kind of insane you are:
 - **THERE IS NO SUPPORT. NONE.** The update path exists as of
   2026-09-02 (`doc/update-path.md`: one enabling reflash, then `make
   deploy` over Wi-Fi with trial-then-promote and rollback), but it has
-  run on exactly one device, one evening. No package manager on the device. No
+  run on exactly one device — fifteen generations over three days, one
+  hung trial recovered by the watchdog. No package manager on the device. No
   issue-triage promise. NO WARRANTY OF ANY KIND (`LICENSE`, and it
   means it). If it breaks, you get to keep all the pieces, which is
   generous, because e-ink breaks into SO MANY pieces.
@@ -138,15 +140,16 @@ guix time-machine -C channels.scm -- \
   pinenote/systems/pinenote-reader.scm
 ```
 
-That command is true of the `v0.1.0-prealpha` tag with its committed
-pin. **On current `main` it fails** (2026-08-25): the kernel moved to
-the 7.1 series pin and `channels.scm` has not been re-pinned yet, so
-build with your ambient `guix pull` instead — plain `make
+That command is true of every tag with its committed pin: the pin was
+re-made for the 7.1 series on 2026-08-25 and, re-checked 2026-09-04,
+`make kernel-drv TIME_MACHINE=1` resolves the identical kernel
+derivation as an ambient `guix pull`. Without the flag you build
+against your ambient `guix` instead — plain `make
 rootfs-reader`, which builds the image *and* extracts the rootfs you
 will actually write (an ext4 labelled `PNGuixRoot`) into
 `$(ARTIFACTS)`. `TIME_MACHINE=1` (the wrapper for the pinned path
-above) works again after the next pin bump — `doc/building.md` has the
-full story. Fair warning: a cold kernel cross-build is hours, not
+above) is the release build's flag; a future kernel-series bump must
+carry the pin with it — `doc/building.md` has the full story. Fair warning: a cold kernel cross-build is hours, not
 minutes. Day-to-day:
 `make help`, `make kernel-drv` (seconds, before any real build),
 `make qemu-smoke`. The gitignored licensed fonts are optional — a fresh
@@ -189,8 +192,9 @@ boots. Paths relative to the partition root:
   a second device), but only you can put books in it.
 - `wilkbook/autosuspend.conf` — **optional, and a foot-gun.** Writing
   `enabled=0` here pauses auto-suspend, which is genuinely handy while
-  you are poking at a new device over SSH (otherwise it naps five
-  minutes in and each nap costs a physical button press). **If you write
+  you are poking at a new device over SSH (otherwise it naps fifteen
+  minutes in — KOReader's idle timer, never while on a charger — and
+  each nap costs a physical button press). **If you write
   it, you must undo it** — a device with this file at `enabled=0` never
   sleeps, shows no suspend banner, and burns ~157 mA forever. Undo with
   `enabled=1`, or just delete the file; the platform-controls broker
@@ -217,9 +221,10 @@ console needed, with a ~15 s countdown. A boot where nobody touches the
 menu lands in os1, which is exactly the behaviour you want from a rescue
 default.
 
-**5. Check it sleeps.** Leave it untouched for six minutes. You should
-see your page with a `SUSPENDED` banner and the frontlight off; SSH and
-ping go dead. If it never sleeps, check
+**5. Check it sleeps.** Unplug it and leave it untouched for sixteen
+minutes (the idle timer is KOReader's 15 minutes, and it never fires on
+a charger). You should see your page under KOReader's sleep screen with
+the frontlight off; SSH and ping go dead. If it never sleeps, check
 `cat /data/wilkbook/autosuspend.conf` first — see the previous step.
 
 **6. Read.** Page turns are single-pass, the device suspends itself when
@@ -290,9 +295,12 @@ build time, never hand-copied — so they cannot drift from the driver.
 - `pinenote/patches/linux-pinenote-7.0-forward-port.patch` — the EBC
   display stack, `drm_epd_helper`, WS8100 pen, PineNote DTS and
   `pinenote_defconfig`, forward-ported onto vanilla 7.0.x and
-  hardware-validated. Six smaller patches ride alongside it (BSP SIP
-  suspend, cpuidle, vdd_cpu PFM, DDR static-low, st_accel PM, and the
-  ultra rails-off suspend — 4.64 mA measured 2026-08-08).
+  hardware-validated. Thirteen smaller patches ride alongside it: six
+  for power (BSP SIP suspend, cpuidle, vdd_cpu PFM, DDR static-low,
+  st_accel PM, and the ultra rails-off suspend — 4.64 mA measured
+  2026-08-08), hrdl's direct-mode driver with three of ours on it, a
+  PMIC kexec fix, a Wi-Fi power-sequence delay, and a correctness pass
+  from a third-party audit.
   `doc/kernel-forward-port.md` carries the inventory, the refresh
   procedure, the config lessons, and the community cherry-pick record.
 - `pinenote/tools/ddr-sip-probe/src` — a ~zero-risk out-of-tree module
@@ -334,13 +342,17 @@ build time, never hand-copied — so they cannot drift from the driver.
   re-pasted code, "absence of an error is not a passing test", and why a
   single-stack harness models ordering but not races.
 
-## Status (2026-08-15)
+## Status (2026-09-04)
 
-- **Product**: the reader image on os2 — KOReader natively on fbdev with
+- **Product**: one reader image on os2 — KOReader natively on fbdev with
   pen/finger input, four orientations, publish-on-call single-pass page
   turns, the GL16 partial policy + idle washer, Wi-Fi with out-of-band
-  credentials, key-only SSH. `v0.1.0-prealpha` is tagged; the alpha
-  sign-off (`doc/alpha-signoff.md`) has not happened.
+  credentials, key-only SSH, and since 2026-09 the direct-mode display
+  driver as *the* driver (no more direct-vs-shipping split) plus
+  cable-free updates. Tags: `v0.1.0-prealpha`, `v0.2.0-prealpha`
+  (2026-08-27), `v0.3.0-prealpha` (2026-09-04); the alpha sign-off
+  (`doc/alpha-signoff.md`) has not happened, and no second operator has
+  run the current lineage.
 - **Ultra suspend is in production** (2026-08-08): hrdl's rails-off
   configuration on the primary kernel, **4.64 mA measured on glass**
   (`doc/artifacts/pinenote-ultra-r12-20260808/`) against the superseded
@@ -349,23 +361,30 @@ build time, never hand-copied — so they cannot drift from the driver.
   (~16 days), 170 suspend cycles with zero failures**
   (`doc/artifacts/pinenote-ultra-soak-20260815/`) — the **draws** are
   measured; the ~30 and ~16 day figures are those draws divided onto a
-  4000 mAh charge, not an observed run to empty. The device sleeps after 5 idle minutes; only the power
-  button, the RTC backstop, and the charger can wake it — the rails-off
-  tradeoff unpowers GPIO0 during suspend, so the pen cannot — though
-  the cover demonstrably does wake it (2026-08-09), which the model does
-  not yet explain. SSH to a deployed reader is intermittent while
-  auto-suspend is enabled (`doc/device-access.md`).
-- **Kernel**: the vanilla-7.0.x forward port is the hardware-proven
-  primary (display, PREEMPT_RT, Wi-Fi/BT, gadget). Seven patches total —
-  `doc/kernel-forward-port.md`.
+  4000 mAh charge, not an observed run to empty. The device sleeps after 15 idle minutes; only the power
+  button, the RTC backstop, the charger and the cover can wake it — the
+  rails-off tradeoff unpowers GPIO0 during suspend, so the pen cannot;
+  the cover's wake (2026-08-09) is half explained (its sensor hangs off
+  the battery, 2026-08-24) and half open (how the PMU latches the edge). SSH to a deployed reader is intermittent while
+  auto-suspend is enabled (`doc/device-access.md`). Idle timing moved to
+  KOReader in 2026-08 (15 minutes by default, settable, and never while
+  on a charger), with a supervised broker as the sole writer of
+  `/sys/power/state`.
+- **Kernel**: Linux 7.1.8 with fourteen patches — the vanilla forward
+  port (display, PREEMPT_RT, Wi-Fi/BT, gadget), hrdl's direct-mode EBC
+  driver and our fixes on it, a PMIC kexec fix and a Wi-Fi
+  power-sequence delay. 7.0.11 remains the last hardware-proven kernel
+  for the *old* shipping driver — `doc/kernel-forward-port.md`.
 - Exact image hashes, session records, and the full history:
   `doc/status.md`.
 
 ## Alpha
 
 Alpha targets operators who build from source and are comfortable with a
-serial console for recovery. No one outside the author has installed it
-yet; if you are provisioning your own device, `doc/install.md` is your
+serial console for recovery. One person outside the author has
+installed it (rpedde, 2026-08-31, on their own device); the direct-kernel
+lineage since 2026-09-03 has not been run by a second operator. If you
+are provisioning your own device, `doc/install.md` is your
 starting page, `doc/alpha-expectations.md` says what it should feel
 like, and `doc/alpha-signoff.md` is the bar an actual alpha release has
 to clear. `doc/alpha-checklist.md` tracks what stands between the
@@ -388,18 +407,27 @@ prealpha tag and that bar.
 
 ## Layout
 
-- `pinenote/packages/` — three kernel packages (`linux-pinenote` forward
-  port, `linux-pinenote-debug` with diagnostics + `EXTRACT_FBS`,
-  `linux-pinenote-6.6.30` regression baseline), Broadcom Wi-Fi/BT
-  firmware packages, firmware helper scripts, the KOReader device target.
+- `pinenote/packages/` — two kernel packages (`linux-pinenote`, the
+  forward port plus hrdl's direct-mode driver and the rest of the
+  fourteen-patch stack; `linux-pinenote-6.6.30`, the regression
+  baseline — `linux-pinenote-debug` was retired by the embrace sweep,
+  the direct driver carrying `EXTRACT_FBS` natively), Broadcom Wi-Fi/BT
+  firmware packages, firmware helper scripts, the KOReader device
+  target, the platform-controls broker and the update-path helper.
 - `pinenote/patches/` — the kernel forward-port patch (EBC driver, WS8100
   pen, PineNote DTS, `pinenote_defconfig`) plus the smaller
   power-management patches (BSP SIP suspend, cpuidle, vdd_cpu PFM, DDR
-  DVFS, st_accel PM). `doc/kernel-forward-port.md` has the inventory.
-- `pinenote/services/` — Shepherd services: waveform install, EBC
-  parameters, reader session, orientation bridge, auto-suspend, DDR
-  DVFS (dmc + input-driven boost), networking, USB CDC-ACM gadget
-  console, diagnostics.
+  DVFS, st_accel PM, ultra rails-off), the direct-mode driver and our
+  fixes on it, the rk8xx kexec fix and the sdio power-sequence delay —
+  fourteen in all. `doc/kernel-forward-port.md` has the inventory.
+- `pinenote/services/` — Shepherd services: waveform install, the
+  direct driver's CLUT one-shot, EBC parameters, reader session,
+  orientation bridge, the platform-controls broker (sleep/wake — the
+  standalone auto-suspend daemon is retired from the reader flavor),
+  frontlight, DDR DVFS (dmc + input-driven boost), networking, ssh keys,
+  timesync, the library and manuals shelf, the update path (importer
+  daemon, signing-key ACL, root growth), USB CDC-ACM gadget console,
+  diagnostics.
 - `pinenote/images/` — initrd wrappers, extlinux bootloader config, kernel
   arguments, partition labels.
 - `pinenote/systems/` — flavor entrypoints (see `doc/pinenote-flavors.md`).
@@ -407,9 +435,13 @@ prealpha tag and that bar.
   helpers.
 - `pinenote/tools/` — test and diagnostic tools. Host-side (no device):
   `wbf`, `ebc-logic`, `rastersim`, `orientation`, `koreader-input`,
-  `optics`, `power`, `rockchip-pm`, `ebc-barrier`. Device-side and
-  supervised: `ebc-damage-probe`, `ddr-sip-probe`, `ddr-dvfs-test`. The
-  table in `doc/testing.md` gives each one's rung and coverage.
+  `optics`, `power`, `rockchip-pm`, `platform-controls`, `update-path`,
+  `timesync`, `settings`, `manuals`, `refresh-episodes`, `pen`
+  (`ebc-barrier` went with the old driver in the embrace sweep).
+  Device-side and supervised: `ebc-damage-probe`, `ebc-lab`,
+  `ddr-sip-probe`, `ddr-dvfs-test`, `optics-rig`, and the deployer
+  (`deploy`). The table in `doc/testing.md` gives each one's rung and
+  coverage.
 - `pinenote/fonts/` — optional, gitignored personally-licensed fonts
   (`pinenote/fonts/README.md`).
 - `doc/` — the doc map in `CLAUDE.md` describes every document. Highlights:
@@ -589,10 +621,12 @@ it will not open a socket without a route, and it backs off when a server
 does not answer — all of which matters because the standby budget it is
 spending from is 5.47 mA. The reasoning, including what it does to the
 RTC wake alarm, is `doc/networking.md` §7. `make timesync-check` is the
-gate. **Nothing here has run on a device; no clock has been set on a
-PineNote** (issue #27).
+gate. **The no-server path has run on a device** (R3, 2026-09-04,
+generation 14: one `no --server configured` line, the service stopped,
+the clock the RTC's); **no clock has yet been set from a server on a
+PineNote** (issue #27; R3s in `doc/glass-plan-2026-08.md`).
 
 ## Hosting
 
 The canonical public home is <https://github.com/willkelly/wilkbook>
-(tagged `v0.1.0-prealpha`). Issues and contributions go through GitHub.
+(tags `v0.1.0-prealpha` and `v0.2.0-prealpha`). Issues and contributions go through GitHub.

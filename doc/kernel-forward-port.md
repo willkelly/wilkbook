@@ -45,9 +45,10 @@ post-mortem harvest — are `doc/device-access.md`):
 - 6.12 runs `GPIO_ROCKCHIP=m` with early initrd loading; our `=y` achieves
   the same probe ordering more bluntly.
 
-## The three kernel packages
+## The kernel packages
 
-All live in `pinenote/packages/kernel.scm`:
+All live in `pinenote/packages/kernel.scm` (two since the embrace sweep,
+2026-09-03):
 
 - `linux-pinenote-6.6.30` — the m-weigand PineNote tree, pinned by commit.
   Hardware-validated end to end (display, Wi-Fi, BT, USB gadget). Kept as the
@@ -57,21 +58,23 @@ All live in `pinenote/packages/kernel.scm`:
   stack inventoried below, configured with `pinenote_defconfig`. This is
   the kernel-currency track. The channel therefore depends on nonguix
   (see `.guix-channel` / `channels.scm`).
-- `linux-pinenote-debug` — `linux-pinenote` plus stacked debug patches
-  (currently `linux-pinenote-debug-extract-fbs.patch`, which implements
-  the `EXTRACT_FBS` belief-dump ioctl the primary kernel stubs with
-  `-EOPNOTSUPP`). A separate inheriting variant so the primary stays
-  byte-identical; debug patches are deleted as their investigations
-  close.
+- ~~`linux-pinenote-debug`~~ — retired by the embrace sweep (2026-09-03):
+  it was `linux-pinenote` plus `linux-pinenote-debug-extract-fbs.patch`
+  (the `EXTRACT_FBS` belief-dump ioctl the old driver stubbed with
+  `-EOPNOTSUPP`); the direct driver registers `EXTRACT_FBS` natively.
+  The patch file stays only as the ebc-logic harness's dbg fixture.
+  `linux-pinenote-hrdl-direct`, the study kernel, was retired the same
+  day — its driver is now in `linux-pinenote`.
 
 ## Patch inventory — what `linux-pinenote` actually applies
 
 `%linux-pinenote-patches` in `pinenote/packages/kernel.scm` is the
 authoritative list; the comments there carry each patch's rationale and
-revert instruction. As of 2026-09-03 it is twelve patches, applied in list
+revert instruction. As of 2026-09-04 it is fourteen patches, applied in list
 order on top of the vanilla source (items 8–11 are the direct-mode
 driver and our fixes on it; item 12 is the mfd rk8xx kexec fix that
-makes the update path's watchdog self-reset work):
+makes the update path's watchdog self-reset work; item 14 is a further
+correctness pass on the direct-mode driver from a third-party audit):
 
 1. `linux-pinenote-7.0-forward-port.patch` — the EBC display stack,
    WS8100 pen, PineNote DTS, `pinenote_defconfig`; the permanent core
@@ -139,17 +142,58 @@ makes the update path's watchdog self-reset work):
     the armed watchdog and DEFAULT booted hands-off; the GRF bus-wedge
     hang is the one class the reset cannot recover — the blacklist
     prevents it). Merged 2026-09-03.
+13. `linux-pinenote-7.1-sdio-pwrseq-delay.patch` — arm64 dts: 100 ms
+    `post-power-on-delay-ms` on the PineNote's `sdio_pwrseq` (the
+    Quartz64's value; mainline's PineNote DTS has none). With
+    `cap-power-off-card` every resume re-enumerates the Wi-Fi card from
+    cold and one resume in ten timed out on the first control exchange
+    after the firmware download (2026-09-03, `doc/networking.md` §8).
+    Written for upstream. **Live on glass since generation 10's cold
+    boot, 2026-09-03** (`post-power-on-delay-ms` reads 0x64 in the
+    running tree); 27 + 32 hands-off suspend cycles across two rigs
+    with zero Wi-Fi restore failures, and the attach timeout has not
+    recurred. It is a device-tree change, so a kexec'd trial runs the
+    previous cold boot's tree and cannot carry it: it reaches a device
+    only at that device's next cold boot (`doc/update-path.md`).
+14. `linux-pinenote-7.1-direct-correctness.patch` — ours, on top of
+    hrdl's: four correctness fixes from the 2026-09-03 third-party audit
+    (`doc/reviews/2026-09-03-third-party-audit.md`): the parallel
+    advance no longer runs a band inline when `queue_work()` returns
+    false (`WARN_ON_ONCE` instead — that return means the work is
+    already queued and owns the completion); the 32×32 dither's second
+    16-byte half now loads 16 bytes into the row instead of repeating
+    the first half, in all three pixel-format copies;
+    `rect_hint_batch` is validated (1..4096) and the rectangle count is
+    capped at 65536 (`-E2BIG`); `OFF_SCREEN`/`EXTRACT_FBS` return
+    `-EFAULT` on any short user copy instead of leaking a byte count or
+    OR-ing residuals with errnos. Built as
+    `6rhnmj09…-linux-pinenote-7.1.8-pinenote.drv` after the 2026-09-04
+    review's braces fix — the first derivation,
+    `mwycbl5a…`, carried five `-Wdangling-else` warnings (an unbraced
+    `if (access_ok(...)) if (copy_to_user(...))` bound the pre-existing
+    `else res = -EFAULT;` to the inner `if`, inverting the return) and
+    was never deployed; the only warning in the files this patch touches
+    is hrdl's own unused `frame_counter` at `rockchip_ebc.c:903`. No
+    host harness executes the direct-mode driver's actual source
+    (`ebc-logic` compiles only the forward-port patch's LUT-walk
+    driver), so the offline ladder does not reach it. **The guards ran
+    on glass 2026-09-04 (generation 14)**: `rect_hint_batch=0` refused
+    with `EINVAL` in 0.000 s instead of spinning, 70 000 rectangles with
+    `-E2BIG`, `EXTRACT_FBS`/`RECT_HINTS` happy paths unchanged, no
+    `WARNING` from the `queue_work` assertion (`doc/status.md`). Two
+    halves stay unobserved: the dither correction is **off the shipped
+    route** (the reader draws Y4 through `default_hint=32`, no dither
+    bit; the driver's dithered route is hint 64 and its FAST mode), so
+    nothing a reader sees changes; and the short-copy `-EFAULT` branches
+    have not been provoked.
 
-`linux-pinenote-debug` stacks `linux-pinenote-debug-extract-fbs.patch`
-on top of the same seven.
-
-**A patch refresh must carry all seven.** The refresh procedure below
-regenerates only the forward-port patch — the other six are separate
+**A patch refresh must carry all fourteen.** The refresh procedure below
+regenerates only the forward-port patch — the other thirteen are separate
 files that a refreshed `kernel.scm` still applies, and nothing in the
 procedure touches them, so the failure mode is *omission*: forgetting
 they exist, or rebasing the forward-port onto a base where one of them
 no longer applies. After any base change, `git apply --check` each of
-the seven against the new source before building, and re-read the
+the thirteen against the new source before building, and re-read the
 kernel.scm comments — several are deliberate, revertable experiments,
 not permanent carry.
 
@@ -179,7 +223,7 @@ Host fixtures exercise the same model and executor with fakes only.
 It does not change Linux 7.0's `ROCKCHIP_SLEEP_PD_CONFIG=0xff` pmdomain ABI.
 
 **The direct-mode driver is in the shipping list since the embrace
-sweep's S1 (2026-09-03):** items 8–11 below. `linux-pinenote-hrdl-direct`
+sweep's S1 (2026-09-03):** items 8–11 above. `linux-pinenote-hrdl-direct`
 and `linux-pinenote-debug` are retired (the direct driver registers
 `EXTRACT_FBS` natively); `linux-pinenote-debug-extract-fbs.patch` stays
 only as the ebc-logic harness's dbg fixture over the retained forward-port
@@ -447,7 +491,7 @@ moved — e.g. 7.0.11 → 7.0.14:
    source out of the patch, so it is the gate that notices a silent
    semantic change).
 
-**Record, 7.0.11 → 7.0.14 (2026-08-15):** all seven patches apply
+**Record, 7.0.11 → 7.0.14 (2026-08-15, the seven-patch era):** all seven patches apply
 cleanly, and 7.0.14's `rk3566-pinenote.dtsi` carries neither the
 `simple-battery` node nor the `charger` child, so the 7.1 collision does
 not exist there. Verified by dry-run and by inspecting the mainline
@@ -459,7 +503,8 @@ glass. 7.0.11 remains the proven version.
 1. Change `%linux-pinenote-base` and update `KERNEL_EXPECT` in the
    `Makefile`. Expect `kernel-version-check` to be the first thing that
    moves.
-2. Dry-run all seven patches. **Failures here are the deliverable**, not
+2. Dry-run every patch in `%linux-pinenote-patches`, in list order
+   (fourteen as of 2026-09-04). **Failures here are the deliverable**, not
    an obstacle — each one is either a hunk mainline absorbed (delete it)
    or a hunk that needs rebasing (do that).
 3. **Known for 7.1:** mainline carries `1d608a269e24`, so **both** the
@@ -860,12 +905,24 @@ pinned by `make direct-probe-quirk-check`:** the probe's error path after
 a failed `rockchip_ebc_drm_init` is a bare `return ret` — hrdl's patch
 replaced `goto err_stop_kthread` and deleted that label — so a probe that
 fails there leaves runtime PM enabled and the parked refresh kthread
-alive. On the direct image the *first* probe fails there by construction
+alive. On the direct image the *first* probe fails by construction
 (no CLUT until the one-shot compiles it), and the rebind's second
 `pm_runtime_enable` prints `Unbalanced pm_runtime_enable!` on every boot.
-Benign (runtime PM still works; one parked kthread leaked per boot), and
-the driver's lineage owns the two-line fix (`doc/upstream-register.md`
-item 23).
+**Correction from glass, 2026-09-04 (generation 14, the probe-unwind
+patch applied):** the boot's first probe does not fail at `drm_init` —
+it fails earlier, in `rockchip_ebc_waveform_init` (`Direct firmware
+load for rockchip/custom_wf.bin failed`, `*ERROR* Unable to load
+custom_wf.bin`, 2.8 s), whose bare `return ret` the unwind patch does
+not reach, so the rebind still logs `Unbalanced pm_runtime_enable!`
+(8.2 s) and that path still leaks the two plain vmallocs
+(`hints_ioctl`, `packed_inner_outer_nextprev`, ~10 MB) and the runtime-PM
+count — the audit's item 2, glass-confirmed (`doc/status.md`). Each
+*successful* probe additionally leaks `lut_custom.luts` (one
+`vzalloc`, 228 kB for this device's 14 temperature bins, freed
+nowhere): the rebind ×5 slope of the same session. Both are once per
+boot in the product and reclaimed at the next boot. The driver's
+lineage owns the fix (`doc/upstream-register.md` item 23, which now
+records the real failure site).
 
 ## Why the base is vanilla, not linux-libre (history)
 

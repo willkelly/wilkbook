@@ -296,10 +296,12 @@ wipes it when os2 boots, so harvest before rebooting os2.
 
 Stated plainly, because the alternative is implying a tested path.
 
-- **No device without a prior wilkbook install has ever booted this
-  image.** "Fresh-clone first boot must survive" is an open alpha
-  blocker (`doc/alpha-checklist.md` §5), and it is open for the
-  *author's* device. On a second device it is open twice over.
+- **One device without a prior wilkbook install has booted this
+  image** — rpedde's, 2026-08-31 (`doc/status.md`); until then none had.
+  "Fresh-clone first boot must survive" (`doc/alpha-checklist.md` §5)
+  is closed in the tree and has that single data point on glass; the
+  direct-kernel lineage since 2026-09-03 has not been installed fresh
+  anywhere.
 - **`/data/books` is auto-created on first boot** (section 7); a missing
   data partition falls back to a readable placeholder rather than a
   broken browser — proven in QEMU, not on a second device.

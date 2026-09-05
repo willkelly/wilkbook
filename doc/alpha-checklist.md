@@ -11,7 +11,9 @@ question answered on hardware** — answered, not necessarily landed.
 able to build from source and drive a UART. The repo goes public at the
 same time, but for *reading and stealing*, not for installing: no
 general-audience install path, no update mechanism, no support promise.
-The disclaimer carries that.
+The disclaimer carries that. [The update mechanism arrived 2026-09-02
+(`doc/update-path.md`); the audience and the support promise are
+unchanged.]
 
 **Missing a target is acceptable** and gets the pre-1.0 optimization
 pass. Publishing a number we never measured is not. Alpha ships measured
@@ -96,8 +98,11 @@ configuration.  The bench kernel and flavor are retired.
 **Consequence, documented not hidden:** during suspend the GPIO0 pad bank
 is unpowered, so the only wake sources are rk817-internal (RTC alarm,
 power button, charger).  The pen cannot wake it. The **cover
-can**, confirmed 2026-08-09 — which contradicts the model above and is
-an open question rather than a settled tradeoff (`doc/power-management.md`).  A cold touch controller times out once on
+can**, confirmed 2026-08-09 — which contradicted the model above until
+2026-08-24, when the rails half was solved (the hall sensor is powered
+from the battery through two always-on regulators); how the PMU latches
+the edge with the pad rails down is the half still open
+(`doc/power-management.md`).  A cold touch controller times out once on
 resume and is reset by the carried workaround.
 
 ### 3c. ~~NEW BLOCKER — the multi-day ultra soak~~ — DONE 2026-08-15
@@ -259,10 +264,12 @@ The machinery now exists; the acts themselves wait for sign-off.
       by commit with introductions. This is the reproducibility claim:
       `guix time-machine -C channels.scm` rebuilds the identical closure.
       Regenerate with `make channels-pin` *before* building the shipping
-      artifact — and note this regeneration is currently *mandatory*,
-      not hygiene: the committed pin predates the kernel's 7.1 series
-      pin, so time-machine against it fails outright until the bump
-      (`doc/building.md`, 2026-08-25).
+      artifact — for one day (2026-08-25) that regeneration was
+      *mandatory*, not hygiene: the committed pin predated the kernel's
+      7.1 series pin and time-machine failed outright until the
+      2026-08-26 bump; re-checked 2026-09-04, the pinned and ambient
+      `make kernel-drv` resolve the identical derivation
+      (`doc/building.md`).
 - [x] **`make release-manifest ROOTFS=…`** writes `SHA256SUMS` carrying
       the hash, the git description and the channel pointer, so the hash
       lands inside signed history rather than beside a download.
@@ -287,25 +294,30 @@ tag, one channel pin and one hash clears it.
 
 ### 7. Public-repo posture
 
-- [ ] The disclaimer, stated plainly and early: hardly tested, largely
-      AI-written, will probably break your device, no support.
-- [ ] **Root posture stated, not discovered.** With the convenience flag
+- [x] The disclaimer, stated plainly and early: hardly tested, largely
+      AI-written, will probably break your device, no support. (README,
+      since the 2026-08-08 publication.)
+- [x] **Root posture stated, not discovered.** With the convenience flag
       on, any USB-C cable is an unauthenticated root shell
       (`usb-gadget.scm` execs a shell with no login prompt; `reader` has
       `NOPASSWD: ALL`). That is fine for two people who know — and only
       if they are told, in the README, not in a commit message.
-      `/etc/wilkbook-build` names the build either way.
-- [ ] **The debug-UART serial console is also an unauthenticated root
+      `/etc/wilkbook-build` names the build either way. (Stated in
+      README's build-flags section.)
+- [x] **The debug-UART serial console is also an unauthenticated root
       shell** — flagged 2026-09-03 (`doc/status.md`, `doc/device-access.md`):
       `ttyS2`'s getty logs root in with no password, same standing as the
       ACM gadget item above, but a *physical debug pad* rather than the
       convenience flag, so it is on every build regardless of
       `WILKBOOK_VERY_INSECURE_FOR_CONVENIENCE`. State it alongside the
-      root posture above, or decide it needs its own gate.
-- [ ] Merge the shippable half of `ultra-handshake-arm` to main.
-- [ ] A "what to steal" entry point: this repo's genuine value to other
+      root posture above, or decide it needs its own gate. Stated —
+      README's build-flags section and the tester brief (2026-09-04);
+      the gate decision stays open.
+- [x] Merge the shippable half of `ultra-handshake-arm` to main (§6,
+      2026-08-08).
+- [x] A "what to steal" entry point: this repo's genuine value to other
       PineNote people is the host tools and the findings, not the image.
-      Point at them from the README.
+      Point at them from the README. (README, "What to steal".)
 
 ---
 
@@ -349,9 +361,10 @@ power button and the cover.
       config path but not `enabled`, and the only paused message fires
       on a power tap, so an idle-only user gets silence. `herd status`
       showing `running` reads as healthy.
-- [ ] **Timezone at build time** — GitHub issue #6, raised in the same
+- [x] **Timezone at build time** — GitHub issue #6, raised in the same
       session: the image runs UTC, so clocks and log timestamps are off
-      for every user.
+      for every user. Built: `WILKBOOK_TIMEZONE` (README, build flags);
+      the on-glass look at the clock is R1, unrun.
 
 **The lesson worth keeping:** every offline gate in this repo passed on
 this image, and the QEMU rungs boot it three ways. None of them could
@@ -378,7 +391,10 @@ seen on glass**, so both belong in the QC cycle.
       by hand "or the box is pitch black", which *is* this bug.
 - [ ] **Verify both on glass** — QC §2.2 (cycle with the light ON and
       check `actual_brightness` after) and §2.3 (close the cover, confirm
-      it sleeps promptly; open it, confirm it wakes).
+      it sleeps promptly; open it, confirm it wakes). [Superseded by the
+      broker 2026-08-31, which owns both: its frontlight restore was
+      hardware-accepted on rpedde's device; the cover is confirmed
+      below.]
 - [x] **Cover-close-to-suspend: CONFIRMED on glass 2026-08-09**, first
       on the second tester's device and then on the author's. The switch
       is wired and armed (`gpio-23`, ACTIVE LOW, IRQ, SW_LID,
@@ -394,6 +410,96 @@ seen on glass**, so both belong in the QC cycle.
       *mechanism* is now an open question, tracked in
       `doc/power-management.md`. The product fact is good news: a third
       wake source, and a complete cover gesture.
+
+### 11. ~~The embrace sweep: one reader flavor, on the direct-mode kernel~~ — MERGED AND GLASS-PROVEN 2026-09-03
+
+The two-flavor split (shipping-driver reader vs. direct-mode study
+image) is gone: `linux-pinenote` **is** the direct-mode kernel now
+(PR #56, merged to `main` via #64). Glass-proven the same day as
+generation 7 on wkelly's device: flash-free page turns, all four
+rotations (still flashing, still feeling a little sluggish — unchanged
+from the study image), pen and touch, and the platform-controls broker
+suspending/waking cleanly through both the power button and the cover
+(three cycles, zero failures — the first hardware session of the
+broker and the direct driver together), followed by a cold boot.
+`doc/status.md` 2026-09-03 late afternoon.
+
+**What it opened, not yet closed:**
+
+- [ ] The shipping-reader validation checklist R1–R7 and the optics
+      check (`doc/glass-plan-2026-08.md`) have not been run since the
+      switch — only what's listed above was exercised. R3 as the reader
+      ships means the inert check (no server, one log line, clock =
+      RTC) — run and held 2026-09-04; the with-server sync and the
+      alarm re-arm are a separate row (R3s) on a rebuilt generation and
+      not a tag blocker. R4 held the same day.
+- [ ] The third-party audit's item 2: the direct driver's probe/remove
+      path doesn't release everything it acquires when a probe fails —
+      six vmalloc planes, two DMA maps, and the custom LUT (the LUT is
+      never freed even on a clean remove). Confirmed against the source
+      2026-09-03 (`doc/reviews/2026-09-03-third-party-audit.md`); not
+      yet fixed — the review calls it "the most important substantive
+      follow-up."
+- [x] Kernel patch 14 (four correctness fixes from that same audit) ran
+      on glass 2026-09-04 (generation 14): a zeroed `rect_hint_batch` is
+      refused with EINVAL in 0.000 s instead of spinning, an oversized
+      hint list with E2BIG, the happy paths unchanged, no `WARNING` in
+      dmesg (`doc/status.md`). Two halves of it remain unobserved: the
+      corrected dither is off the shipped route (the reader draws Y4
+      with `default_hint=32`; the fix affects DITHER-hinted Y1/Y2 and
+      the driver's FAST mode), and the short-copy `-EFAULT` branches
+      have not been provoked.
+
+### 12. ~~The update path: deploy without a cable~~ — GLASS-PROVEN 2026-09-02, self-recovery PROVEN 2026-09-03
+
+`make deploy` moves only the missing store paths over the network,
+kexecs the result as a trial, health-checks it, and promotes it —
+proven end to end in QEMU and on glass 2026-09-02 (`doc/update-path.md`,
+`doc/status.md`). **Kernel patch 8 (kexec-hardening, PR #48, merged via
+#64) closes the worst failure mode**: a trial kernel that halts is now
+reset by the SoC watchdog into U-Boot — proven end to end 2026-09-03
+evening. U-Boot's default slot is os1, so the last promoted generation
+comes back hands-off only with the UART attached and the deployer
+answering the menu (`WILKBOOK_UART`); with no cable the device waits on
+stock Debian. A trial that
+dies in the specific GRF bus-wedge hang (`doc/upstream-register.md`
+item 22) is *prevented* by the standing initcall blacklist rather than
+recovered by the reset; that class still needs the power button if the
+blacklist is ever wrong on a future kernel change.
+
+**What it opened, not yet closed:**
+
+- [x] The deployer's UART watcher used to start only after the
+      five-minute ssh wait, by which time U-Boot's menu was long gone;
+      since 2026-09-04 (review S4) it is armed before the `kexec -e` and
+      the recovery path waits on it, pinned in the update-path
+      `test-static.sh`. With no cable the landing is still os1.
+- [ ] A trial that dies *after* the helper's own Wi-Fi off — an EBC that
+      never goes idle, a failed `kexec -l` — strands the reader stopped
+      and radio-off with no message delivered, and the deployer reports
+      it as a dead trial the watchdog will reset, which it will not
+      (the dog is armed later). Found by review 2026-09-04, not fixed.
+- [ ] Generation pruning (`KEEP=`) has no guard against deleting the
+      last generation known to work — nothing currently pins one.
+- [ ] The os1-based rescue script (PR #51) has never been run against
+      os1 itself.
+- [x] Wi-Fi reassociating after a resume is exercised on both paths:
+      27 unattended cycles overnight 2026-09-03/04 (broker-triggered)
+      and 32 more on 2026-09-04 of which 28 were KOReader's own idle
+      timer, 0 restore failures in either run (`doc/status.md`). The
+      driver rebind and the association retry underneath have still
+      never fired on glass — harness-proven only.
+- [ ] The watchdog self-reset's timing is not fully understood: the
+      reset that proved it landed roughly 3.5 minutes after the dog was
+      armed, not the ~44 s the configured timeout predicts. Harmless,
+      but unexplained.
+- [ ] Generations 11–12, still inside wkelly's device's `KEEP` window,
+      are "convenience" builds (`WILKBOOK_VERY_INSECURE_FOR_CONVENIENCE=1`
+      — a passwordless root shell over USB), built to debug the Wi-Fi fix
+      with no UART. The device runs generation 15, a normal build; do not
+      roll back into 11 or 12 for reading. Recorded as a live reminder
+      that the flag exists and is easy to leave on, not as a defect in
+      the shipping build.
 
 ## Explicitly deferred to the pre-1.0 optimization pass
 

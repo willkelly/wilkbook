@@ -642,6 +642,18 @@ configuration field:
           (servers '("192.168.1.1"))))
 ```
 
+With none configured the daemon logs one `no --server configured` line
+at boot and exits; shepherd then shows it stopped **and disabled** (a
+non-respawned exit), which is the shipped, healthy state (R3 in
+`doc/glass-plan-2026-08.md`, held 2026-09-04). The clock is then the
+RK817 RTC's, restored by the kernel at every boot. To set it by hand
+over SSH, write the RTC too, or the setting is lost at the next cold
+boot — this is the same pair the daemon uses after a sync:
+
+```sh
+date -u -s '2026-09-04 20:30:00' && hwclock --systohc --utc --noadjfile
+```
+
 The recommendation is a server on the LAN you already chose to join — a
 router almost always is one. An IPv4 literal takes the `inet_pton` path,
 so the daemon generates no DNS traffic either; a hostname goes through
@@ -757,3 +769,89 @@ so first.
 `not-before` is a constant rather than the build date on purpose:
 stamping the build date into a default would make the derivation
 unreproducible. It therefore ages, and the field is how you move it.
+
+## 8. Wi-Fi after a resume (2026-09-03)
+
+The ultra suspend powers the SDIO card off (`cap-power-off-card`), so
+every resume is a full `brcmfmac` re-probe: the mmc core re-enumerates
+the card, the driver downloads the firmware again and attaches. On
+2026-09-03 one resume in ten (generation 8, the study flavor; the UART
+capture holds all ten) downloaded the firmware and then timed out on the
+first control exchange — `brcmf_sdio_bus_rxctl: resumed on timeout`,
+`brcmf_bus_started: failed: -110`, `brcmf_attach failed` — whereupon
+the driver's failure path released both SDIO functions
+(`device_release_driver()` in `brcmf_sdio_firmware_callback`) and
+nothing ever rebound them: `wlan0` stayed absent through two more
+suspend cycles until a cold boot. The same boot's `mmc_sdio_suspend`
+had warned `WARN_ON(host->sdio_irqs && !mmc_card_keep_power(host))`
+eight seconds before that resume; at cold boot the first probe of the
+same function fails with -5 and a 12 ms retry saves it. So the power
+sequence is marginal at the edges, and the reset/enable lines sit on
+`gpio0`, whose pad rail is one of the three cut in ultra suspend, with
+no settle delay configured on the power sequence.
+
+Three layers, cheapest first:
+
+1. **`pinenote-wifi-control on` recovers the driver itself.** If
+   `wlan0` has not appeared within 5 s of the resume, it rebinds SDIO
+   function 2 (`mmc1:0001:2`, the one whose probe does the work) through
+   `/sys/bus/sdio/drivers/brcmfmac/{unbind,bind}` — the device nodes
+   survive the driver's failure path, so this reruns exactly the probe a
+   clean resume takes — and waits 15 s more. Once the supplicant is up
+   it waits up to 15 s for association (`carrier`) and restarts the
+   supplicant once if none comes; no AP in range looks the same and is
+   reported, not fatal. Waits are env-overridable so the host harness
+   runs them at zero: `make platform-controls-check` pins the rebind, the
+   no-rebind-when-present case, and the single association retry.
+2. **The broker logs a failed restore** (`Wi-Fi restore failed after
+   resume`) instead of discarding the exit status at its four restore
+   sites.
+3. **Kernel patch 13** (`linux-pinenote-7.1-sdio-pwrseq-delay.patch`):
+   `post-power-on-delay-ms = <100>` on `sdio_pwrseq`, the Quartz64's
+   value for the same module family; mainline's PineNote DTS has none.
+   100 ms per power-on, nothing else.
+
+**The second class, root-caused the same night (2026-09-03 21:00):**
+KOReader restores Wi-Fi on resume only when `auto_restore_wifi` (which
+the profile seeds true) AND its own memory `wifi_was_on` are true
+(`networklistener.lua`); that memory is set only by KOReader's own
+successful connect or restore and is cleared, together with the radio,
+by `_abortWifiConnection` when a restore's 45 s connectivity check
+times out (`manager.lua`). Our radio is brought up by the service, not
+by KOReader, so the memory was seeded once (only when the settings file
+is absent) and never re-earned; the generation-8 driver failure at
+16:42 made a restore fail, the flag went false in
+`/root/.config/koreader/settings.reader.lua` (shared by every
+generation), and from then on every idle or charger-wake suspend
+(KOReader-initiated: it turns the radio off first, so the broker's
+`had_wifi` is false and it stays out) left the reader offline until the
+menu toggle. Button-initiated suspends go through the broker and always
+restored (eleven for eleven in the rig). Layer 4, on branch
+`wifi-koreader-memory`: the device layer reasserts KOReader's memory
+from the control script's own record (`/run/wilkbook-power/wifi.state`
+reads `on` when a validated supplicant was taken down for the sleep) in
+the Resume handler, before KOReader's listener decides, and sets the
+setting at start-up when the service has the radio on. Policy stays
+KOReader's: `auto_restore_wifi` still gates. Alongside: the control
+script's association retry now runs as a detached watcher (`on` is
+synchronous on KOReader's UI thread and must return in seconds), every
+message also lands in `/run/wilkbook-power/wifi.log`, and the broker
+takes an `rtc_settle=` config key so the cycle rig can hold long awake
+windows.
+
+What is proven offline: layers 1–2 by the harness. What needs glass:
+the hands-off cycle rig (`pinenote/tools/platform-controls/wifi-cycle.sh`:
+a short `backstop=` in `/data/wilkbook/autosuspend.conf` plus one
+injected power tap makes the broker suspend, RTC-wake, restore Wi-Fi,
+settle `rtc_settle` seconds and re-suspend by itself) run for tens of
+cycles on the image that carries all three, counting `Wi-Fi restore
+failed`, `rebinding the driver` and `restarting the supplicant` in the
+broker's log and `wifi.log`. **Run, twice** (`doc/status.md`): 27
+broker-triggered cycles overnight 2026-09-03/04 and 32 on 2026-09-04
+with the cable out so that KOReader's idle timer triggered 28 of them
+— zero restore failures, zero rebinds, zero retries; the rebind and the
+retry are therefore still harness-proven only. The second failure class
+seen on generation 7 (driver attach fine per the UART, no SSH
+afterwards) has not recurred in 59 cycles; layer 1's association retry
+is aimed at it, unexercised.
+

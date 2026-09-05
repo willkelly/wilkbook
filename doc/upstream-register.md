@@ -836,9 +836,10 @@ unattached state (`doc/artifacts/pinenote-ultra-soak-20260815/`). Same
 DT, same userspace; only the kernel series moved.
 
 **Where it would go:** linux-usb / dwc3 maintainers, if it reproduces
-outside our patch stack. None of our seven patches touches dwc3 or the
-gadget core, but the BSP SIP suspend patch changes the suspend ordering
-around it, so we cannot yet exclude an interaction.
+outside our patch stack. None of our fourteen patches touches dwc3 or
+the gadget core (the forward-port's defconfig only enables them), but
+the BSP SIP suspend patch changes the suspend ordering around it, so we
+cannot yet exclude an interaction.
 
 **What has to be true first:** (1) reproduce on a clean 7.1.x defconfig
 build (no SIP suspend patch) on the device — if it disappears, the bug
@@ -1048,6 +1049,16 @@ fails there by construction (the CLUT is compiled on-device after the
 module is loaded, then the driver is rebound), so every boot logs
 `rockchip-ebc fdec0000.ebc: Unbalanced pm_runtime_enable!` at the
 rebind. Benign in effect; still a leak on every failed probe.
+**Glass, 2026-09-04:** with the unwind patch in the kernel the message
+still prints at every boot, because the by-construction failure is not
+at `drm_init` but earlier, in `rockchip_ebc_waveform_init` (the
+`custom_wf.bin` load, before the kthreads exist), whose own bare
+`return ret` leaks `pm_runtime_enable`, the two `vmalloc`s
+(`hints_ioctl`, `packed_inner_outer_nextprev`) and the two phase DMA
+mappings; a successful probe then leaks `lut_custom.luts` (one
+`vzalloc` of `num_temp_ranges × sizeof(struct drm_epd_lut_temp_v2)`,
+228 kB here, never freed). The fix is the resource-lifetime pass the
+third-party audit's item 2 asks for, not the two-line goto.
 
 **Fix:** restore `goto err_stop_kthread;` and the label
 (`kthread_stop(ebc->refresh_thread);` falling into `err_disable_pm`).
@@ -1296,10 +1307,9 @@ are refuted (unchanged from before, kept for the record):
    itself caused; rewriting `CRU_GLB_RST_CON` bits 0–1 (already `0x103`)
    before the second armed-hang test changed nothing (PR #54 closed).
 
-**What has to be true first:** nothing blocks the upstream send but
-review — the patch is on the kexec-hardening branch (PR #48), which
-per `CLAUDE.md` wants an operator's review before merge (kernel patch).
-A second board (rpedde's) would strengthen the upstream claim but is
+**What has to be true first:** nothing blocks the upstream send — the
+patch was reviewed and merged 2026-09-03 (PR #48, via the #64 sync) and
+has carried every generation since 9. A second board (rpedde's) would strengthen the upstream claim but is
 not required; the register-level mechanism (a documented shutdown hook
 racing a documented kexec code path) does not need a second board to be
 believed, only to be doubly corroborated.

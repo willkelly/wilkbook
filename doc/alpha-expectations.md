@@ -2,15 +2,37 @@
 
 You have a PineNote running wilkbook's reader image. This page says what
 it should *feel* like, what is known-broken, and what to report. It is
-the operator's calibration, written 2026-08-08 and revised 2026-08-15
-with the measured soak figures — if your device does
-worse than this, that's a bug report; if it does better, brag.
+the operator's calibration, written 2026-08-08, revised 2026-08-15 and 2026-09-04
+with the measured soak figures and 2026-09-04 for the v0.3.0-prealpha
+changes below — if your device does worse than this, that's a bug
+report; if it does better, brag.
+
+## Since v0.2.0
+
+Two things changed about how this device *stays* current, not just how
+it reads. First, it can now update itself: a new build reaches your
+PineNote over `make deploy` — no cable, no reflash — and if the new
+version ever fails to come up, the device notices on its own and resets
+itself. Where it lands then depends on the cable: with the debug cable
+attached the update tool answers the boot menu and your reader comes
+back on its own; with no cable the device comes up in the stock rescue
+system (os1) and waits for you. Second, there is only one
+reader image now: the direct-mode display driver, previously an
+experiment running alongside the original driver, is the shipping
+driver on every build — page turns should feel the same or better
+(no flashing), rotations still flash a little and feel a touch slower,
+same as before. Sleep and wake (power button, cover, KOReader's own idle
+timer) still go through the same broker as v0.2.0, now proven on this
+driver too, and Wi-Fi should reconnect on its own after almost every
+sleep instead of occasionally needing a manual toggle.
 
 ## The feel
 
 - **Page turns should feel snappier than the stock Debian image.** One
   pass per turn: the page draws once, completely. No settle-then-redraw.
-- **Few or no full-screen flashes.** The black-white-black inversion
+- **Few or no full-screen flashes on page turns; rotations do flash and
+  feel sluggish** (the operator's own verdict on the direct-mode kernel,
+  2026-09-03). The black-white-black inversion
   flash should be rare — not on ordinary page turns, not on menus. An
   occasional deliberate full wash (ghost-clearing) is normal after many
   pages or on resume.
@@ -61,7 +83,7 @@ worse than this, that's a bug report; if it does better, brag.
 
   | | draw | from a full charge |
   |---|---|---|
-  | Sitting idle, suspending itself | 5.47 mA | **~30 days** |
+  | Sitting idle, suspending itself | 5.47 mA | **~30 days** (measured on the v0.1.0 image with the retired 5-minute daemon; not yet re-measured on the direct-mode kernel with the broker) |
   | Actually being read (~40 min/day) | 10.07 mA | **~16 days** |
 
   If you read more than that, expect less than 16. The honest way to
@@ -80,13 +102,16 @@ worse than this, that's a bug report; if it does better, brag.
   over those six days, unattended. That is the number to weigh against
   the warnings below about a device that will not wake — the failure is
   taken seriously because it would be bad, not because it is common.
-- The device suspends itself after ~5 idle minutes (page + SUSPENDED
+- The device suspends itself after 15 idle minutes (KOReader's own timer,
+  settable in its menu; it will NOT auto-sleep while on the charger — that
+  is the default, not a fault) (page + SUSPENDED
   banner, frontlight off), and a short power press suspends or wakes it
   on demand.
 - **If it never sleeps at all** — no banner, Wi-Fi stays up, the power
   button does nothing — auto-suspend is *paused*, not broken. Check
   `/data/wilkbook/autosuspend.conf` and
-  `/var/lib/pinenote/autosuspend.conf`; either holding `enabled=0`
+  `/var/lib/pinenote/autosuspend.conf`; either holding `enabled=0` (which also silences the power button and the
+  cover: the broker treats it as "do not sleep, do not react")
   pauses everything, and the second one wins. Set `enabled=1` or delete
   it (no restart needed). An earlier version of the install page told
   people to create that file and never told them to undo it, so this is
@@ -108,10 +133,14 @@ worse than this, that's a bug report; if it does better, brag.
 
 ## Known not-working (told to you rather than discovered by you)
 
-- **The Wi-Fi UI does not work.** There is no on-device network picker.
+- **The Wi-Fi UI is an on/off toggle, not a picker.** Networks are
+  configured out of band (`doc/networking.md`); the menu toggle works and
+  "restore Wi-Fi after resume" is honoured. An earlier note said the UI
+  did not work at all; that is no longer true.
   Credentials are staged out of band (a file on the data partition —
   `doc/install.md`); once staged, Wi-Fi associates at boot on its own.
-- **The brightness UI may or may not work.** The frontlight comes on at
+- **The brightness UI works; level and warmth come back after a wake.**
+  (Earlier note kept for history:) The frontlight comes on at
   boot and turns off in suspend; adjusting it from KOReader's own
   slider is unvalidated. If it works for you, say so — that's data.
 - **No Wi-Fi UI also means no on-device book downloads.** Books arrive
@@ -119,6 +148,60 @@ worse than this, that's a bug report; if it does better, brag.
 - Settings you change in KOReader menus persist across suspends but
   **reset on a reflash** (they live on the OS partition; your books and
   reading positions live on the data partition and survive).
+- **The clock is whatever the device's own RTC holds.** Nothing on the
+  image sets it: it *can* ask a time server, but ships with none
+  configured, so out of the box it talks to nothing. Expect it to drift
+  a little; if the battery ever runs completely flat, expect a nonsense
+  date afterwards. Two different things can look like a wrong clock:
+  the *time* (the RTC's) and the *zone* (the image runs UTC unless it
+  was built with a timezone). Tell the operator, who can set the time
+  over SSH or name your router as the time server in your next build
+  (`doc/networking.md`).
+- **We haven't re-run the full page-turn/ghosting quality check since
+  switching to the direct-mode driver as standard.** It should look and
+  feel like v0.2.0 did; say something if it doesn't.
+- **If a wireless update ever seems to hang**, give it a few minutes:
+  the device resets itself (about 3.5 minutes in the session that proved
+  it). What happens next depends on the cable. **With the debug cable
+  attached** the update tool answers the boot menu and your reader comes
+  back by itself. **With no cable it comes up in the stock rescue system
+  (os1)** — not a rare corner, the normal outcome, because that is what
+  this boot loader defaults to. It waits there; nothing is lost, and the
+  last working version is still on the device.
+- **Old versions aren't yet protected from automatic cleanup** — there's
+  no "never delete this one" pin on a known-good version yet.
+- **The rescue procedure for a badly broken update has never actually
+  been run**, only written and reasoned about.
+- **Wi-Fi reconnecting after sleep is now well-tested for both cases** —
+  the ordinary one (power button, cover, the automatic wake) and the one
+  where KOReader's own idle timer puts the device to sleep: 59 unattended
+  sleep/wake cycles across two runs, 28 of them idle-timer sleeps, with
+  the radio back every time. What has *never* fired on a real device is
+  the deeper recovery underneath it (the driver rebind and the second
+  association attempt): it is proven only in the offline harness, so if
+  Wi-Fi ever does stay down after a wake, that is the code that gets its
+  first real test — tell us.
+- **If the display driver's very first startup attempt is interrupted**
+  (it is *expected* to fail once and recover a moment later — that part
+  is normal and not a bug), it can leak a small amount of memory instead
+  of freeing it. Found by an outside code review, not yet fixed.
+- **A wake by the power button could be followed by an automatic
+  re-sleep a few seconds later**, leaving the reader looking dead until
+  a second press. Found and fixed 2026-09-04, and the fix was re-run
+  the same evening on the build this tag names: a button sleep inside
+  the self-wake's window, then a button wake that held. If it ever
+  happens to you anyway, press again — the second press holds — and
+  say so.
+- **The reader opens in the library, not in your book**, after a reboot
+  or an update. Your place is kept; you tap the book. That is today's
+  behaviour, not a decision anyone has defended.
+- **The debug serial port still logs in as root with no password**, if
+  someone has physical access and the right cable.
+- If you're handed a device with the console-debug build flag on (a
+  no-login root shell over USB, meant for the operator's own
+  debugging), that's deliberate and isn't what a normal build ships
+  with — don't mistake it for a security bug, and don't keep using that
+  build day to day.
 
 ## Reporting
 

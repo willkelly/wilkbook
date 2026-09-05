@@ -37,7 +37,7 @@ the bail-out criteria at the bottom still apply.
 **Update 2026-09-03: the one-image embrace ran on glass, as generation
 7** (wkelly's PineNote, `doc/status.md`, embrace sweep S6): the merged
 `reader` — direct-mode kernel plus the platform-controls broker,
-branch `embrace-s1`/PR #56, not yet merged — reached os2 through the
+branch `embrace-s1`/PR #56, merged the same evening — reached os2 through the
 update path, was kexec-trialled and promoted, then cold-booted; power
 button and cover both suspended and woke the device through the broker
 for the first time on any hardware, three cycles with zero failures.
