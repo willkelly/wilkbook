@@ -1064,7 +1064,18 @@ third-party audit's item 2 asks for, not the two-line goto.
 (`kthread_stop(ebc->refresh_thread);` falling into `err_disable_pm`).
 Two lines — carried in tree since 2026-09-03 as
 `linux-pinenote-7.1-probe-unwind.patch` (the pin asserts both the
-inherited shape and the fix).
+inherited shape and the fix). **And the resource-lifetime pass, written
+2026-09-04** as `linux-pinenote-7.1-probe-lifetime.patch` (kernel patch
+15, `doc/kernel-forward-port.md` item 15): a label chain in reverse
+acquisition order (stop refresh thread, stop temperature thread, free
+`lut_custom.luts`, disable runtime PM, unmap `zero_handle` if mapped,
+unmap the two phase buffers, free the two `vmalloc`s), every one of the
+fifteen failure sites between the `vmalloc`s and the thread creation
+routed to the label that undoes what it had acquired — `waveform_init`'s
+included — the temperature thread stopped on the later failures, and
+`remove()` freeing the LUT. The success path is untouched. **Glass
+pending**; what upstream would want is that same fix rebased onto hrdl's
+current tree, which we have not checked still has this shape.
 
 **What has to be true first:** the baseline gate; confirm hrdl's current
 tree still has the bare return (our patch is a snapshot); the pin

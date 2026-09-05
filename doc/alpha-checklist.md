@@ -435,11 +435,21 @@ broker and the direct driver together), followed by a cold boot.
       not a tag blocker. R4 held the same day.
 - [ ] The third-party audit's item 2: the direct driver's probe/remove
       path doesn't release everything it acquires when a probe fails —
-      six vmalloc planes, two DMA maps, and the custom LUT (the LUT is
-      never freed even on a clean remove). Confirmed against the source
-      2026-09-03 (`doc/reviews/2026-09-03-third-party-audit.md`); not
-      yet fixed — the review calls it "the most important substantive
-      follow-up."
+      the two plain vmallocs (~10 MB), two DMA maps, the runtime-PM
+      count, and the custom LUT (the LUT is never freed even on a clean
+      remove). Confirmed against the source 2026-09-03
+      (`doc/reviews/2026-09-03-third-party-audit.md`), on glass
+      2026-09-04 (generation 14: the by-construction first probe fails
+      at `waveform_init`, which the probe-unwind patch never reaches);
+      the review calls it "the most important substantive follow-up."
+      **Fixed in the tree 2026-09-04** as kernel patch 15
+      (`linux-pinenote-7.1-probe-lifetime.patch`, branch
+      `probe-lifetime`; `doc/kernel-forward-port.md` item 15). **Glass
+      pending** — this box closes when a generation carrying it shows no
+      `Unbalanced pm_runtime_enable!` at the rebind, no orphan 642/1926-page
+      `/proc/vmallocinfo` entries after boot, and `VmallocUsed` flat
+      (±16 kB) across five unbind/bind cycles with the reader stopped,
+      the 57-page LUT entry count staying at 1.
 - [x] Kernel patch 14 (four correctness fixes from that same audit) ran
       on glass 2026-09-04 (generation 14): a zeroed `rect_hint_batch` is
       refused with EINVAL in 0.000 s instead of spinning, an oversized

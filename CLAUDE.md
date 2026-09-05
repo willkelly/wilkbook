@@ -21,7 +21,7 @@ code review — before a single reboot. That's the standard.
 ## Repo shape
 
 - `pinenote/packages/kernel.scm` — two kernels: `linux-pinenote` (vanilla
-  7.1.x + the fourteen-patch stack, hrdl's direct-mode EBC driver
+  7.1.x + the fifteen-patch stack, hrdl's direct-mode EBC driver
   included — the **primary** and, since the embrace sweep, the only
   reader kernel) and `linux-pinenote-6.6.30` (m-weigand baseline,
   **regression-isolation only** — 7.0 reached parity 2026-07-04).
@@ -33,12 +33,13 @@ code review — before a single reboot. That's the standard.
   `pinenote_defconfig`. This single patch is the most rebase-fragile,
   highest-value artifact in the repo. Treat edits to it with care; it is
   also **treated as permanent** (mainline has no EPD infrastructure and
-  won't for years — see `doc/eink-research.md`). Thirteen more patches
+  won't for years — see `doc/eink-research.md`). Fourteen more patches
   ride alongside it — six for power (BSP SIP suspend, cpuidle, vdd_cpu
   PFM, DDR DVFS, st_accel PM, ultra rails-off suspend), hrdl's
   direct-mode driver and three of ours on it, the rk8xx kexec fix, the
-  sdio power-sequence delay, and the direct-correctness pass — fourteen
-  in all; the inventory lives in `doc/kernel-forward-port.md`.
+  sdio power-sequence delay, the direct-correctness pass, and the
+  probe-lifetime pass — fifteen in all; the inventory lives in
+  `doc/kernel-forward-port.md`.
 - `pinenote/services/`, `pinenote/images/`, `pinenote/systems/` — Guix
   system services, initrd, and flavor entrypoints.
 - `pinenote/tools/` — the test and diagnostic tools, host-side and
@@ -359,7 +360,7 @@ gitignored `build/`, or the reader's static address.
   off (`DEFAULT_ENABLE=0x0`), BREAK+`sysrq` arms, BREAK+key fires —
   the sequence is an arming toggle, NOT a per-use guard
   (`doc/kernel-forward-port.md`). 6.6.30 remains regression-isolation only.
-  Fourteen patches as of 2026-09-04 (seven from the 7.0/7.1 series, four for the direct-mode driver and our fixes on it, one mfd rk8xx kexec fix, one Wi-Fi power-sequence settle delay, one further direct-driver correctness pass from a third-party audit); the 7.1 move *deleted* two hunks mainline absorbed. The
+  Fifteen patches as of 2026-09-04 (seven from the 7.0/7.1 series, four for the direct-mode driver and our fixes on it, one mfd rk8xx kexec fix, one Wi-Fi power-sequence settle delay, two further direct-driver passes from a third-party audit — correctness, then the probe's resource lifetime); the 7.1 move *deleted* two hunks mainline absorbed. The
   rk8xx one is glass-proven and merged (2026-09-03); the sdio-pwrseq-delay
   and direct-correctness patches are glass-exercised on generations
   10–15 (the sdio delay's device-tree half only on the cold-booted 10)
@@ -367,7 +368,14 @@ gitignored `build/`, or the reader's static address.
   `prealpha-candidate`), which wants the operator's review for them.
   Inventory in `doc/kernel-forward-port.md`. The probe-unwind patch's
   claim is corrected there: the boot's failed first probe is at
-  `waveform_init`, which it does not cover (audit item 2, still open).
+  `waveform_init`, which it does not cover. **Patch 15 (probe-lifetime,
+  2026-09-04) is the audit's item 2 fix** — every probe failure unwinds
+  everything it acquired (the ~10 MB of vmalloc, the phase DMA maps,
+  the runtime-PM count, both kthreads) and `remove()` frees the 228 kB
+  custom LUT — in the tree and NOT yet on glass; its proof is no
+  `Unbalanced pm_runtime_enable!` at the rebind, no orphan 642/1926-page
+  `/proc/vmallocinfo` entries after boot, and `VmallocUsed` flat across
+  five unbind/bind cycles with the reader stopped.
 - **Suspend**: **ultra suspend is the shipping suspend** (2026-08-08,
   R12): hrdl's configuration adopted whole — standing
   `rockchip,suspend-state-override = <5>` + three `*_pmu` rails
