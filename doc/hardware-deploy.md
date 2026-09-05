@@ -294,6 +294,15 @@ answers leaves the boot menu's default on the last good generation.
 - A UART for the first kexec on a device (`doc/device-access.md`): a
   hung trial is recovered by the power button and the U-Boot menu, and
   the menu is driven by `pinenote/scripts/uart/uboot-pick-slot.sh`.
+  With `WILKBOOK_UART=/dev/ttyUSB0` the deployer arms that script
+  before the kexec, reads the pid/process-group handle it writes to
+  `<capture>.watcher`, and reaps that group when the trial answers (or
+  after it has picked os2 on a dead one) — never by `$!`, which from a
+  job-control shell names a `setsid` wrapper that has already exited
+  (`doc/device-access.md`, the handle file). The capture it leaves in
+  `$TMPDIR/wilkbook-uart-recover-<pid>.log` is lossy at 1.5 Mbaud (the
+  adapter, not termios: ~25 bytes lost every 150–250) — enough to see
+  the boot and catch the menu, not a transcript.
 
 **Every update:**
 

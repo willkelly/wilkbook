@@ -517,6 +517,21 @@ blacklist is ever wrong on a future kernel change.
       `pin 16` and `prune --keep 1`, which takes every unpinned
       generation between, and `list` still showing 16 `[pinned]`
       (`doc/hardware-deploy.md`).
+- [x] (offline, 2026-09-04) The watcher's menu match rode on one short
+      string in a capture that drops ~25 bytes every 150–250 (the
+      adapter at 1.5 Mbaud, not termios — `doc/device-access.md`), and a
+      hand-run watcher's `$!` was a dead `setsid` wrapper so its `cat`
+      outlived the session. Now: any of the three menu entry lines or
+      the countdown line triggers (U-Boot draws the entries once and
+      repeats only the countdown; never the title or "Press UP/DOWN",
+      which extlinux's generation menu shares, nor the pre-menu CTRL+C
+      prompt), the picker writes its pid/pgid/reader to `LOG.watcher`
+      and the deployer reaps by that, and a picker reaped before the
+      menu records `exit=terminated` there, not the `exit=0` a bash `sh`
+      used to leave; `make uart-pick-check` replays the real captured
+      menu bytes through a pty. **Glass still owed:** one deploy or cold
+      boot with the UART reaped by the recorded pgid, and a capture with
+      no mid-line drops (a different adapter, or a lower console baud).
 - [ ] The os1-based rescue script (PR #51) has never been run against
       os1 itself.
 - [x] Wi-Fi reassociating after a resume is exercised on both paths:
