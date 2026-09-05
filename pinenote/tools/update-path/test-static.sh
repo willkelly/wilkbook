@@ -59,6 +59,15 @@ grep -q 'and not pinned\[n\] then' "$ledger"
 grep -q 'pin N|unpin N|prune' "$helper"
 ! grep -q 'gen-pinned\|/boot/pinned\|pins\.conf' "$helper" "$ledger"
 echo "PASS: pin/unpin mark a generation inside its own /boot/gen-N and prune honours the pinned set"
+# ...and rung 4u exercises it: pin A, a prune that would take A, unpin, then
+# the positive control after the rollback.
+harness="$here/../../scripts/qemu/run-virt-update-flow.sh"
+grep -q 'vm "wilkbook-generation pin 1"' "$harness"
+grep -q 'vm "wilkbook-generation unpin 1"' "$harness"
+[ "$(grep -c 'vm "wilkbook-generation prune --keep 1"' "$harness")" -eq 2 ]
+after 'wilkbook-generation pin 1' 'wilkbook-generation unpin 1' "$harness"
+after 'wilkbook-generation unpin 1' 'wilkbook-generation trial 1' "$harness"
+echo "PASS: the QEMU rig pins, prunes around the pin, unpins, and prunes for real after the rollback"
 # deployer: promote only after a passing health check; failure exits 1 without promoting.
 after 'wilkbook-generation health --expect' 'wilkbook-generation promote' "$deploy"
 grep -q 'NOT PROMOTED: health check failed' "$deploy"
