@@ -206,8 +206,9 @@ The menu is caught anyway — but not because U-Boot keeps redrawing it.
 It draws the entries ONCE and then reprints only the countdown line each
 second; the three full draws in that capture (line 220: one countdown
 value, `Hit any key to stop autoboot: 15`) are the one draw and the menu
-answering the picker's own DOWN, DOWN, the last two each preceded by the
-keypress clear `ESC[9;1H ESC[2K` — not further chances. So the picker
+answering the picker's own DOWN, DOWN — draw 2 after the one keypress
+clear `ESC[9;1H ESC[2K` that follows the countdown, draw 3 directly
+after draw 2 — not further chances. So the picker
 gets exactly one draw to match before it sends keys, and the match is
 widened from two strings to any of the three entry lines in that draw
 (each of those three draws had a *different* entry clipped and never all

@@ -38,9 +38,10 @@
 # full draw is its response to a keystroke.  So the picker gets exactly
 # one draw of the entries to match before it sends keys (2026-09-04's
 # cold-boot capture, doc/artifacts/pinenote-gen16-deploy-20260904/
-# uart-coldboot.log line 220: one countdown value, then two more draws
-# each preceded by the keypress clear ESC[9;1H ESC[2K -- the menu
-# answering this script's DOWN, DOWN, not further chances).  The capture
+# uart-coldboot.log line 220: one countdown value, then two more draws,
+# the second after the one keypress clear ESC[9;1H ESC[2K that follows
+# the countdown and the third directly after it -- the menu answering
+# this script's DOWN, DOWN, not further chances).  The capture
 # loses ~20-30 bytes every 150-250 at 1.5 Mbaud (the CH340 side, not
 # termios -- see device-access.md), so a single 16-byte string can be the
 # one clipped in that draw: the match was widened from two strings to any

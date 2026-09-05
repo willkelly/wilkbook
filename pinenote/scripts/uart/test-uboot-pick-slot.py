@@ -80,7 +80,8 @@ def capture_regions():
     # 1-based lines of the committed capture: 68 = "DDR Version" (SPL),
     # 219 = U-Boot's CTRL+C autoboot prompt, 220 = the slot menu (one line:
     # cursor escapes, no newlines) -- its one draw, the countdown line, and
-    # the two redraws that answered the picker's DOWN, DOWN -- 221-232 =
+    # the two redraws that answered the picker's DOWN, DOWN (the first after
+    # the one keypress clear, the second directly after it) -- 221-232 =
     # extlinux, its generation menu, the kernel load.
     pre = b'\n'.join(lines[67:219]) + b'\n'
     prompt = lines[218] + b'\n'
@@ -90,7 +91,7 @@ def capture_regions():
     assert prompt.startswith(b"Hit key to stop autoboot('CTRL+C')"), prompt
     assert pre.endswith(prompt) and COUNTDOWN not in pre
     assert b'*** U-Boot Boot Menu ***' in menu and all(e in menu for e in ENTRIES)
-    assert menu.count(COUNTDOWN) == 1 and menu.count(b'\x1b[9;1H\x1b[2K') == 2, 'one countdown value, two keypress clears'
+    assert menu.count(COUNTDOWN) == 1 and menu.count(b'\x1b[9;1H\x1b[2K') == 2, "one countdown value; draw 1's own statusline clear plus the one post-countdown keypress clear"
     assert b'wilkbook generations' in post and b'Press UP/DOWN to move, ENTER to select' in post
     assert b'Enter choice:' in post and COUNTDOWN not in post
     assert b'Boot OS' not in post and b'Search for extlinux' not in post
