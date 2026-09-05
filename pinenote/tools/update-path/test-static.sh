@@ -56,7 +56,8 @@ echo "PASS: deployer promotes only after health, cross-builds, sends only the mi
 # PineNote at the helper's Wi-Fi off) and nothing closes the TCP connection;
 # without keepalives the client hangs forever (2026-09-02).
 harness="$here/../../scripts/qemu/run-virt-update-flow.sh"
-[ "$(grep -c '^vm_trial "wilkbook-generation trial' "$harness")" -eq 2 ]
+# three trials: the forced refusal (3b), B, and the rollback to A
+[ "$(grep -c '^vm_trial "wilkbook-generation trial' "$harness")" -eq 3 ]
 ! grep -q '^vm "wilkbook-generation trial' "$harness"
 grep -q 'ServerAliveInterval=5 -o ServerAliveCountMax=2' "$harness"
 grep -q 'timeout 120 ssh' "$harness"
@@ -67,8 +68,20 @@ echo "PASS: every trial ssh carries keepalives and a timeout, so a kexec cannot 
 # A stale generation tests the wrong helper; the trial's output is evidence.
 grep -q 'stale SYSTEM_B or ROOTFS' "$harness"
 grep -q 'cmp -s "$tree_helper" "$shipped"' "$harness"
-[ "$(grep -c 'sed "s/^/        trial> /"' "$harness")" -eq 2 ]
+[ "$(grep -c 'sed "s/^/        trial> /"' "$harness")" -eq 3 ]
 echo "PASS: the rig refuses a generation whose helper is not the tree's and keeps each trial's output"
+# The rig forces one refusal (B's Image moved away -> kexec -l fails after the
+# teardown) and requires the guest back on the same boot, health passing, the
+# helper's exit 1 and the record, then a stale record refused on the new boot.
+grep -q 'mv /boot/gen-$n/Image /boot/gen-$n/Image.away' "$harness"
+grep -q '|| refused_rc=\$?' "$harness"
+grep -q '\[ "$refused_rc" -eq 1 \]' "$harness"
+grep -q 'trial abandoned: teardown undone' "$harness"
+grep -q '\[ "$boot_still" = "$boot_a1" \]' "$harness"
+grep -q 'wilkbook-generation last-trial" | grep -q' "$harness"
+after 'refused trial: DEFAULT still gen-1' '^# 4. trial: kexec into B' "$harness"
+after '^# 4. trial: kexec into B' 'a stale refusal record passed on the new boot' "$harness"
+echo "PASS: the rig forces a refusal after the teardown and requires the guest back, reader running"
 # kexec on the RK3566 (first glass trial 2026-09-02): the kexec'd kernel found
 # the GICv3 LPI tables enabled and unreserved (no EFI to persist them) and
 # hung; the PineNote has no LPI user, so LPIs are never enabled.
@@ -110,11 +123,70 @@ after 'recover_after_failed_trial() {' 'wait "$watcher" && wait_for_ssh' "$deplo
 sed -n '/^recover_after_failed_trial() {/,/^}/p' "$deploy" | grep -q '^  exit 1$'
 ! grep -q 'never answered; a power-cycle boots' "$deploy"
 echo "PASS: a trial that never answers is recovered over the UART when one is configured, and never promoted"
-# The watcher runs in its own process group and is reaped as a group, on both
-# paths, and never through a bare kill that set -e can turn into an abort
-# (review 2026-09-04: a watcher that had done its job and exited made the
-# deployer die between a passed ssh wait and promote).
+# The watcher runs in its own process group and is reaped as a group, on every
+# path (success, refusal, recovery), through one function and never through a
+# bare kill that set -e can turn into an abort (review 2026-09-04: a watcher
+# that had done its job and exited made the deployer die between a passed ssh
+# wait and promote).
 grep -q 'setsid sh "$repo/pinenote/scripts/uart/uboot-pick-slot.sh"' "$deploy"
-[ "$(grep -c 'kill -- -"$watcher" 2>/dev/null || true' "$deploy")" -eq 2 ]
+[ "$(grep -c 'kill -- -"$watcher" 2>/dev/null || true' "$deploy")" -eq 1 ]
+grep -q '^reap_watcher() {' "$deploy"
+[ "$(grep -c '^ *reap_watcher$' "$deploy")" -eq 3 ]
 ! grep -q 'kill "$watcher"' "$deploy"
-echo "PASS: the UART watcher is reaped as a process group, and a dead watcher cannot abort a successful deploy"
+echo "PASS: the UART watcher is reaped as a process group on every path, and a dead watcher cannot abort a successful deploy"
+# A trial that dies AFTER the radio-off (review 2026-09-04): every die() past
+# `pinenote-wifi-control off` in the trial goes through bail(), which undoes
+# the teardown in reverse -- gadget re-bound (the saved UDC name written back,
+# as the broker and the usb-gadget service do), radio on, reader started --
+# before it dies, so the reader is never stranded stopped and silent.  The
+# teardown ORDER above is untouched; only the failure paths changed.
+trial_after_radio=$(sed -n '/^function commands.trial/,/^end$/p' "$helper" | sed -n '/WIFI .. " off/,$p')
+! printf '%s\n' "$trial_after_radio" | grep -q 'die('
+[ "$(printf '%s\n' "$trial_after_radio" | grep -c 'bail(')" -eq 3 ]
+printf '%s\n' "$trial_after_radio" | grep -q 'bail("EBC did not go idle'
+printf '%s\n' "$trial_after_radio" | grep -q 'bail("kexec -l failed for generation %d (exit %s): %s"'
+printf '%s\n' "$trial_after_radio" | grep -q 'bail("kexec -e returned (exit %s): %s'
+# bail() restores in reverse order and only then dies; each restore writes
+# nothing to the session (it may be gone: EPIPE would abort the control script).
+bail_body=$(sed -n '/^local function bail(/,/^end$/p' "$helper")
+printf '%s\n' "$bail_body" | grep -q 'record_refusal(torn.generation'
+printf '%s\n' "$bail_body" | grep -q 'sbin/kexec -u >/dev/null 2>&1'
+printf '%s\n' "$bail_body" | grep -q 'remount,rw / >/dev/null 2>&1'
+printf '%s\n' "$bail_body" | grep -q 'write_file, WATCHDOG, "V"'
+printf '%s\n' "$bail_body" | grep -q 'write_file, DWC3_CONTROL, torn.dwc3'
+printf '%s\n' "$bail_body" | grep -q 'write_file, UDC, torn.udc'
+printf '%s\n' "$bail_body" | grep -q 'herd start pinenote-usb-acm-gadget >/dev/null 2>&1'
+printf '%s\n' "$bail_body" | grep -q 'WIFI .. " on >/dev/null 2>&1'
+printf '%s\n' "$bail_body" | grep -q 'herd start reader-session >/dev/null 2>&1'
+after 'write_file, DWC3_CONTROL, torn.dwc3' 'write_file, UDC, torn.udc' "$helper"
+after 'write_file, UDC, torn.udc' 'WIFI .. " on >/dev/null' "$helper"
+after 'WIFI .. " on >/dev/null' 'herd start reader-session' "$helper"
+after 'herd start reader-session' 'die("%s", message)' "$helper"
+# the magic-close V lives only in the bail-out, never in the arm
+[ "$(grep -c '"V"' "$helper")" -eq 1 ]
+# the teardown remembers what it undid, and only what was up comes back
+after 'herd status reader-session 2>/dev/null | grep -q running")' 'herd stop reader-session' "$helper"
+after 'WIFI .. " status' 'WIFI .. " off' "$helper"
+grep -q 'if bound ~= "" then torn.udc = bound; write_file(UDC, "' "$helper"
+# the helper survives its session's death mid-restore, and the kexec binary's words come back
+grep -q 'ffi.C.signal(13, ffi.cast("void \*", 1))' "$helper"
+grep -q 'local loaded, load_rc, load_said = capture(load)' "$helper"
+grep -q 'capture("/run/current-system/profile/sbin/kexec -e")' "$helper"
+grep -q 'commands\["last-trial"\]' "$helper"
+grep -q 'boot_id=%s' "$helper"
+echo "PASS: every refusal after the radio-off undoes the teardown in reverse before it is said"
+# The deployer tells a refusal from a dead link by the trial ssh's exit status:
+# 255/124 is the link dying with the old kernel (success); any other non-zero
+# is the helper refusing, reported without the five-minute wait and without
+# the watchdog-recovery wording.  A refusal said after the link dropped is
+# caught from the record before health, by the target generation's helper.
+grep -q '|| trial_rc=\$?' "$deploy"
+grep -q '^    0|255|124) ;;$' "$deploy"
+grep -q 'NOT PROMOTED: the trial helper refused (exit \$trial_rc)' "$deploy"
+grep -q 'NOT PROMOTED: the trial helper refused after the ssh link had dropped' "$deploy"
+grep -q 'cat /boot/gen-$gen/system)/profile/bin/wilkbook-generation last-trial' "$deploy"
+after 'NOT PROMOTED: the trial helper refused (exit' 'waiting for the new generation to answer ssh' "$deploy"
+after 'wilkbook-generation last-trial' 'wilkbook-generation health --expect' "$deploy"
+sed -n '/^  case \$trial_rc in/,/^  esac/p' "$deploy" | grep -q 'reap_watcher'
+! sed -n '/^  case \$trial_rc in/,/^  esac/p' "$deploy" | grep -q 'watchdog'
+echo "PASS: the deployer says refused, not never-answered, when the helper bails out"

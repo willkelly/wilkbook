@@ -135,6 +135,28 @@ dflt=$(vm 'sed -n "s/^DEFAULT gen-//p" /boot/extlinux/extlinux.conf')
 vm "test -f /boot/gen-$n/Image && test -f /boot/gen-$n/initrd.cpio.gz && test -f /boot/gen-1/Image" \
   && pass "payloads staged for gen-1 (pre-helper generation) and gen-$n" || fail "payload staging"
 
+# 3b. a trial the helper must REFUSE, after its teardown: B's kernel image is
+# moved away, so kexec -l fails once the reader is stopped and the radio is
+# off.  The bail-out must put the guest back -- reachable on the same boot,
+# reader running, health passing -- and the refusal must reach the caller as
+# the helper's own exit status with the kexec binary's words, not as a
+# dropped link (review 2026-09-04: a helper that died there stranded the
+# reader stopped and silent, and the deployer called it a dead trial).
+vm "mv /boot/gen-$n/Image /boot/gen-$n/Image.away"
+refused_rc=0
+vm_trial "wilkbook-generation trial $n" >"$log.trial-$n-refused" 2>&1 || refused_rc=$?
+sed "s/^/        trial> /" "$log.trial-$n-refused"
+vm "mv /boot/gen-$n/Image.away /boot/gen-$n/Image"
+[ "$refused_rc" -eq 1 ] && pass "refused trial: the helper exited 1 (a refusal, not a dropped link)" || fail "refused trial: exit $refused_rc"
+grep -q 'kexec -l failed for generation' "$log.trial-$n-refused" && grep -q 'trial abandoned: teardown undone' "$log.trial-$n-refused" \
+  && pass "refused trial: the kexec -l failure and the bail-out both reached the caller" || fail "refused trial: the refusal did not reach the caller"
+boot_still=$(vm cat /proc/sys/kernel/random/boot_id 2>/dev/null || true)
+[ "$boot_still" = "$boot_a1" ] && pass "refused trial: the guest is reachable on the same boot" || fail "refused trial: boot id $boot_still (was $boot_a1)"
+vm "wilkbook-generation health --expect $sys_a" >/dev/null && pass "refused trial: health passes on A again (the reader was restarted)" || fail "refused trial: health on A after the bail-out"
+vm "wilkbook-generation last-trial" | grep -q '^result=refused$' && pass "refused trial: the record names this boot" || fail "refused trial: no record for this boot"
+dflt=$(vm 'sed -n "s/^DEFAULT gen-//p" /boot/extlinux/extlinux.conf')
+[ "$dflt" = "1" ] && pass "refused trial: DEFAULT still gen-1" || fail "DEFAULT after the refused trial: $dflt"
+
 # 4. trial: kexec into B
 vm_trial "wilkbook-generation trial $n" >"$log.trial-$n" 2>&1 || true
 sed "s/^/        trial> /" "$log.trial-$n"
@@ -146,6 +168,8 @@ boot_b=$(vm cat /proc/sys/kernel/random/boot_id)
 [ -n "$boot_b" ] && [ "$boot_b" != "$boot_a1" ] && pass "after kexec: a new boot id (the kernel really was replaced)" || fail "boot id unchanged after the trial: the kexec did not happen"
 hn=$(vm hostname)
 [ "$hn" = "pinenote-reader-genb" ] && pass "after kexec: hostname is generation B's" || fail "hostname $hn"
+# the refusal record from 3b belongs to A's boot: it must never pass for this one
+if vm "wilkbook-generation last-trial" >/dev/null 2>&1; then fail "a stale refusal record passed on the new boot"; else pass "after kexec: the earlier refusal record does not pass for this boot"; fi
 if vm "wilkbook-generation health --expect $sys_b" >/dev/null; then pass "health check passes on B"; else fail "health on B"; fi
 dflt=$(vm 'sed -n "s/^DEFAULT gen-//p" /boot/extlinux/extlinux.conf')
 [ "$dflt" = "1" ] && pass "DEFAULT still gen-1 while B is only on trial" || fail "DEFAULT during trial: $dflt"
