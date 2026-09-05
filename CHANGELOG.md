@@ -25,6 +25,16 @@ tag.
 
 ## Unreleased
 
+- **A wireless update no longer leaves your library's partition
+  unclean.** The update tool put the system partition to bed before
+  handing over to the new kernel but not the data partition (books,
+  settings, Wi-Fi credentials), so from the filesystem's point of view
+  every update was a crash there. Its journal covered for that until
+  2026-09-04, when one update came up with an empty library and
+  auto-sleep stuck off because the partition failed to mount in time.
+  Now both partitions are remounted read-only first, and if the update
+  has to give up, both come back read-write. Found on generation 18;
+  the fix rides every update from the next one on.
 - **An update that has to give up partway through its own shutdown
   now puts the reader back on its own.** Before, if the trial stalled
   after the device had already turned its radio off — the screen
