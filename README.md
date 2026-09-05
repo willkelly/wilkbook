@@ -295,12 +295,13 @@ build time, never hand-copied — so they cannot drift from the driver.
 - `pinenote/patches/linux-pinenote-7.0-forward-port.patch` — the EBC
   display stack, `drm_epd_helper`, WS8100 pen, PineNote DTS and
   `pinenote_defconfig`, forward-ported onto vanilla 7.0.x and
-  hardware-validated. Thirteen smaller patches ride alongside it: six
+  hardware-validated. Fourteen smaller patches ride alongside it: six
   for power (BSP SIP suspend, cpuidle, vdd_cpu PFM, DDR static-low,
   st_accel PM, and the ultra rails-off suspend — 4.64 mA measured
   2026-08-08), hrdl's direct-mode driver with three of ours on it, a
-  PMIC kexec fix, a Wi-Fi power-sequence delay, and a correctness pass
-  from a third-party audit.
+  PMIC kexec fix, a Wi-Fi power-sequence delay, a correctness pass
+  from a third-party audit, and the probe-lifetime pass that closes that
+  audit's item 2.
   `doc/kernel-forward-port.md` carries the inventory, the refresh
   procedure, the config lessons, and the community cherry-pick record.
 - `pinenote/tools/ddr-sip-probe/src` — a ~zero-risk out-of-tree module
