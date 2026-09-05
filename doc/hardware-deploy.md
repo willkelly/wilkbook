@@ -392,7 +392,8 @@ notes"):**
   drives the menu back to os2 itself and reports the device back on the
   previous `DEFAULT`; without the cable, a failed trial ends on stock
   os1 with SSH — change the default from there if you want
-  (`rescue-generation.sh`), and pick os2 at the on-device menu. Before
+  (`rescue-generation.sh`, PR #51 — open against main, not in this
+  tree, never run), and pick os2 at the on-device menu. Before
   the watchdog resets it (or if it doesn't): the power button, then
   `uboot-pick-slot.sh --slot os2`.
 - Anything that changes early boot (kernel, DTB, command line) wants

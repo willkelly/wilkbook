@@ -164,7 +164,10 @@ hours; see `doc/alpha-checklist.md` for the open decision.
    (attach failed) — the SDIO firmware did not reload. A second
    suspend/resume cycle on the same boot did not recover it either; SSH
    stayed unreachable for the rest of that boot. A cold boot restores
-   it. Observed once, on one flavor; not yet root-caused.
+   it. Observed once, on one flavor; not yet root-caused. [Root-caused
+   2026-09-03: a marginal SDIO power sequence on resume — kernel patch
+   13 and the control script's rebind, `doc/networking.md` §8; not seen
+   again in the 59 rig cycles since.]
 
 ### Proving the link end to end (2026-08-06)
 

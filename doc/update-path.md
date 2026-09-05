@@ -3,9 +3,10 @@
 How a running reader gets a new OS without a cable, a boot menu, or a
 1.8 GB reflash — and how it gets the old one back. Written 2026-09-02
 after the broker+direct arc showed what "flash → boot menu → verify"
-costs per iteration. Status: **designed, phase 1 in progress; nothing
-below has run on glass.** `doc/status.md` is the truth; this page is the
-intent.
+costs per iteration. Status: **on glass since 2026-09-02** — fifteen
+generations on one device by 2026-09-04, the QEMU rig alongside ("Proof
+ladder" and "Glass notes" below). `doc/status.md` is the truth; this
+page is the design and what the glass taught.
 
 ## Goal
 
@@ -156,7 +157,7 @@ teardown as a suspend (EBC quiesce, gadget unbind, Wi-Fi off) before
   TPS65185 came through four warm restarts. What kexec *does* need on
   the RK3566 is in the glass notes below.
 - Store growth policy: how many generations to keep on a 15.7 GB slot
-  (default K=3), and when `guix gc` runs (only from the deployer, never
+  (the deployer's default `KEEP` is 5), and when `guix gc` runs (only from the deployer, never
   on a timer). First data point: four generations of the reader used
   2.0 GB of the 15 GB slot; prune to two took it to the same 2.0 GB
   (the generations share nearly everything).

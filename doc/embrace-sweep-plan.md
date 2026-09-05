@@ -164,11 +164,12 @@ os2 as a generation through the update path
 generation 4 and promoted, then cold-booted after a UART-watcher
 recovery. Suspend/resume through the platform-controls broker (power
 button and cover) ran cleanly on this kernel for the first time — 3
-successes, 0 failures. **Not yet run**: the shipping-reader validation
-list in `doc/glass-plan-2026-08.md` item by item, and the
-`pinenote-flash-area` optics check against `doc/datasets/` — so this
-step is proven for boot/update/suspend, not yet for the green list it
-calls for. On a green list, the next prealpha tag ships `reader`,
+successes, 0 failures. **Partly run since**: of the shipping-reader
+validation list in `doc/glass-plan-2026-08.md`, R3 (the inert clock),
+R4 and R6's count ran 2026-09-04 on generation 14; R1, R2, R5, R7 and
+the `pinenote-flash-area` optics check against `doc/datasets/` have not
+— so this step is proven for boot/update/suspend, not yet for the green
+list it calls for. On a green list, the next prealpha tag ships `reader`,
 singular (`doc/alpha-checklist.md` gains the row).
 
 ## After the sweep: the display program, in order

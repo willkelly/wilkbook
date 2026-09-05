@@ -45,9 +45,10 @@ post-mortem harvest — are `doc/device-access.md`):
 - 6.12 runs `GPIO_ROCKCHIP=m` with early initrd loading; our `=y` achieves
   the same probe ordering more bluntly.
 
-## The three kernel packages
+## The kernel packages
 
-All live in `pinenote/packages/kernel.scm`:
+All live in `pinenote/packages/kernel.scm` (two since the embrace sweep,
+2026-09-03):
 
 - `linux-pinenote-6.6.30` — the m-weigand PineNote tree, pinned by commit.
   Hardware-validated end to end (display, Wi-Fi, BT, USB gadget). Kept as the
@@ -57,18 +58,19 @@ All live in `pinenote/packages/kernel.scm`:
   stack inventoried below, configured with `pinenote_defconfig`. This is
   the kernel-currency track. The channel therefore depends on nonguix
   (see `.guix-channel` / `channels.scm`).
-- `linux-pinenote-debug` — `linux-pinenote` plus stacked debug patches
-  (currently `linux-pinenote-debug-extract-fbs.patch`, which implements
-  the `EXTRACT_FBS` belief-dump ioctl the primary kernel stubs with
-  `-EOPNOTSUPP`). A separate inheriting variant so the primary stays
-  byte-identical; debug patches are deleted as their investigations
-  close.
+- ~~`linux-pinenote-debug`~~ — retired by the embrace sweep (2026-09-03):
+  it was `linux-pinenote` plus `linux-pinenote-debug-extract-fbs.patch`
+  (the `EXTRACT_FBS` belief-dump ioctl the old driver stubbed with
+  `-EOPNOTSUPP`); the direct driver registers `EXTRACT_FBS` natively.
+  The patch file stays only as the ebc-logic harness's dbg fixture.
+  `linux-pinenote-hrdl-direct`, the study kernel, was retired the same
+  day — its driver is now in `linux-pinenote`.
 
 ## Patch inventory — what `linux-pinenote` actually applies
 
 `%linux-pinenote-patches` in `pinenote/packages/kernel.scm` is the
 authoritative list; the comments there carry each patch's rationale and
-revert instruction. As of 2026-09-03 it is fourteen patches, applied in list
+revert instruction. As of 2026-09-04 it is fourteen patches, applied in list
 order on top of the vanilla source (items 8–11 are the direct-mode
 driver and our fixes on it; item 12 is the mfd rk8xx kexec fix that
 makes the update path's watchdog self-reset work; item 14 is a further
@@ -191,7 +193,7 @@ files that a refreshed `kernel.scm` still applies, and nothing in the
 procedure touches them, so the failure mode is *omission*: forgetting
 they exist, or rebasing the forward-port onto a base where one of them
 no longer applies. After any base change, `git apply --check` each of
-the seven against the new source before building, and re-read the
+the thirteen against the new source before building, and re-read the
 kernel.scm comments — several are deliberate, revertable experiments,
 not permanent carry.
 
@@ -221,7 +223,7 @@ Host fixtures exercise the same model and executor with fakes only.
 It does not change Linux 7.0's `ROCKCHIP_SLEEP_PD_CONFIG=0xff` pmdomain ABI.
 
 **The direct-mode driver is in the shipping list since the embrace
-sweep's S1 (2026-09-03):** items 8–11 below. `linux-pinenote-hrdl-direct`
+sweep's S1 (2026-09-03):** items 8–11 above. `linux-pinenote-hrdl-direct`
 and `linux-pinenote-debug` are retired (the direct driver registers
 `EXTRACT_FBS` natively); `linux-pinenote-debug-extract-fbs.patch` stays
 only as the ebc-logic harness's dbg fixture over the retained forward-port

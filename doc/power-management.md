@@ -58,8 +58,9 @@ What was hardware-proven by 2026-08-15:
   `ENABLE` 2f → 20 drift across deep is unexplained; ultra-suspend
   remains unadopted (rail-kill wake collision unresolved).
   [Superseded 2026-08-08: ADOPTED — rails-off ultra resumes on both wake
-  legs and ships on the primary kernel; the running multi-day soak is the
-  outstanding suspend proof. See the lead bullet above.]
+  legs and ships on the primary kernel; the multi-day soak was the
+  outstanding suspend proof and concluded 2026-08-15. See the lead
+  bullets above.]
   [Closed 2026-08-15: the soak concluded — 148 h unplugged, 170 suspend
   cycles, zero failures, 5.47 mA idle standby and 10.07 mA as actually
   read. `doc/artifacts/pinenote-ultra-soak-20260815/`. Cover wake and the
