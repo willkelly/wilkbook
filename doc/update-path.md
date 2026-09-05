@@ -72,7 +72,9 @@ ssh reader wilkbook-generation add S          → system-(N+1)-link, /boot/gen-(
 ssh reader wilkbook-generation trial N+1      → EBC quiesce, gadget off, Wi-Fi off, kexec -l, kexec -e
 wait for ssh; health check                    → /run/current-system == S, broker ready, reader up
 ssh reader wilkbook-generation promote N+1    → DEFAULT = gen N+1
-(prune)                                       → keep K generations; guix gc reclaims the rest
+(prune)                                       → keep K generations (+ DEFAULT, the booted one, and
+                                                every PINNED one); guix gc reclaims the rest
+(after a cold boot: wilkbook-generation pin N) → /boot/gen-N/pinned; prune never deletes N
 ```
 
 The transfer is guix's own signed nar stream — `guix archive --export`
@@ -97,12 +99,34 @@ change is megabytes; a kernel change ~100 MB; never the 2 GB closure.
 
 **On the device** (`pinenote/packages/update-path/`, shipped like
 platform-controls): `wilkbook-generation` — `add`, `list`, `trial`,
-`promote`, `demote`, `prune`. The generation ledger is
+`promote`, `demote`, `pin`, `unpin`, `prune`. The generation ledger is
 `/var/guix/profiles/system-*-link` (Guix's own) plus
 `/boot/gen-*/`; `extlinux.conf` is rendered from the ledger. The trial
 reuses the broker's quiesce (the EBC must be idle before the kernel is
 replaced under it). Pure parts — ledger arithmetic, extlinux rendering,
-promote/prune decisions — are tested offline.
+promote/prune decisions, the pinned set — are tested offline.
+
+**The pin (2026-09-04).** `prune --keep K` keeps the K *newest*
+generations, which are the least proven; without a pin the only
+cold-booted generation was kept inside the window by hand, until the
+deploy of generation 16 (`KEEP=8`) pruned generation 10 — the previous
+cold-booted one — exactly that way. `wilkbook-generation pin N` marks
+N known-good and `prune` then never deletes it, on top of never
+deleting `DEFAULT` or the booted generation; pinned generations do not
+count against K. `list` shows `[pinned]`; `unpin N` clears it. The
+marker is an empty file in the generation's own payload directory,
+`/boot/gen-N/pinned`, chosen over a separate list file because it dies
+with the generation (prune removes `/boot/gen-N` whole, so a pin cannot
+dangle), needs no parsing, and adds nothing to the helper's write set —
+`/boot`, the profiles and the store, pinned by `test-static.sh`. Pin a
+generation once a cold boot has proven it (the trial does not run its
+device tree — "Device-tree changes do not ride a trial" below); unpin
+the previous one when a newer generation has been cold-booted and
+pinned in its place. The deployer needs no change: its
+`prune --keep $KEEP` honours the pins. Not yet run on a device: the
+glass proof is a `pin` of the cold-booted generation followed by a
+prune with a `KEEP` small enough to have taken it, and `list` still
+showing it.
 
 **On the workstation** (`make deploy DEVICE=…`): build, copy, add,
 trial, health-check, promote, with every step refusing rather than
@@ -131,13 +155,14 @@ teardown as a suspend (EBC quiesce, gadget unbind, Wi-Fi off) before
 ## Proof ladder
 
 - **Rung 1**: the helper's pure logic (ledger, extlinux render, promote/
-  demote/prune, health predicate) under host luajit; the kernel-config
-  and package pins in the image inspection.
+  demote/prune with the pinned set, health predicate) under host luajit;
+  the kernel-config and package pins in the image inspection.
 - **Rung 4 — the whole flow in QEMU virt** (`make qemu-update-check ROOTFS=…`): boot generation A, `guix
   archive --export | ssh | guix archive --import` generation B into the
   VM (the guix copy nar pipe over plain OpenSSH), `add`, `trial` (kexec
   inside the VM), verify B answers as `/run/current-system`, `promote`,
-  then roll back to A. The mechanism end-to-end, no glass.
+  `pin` A and `prune --keep 1` (A survives; `unpin`), then roll back to
+  A and prune for real (B goes). The mechanism end-to-end, no glass.
 - **Glass** (UART-attended) — **done 2026-09-02**: the enabling image
   was written to os2 by the dd protocol, generation 3 (a cross-built
   system) was promoted and cold-booted from the helper's own extlinux
@@ -160,7 +185,10 @@ teardown as a suspend (EBC quiesce, gadget unbind, Wi-Fi off) before
   (the deployer's default `KEEP` is 5), and when `guix gc` runs (only from the deployer, never
   on a timer). First data point: four generations of the reader used
   2.0 GB of the 15 GB slot; prune to two took it to the same 2.0 GB
-  (the generations share nearly everything).
+  (the generations share nearly everything). *Which* generations the
+  window keeps is settled (2026-09-04): the K newest plus `DEFAULT`,
+  the booted one and every pinned one — a pinned generation costs only
+  its delta, so a pin is cheap to hold.
 - Whether the nar transfer over Wi-Fi is fast enough for a kernel-sized
   delta (~100 MB) to feel routine.
 
@@ -395,7 +423,7 @@ the hang.
   generation that doesn't have patch 8 yet. It brought the device back
   three times this investigation. A generation is proven only by *both*
   boots: the kexec trial and, for anything that changes early boot, a
-  cold one.
+  cold one — and once it is, `pin` it, so the next prune cannot take it.
 
 ## Rig notes (what the QEMU flow taught, 2026-09-02)
 

@@ -318,15 +318,29 @@ or a hand `pinenote-wifi-control on` from the UART does: a known gap,
 not yet closed), waits for the new generation to
 answer, runs `health` (`/run/current-system` is the new system, the
 broker is ready, the reader started), and only then `promote`s it and
-prunes to KEEP generations plus the promoted and booted ones, then
-`guix gc`. Every refusal is printed as `NOT PROMOTED: …` and the
+prunes to KEEP generations plus the promoted, booted and pinned ones,
+then `guix gc`. Every refusal is printed as `NOT PROMOTED: …` and the
 default is untouched. Expect the device to be silent for ~30 s around
 the kexec; the reader is back with the page it had.
 
 **On the device**, `wilkbook-generation list | add | trial N | health
-[--expect S] | promote N | demote | prune --keep K` are the same
-verbs; `deploy.sh DEVICE --rollback N` is trial+health+promote of an
-existing generation.
+[--expect S] | promote N | demote | pin N | unpin N | prune --keep K`
+are the same verbs; `deploy.sh DEVICE --rollback N` is
+trial+health+promote of an existing generation.
+
+**When to pin (2026-09-04).** After a cold boot proves a generation —
+its own device tree, no kexec in its lineage — run
+`wilkbook-generation pin N` on the device: `prune` (the deployer's or
+yours) then never deletes it, whatever `KEEP` says, and `list` shows it
+`[pinned]`. Until the pin existed the only cold-booted generation was
+kept in the window by hand, and the generation-16 deploy (`KEEP=8`)
+pruned generation 10, the previous cold-booted one. `unpin N` when a
+newer generation has been cold-booted and pinned in its place; a pinned
+generation costs only its store delta, so there is no hurry. The marker
+is `/boot/gen-N/pinned` and goes with the generation if you ever prune
+it after unpinning. Glass proof still owed: `pin 16` on the device,
+then a prune with a `KEEP` small enough to have taken 16, and `list`
+still showing it.
 
 **Rules learned on glass (2026-09-02, `doc/update-path.md` "Glass
 notes"):**
@@ -397,7 +411,8 @@ notes"):**
   the watchdog resets it (or if it doesn't): the power button, then
   `uboot-pick-slot.sh --slot os2`.
 - Anything that changes early boot (kernel, DTB, command line) wants
-  both proofs: the kexec trial and a cold boot from the menu.
+  both proofs: the kexec trial and a cold boot from the menu — then
+  `pin` it.
 - While a session needs stable SSH, pause auto-suspend
   (`/data/wilkbook/autosuspend.conf` = `enabled=0`) — and remember
   that with the pause in place KOReader's sleep screen still paints;

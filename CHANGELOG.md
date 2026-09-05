@@ -25,6 +25,17 @@ work lands.
 
 ## Unreleased
 
+- **You can now mark a version of the OS as "keep this one" so the
+  automatic clean-up never deletes it.** `wilkbook-generation pin N` on
+  the device (and `unpin N` to release it); the version list shows
+  `[pinned]`. Clean-up after an update keeps the newest few versions,
+  which are the *least* proven, and the one version that had been
+  booted the slow, thorough way was being kept inside that window by
+  hand — the update that produced the v0.3.0 build deleted the previous
+  one exactly that way. Proven offline and in the QEMU rig; on a real
+  device the check is still owed: pin the current version, then run a
+  clean-up small enough to have deleted it, and see it stay.
+
 ## v0.3.0-prealpha — 2026-09-04
 
 **Cable-free updates, one reader flavor, and a device that puts itself

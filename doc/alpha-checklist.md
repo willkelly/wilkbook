@@ -479,8 +479,18 @@ blacklist is ever wrong on a future kernel change.
       and radio-off with no message delivered, and the deployer reports
       it as a dead trial the watchdog will reset, which it will not
       (the dog is armed later). Found by review 2026-09-04, not fixed.
-- [ ] Generation pruning (`KEEP=`) has no guard against deleting the
-      last generation known to work — nothing currently pins one.
+- [x] Generation pruning (`KEEP=`) had no guard against deleting the
+      last generation known to work — nothing pinned one, and the
+      generation-16 deploy (`KEEP=8`) pruned generation 10, the previous
+      cold-booted one. Since 2026-09-04 `wilkbook-generation pin N`
+      marks a generation known-good (`/boot/gen-N/pinned`), `prune`
+      never deletes a pinned generation on top of `DEFAULT` and the
+      booted one, and `list` shows `[pinned]`; planner cases and static
+      pins in `make update-path-check`, the QEMU rig (rung 4u) pins,
+      prunes around the pin and prunes for real. The standing rule
+      "keep a cold-booted generation in the window by hand" is now "pin
+      it after the cold boot". Not yet run on the device: `pin 16`, then
+      a prune with a small `KEEP` that must leave 16 in place.
 - [ ] The os1-based rescue script (PR #51) has never been run against
       os1 itself.
 - [x] Wi-Fi reassociating after a resume is exercised on both paths:
