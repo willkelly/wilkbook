@@ -141,11 +141,13 @@ reader restart or boot lands in the library by design.
    `WILKBOOK_UART=/dev/ttyUSB0 make deploy DEVICE=pinenote-os2
    KEEP=8` from the branch. This is the first deploy ever to run the
    deployer's watcher path on glass (armed before the kexec, in its own
-   process group, reaped after): expect the `== UART watcher armed on`
-   line, the two device-tree notes, health, promote, generation 8
-   pruned — and afterwards `pgrep -f 'cat /dev/ttyUSB'` on the
-   workstation must find nothing. Everything below is then on 16, the
-   tag candidate.
+   process group, reaped after): expect the build to print
+   `/gnu/store/8czi9ry1z0gph24n5yls7iiy83y4n0b8-system` (built from the
+   branch head 2026-09-04 evening, `scratchpad/build-gen16.log`, kernel
+   unchanged: `6rhnmj09…`), then the `== UART watcher armed on` line,
+   the two device-tree notes, health, promote, generation 8 pruned —
+   and afterwards `pgrep -f 'cat /dev/ttyUSB'` on the workstation must
+   find nothing. Everything below is then on 16, the tag candidate.
 1. UART capture and the menu watcher armed before anything reboots.
 2. **Visual pass on generation 15**: text edges on a real page,
    ghosting after twenty real turns, rotation flash in all four
