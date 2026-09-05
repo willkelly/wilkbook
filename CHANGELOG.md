@@ -38,9 +38,13 @@ this lineage. **Unreleased** above it collects what has landed since.
   turns, pen, suspend, or the one deliberate failed probe per boot
   (the `Unable to load custom_wf.bin` line stays). A reader that is
   never rebound after boot had only ever lost that memory once per
-  boot. The proof on glass is still owed: no `Unbalanced` line at the
-  rebind, and kernel `VmallocUsed` flat across five unbind/bind cycles
-  (`doc/kernel-forward-port.md` item 15).
+  boot. **Proven on the device the same evening** (generations 17 and
+  18): no `Unbalanced` line at the rebind, the leaked buffers gone
+  from the kernel's own accounting, and kernel memory flat across five
+  unbind/bind cycles. The first run also caught an older ordering bug
+  in the driver's teardown that only the fix made visible (a kernel
+  warning on the first unbind); the second version corrects it and
+  runs warning-free (`doc/kernel-forward-port.md` item 15).
 - **You can now mark a version of the OS as "keep this one" so the
   automatic clean-up never deletes it.** `wilkbook-generation pin N` on
   the device (and `unpin N` to release it); the version list shows
@@ -49,15 +53,15 @@ this lineage. **Unreleased** above it collects what has landed since.
   booted the slow, thorough way was kept inside that window by nothing
   but the window's size — the update that produced the v0.3.0 build
   left the previous such version as the seventh of the eight it kept,
-  one or two updates from being deleted. Proven offline and in the QEMU
-  rig; on a real device the check is still owed, and it takes an update
-  first: v0.3.0's own tool does not know the `pin` word, and clean-up
-  can never delete the version you are running or the one set to boot
-  next, pin or no pin, so pinning the current version proves nothing.
-  The check is: install a version built with this change, pin v0.3.0
-  from it (and the older thorough-booted one, if it is to stay), run a
-  clean-up that keeps only one version, and see the pinned ones stay
-  while the unpinned ones between go.
+  one or two updates from being deleted. Proven offline, in the QEMU
+  rig, and **on the device the same evening**: from the first version
+  built with the verb, the v0.3.0 build and the older thorough-booted
+  one were pinned, a clean-up that keeps only one version was run, and
+  it deleted exactly the five unpinned versions between them and kept
+  both pinned ones (`doc/status.md`, 2026-09-04 late). Clean-up can
+  never delete the version you are running or the one set to boot next,
+  pin or no pin, so pinning the current version proves nothing; pin the
+  *previous* good one.
 - **An update that has to give up partway through its own shutdown
   now puts the reader back on its own.** Before, if the trial stalled
   after the device had already turned its radio off — the screen
@@ -70,9 +74,11 @@ this lineage. **Unreleased** above it collects what has landed since.
   error text, and `make deploy` prints `NOT PROMOTED: the trial helper
   refused` at once — or, if the network link had already dropped, reads
   the reason back from the device the moment it answers. Proven in the
-  QEMU rig with a deliberately broken kernel image; **not yet on a
-  PineNote** — the glass check is a trial forced to fail while the
-  screen is busy, coming back with the book open and Wi-Fi up. What it
+  QEMU rig with a deliberately broken kernel image, and **on the device
+  the same evening**: with the screen kept busy on purpose, the update
+  refused, put Wi-Fi and the reader back by itself, and the tool printed
+  the refusal it read back from the device — no reboot, same boot id
+  before and after (`doc/status.md`, 2026-09-04 late). What it
   does not cover: an update that dies *after* the new kernel has been
   told to start is the new kernel's failure, handled by the self-reset
   as before.

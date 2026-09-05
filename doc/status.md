@@ -1,7 +1,100 @@
 # Hardware status
 
-Last updated: 2026-09-04. Update protocol: add a dated entry at the top
+Last updated: 2026-09-04 (late). Update protocol: add a dated entry at the top
 after every hardware session; entries are per-device/per-operator.
+
+## 2026-09-04 late (wkelly PineNote, operator present, no UART) — the four post-tag fixes on glass: generations 17 and 18, the pin prunes for real, the trial refuses and comes back, patch 15's leaks gone and its one warning fixed
+
+After the tag, four branches (PRs #73–#76: kernel patch 15 for the
+audit's item 2, the ledger pin, the trial bail-out, the UART watcher
+handle) were merged into one deployable tree (`post-tag-glass`) and
+put on the device the same evening, without the debug cable (the
+operator had it out; they were at the device).
+
+**Generation 17** (`8gg44r7adziazhn1ng3hwhd6r0z1jr3d-system`, kernel
+`s3d0cbj9…` = patch 15 v1): 17 of 439 paths, kexec trial from the
+cold-booted 16, health ok, promoted, generation 9 pruned. No kexec'd-kernel
+note this time — correct, 16 had been cold-booted.
+
+**Patch 15 (#73), first run.** `Unbalanced pm_runtime_enable!`: **0**
+on the boot, with the deliberate failed first probe (`custom_wf.bin`,
+2.9 s) and the second probe (8.4 s) still there. `/proc/vmallocinfo`
+with the reader running: **7 × 642-page, 1 × 1926-page, 1 × 57-page**
+(generation 14 had 8, 2, 1 — the failed probe's two buffers are freed
+now). Five unbind/bind cycles with the reader stopped: the 57-page LUT
+entry stayed at **1** throughout (it grew by one per cycle before),
+`VmallocUsed` 21 584 → 21 632 → 21 632 → 21 616 → 21 664 kB (±48 kB,
+against +212–276 kB per cycle before), threads 2, `card1` after every
+bind. And one thing patch 15 had not caused but exposed: on cycle 1 —
+the unbind that shuts down the reader-era CRTC — the kernel logged
+`WARNING: kernel/kthread.c:707 at kthread_park` from
+`drm_atomic_helper_shutdown → commit_crtc_disable`. hrdl's `remove()`
+runs `kthread_stop()` on both threads and only then
+`drm_atomic_helper_shutdown()`, whose CRTC disable guards its
+`kthread_park` with the thread's `__state` — after `kthread_stop()`
+that is a finished task's: generation 14 happened to read `TASK_DEAD`
+and skipped the park, 17 did not and `WARN_ON(PF_EXITING)` fired.
+**Patch 15 v2** (693a0a6): shutdown first, then stop the threads —
+the reverse of probe's order, where the threads exist before
+`drm_init`. Built clean (kernel `7xb8ib7…`, the EBC files' only warning
+hrdl's `frame_counter`).
+
+**The pin (#74), proven and used.** From generation 17: `pin 16`,
+`pin 10` (the two cold-booted generations), then `prune --keep 1`:
+`generation 10 is pinned; kept`, `generation 16 is pinned; kept`,
+`pruned generation 11 … 15`, the menu re-rendered with three entries,
+`guix gc`. Generations 11 and 12 (the convenience builds) and 13–15
+(superseded candidates) are gone for good; ~300 MB freed; the ledger is
+10 `[pinned]`, 16 `[pinned]`, 17 `[promoted] [booted]`.
+
+**The bail-out (#75), proven on the second try.** First try: a painter
+writing 256 kB to `/dev/fb0` every 150 ms left a ≥250 ms quiet gap, the
+helper's quiesce passed, and the trial simply went ahead (17 kexec'd
+into itself, harmless). Second try, a painter with no pause (3 MB of
+noise per iteration, 75 s): interrupts climbing 28 per 300 ms, then
+`deploy.sh pinenote-os2 --rollback 17` — the helper stopped the reader,
+turned the radio off (the link died as always), failed its quiesce, and
+**bailed out**: gadget re-bound, Wi-Fi back, reader restarted, the
+record written; the deployer read it back and printed
+`NOT PROMOTED: the trial helper refused after the ssh link had dropped;
+it undid its teardown (reader and radio back), DEFAULT is unchanged`
+with `reason=EBC did not go idle`, exit 1. Boot id identical before and
+after (no kexec), the reader running 26 s after, `wlan0` up with its
+addresses. A trap for the next person: the quiesce is 250 ms of a
+flat interrupt count, so the painter must never pause.
+
+**The watcher handle (#76)** stays offline-proven only: no cable this
+evening.
+
+**Generation 18** (`rkw61vxxzifrqwz407gf751w70afignb-system`, the v2
+kernel `7xb8ib7…` plus the three userspace fixes): 6 of 439 paths,
+trial from 17 (the kexec'd-kernel note printed, correctly), health ok,
+promoted, `generation 10 is pinned; kept`, `generation 16 is pinned;
+kept`, nothing to prune. **Patch 15 v2 proven**: `Unbalanced` 0,
+`WARNING:` 0 on the boot, the census 7/1/1 again, and five unbind/bind
+cycles with the reader stopped — cycle 1 released the reader-era
+context with **no warning at all**, cycles 2–5 flat (21 616 → 21 664
+→ 21 616 → 21 632 → 21 632 kB), the LUT entry at 1, threads 2, `card1`
+every bind, five `Initialized` lines, `WARNING:` still 0 for the whole
+boot afterwards. The audit's item 2 is closed on glass.
+
+**A new finding, on the kexec into 18: the data partition did not
+mount.** udev logged `incorrect ext4 checksum on /dev/mmcblk0p7` and
+`/dev/disk/by-partlabel/data: Can't lookup blockdev`; shepherd's
+`file-system-/data` fell back to the library's placeholder (the reader
+came up with an empty library), while the Wi-Fi service found the real
+partition and mounted it **read-only** at `/run/pinenote-wifi`
+(`orphan cleanup on readonly fs`) — its tree intact (books, manuals,
+`wilkbook/`, `wifi/`, `ssh/`), `autosuspend.conf` there reading the
+session's `enabled=0`. The trial helper syncs and remounts **the root**
+read-only before `kexec -e`, and leaves `/data` mounted read-write:
+every kexec so far has left p7 unclean, ext4's journal has covered for
+it, and this one lost udev's race at probe time. The fix is the
+teardown remounting `/data` read-only too (and the bail-out putting it
+back), a PR of its own; the recovery tonight was a hand remount over
+ssh (the operator's, the classifier having refused it to the agent).
+A cold boot of 18 with the cable is still the clean proof that the
+mount path is fine, and #76's proof besides.
 
 ## 2026-09-04 (wkelly PineNote, operator mostly away) — the v0.3.0-prealpha candidate is generation 14: patch 14's guards behave on glass, the "zero-IRQ page turns" were the file manager, the trial notes were dying with the radio
 

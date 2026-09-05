@@ -492,8 +492,10 @@ blacklist is ever wrong on a future kernel change.
       fixed the same day: the helper bails out (teardown undone in
       reverse, reader and radio back) before it refuses, and the
       deployer says `refused` from the exit status or the per-boot
-      record. Rig-proven in rung 4u; the glass proof (a trial forced to
-      fail at the EBC quiesce) has not been run (`doc/update-path.md`).
+      record. Rig-proven in rung 4u and **on glass 2026-09-04 late**
+      (generation 17: a painter kept the panel busy, the helper refused
+      at the quiesce, radio and reader came back, the deployer printed
+      the refusal from the record, same boot id — `doc/status.md`).
 - [x] Generation pruning (`KEEP=`) had no guard against deleting the
       last generation known to work — nothing pinned one, and the
       generation-16 deploy (`KEEP=8`) pruned generation 8 and left
@@ -508,15 +510,11 @@ blacklist is ever wrong on a future kernel change.
       standing rule
       "keep a cold-booted generation in the window by hand" is now "pin
       it after the cold boot" — and before the next deploy, whose prune
-      runs right after `promote`. Not yet run on the device, and it is
-      not `pin 16` then a prune on 16: prune never takes `DEFAULT` or
-      the booted generation, and 16's helper has no `pin` verb. It is a
-      deploy of a generation built with the verb (hand-touch
-      `/boot/gen-10/pinned` first, or use `KEEP=8` again, if 10 is to
-      survive that deploy's own prune), then from the new generation
-      `pin 16` and `prune --keep 1`, which takes every unpinned
-      generation between, and `list` still showing 16 `[pinned]`
-      (`doc/hardware-deploy.md`).
+      runs right after `promote`. **Run on the device 2026-09-04 late**
+      (`doc/status.md`): from generation 17 (the first with the verb),
+      `pin 16`, `pin 10`, then `prune --keep 1` deleted 11–15 and kept
+      both pinned generations and the booted 17 — the recipe in
+      `doc/hardware-deploy.md`, as written.
 - [x] (offline, 2026-09-04) The watcher's menu match rode on one short
       string in a capture that drops ~25 bytes every 150–250 (the
       adapter at 1.5 Mbaud, not termios — `doc/device-access.md`), and a
