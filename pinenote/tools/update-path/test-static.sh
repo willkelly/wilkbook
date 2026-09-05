@@ -174,6 +174,10 @@ grep -q 'local loaded, load_rc, load_said = capture(load)' "$helper"
 grep -q 'capture("/run/current-system/profile/sbin/kexec -e")' "$helper"
 grep -q 'commands\["last-trial"\]' "$helper"
 grep -q 'boot_id=%s' "$helper"
+# the record is removed as a trial begins (only bail() writes it), so a later
+# trial this boot that dies without one is never read as the earlier refusal
+grep -q '^    os.remove(RECORD)$' "$helper"
+after 'os.remove(RECORD)' 'herd stop reader-session' "$helper"
 echo "PASS: every refusal after the radio-off undoes the teardown in reverse before it is said"
 # The deployer tells a refusal from a dead link by the trial ssh's exit status:
 # 255/124 is the link dying with the old kernel (success); any other non-zero

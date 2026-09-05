@@ -239,6 +239,10 @@ function commands.trial(n)
     if not exists("/run/current-system/profile/sbin/kexec") then die("kexec-tools is not in this image") end
     log("trial boot of generation %d: DEFAULT is unchanged; a power-cycle returns to it", n)
     torn.generation = n
+    -- A record left by a trial this boot refused is stale from here on: a
+    -- later trial that dies without leaving one must not be read as that
+    -- earlier refusal.  Removed at the start; only bail() writes it.
+    os.remove(RECORD)
     -- The session that ran this helper may be gone by the time a refusal is
     -- reported; a write to its pipe must come back EPIPE, not kill the
     -- helper mid-restore (SIGPIPE's default).  Best-effort: no ffi, no change.

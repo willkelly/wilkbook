@@ -221,7 +221,13 @@ in it. Only what was up comes back (a reader that was not running
 stays stopped). The restores write nothing to the session, which may
 already be gone (an EPIPE would abort the control script's `set -e`),
 and SIGPIPE is ignored for the trial so a dead session cannot kill the
-helper mid-restore. The teardown order itself is untouched.
+helper mid-restore. The teardown order itself is untouched. The
+bail-out lives in the helper the *target* generation ships (the
+deployer runs
+`$(cat /boot/gen-N/system)/profile/bin/wilkbook-generation trial N`),
+so the very first deploy of a generation built with it already
+exercises it, and a trial into an older generation — a rollback —
+runs that generation's helper, without it.
 
 Whether the message *arrives* is a race against the deployer's
 keepalives (`ServerAliveInterval=5`, `CountMax=2`: ~15 s past the
@@ -229,7 +235,10 @@ radio-off), and an EBC that never goes idle alone spends 10 of them —
 so the helper also leaves a record, `/run/wilkbook-generation/last-trial`
 (boot id, generation, reason), which `wilkbook-generation last-trial`
 prints only when it belongs to the running boot (a trial that went
-through is a new boot, so a stale record never passes). The deployer
+through is a new boot, so a stale record never passes) and which
+every trial removes as it begins, so a later trial in the same boot
+that dies without leaving one is never read as the earlier refusal.
+The deployer
 reads the trial ssh's exit status: 255 or 124 is the link dying with
 the old kernel — the success signature — and proceeds to the ssh wait;
 any other non-zero is the helper refusing, printed as `NOT PROMOTED:

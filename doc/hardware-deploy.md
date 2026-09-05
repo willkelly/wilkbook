@@ -310,10 +310,14 @@ it (`trial`: the device-tree notes and the model line first, then the
 reader stopped INT-first, Wi-Fi off, gadget unbound, EBC quiescent,
 then `kexec -e`; the ssh link dies at the Wi-Fi off, before the kexec
 — by design, so nothing the helper says after that point reaches the
-deployer live. A helper that refuses after that point — an EBC that
-never goes idle, a failed `kexec -l`, a `kexec -e` that returns — used
-to leave the reader stopped and the radio off with no message
-delivered, and a power-button sleep/wake did not bring the radio back,
+deployer live. Since 2026-09-04 the trial's output is captured to a
+temp file and echoed with a `trial>` prefix once the ssh link returns
+(≤90 s: the keepalives give up, or the timeout fires), so the
+device-tree notes still arrive, but not live. A helper that refuses
+after that point — an EBC that never goes idle, a failed `kexec -l`,
+a `kexec -e` that returns — used to leave the reader stopped and the
+radio off with no message delivered, and a power-button sleep/wake
+did not bring the radio back,
 since the broker restores only a radio it saw on; since 2026-09-04 it
 **bails out** instead: the teardown is undone in reverse (gadget
 re-bound, `pinenote-wifi-control on`, `herd start reader-session`)
@@ -338,7 +342,12 @@ page it had.
 **On the device**, `wilkbook-generation list | add | trial N | health
 [--expect S] | promote N | demote | prune --keep K | last-trial` are
 the same verbs; `deploy.sh DEVICE --rollback N` is trial+health+promote of an
-existing generation.
+existing generation. The bail-out lives in the helper the *target*
+generation ships (the deployer runs
+`$(cat /boot/gen-N/system)/profile/bin/wilkbook-generation trial N`),
+so the very first deploy of a generation built with it already
+exercises it, and a trial into an older generation runs that
+generation's helper, without it.
 
 **Rules learned on glass (2026-09-02, `doc/update-path.md` "Glass
 notes"):**

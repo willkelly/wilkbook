@@ -88,9 +88,10 @@ trial_health_promote() {
   # The helper's words are kept in a file so its exit status survives: 255
   # (ssh gave up on its keepalives) or 124 (the timeout) is the link dying
   # with the old kernel -- the SUCCESS signature; anything else is the helper
-  # itself exiting, which it only does to refuse, after undoing its teardown
-  # (radio back, reader back).  That is not a dead trial, no watchdog is
-  # counting, and the five-minute wait would only obscure it (2026-09-04).
+  # itself exiting, which it only does to refuse -- undoing its teardown
+  # first, if it had begun one (radio back, reader back).  That is not a
+  # dead trial, no watchdog is counting, and the five-minute wait would only
+  # obscure it (2026-09-04).
   trial_log=${TMPDIR:-/tmp}/wilkbook-trial-$$.log
   trial_rc=0
   timeout 90 ssh -o ConnectTimeout=10 -o BatchMode=yes -o ServerAliveInterval=5 -o ServerAliveCountMax=2 "root@$device" "\$(cat /boot/gen-$gen/system)/profile/bin/wilkbook-generation trial $gen" > "$trial_log" 2>&1 || trial_rc=$?
@@ -99,7 +100,7 @@ trial_health_promote() {
     0|255|124) ;;
     *)
       reap_watcher
-      echo "NOT PROMOTED: the trial helper refused (exit $trial_rc); it undid its teardown (reader and radio back), DEFAULT is unchanged -- its reason is in the trial output above" >&2
+      echo "NOT PROMOTED: the trial helper refused (exit $trial_rc); if it had begun its teardown it undid it (reader and radio back), DEFAULT is unchanged -- its reason is in the trial output above" >&2
       exit 1;;
   esac
   echo "== waiting for the new generation to answer ssh"
