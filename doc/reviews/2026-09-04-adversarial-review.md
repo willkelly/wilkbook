@@ -76,7 +76,9 @@ battery table marked as measured on the v0.1.0 image.
   (it greps the earlier patch's text), recorded as the audit's own
   complaint about text pins.
 - N13/N14 wording: the rebind never fired on glass, the KOReader-initiated
-  path has four samples, the audit's item 2 is unfixed and is now in
+  path has four samples [as counted at review time; that count was the
+  rig report's cumulative latch — see the 27-cycle correction in
+  `doc/status.md`, and the 2026-09-04 rig's 28 of 32], the audit's item 2 is unfixed and is now in
   the CHANGELOG's known-open list, and a tester-facing entry for patch
   14 exists.
 
@@ -86,6 +88,7 @@ The dither `+16` is arithmetically right and all three copies are
 covered; `num_rects == 0` stays safe; the batch and count types are
 sound and the zero-batch spin is closed; no on-stack work reuse; patch
 13 is inert everywhere suspected and the ultra-coupling pin passes with
-it; the 65-cycle rig did run with patch 13 live; the ioctl roster pin
+it; the overnight rig did run with patch 13 live [27 cycles, not the 65
+its report claimed — corrected 2026-09-04 in `doc/status.md`]; the ioctl roster pin
 still passes; the OFF_SCREEN half of the `-EFAULT` rewrite was correct
 from the start.

@@ -22,7 +22,7 @@ claims are quoted where the exact shape matters.
 | 7 | PRs #49 and #50 are still open and should be closed as superseded by #64. | **Stale**: both were auto-marked merged by GitHub when #64 landed (their heads are ancestors of main). | github | — |
 | 8 | The R1–R7 shipping-reader list and the optics check were not run; S3–S5 not started. | **Correct** per `doc/status.md` 2026-09-03 late afternoon. | — | — |
 | 9 | PR #67's finding (a trial runs the running device tree) should become policy: DTB changes need a cold boot and a live-FDT check before promotion counts. | **Agreed**; the helper's NOTE and the docs are in #67; the cold-boot rule is written into `doc/update-path.md`. | — | — |
-| 10 | PR #66's Wi-Fi fix needs captured repetition (30–50 cycles, both trigger paths, varied sleep lengths) before it is called proven. | **Agreed**, and superseded in part: the same evening root-caused the remaining losses to KOReader's `wifi_was_on` bookkeeping, not the radio (`doc/networking.md` §8, the late-night status entry). Rig v2 is designed. | — | — |
+| 10 | PR #66's Wi-Fi fix needs captured repetition (30–50 cycles, both trigger paths, varied sleep lengths) before it is called proven. | **Agreed**, and superseded in part: the same evening root-caused the remaining losses to KOReader's `wifi_was_on` bookkeeping, not the radio (`doc/networking.md` §8, the late-night status entry). Rig v2 is designed [and has since run: 27 + 32 cycles, both trigger paths, 2026-09-03/04 — `doc/status.md`]. | — | — |
 | 11 | PR #51's os1 rescue is untested on os1. | **Correct**. | — | — |
 
 One caution on item 6 the audit did not state: KOReader draws through
@@ -64,7 +64,8 @@ master; it is a design item, not a flag change.
 1. **Tiny kernel semantics fix** — items 1, 3, 4, 5 as one narrow patch
    (`linux-pinenote-7.1-direct-correctness.patch`, patch 14). Done the
    same night; kernel build and the direct host checks green; glass
-   pending.
+   pending [ran 2026-09-04 on generation 14: the guards behave, the
+   dither is off the shipped route — `doc/status.md`].
 2. **Resource-lifetime fix** — item 2: one shared cleanup in reverse
    acquisition order for failed probe and remove; an on-device
    bind/unbind and fault-injection test counting threads, DMA warnings,
@@ -76,9 +77,11 @@ master; it is a design item, not a flag change.
    R1–R7 and optics run on the current baseline; rewrite any R-test that
    assumes the retired refresh-drain driver.
 5. **Recovery and process** — merge #67's policy; prove #51 on os1;
-   keep a known-good generation (generation 7 or 9).
+   keep a known-good generation (generation 7 or 9) [both since pruned;
+   the cold-booted generation 10 is the one kept by hand, 2026-09-04].
 6. **Wi-Fi proof** — rig v2 with captured per-cycle facts, both trigger
    paths, varied sleep lengths, after the KOReader bookkeeping fix.
+   [Run 2026-09-03/04 and 2026-09-04: 27 + 32 cycles — `doc/status.md`.]
 7. **Only then** — transactional submission and fences, pinned RT
    workers, sparse tiles, dense page-turn specialisation.
 

@@ -26,7 +26,8 @@ earlier generation it is a kernel spin.
 0. **Deploy.** `make deploy DEVICE=pinenote-os2 FLAVOR=reader KEEP=7`
    from a worktree at the candidate commit, no convenience opt-in.
    Expect generation 14 promoted; generations 7–14 kept (nothing
-   pruned). Record the built system path and confirm its kernel is the
+   pruned). *Run with `KEEP=8` (2026-09-04): generation 14 promoted,
+   7–14 kept, nothing pruned — `doc/status.md`.* Record the built system path and confirm its kernel is the
    candidate's derivation (`6rhnmj09…-linux-pinenote-7.1.8-pinenote.drv`,
    the rebuild after the adversarial review's braces fix — that lineage
    is the only proof patch 14 is in the running kernel; and read that
@@ -47,6 +48,8 @@ earlier generation it is a kernel spin.
    prompt return; restore `20`; a call with `num_rects` above 65536 →
    expect errno 7 (E2BIG). Then `dmesg` diff: no `WARNING:` from
    `rockchip_ebc_blit_neon` (the queue_work assertion must stay silent).
+   *Run 2026-09-04 on generation 14: as expected — errno 22 in 0.000 s,
+   errno 7, the happy paths unchanged, dmesg silent (`doc/status.md`).*
 3. **Page turns, camera-free.** Push `optics-inject.lua`, create
    `/run/optics-inject.fifo`, start it under `setsid`, wait for
    `/run/optics-inject.pid`; `herd stop reader-session`, `herd start
@@ -55,6 +58,9 @@ earlier generation it is a kernel spin.
    `QUIT` and confirm the uinput device is gone. Verdicts: thread count
    still 2, `dmesg` diff clean of `WARNING:`, `workqueue lockup`,
    `Unbalanced pm_runtime`, `rockchip.ebc.*error`.
+   *Run 2026-09-04: forty turns cost 0 IRQs — the restart had landed in
+   the file manager, not the book; re-run with the book open, 47 frames
+   per turn, verdicts clean (`doc/status.md`, `doc/testing.md`).*
 4. **Driver rebind ×5.** With `reader-session` stopped:
    `echo fdec0000.ebc > /sys/bus/platform/drivers/rockchip-ebc/unbind`,
    then `bind`, verify `.../fdec0000.ebc/drm/card*` exists, record
@@ -62,6 +68,9 @@ earlier generation it is a kernel spin.
    signal is accumulation across cycles (the audit's item 2 is the
    failed-probe path, which a clean rebind does not take; this is the
    regression guard for what the rebind does take). Restart the reader.
+   *Run 2026-09-04: threads 2, runtime PM balanced, no warnings; one
+   never-freed 228 kB LUT table per successful probe, resolved from
+   source the same afternoon (`doc/status.md`).*
 5. **Device-tree notice.** From generation 14, the RUNNING helper:
    `wilkbook-generation trial 9` — stderr must carry `NOTE: generation
    9's device tree differs from the booted gen-14's …` (generation 9's
@@ -79,15 +88,23 @@ earlier generation it is a kernel spin.
    shows the model line and the kexec'd-kernel note only (its DTB is
    14's, so the "differs" note cannot fire); the "differs" note is
    proven by a hand-run `trial 9` from the fixed generation, whose DTB
-   does differ.*
+   does differ. Both shown on generation 15 the same evening —
+   `doc/status.md`.*
 6. **Suspend rig, KOReader path weighted.** `wifi-cycle.sh koreader-idle
-   120`, then `wifi-cycle-host.sh 15 45 300` (settle 300 s so KOReader's
-   idle timer wins every cycle), then `koreader-idle 900`. Verdicts from
+   120`, then `wifi-cycle-host.sh 15 45 300` (a workstation-side
+   scratchpad wrapper, outside the repo, around the device's
+   `wifi-cycle.sh`; settle 300 s so KOReader's idle timer wins every
+   cycle), then `koreader-idle 900`. Verdicts from
    the device report: `koreader-initiated` should now be most of the
    transactions; `on pid=` and `associated within` counts equal; zero
    `Wi-Fi restore failed`; cyttsp5 `Validation of the wakeup response
    failed` count over `PM: suspend entry` count (R6); no `rxctl`/`attach
    failed`.
+   *Run 2026-09-04, the cable out from the fourth transaction on: 32
+   transactions, 28 KOReader-initiated, `on`/associated 32/31 (the one
+   miss is the stale-settle button wake), 0/0/0 rebinds, retries and
+   restore failures, R6 31 of 32, no `rxctl`/`attach failed`,
+   `suspend_stats` 32/0 (`doc/status.md`).*
 7. **R3 and R4 over SSH.** Clock: generation 14 ships the timesync
    service with no server (the privacy default, `pinenote/services/timesync.scm`),
    so the check is that it is inert — `/var/log/pinenote-timesync.log`
@@ -135,7 +152,8 @@ book first: a reader restart or boot lands in the library by design.
    lineage (patch 13's device-tree change is already proven live this
    way on generation 10; 15's tree is 14's, i.e. 10's plus nothing).
 6. **The os1 rescue (#51)**: let a boot land on os1, run
-   `rescue-generation.sh list` and `log` read-only, then `promote` of
+   `rescue-generation.sh` (PR #51 — open against main, not in this
+   tree, never run) `list` and `log` read-only, then `promote` of
    the already-promoted generation (a no-op), pick os2 at the menu,
    confirm the reader returns. Only then is it a recovery path.
 7. R1 (clock reads local), R2 (open the manuals book, time the first
@@ -144,8 +162,11 @@ book first: a reader restart or boot lands in the library by design.
 ## What the tag needs, in order
 
 1. Unattended half green, with the notice fired and the rig's
-   KOReader-initiated count no longer thin.
-2. The adversarial review's blockers closed.
+   KOReader-initiated count no longer thin — **met 2026-09-04** (both
+   notes shown on generation 15; 28 of the rig's 32 sleeps KOReader's
+   own).
+2. The adversarial review's blockers closed — **done** (B1 rebuilt as
+   `6rhnmj09…`, B2 reworded; `doc/reviews/2026-09-04-adversarial-review.md`).
 3. Operator half run, at least items 1–5.
 4. CHANGELOG, alpha-checklist, alpha-expectations, README's Status
    section, CLAUDE.md's "Where we are" and the kernel inventory true for

@@ -45,8 +45,9 @@ driver's belief buffer different after every turn, runtime status
 instead of `ui partial` (a menu). The reader restart itself cost 234
 interrupts (the open plus a full wash). Lesson recorded in
 `doc/testing.md`'s traps: **confirm an `opening file` line before an
-injected-turn measurement**; `turn-check.sh` (scratchpad, staged under
-`/data/wilkbook/tools`) does the whole dance.
+injected-turn measurement**; `turn-check.sh` (at the time a scratchpad
+script staged under `/data/wilkbook/tools`; in the tree since ad0ebca as
+`pinenote/tools/ebc-lab/turn-check.sh`) does the whole dance.
 
 **4. Driver rebind ×5** (reader stopped, unbind/bind of `fdec0000.ebc`
 four seconds apart): kthreads 2 throughout, `runtime_status` suspended,
@@ -108,7 +109,9 @@ show has now been shown.
 reader flavor ships `pinenote-timesync-service-type` with no server on
 purpose (privacy: no public pool by default — the design comment in
 `pinenote/services/timesync.scm`), so R3's "one sync after association"
-is unverifiable as written; the clock read correct UTC throughout.
+is unverifiable as written — R3 has since been redefined as the inert
+check this run satisfies, the with-server sync becoming R3s
+(`doc/glass-plan-2026-08.md`); the clock read correct UTC throughout.
 Fonts live inside `koreader-bin`; the seeded settings (`wifi_was_on`,
 `auto_restore_wifi`, the rotation profile) were present.
 
@@ -118,8 +121,10 @@ screensaver drew and undrew. The tester brief already names this trap;
 the session's wrap-up restores `enabled=1`.
 
 **6. The rig, part 2 — the KOReader idle path, at last.** `wifi-cycle.sh
-koreader-idle 120`, then `wifi-cycle-host.sh 15 45 300` (backstop
-45 s, settle 300 s), 20:18–21:50 UTC. The first three transactions
+koreader-idle 120`, then `wifi-cycle-host.sh 15 45 300` (a
+workstation-side scratchpad wrapper, outside the repo, that starts and
+stops the device's `wifi-cycle.sh` over ssh or the ACM console and waits;
+backstop 45 s, settle 300 s), 20:18–21:50 UTC. The first three transactions
 (20:18–20:31) ran with the USB cable in and were broker-path only:
 **KOReader's AutoSuspend never fires while the battery reports
 charging** (its own rule — it reschedules by the full timeout instead of
@@ -252,7 +257,10 @@ the broker's own RTC re-suspends. Both KOReader-initiated wakes
 restored Wi-Fi, which is the path the bug lived on, but two samples is
 thin; why the idle timer rarely won the race is not understood (a
 KOReader AutoSuspend rule about external power is the first suspect —
-the reader was on USB throughout). (2) `wifi_was_on` read false in the
+the reader was on USB throughout). [Understood 2026-09-04: that rule is
+it — KOReader's AutoSuspend never fires while the battery reports
+charging, and the reader was on USB; the entry above measured the idle
+path with the cable out, 28 of 32.] (2) `wifi_was_on` read false in the
 settings file for the first minutes after the boot despite the device
 layer's start-up assertion: the file reflects KOReader's memory only at
 its next flush (it flipped true after the first cycle) — consistent with
