@@ -91,10 +91,16 @@ read-only before `kexec -e`, and leaves `/data` mounted read-write:
 every kexec so far has left p7 unclean, ext4's journal has covered for
 it, and this one lost udev's race at probe time. The fix is the
 teardown remounting `/data` read-only too (and the bail-out putting it
-back), a PR of its own; the recovery tonight was a hand remount over
-ssh (the operator's, the classifier having refused it to the agent).
-A cold boot of 18 with the cable is still the clean proof that the
-mount path is fine, and #76's proof besides.
+back) — added to PR #75, whose branch owns the teardown, and built as
+generation 19. A cold boot would prove nothing about this: the proof
+is two kexecs from the fixed helper, each landing with `/data` mounted
+from the partition and no checksum complaint — the second with the
+partition read-write and freshly written beforehand. Not run yet at
+the time of writing: the reader had gone to sleep (the placeholder
+`/data` has no config, so the broker used its default timer) and the
+operator was away from the button. The device sits on 18 with the
+partition read-only at the Wi-Fi service's mount and the reader on an
+empty library until then.
 
 ## 2026-09-04 (wkelly PineNote, operator mostly away) — the v0.3.0-prealpha candidate is generation 14: patch 14's guards behave on glass, the "zero-IRQ page turns" were the file manager, the trial notes were dying with the radio
 
