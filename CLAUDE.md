@@ -20,23 +20,30 @@ code review — before a single reboot. That's the standard.
 
 ## Repo shape
 
-- `pinenote/packages/kernel.scm` — three kernels: `linux-pinenote` (the
-  vanilla-7.0.x + forward-port-patch **primary**), `linux-pinenote-debug`
-  (primary + diagnostics/`EXTRACT_FBS`), and `linux-pinenote-6.6.30`
-  (m-weigand baseline, **regression-isolation only** — 7.0 reached parity
-  2026-07-04).
+- `pinenote/packages/kernel.scm` — two kernels: `linux-pinenote` (vanilla
+  7.1.x + the fourteen-patch stack, hrdl's direct-mode EBC driver
+  included — the **primary** and, since the embrace sweep, the only
+  reader kernel) and `linux-pinenote-6.6.30` (m-weigand baseline,
+  **regression-isolation only** — 7.0 reached parity 2026-07-04).
+  `linux-pinenote-debug` and `linux-pinenote-hrdl-direct` were retired
+  by the sweep (2026-09-03; the direct driver carries `EXTRACT_FBS`
+  natively).
 - `pinenote/patches/linux-pinenote-7.0-forward-port.patch` — the EBC
   display driver, `drm_epd_helper`, WS8100 pen, PineNote DTS, and
   `pinenote_defconfig`. This single patch is the most rebase-fragile,
   highest-value artifact in the repo. Treat edits to it with care; it is
   also **treated as permanent** (mainline has no EPD infrastructure and
-  won't for years — see `doc/eink-research.md`). Six smaller patches ride
-  alongside it (BSP SIP suspend, cpuidle, vdd_cpu PFM, DDR DVFS, st_accel
-  PM, ultra rails-off suspend) — the inventory lives in `doc/kernel-forward-port.md`.
+  won't for years — see `doc/eink-research.md`). Thirteen more patches
+  ride alongside it — six for power (BSP SIP suspend, cpuidle, vdd_cpu
+  PFM, DDR DVFS, st_accel PM, ultra rails-off suspend), hrdl's
+  direct-mode driver and three of ours on it, the rk8xx kexec fix, the
+  sdio power-sequence delay, and the direct-correctness pass — fourteen
+  in all; the inventory lives in `doc/kernel-forward-port.md`.
 - `pinenote/services/`, `pinenote/images/`, `pinenote/systems/` — Guix
   system services, initrd, and flavor entrypoints.
-- `pinenote/tools/` — fifteen host-side test and diagnostic tools; the
-  table in `doc/testing.md` says what each covers. The core display trio
+- `pinenote/tools/` — the test and diagnostic tools, host-side and
+  device-side (twenty-one directories as of 2026-09-04); the table in
+  `doc/testing.md` says what each covers. The core display trio
   (`wbf`, `ebc-logic`, `rastersim`) compiles the *verbatim* driver source
   out of the patch and tests it on your workstation.
 - `pinenote/scripts/preflight/` — non-destructive inspection/extraction.
@@ -57,6 +64,10 @@ code review — before a single reboot. That's the standard.
   what blocks it; and the human QC cycle that actually cuts it.
 - `doc/alpha-expectations.md` — the tester-facing brief: what the reader
   should feel like, what is known-broken, how to report.
+- `doc/release.md` — what a tag names (commit, channel pin, hash — or,
+  for a generation-shipped tag, the promoted generation's system path
+  and kernel derivation), the cutting procedure, and what we
+  deliberately do not do (no hosted binary).
 - `doc/worked-examples.md` — the philosophy applied: replayable case
   studies. Read these before your first non-trivial change.
 - `doc/building.md` — host prerequisites and exact build/QEMU/extraction
@@ -95,6 +106,10 @@ code review — before a single reboot. That's the standard.
 - `doc/glass-plan-2026-08.md` — the standing agenda for attended glass
   sessions: the direct-mode embrace-or-reject ladder and the
   shipping-reader validation list.
+- `doc/prealpha-session-2026-09-04.md` — the `v0.3.0-prealpha` test
+  session: the unattended half (run 2026-09-04, results inline and in
+  `doc/status.md`), the operator half (not yet run), and what the tag
+  needs, in order.
 - `doc/configuration.md` — how configuration is meant to work: sparse
   overrides, schema-declared validation and migration, everything
   surviving a reflash, the settings book, and what alpha actually ships.
@@ -132,7 +147,8 @@ code review — before a single reboot. That's the standard.
 - `doc/archive/` — historical documents (indexed by its README).
   `doc/artifacts/` — committed hardware-session evidence.
   `doc/datasets/` — committed derived optics dataset.
-  `doc/reviews/` — repo-wide review records.
+  `doc/reviews/` — review records (the 2026-08-06 pre-share review, the
+  2026-09-03 third-party audit, the 2026-09-04 adversarial review).
 
 Vocabulary used throughout: **os1/os2** — the two OS partition slots
 (p5 = stock Debian rescue, p6 = ours); **wash** — a full-screen refresh
@@ -236,8 +252,10 @@ gitignored `build/`, or the reader's static address.
   turns (8/8 on glass, 2026-08-01), the GL16 partial policy + idle washer,
   Wi-Fi with out-of-band credentials, key-only SSH, ACM gadget (console
   shell opt-in via `WILKBOOK_VERY_INSECURE_FOR_CONVENIENCE`).
-  `v0.1.0-prealpha` is tagged and the repo is public
-  (github.com/willkelly/wilkbook); the alpha sign-off has NOT happened
+  `v0.1.0-prealpha` and `v0.2.0-prealpha` are tagged and the repo is
+  public (github.com/willkelly/wilkbook); `v0.3.0-prealpha` is the
+  candidate on the device (generation 15, branch `prealpha-candidate`),
+  not yet tagged; the alpha sign-off has NOT happened
   (`doc/alpha-signoff.md`, `doc/alpha-checklist.md`).
 - **Direct mode (the handwriting experiment) ran on glass 2026-08-25**:
   the `reader-direct` study image booted on os2, D1–D4 of the ladder
@@ -318,17 +336,20 @@ gitignored `build/`, or the reader's static address.
   its rockchip_ebc.ko live-swapped as a module onto the running study
   kernel for the same-session ghost shootout (doc/status.md part 13;
   probe clean, but a reproducible DT-mismatch band artifact on the
-  study DTB — an instrument, not a validated boot). os2 currently
-  carries the study image — os1 remains the rescue path.
+  study DTB — an instrument, not a validated boot). **Since the embrace
+  (2026-09-03) the product kernel on OUR device is 7.1.8 with hrdl's
+  direct driver**: generations 7–15 on os2, 7 and 10 cold-booted, the
+  rest kexec'd (`doc/status.md`); os1 remains the rescue path.
   **Update 2026-08-31 (rpedde's device, PR #41)**: the shipping-driver
   7.1.8 reader image cold-booted twice on a SECOND operator's PineNote
   and ran a full suspend/wake acceptance matrix — the shipping-driver
   7.1 is now a validated boot, on that device. Our own glass record for
   it is still only the module swap.
-  So: 7.1 is what the repo *builds*, 7.0.11 is what is *proven* for the
-  product on OUR device, the study ran 7.1.8 on glass, and rpedde's
-  device validated the shipping-driver 7.1.8 boot. Never state one as
-  the other.
+  So: 7.1.8 with the direct driver is what the repo *builds* and what
+  runs on OUR device since generation 7; 7.0.11 is the last kernel
+  proven for the OLD shipping driver on our device; rpedde's device
+  validated the shipping-driver 7.1.8 boot and has not run the direct
+  lineage. Never state one as the other.
   `channels.scm` was pin-bumped 2026-08-26 to the 7.1-resolving
   generation, so `TIME_MACHINE=1` works again on `main` (gated on
   time-machine resolving the identical kernel derivation as ambient);
@@ -337,7 +358,7 @@ gitignored `build/`, or the reader's static address.
   off (`DEFAULT_ENABLE=0x0`), BREAK+`sysrq` arms, BREAK+key fires —
   the sequence is an arming toggle, NOT a per-use guard
   (`doc/kernel-forward-port.md`). 6.6.30 remains regression-isolation only.
-  Fourteen patches as of 2026-09-03 (seven from the 7.0/7.1 series, four for the direct-mode driver and our fixes on it, one mfd rk8xx kexec fix, one Wi-Fi power-sequence settle delay, one further direct-driver correctness pass from a third-party audit); the 7.1 move *deleted* two hunks mainline absorbed. The
+  Fourteen patches as of 2026-09-04 (seven from the 7.0/7.1 series, four for the direct-mode driver and our fixes on it, one mfd rk8xx kexec fix, one Wi-Fi power-sequence settle delay, one further direct-driver correctness pass from a third-party audit); the 7.1 move *deleted* two hunks mainline absorbed. The
   rk8xx one is glass-proven and merged (2026-09-03); the sdio-pwrseq-delay
   and direct-correctness patches are glass-exercised on generations
   10–15 (the sdio delay's device-tree half only on the cold-booted 10)
@@ -389,12 +410,14 @@ gitignored `build/`, or the reader's static address.
   daemon. Charging inhibits suspend by default
   (`suspend_while_charging=1` opts out); `enabled=0` still pauses
   everything (the broker re-reads it continuously). Hardware-accepted
-  on rpedde's device (shipping flavor); the v0.2.0 image on OUR os2
-  predates it and still runs the 5-min daemon. The broker +
+  on rpedde's device (shipping flavor) 2026-08-31; OUR device has run
+  the broker since generation 7 (2026-09-03) — the v0.2.0 dd'd image
+  that ran the 5-min daemon is gone from os2. The broker +
   direct-driver combination ran its first hardware session 2026-09-03
   (wkelly's device, generation 7 on the embrace branch: power button
   and cover both suspended and woke cleanly through the broker, three
-  cycles, zero failures — `doc/status.md`). Still
+  cycles, zero failures), then 59 hands-off cycles across the
+  2026-09-03/04 rigs (`doc/status.md`). Still
   unexplained: the TPS `ENABLE` 2f→20 delta after suspend, and one
   13.09 mA idle segment in the soak.
 - **Power**: awake reader idle ~157 mA after the vdd_cpu auto-PFM fix
@@ -448,8 +471,9 @@ gitignored `build/`, or the reader's static address.
   in the driver 2026-08-24** (issue #22, hrdl's work-item drain gate) —
   the loop now drains within one area lifetime whenever a global refresh
   or a park is pending, so those procedures stop being load-bearing. That
-  fix is harness-proven only; **no panel has run it.** Until a hardware
-  session says otherwise, keep the procedures.
+  fix is harness-proven only; **no panel has exercised it** (R5 in
+  `doc/glass-plan-2026-08.md` is unrun on either driver). Until a
+  hardware session says otherwise, keep the procedures.
 - **A reader restart lands in the file manager, not the book** (no
   `start_with` is seeded, by design): forty injected page turns there
   cost 0 EBC IRQs and looked like a display regression (2026-09-04).
