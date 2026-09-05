@@ -840,13 +840,18 @@ takes an `rtc_settle=` config key so the cycle rig can hold long awake
 windows.
 
 What is proven offline: layers 1–2 by the harness. What needs glass:
-the hands-off cycle rig (`wifi-cycle.sh` in the session scratchpad:
+the hands-off cycle rig (`pinenote/tools/platform-controls/wifi-cycle.sh`:
 a short `backstop=` in `/data/wilkbook/autosuspend.conf` plus one
 injected power tap makes the broker suspend, RTC-wake, restore Wi-Fi,
-settle 20 s and re-suspend by itself) run for tens of cycles on the
-image that carries all three, counting `Wi-Fi restore failed`,
-`rebinding the driver` and `restarting the supplicant` in the broker's
-log. Not observed yet: a second failure class on generation 7 the same
-evening (driver attach fine per the UART, no SSH afterwards) — layer 1's
-association retry is aimed at it, unproven.
+settle `rtc_settle` seconds and re-suspend by itself) run for tens of
+cycles on the image that carries all three, counting `Wi-Fi restore
+failed`, `rebinding the driver` and `restarting the supplicant` in the
+broker's log and `wifi.log`. **Run, twice** (`doc/status.md`): 27
+broker-triggered cycles overnight 2026-09-03/04 and 32 on 2026-09-04
+with the cable out so that KOReader's idle timer triggered 28 of them
+— zero restore failures, zero rebinds, zero retries; the rebind and the
+retry are therefore still harness-proven only. The second failure class
+seen on generation 7 (driver attach fine per the UART, no SSH
+afterwards) has not recurred in 59 cycles; layer 1's association retry
+is aimed at it, unexercised.
 
