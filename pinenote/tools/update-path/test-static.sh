@@ -139,4 +139,16 @@ after 'echo "pid=$$"' 'stty -F "$tty"' "$picker"
 after 'stty -F "$tty"' 'cat "$tty" >> "$log"' "$picker"
 after 'cat "$tty" >> "$log"' 'echo "reader=$reader" >> "$handle"' "$picker"
 grep -q 'echo "exit=$status" >> "$handle"' "$picker"
-echo "PASS: the UART watcher is reaped and waited for by the group and pid it records itself, and a dead watcher cannot abort a successful deploy"
+# exit= comes only from the picker's own exit paths, never from $? in the
+# EXIT trap: bash as sh runs that trap on an untrapped SIGTERM with the last
+# command's status, so a reaped picker recorded exit=0 -- the handle's "slot
+# chosen", which watcher_wait reads (review 2026-09-04; dash records
+# nothing).  The deployer itself was never misled -- its wait finishes before
+# its reap -- only a hand-run watcher's handle, read after the reap, was.
+# TERM/INT/HUP are trapped ahead of EXIT and record "terminated".
+! grep -q 'status=$?' "$picker"
+after "trap 'status=terminated; exit 143' TERM INT HUP" 'trap finish EXIT' "$picker"
+sed -n '/^finish() {/,/^}/p' "$picker" | grep -q 'if \[ -n "$status" \]; then echo "exit=$status"'
+grep -q 'status=0; exit 0' "$picker"
+grep -q 'status=1; exit 1' "$picker"
+echo "PASS: the UART watcher is reaped and waited for by the group and pid it records itself, its exit= is never a signal's, and a dead watcher cannot abort a successful deploy"

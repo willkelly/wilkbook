@@ -196,7 +196,9 @@ boot's: ~25 bytes (19–29) lost every 150–250 bytes, the same rate in
 both, which fits the CH340 adapter overrunning at 1.5 Mbaud and rules
 out termios and a second reader (`doc/device-access.md`, "The capture is
 lossy"). The single-string match is widened to the three entry lines and
-pinned offline (`make uart-pick-check`); the glass proof is still owed.]
+the countdown line — U-Boot draws the entries once and repeats only the
+countdown, so there is one draw to match — and pinned offline (`make
+uart-pick-check`); the glass proof is still owed.]
 
 **Operator half on generation 16, first pass (20:45 MDT, the
 operator's own words: "pages turn fine, pen works, cover and button

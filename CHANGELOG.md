@@ -29,20 +29,23 @@ work lands.
   deploy or cold-boot with the debug cable attached, the script that
   answers U-Boot's boot menu (`uboot-pick-slot.sh`, also the deployer's
   `WILKBOOK_UART` watcher) now recognises the menu from any of its three
-  entry lines rather than one short string — the serial capture drops
-  ~25 bytes every 150–250 at 1.5 Mbaud (the USB adapter, not a setting;
+  entry lines or its countdown line (`Hit any key to stop autoboot`)
+  rather than one short string — U-Boot draws the entries once and then
+  repeats only the countdown, and the serial capture drops ~25 bytes
+  every 150–250 at 1.5 Mbaud (the USB adapter, not a setting;
   `doc/device-access.md`), so a single string could be the one clipped.
   It writes its own pid and process group to `<capture>.watcher`; stop
   it with `kill -- -$(sed -n 's/^pgid=//p' <capture>.watcher)`, which
   takes its `cat` of the port with it — the pid your shell reports for
   a backgrounded `setsid` is a wrapper that has already exited, and
-  killing that left a reader holding the port for the next reboot. The
-  deployer uses the same file. It will not answer extlinux's generation
-  menu by mistake (same look, wrong menu). `make uart-pick-check` proves
-  all of it offline by replaying the real captured boot through a
-  pseudo-terminal. Not yet run on the device since the change; the
-  capture itself is still lossy until the adapter or the console baud
-  changes.
+  killing that left a reader holding the port for the next reboot.
+  Stopped that way its `exit=` line says `terminated`, not the `exit=0`
+  ("slot chosen") a bash `sh` used to leave. The deployer uses the same
+  file. It will not answer extlinux's generation menu by mistake (same
+  look, wrong menu). `make uart-pick-check` proves all of it offline by
+  replaying the real captured boot through a pseudo-terminal. Not yet
+  run on the device since the change; the capture itself is still lossy
+  until the adapter or the console baud changes.
 
 ## v0.3.0-prealpha — 2026-09-04
 

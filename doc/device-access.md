@@ -202,10 +202,20 @@ second reader (two `cat`s on one port would split the stream roughly in
 half, not clip ~10 % of it; both captures show the same rate, and the
 deployer's reap was verified by `pgrep` that night). So: the capture is
 **enough to see a boot and to catch the menu, not a clean transcript**.
-The menu is caught anyway because U-Boot redraws it every second of its
-countdown and the picker now matches any of the three entry lines (in
-that cold boot each redraw had a *different* entry clipped and never all
-three). A clean transcript needs a different adapter (an FT232H or
+The menu is caught anyway — but not because U-Boot keeps redrawing it.
+It draws the entries ONCE and then reprints only the countdown line each
+second; the three full draws in that capture (line 220: one countdown
+value, `Hit any key to stop autoboot: 15`) are the one draw and the menu
+answering the picker's own DOWN, DOWN, the last two each preceded by the
+keypress clear `ESC[9;1H ESC[2K` — not further chances. So the picker
+gets exactly one draw to match before it sends keys, and the match is
+widened from two strings to any of the three entry lines in that draw
+(each of those three draws had a *different* entry clipped and never all
+three) plus the countdown line, matched exactly as `Hit any key to stop
+autoboot`, as a fourth: the only string that repeats for the 15 s the
+menu is up. The pre-menu prompt is the different text `Hit key to stop
+autoboot('CTRL+C')` and extlinux's generation menu asks `Enter choice:`;
+neither matches. A clean transcript needs a different adapter (an FT232H or
 CP2102N is rated for 1.5 Mbaud with a real FIFO), or the console at a
 lower baud — which the device side fixes at 1500000 in the kernel command
 line and U-Boot, so that is a build change, not a host one. **Glass proof
@@ -222,7 +232,9 @@ pid=NNN        the script
 pgid=NNN       its process group (== pid under setsid or from a job-control shell)
 termios=...    `stty -a` of the port after setup, as evidence
 reader=NNN     the `cat` of the tty, which outlives the pick by design
-exit=N         once the script has a status (0 = menu seen, slot chosen)
+exit=...       once the script has a status: 0 = menu seen, slot chosen;
+               1 = no menu in time; 2 = the port refused the setup;
+               terminated = reaped (TERM/INT/HUP) before it had one
 ```
 
 `kill -- -PGID` from that file reaps script and reader together; that is
@@ -238,14 +250,27 @@ is the script. The deployer reads the file after arming its watcher and
 falls back to `$!` only if the file never appears (`deploy.sh`
 `watcher_handle`/`watcher_wait`/`watcher_reap`, pinned in
 `pinenote/tools/update-path/test-static.sh`); a hand-run watcher is reaped
-the same way: `kill -- -$(sed -n 's/^pgid=//p' LOG.watcher)`. Both shapes
-are exercised offline — `make uart-pick-check` drives the script against a
-pseudo-terminal replaying the real captured U-Boot bytes, started both
-ways, and pins the file, the port setup, the keystrokes per slot, and that
-nothing is sent for U-Boot's earlier `Hit key to stop autoboot('CTRL+C')`
-prompt or for extlinux's generation menu (which the same bootmenu code
-draws with the same title and "Press UP/DOWN" line — matching either
-would answer the wrong menu). **Glass proof still owed:** the next deploy
+the same way: `kill -- -$(sed -n 's/^pgid=//p' LOG.watcher)`. The `exit=`
+line is written only from the script's own exit paths, never from `$?` in
+its EXIT trap: this host's PATH `sh` is bash 5.2, which runs an EXIT trap
+on an untrapped SIGTERM with the last command's status, so a picker
+reaped before the menu recorded `exit=0` — the line this file defines as
+"menu seen, slot chosen" (dash, the shebang's `/bin/sh`, runs no EXIT
+trap there and recorded nothing). The picker now traps TERM/INT/HUP and
+records `exit=terminated`. The deployer was never misled by this — its
+`watcher_wait` has finished before `watcher_reap` sends the signal; only
+a hand-run watcher's handle, read after the reap, said a pick it never
+made. Both start shapes are exercised offline — `make uart-pick-check`
+drives the script against a pseudo-terminal replaying the real captured
+U-Boot bytes, started both ways, and pins the file, the port setup, the
+keystrokes per slot (from the entry lines, or from the countdown line
+alone), that nothing is sent for U-Boot's earlier `Hit key to stop
+autoboot('CTRL+C')` prompt — in its place in the boot or by itself — or
+for extlinux's generation menu (which the same bootmenu code draws with
+the same title and "Press UP/DOWN" line — matching either would answer
+the wrong menu), and that a picker reaped before any menu records
+`exit=terminated`, never `exit=0`, under `sh` and under dash or bash when
+the other is on PATH. **Glass proof still owed:** the next deploy
 or cold boot with the UART attached, reaped by the recorded pgid and
 leaving no `cat /dev/ttyUSB0` behind (`pgrep -f 'cat /dev/ttyUSB'`).
 
@@ -299,7 +324,9 @@ was lost with it; 2026-09-02 it picked os2 at poll 23 and recorded the
 first kexec on glass; 2026-09-04 it picked os2 on a cold boot eight
 seconds after the menu). It matches any of the menu's three entry lines
 (`Search for extlinux.conf on all partitions`, `Boot OS1 (part 5)`,
-`Boot OS2 (part 6)`) and nothing else, records itself in `LOG.watcher`
+`Boot OS2 (part 6)`) or its countdown line (`Hit any key to stop
+autoboot`, the only string U-Boot repeats while the menu is up; the
+entries are drawn once) and nothing else, records itself in `LOG.watcher`
 (the pid/pgid handle above), and gives up after
 `WILKBOOK_UBOOT_MENU_TIMEOUT` seconds (default 900). Offline suite:
 `make uart-pick-check`.
