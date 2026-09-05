@@ -46,7 +46,21 @@ The 2026-09-03 third-party audit's item 2
 (doc/reviews/2026-09-03-third-party-audit.md); wilkbook
 doc/upstream-register.md item 23. Applies on top of
 linux-pinenote-7.1-probe-unwind.patch and keeps its err_stop_kthread
-label and goto. Unproven on glass as of 2026-09-04.
+label and goto.
+
+remove() shuts the DRM state down BEFORE stopping the two kthreads (v2,
+2026-09-04 evening): the CRTC's atomic_disable parks them, and hrdl's
+order -- stop, then shutdown -- had the disable path read and park a
+task that kthread_stop() had already reaped; its TASK_DEAD guard hid
+that on generation 14 and kthread.c's WARN_ON(PF_EXITING) caught it on
+generation 17's first unbind (the reader-era CRTC being shut down).
+Threads were created before drm_init, so this is the reverse order too.
+
+Glass 2026-09-04 (generation 17): zero "Unbalanced pm_runtime_enable"
+at the rebind; the vmalloc census down to the live buffers (7 x 642,
+1 x 1926, 1 x 57 pages); five unbind/bind cycles flat within +48 kB
+with the LUT entry count at 1 -- the leaks are gone.  The remove-order
+fix above is what the second run proves.
 
 --- a/drivers/gpu/drm/rockchip/rockchip_ebc.c
 +++ b/drivers/gpu/drm/rockchip/rockchip_ebc.c
@@ -243,12 +257,23 @@ label and goto. Unproven on glass as of 2026-09-04.
  
  	return ret;
  }
-@@ -2620,6 +2657,8 @@
- 	kthread_stop(ebc->temp_upd_thread);
- 	drm_atomic_helper_shutdown(&ebc->drm);
+@@ -2616,9 +2653,18 @@
+ #endif
  
-+	vfree(ebc->lut_custom.luts);
+ 	drm_dev_unregister(&ebc->drm);
++	/*
++	 * Shut the DRM state down while the kthreads are alive: the CRTC's
++	 * atomic_disable parks them, and parking a thread that kthread_stop()
++	 * has already reaped is a use of a finished task (kthread.c's
++	 * WARN_ON(PF_EXITING) fired on the 2026-09-04 rebind).  Reverse
++	 * acquisition order: probe created the threads before drm_init.
++	 */
++	drm_atomic_helper_shutdown(&ebc->drm);
+ 	kthread_stop(ebc->refresh_thread);
+ 	kthread_stop(ebc->temp_upd_thread);
+-	drm_atomic_helper_shutdown(&ebc->drm);
 +
++	vfree(ebc->lut_custom.luts);
+ 
  	dma_unmap_single(dev, ebc->phase_handles[0], ebc->phase_size, DMA_TO_DEVICE);
  	dma_unmap_single(dev, ebc->phase_handles[1], ebc->phase_size, DMA_TO_DEVICE);
- 
