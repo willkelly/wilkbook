@@ -395,7 +395,12 @@ the hang.
   generation that doesn't have patch 8 yet. It brought the device back
   three times this investigation. A generation is proven only by *both*
   boots: the kexec trial and, for anything that changes early boot, a
-  cold one.
+  cold one. The picker's menu match, its port setup and the
+  pid/process-group handle the deployer reaps by (`<capture>.watcher`)
+  are pinned offline against the real captured U-Boot bytes (`make
+  uart-pick-check`, 2026-09-04); the deployer's use of that handle is
+  pinned in `test-static.sh`. Its capture drops ~25 bytes every 150–250
+  at 1.5 Mbaud — the adapter, not termios (`doc/device-access.md`).
 
 ## Rig notes (what the QEMU flow taught, 2026-09-02)
 

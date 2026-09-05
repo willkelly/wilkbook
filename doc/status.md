@@ -189,6 +189,16 @@ mid-line every few hundred (`CPUs=00000] ftrace:`), the raw `cat` of a
 transcript; the picker's menu match rides on a single short string and
 has never fired on glass, so the recovery half of this path is still
 unproven. The device is on 16, `enabled=1`, the operator's half begins.
+[Corrected 2026-09-04, offline (branch `uart-watcher-termios`): "no
+termios setup" was wrong — the picker has always run `stty … 1500000 …
+raw -echo` before its `cat`. Measured from this capture and the cold
+boot's: ~25 bytes (19–29) lost every 150–250 bytes, the same rate in
+both, which fits the CH340 adapter overrunning at 1.5 Mbaud and rules
+out termios and a second reader (`doc/device-access.md`, "The capture is
+lossy"). The single-string match is widened to the three entry lines and
+the countdown line — U-Boot draws the entries once and repeats only the
+countdown, so there is one draw to match — and pinned offline (`make
+uart-pick-check`); the glass proof is still owed.]
 
 **Operator half on generation 16, first pass (20:45 MDT, the
 operator's own words: "pages turn fine, pen works, cover and button
@@ -225,7 +235,9 @@ watchers, not for the deployer: from a shell with job control a
 backgrounded `setsid` forks and `$!` is the wrapper, not the script;
 the script's own pid is the group to reap (the deployer runs from
 `make`, no job control, where `$!` is right and the reap was verified
-clean after the generation-16 deploy).
+clean after the generation-16 deploy). [Since 2026-09-04, offline: the
+picker writes pid/pgid/reader to `LOG.watcher` and the deployer reaps
+by that file — `doc/device-access.md`, "the hand-run trap".]
 
 **Operator half, second pass (21:10 MDT) — the tag's last two items.**
 All four rotations on a real page: fine. The settle-window check of the
