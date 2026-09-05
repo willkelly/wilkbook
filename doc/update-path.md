@@ -162,7 +162,10 @@ teardown as a suspend (EBC quiesce, gadget unbind, Wi-Fi off) before
   VM (the guix copy nar pipe over plain OpenSSH), `add`, `trial` (kexec
   inside the VM), verify B answers as `/run/current-system`, `promote`,
   `pin` A and `prune --keep 1` (A survives; `unpin`), then roll back to
-  A and `prune --keep 0` (B goes). The mechanism end-to-end, no glass.
+  A and `prune --keep 0` (B goes). The mechanism end-to-end, no glass;
+  green with the pin steps 2026-09-04 (three boot ids, gen-1's marker
+  and payload intact through the pinned prune, gen-2 gone after the
+  unpinned one).
 - **Glass** (UART-attended) — **done 2026-09-02**: the enabling image
   was written to os2 by the dd protocol, generation 3 (a cross-built
   system) was promoted and cold-booted from the helper's own extlinux

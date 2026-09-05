@@ -486,8 +486,9 @@ blacklist is ever wrong on a future kernel change.
       marks a generation known-good (`/boot/gen-N/pinned`), `prune`
       never deletes a pinned generation on top of `DEFAULT` and the
       booted one, and `list` shows `[pinned]`; planner cases and static
-      pins in `make update-path-check`, the QEMU rig (rung 4u) pins,
-      prunes around the pin and prunes for real. The standing rule
+      pins in `make update-path-check`, and the QEMU rig (rung 4u) pins,
+      prunes around the pin and prunes for real — green 2026-09-04. The
+      standing rule
       "keep a cold-booted generation in the window by hand" is now "pin
       it after the cold boot". Not yet run on the device: `pin 16`, then
       a prune with a small `KEEP` that must leave 16 in place.
