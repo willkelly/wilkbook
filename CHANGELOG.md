@@ -20,10 +20,27 @@ claim under **v0.3.0-prealpha** below is from wkelly's device across the
 sessions it cites, moved onto the device generation-by-generation by
 `make deploy` rather than by a single `dd`'d image; what has *not* been
 run is listed under **Known broken**, and no second operator has run
-this lineage. **Unreleased** above it is empty until the next round of
-work lands.
+this lineage. **Unreleased** above it collects what has landed since.
 
 ## Unreleased
+
+- **The display driver stops leaking memory on every boot and every
+  rebind (kernel patch 15, `probe-lifetime`; on no device yet).** Every
+  boot, the driver's first probe fails on purpose — the compiled
+  waveform table does not exist until a one-shot builds it a few
+  seconds later — and until now that failed probe walked away from
+  ~10 MB of kernel memory and a power-management count, which is the
+  `Unbalanced pm_runtime_enable!` line you may have seen in `dmesg`
+  around 8 s. Separately, every *successful* probe kept a 228 kB
+  waveform table that nothing ever freed, so each unbind/bind of the
+  display grew kernel memory by that much. Both are released now.
+  What this does **not** change: anything you see on the panel, page
+  turns, pen, suspend, or the one deliberate failed probe per boot
+  (the `Unable to load custom_wf.bin` line stays). A reader that is
+  never rebound after boot had only ever lost that memory once per
+  boot. The proof on glass is still owed: no `Unbalanced` line at the
+  rebind, and kernel `VmallocUsed` flat across five unbind/bind cycles
+  (`doc/kernel-forward-port.md` item 15).
 
 ## v0.3.0-prealpha — 2026-09-04
 

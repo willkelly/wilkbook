@@ -98,7 +98,7 @@ help:
 	@echo "  clut-check        C CLUT compiler vs hrdl's wbf_to_custom.py, byte-identical ([WBF=..] [CLUT_REF=..])"
 	@echo "  ebc-clut-check    the direct-mode CLUT installer one-shot, driven through every branch"
 	@echo "  ebc-ioctl-roster-check  every on-device EBC ioctl against the driver(s) it runs on (both UAPI headers from the patches)"
-	@echo "  direct-probe-quirk-check  quirk: the direct driver's probe returns bare after a failed drm_init (pinned, reported)"
+	@echo "  direct-probe-quirk-check  quirk: the direct driver's probe returned bare after a failed drm_init or waveform_init (pinned, reported; our unwind + lifetime fixes pinned after it)"
 	@echo "  direct-rect-hints-check   quirk: hrdl's RECT_HINTS ioctl is unbounded; our bounds patch is present and applied after it"
 	@echo "  update-path-check the update path: generation ledger, extlinux rendering, trial/promote pins"
 	@echo "  deploy            DEVICE=<ssh host>: build, guix copy, add generation, kexec trial, health, promote"
@@ -583,9 +583,12 @@ ebc-ioctl-roster-check:
 	python3 pinenote/scripts/preflight/validate-ebc-ioctl-roster.py
 
 # quirk: the direct-mode driver's probe leaks runtime PM and the parked
-# refresh kthread on a failed drm_init (the by-construction first probe of
-# the direct image), hence "Unbalanced pm_runtime_enable!" at every rebind.
-# Inherited from hrdl's tree; pinned so a rebase re-approves on purpose.
+# refresh kthread on a failed drm_init, and -- the by-construction first probe
+# of every boot, glass 2026-09-04 -- the two plain vmallocs, the phase DMA
+# maps and the runtime-PM count on a failed waveform_init, hence "Unbalanced
+# pm_runtime_enable!" at every rebind; a successful probe never freed the
+# custom LUT.  Inherited from hrdl's tree; pinned so a rebase re-approves on
+# purpose, together with our unwind and probe-lifetime patches after it.
 direct-probe-quirk-check:
 	sh pinenote/scripts/preflight/validate-direct-probe-quirk.sh
 
