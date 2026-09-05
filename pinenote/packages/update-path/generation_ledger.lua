@@ -87,19 +87,34 @@ function M.next_number(numbers)
 end
 
 -- Which generations to delete: keep the `keep` newest, and ALWAYS keep
--- the promoted default and the booted one, whatever their age.
-function M.prune_plan(numbers, default_number, booted_number, keep)
+-- the promoted default, the booted one and every PINNED one, whatever
+-- their age.  `pinned` is a set ({ [number] = true }): the generations an
+-- operator marked known-good (a cold boot proved the tree) -- the newest
+-- generations are the least proven, so "keep K newest" on its own would
+-- delete the proven one first (2026-09-04: generation 10, the last
+-- cold-booted one, went that way).  Pinned generations do not count
+-- against `keep`, exactly like the default and the booted one.
+function M.prune_plan(numbers, default_number, booted_number, keep, pinned)
+    pinned = pinned or {}
     local sorted = {}
     for _, n in ipairs(numbers) do sorted[#sorted + 1] = n end
     table.sort(sorted, function(a, b) return a > b end)
     local plan = {}
     for i, n in ipairs(sorted) do
-        if i > keep and n ~= default_number and n ~= booted_number then
+        if i > keep and n ~= default_number and n ~= booted_number and not pinned[n] then
             plan[#plan + 1] = n
         end
     end
     table.sort(plan)
     return plan
+end
+
+-- The pin marker's path: an empty file inside the generation's own
+-- payload directory.  It lives with the payload so that it cannot
+-- outlive the generation (prune removes the directory whole), needs no
+-- parsing, and stays inside the helper's write set (/boot).
+function M.pin_path(number)
+    return M.gen_dir(number) .. "/pinned"
 end
 
 -- report: { current_system = S, broker_ready = bool, reader_started = bool }
