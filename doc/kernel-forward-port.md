@@ -146,7 +146,13 @@ correctness pass on the direct-mode driver from a third-party audit):
     `cap-power-off-card` every resume re-enumerates the Wi-Fi card from
     cold and one resume in ten timed out on the first control exchange
     after the firmware download (2026-09-03, `doc/networking.md` §8).
-    Written for upstream. Glass proof pending (the cycle rig).
+    Written for upstream. **Live on glass since generation 10's cold
+    boot, 2026-09-03** (`post-power-on-delay-ms` reads 0x64 in the
+    running tree); 27 + 32 hands-off suspend cycles across two rigs
+    with zero Wi-Fi restore failures, and the attach timeout has not
+    recurred. It is a device-tree change, so a kexec'd trial runs the
+    previous cold boot's tree and cannot carry it: it reaches a device
+    only at that device's next cold boot (`doc/update-path.md`).
 14. `linux-pinenote-7.1-direct-correctness.patch` — ours, on top of
     hrdl's: four correctness fixes from the 2026-09-03 third-party audit
     (`doc/reviews/2026-09-03-third-party-audit.md`): the parallel
@@ -158,17 +164,29 @@ correctness pass on the direct-mode driver from a third-party audit):
     `rect_hint_batch` is validated (1..4096) and the rectangle count is
     capped at 65536 (`-E2BIG`); `OFF_SCREEN`/`EXTRACT_FBS` return
     `-EFAULT` on any short user copy instead of leaking a byte count or
-    OR-ing residuals with errnos. Compiled clean
-    (`mwycbl5a…-linux-pinenote-7.1.8-pinenote.drv`); no host harness
-    executes the direct-mode driver's actual source (`ebc-logic`
-    compiles only the forward-port patch's LUT-walk driver), so this is
-    unexercised even by the offline ladder; glass proof pending.
+    OR-ing residuals with errnos. Built as
+    `6rhnmj09…-linux-pinenote-7.1.8-pinenote.drv` after the 2026-09-04
+    review's braces fix — the first derivation,
+    `mwycbl5a…`, carried five `-Wdangling-else` warnings (an unbraced
+    `if (access_ok(...)) if (copy_to_user(...))` bound the pre-existing
+    `else res = -EFAULT;` to the inner `if`, inverting the return) and
+    was never deployed; the only warning in the files this patch touches
+    is hrdl's own unused `frame_counter` at `rockchip_ebc.c:903`. No
+    host harness executes the direct-mode driver's actual source
+    (`ebc-logic` compiles only the forward-port patch's LUT-walk
+    driver), so the offline ladder does not reach it. **The guards ran
+    on glass 2026-09-04 (generation 14)**: `rect_hint_batch=0` refused
+    with `EINVAL` in 0.000 s instead of spinning, 70 000 rectangles with
+    `-E2BIG`, `EXTRACT_FBS`/`RECT_HINTS` happy paths unchanged, no
+    `WARNING` from the `queue_work` assertion (`doc/status.md`). Two
+    halves stay unobserved: the dither correction is **off the shipped
+    route** (the reader draws Y4 through `default_hint=32`, no dither
+    bit; the driver's dithered route is hint 64 and its FAST mode), so
+    nothing a reader sees changes; and the short-copy `-EFAULT` branches
+    have not been provoked.
 
-`linux-pinenote-debug` stacks `linux-pinenote-debug-extract-fbs.patch`
-on top of the same seven.
-
-**A patch refresh must carry all seven.** The refresh procedure below
-regenerates only the forward-port patch — the other six are separate
+**A patch refresh must carry all fourteen.** The refresh procedure below
+regenerates only the forward-port patch — the other thirteen are separate
 files that a refreshed `kernel.scm` still applies, and nothing in the
 procedure touches them, so the failure mode is *omission*: forgetting
 they exist, or rebasing the forward-port onto a base where one of them
@@ -471,7 +489,7 @@ moved — e.g. 7.0.11 → 7.0.14:
    source out of the patch, so it is the gate that notices a silent
    semantic change).
 
-**Record, 7.0.11 → 7.0.14 (2026-08-15):** all seven patches apply
+**Record, 7.0.11 → 7.0.14 (2026-08-15, the seven-patch era):** all seven patches apply
 cleanly, and 7.0.14's `rk3566-pinenote.dtsi` carries neither the
 `simple-battery` node nor the `charger` child, so the 7.1 collision does
 not exist there. Verified by dry-run and by inspecting the mainline
@@ -483,7 +501,8 @@ glass. 7.0.11 remains the proven version.
 1. Change `%linux-pinenote-base` and update `KERNEL_EXPECT` in the
    `Makefile`. Expect `kernel-version-check` to be the first thing that
    moves.
-2. Dry-run all seven patches. **Failures here are the deliverable**, not
+2. Dry-run every patch in `%linux-pinenote-patches`, in list order
+   (fourteen as of 2026-09-04). **Failures here are the deliverable**, not
    an obstacle — each one is either a hunk mainline absorbed (delete it)
    or a hunk that needs rebasing (do that).
 3. **Known for 7.1:** mainline carries `1d608a269e24`, so **both** the

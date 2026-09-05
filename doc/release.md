@@ -61,6 +61,17 @@ tested. `README.md` says so at the top and means it.
 6. **Tag, annotated**, naming the image hash in the tag message:
    `git tag -a v0.1.0-alpha -m "..."`. The hash then lives inside signed
    history rather than beside a download.
+
+**A tag that ships as generations rather than as an image**
+(`v0.3.0-prealpha`, 2026-09-04 — the first one where the device is
+updated by `make deploy` rather than by a `dd`'d image) has no single
+artifact to name, so steps 3, 4 and 6 change: the tag message names the
+**promoted generation's system store path and its kernel derivation**
+instead of a rootfs hash, and the manifest step is skipped. Steps 1, 2,
+5 and 7 are unchanged and still binding — in particular the channel pin
+(step 2) must be re-made if anything under `pinenote/packages` moved
+since the last one, because that pin is the only thing that lets a
+second person rebuild the same generation.
 7. **Commit the signed-off record** from `doc/alpha-signoff.md` §4 and
    add the `doc/status.md` entry.
 

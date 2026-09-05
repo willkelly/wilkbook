@@ -335,13 +335,17 @@ build time, never hand-copied — so they cannot drift from the driver.
   re-pasted code, "absence of an error is not a passing test", and why a
   single-stack harness models ordering but not races.
 
-## Status (2026-08-15)
+## Status (2026-09-04)
 
-- **Product**: the reader image on os2 — KOReader natively on fbdev with
+- **Product**: one reader image on os2 — KOReader natively on fbdev with
   pen/finger input, four orientations, publish-on-call single-pass page
   turns, the GL16 partial policy + idle washer, Wi-Fi with out-of-band
-  credentials, key-only SSH. `v0.1.0-prealpha` is tagged; the alpha
-  sign-off (`doc/alpha-signoff.md`) has not happened.
+  credentials, key-only SSH, and since 2026-09 the direct-mode display
+  driver as *the* driver (no more direct-vs-shipping split) plus
+  cable-free updates. Tags: `v0.1.0-prealpha`, `v0.2.0-prealpha`
+  (2026-08-27), `v0.3.0-prealpha` in preparation; the alpha sign-off
+  (`doc/alpha-signoff.md`) has not happened, and no second operator has
+  run the current lineage.
 - **Ultra suspend is in production** (2026-08-08): hrdl's rails-off
   configuration on the primary kernel, **4.64 mA measured on glass**
   (`doc/artifacts/pinenote-ultra-r12-20260808/`) against the superseded
@@ -355,10 +359,15 @@ build time, never hand-copied — so they cannot drift from the driver.
   tradeoff unpowers GPIO0 during suspend, so the pen cannot — though
   the cover demonstrably does wake it (2026-08-09), which the model does
   not yet explain. SSH to a deployed reader is intermittent while
-  auto-suspend is enabled (`doc/device-access.md`).
-- **Kernel**: the vanilla-7.0.x forward port is the hardware-proven
-  primary (display, PREEMPT_RT, Wi-Fi/BT, gadget). Seven patches total —
-  `doc/kernel-forward-port.md`.
+  auto-suspend is enabled (`doc/device-access.md`). Idle timing moved to
+  KOReader in 2026-08 (15 minutes by default, settable, and never while
+  on a charger), with a supervised broker as the sole writer of
+  `/sys/power/state`.
+- **Kernel**: Linux 7.1.8 with fourteen patches — the vanilla forward
+  port (display, PREEMPT_RT, Wi-Fi/BT, gadget), hrdl's direct-mode EBC
+  driver and our fixes on it, a PMIC kexec fix and a Wi-Fi
+  power-sequence delay. 7.0.11 remains the last hardware-proven kernel
+  for the *old* shipping driver — `doc/kernel-forward-port.md`.
 - Exact image hashes, session records, and the full history:
   `doc/status.md`.
 
