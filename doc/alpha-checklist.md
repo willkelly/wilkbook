@@ -424,9 +424,15 @@ broker and the direct driver together), followed by a cold boot.
       2026-09-03 (`doc/reviews/2026-09-03-third-party-audit.md`); not
       yet fixed — the review calls it "the most important substantive
       follow-up."
-- [ ] Kernel patch 14 (four correctness fixes from that same audit) has
-      compiled and passed the host checks but has never run on a
-      device; a smoke test is planned before the tag.
+- [x] Kernel patch 14 (four correctness fixes from that same audit) ran
+      on glass 2026-09-04 (generation 14): a zeroed `rect_hint_batch` is
+      refused with EINVAL in 0.000 s instead of spinning, an oversized
+      hint list with E2BIG, the happy paths unchanged, no `WARNING` in
+      dmesg (`doc/status.md`). Two halves of it remain unobserved: the
+      corrected dither is off the shipped route (the reader draws Y4
+      with `default_hint=32`; the fix affects DITHER-hinted Y1/Y2 and
+      the driver's FAST mode), and the short-copy `-EFAULT` branches
+      have not been provoked.
 
 ### 12. ~~The update path: deploy without a cable~~ — GLASS-PROVEN 2026-09-02, self-recovery PROVEN 2026-09-03
 
@@ -435,8 +441,11 @@ kexecs the result as a trial, health-checks it, and promotes it —
 proven end to end in QEMU and on glass 2026-09-02 (`doc/update-path.md`,
 `doc/status.md`). **Kernel patch 8 (kexec-hardening, PR #48, merged via
 #64) closes the worst failure mode**: a trial kernel that halts is now
-reset by the SoC watchdog and the last promoted generation boots on its
-own, hands-off — proven end to end 2026-09-03 evening. A trial that
+reset by the SoC watchdog into U-Boot — proven end to end 2026-09-03
+evening. U-Boot's default slot is os1, so the last promoted generation
+comes back hands-off only with the UART attached and the deployer
+answering the menu (`WILKBOOK_UART`); with no cable the device waits on
+stock Debian. A trial that
 dies in the specific GRF bus-wedge hang (`doc/upstream-register.md`
 item 22) is *prevented* by the standing initcall blacklist rather than
 recovered by the reset; that class still needs the power button if the
@@ -444,30 +453,37 @@ blacklist is ever wrong on a future kernel change.
 
 **What it opened, not yet closed:**
 
-- [ ] The deployer's own UART watcher does not start looking for a
-      stuck trial until five minutes have passed — a failed unattended
-      trial spends that whole window looking stuck before recovery
-      begins, and if the watchdog reset doesn't happen either, it lands
-      on os1 rather than the reader.
+- [x] The deployer's UART watcher used to start only after the
+      five-minute ssh wait, by which time U-Boot's menu was long gone;
+      since 2026-09-04 (review S4) it is armed before the `kexec -e` and
+      the recovery path waits on it, pinned in the update-path
+      `test-static.sh`. With no cable the landing is still os1.
+- [ ] A trial that dies *after* the helper's own Wi-Fi off — an EBC that
+      never goes idle, a failed `kexec -l` — strands the reader stopped
+      and radio-off with no message delivered, and the deployer reports
+      it as a dead trial the watchdog will reset, which it will not
+      (the dog is armed later). Found by review 2026-09-04, not fixed.
 - [ ] Generation pruning (`KEEP=`) has no guard against deleting the
       last generation known to work — nothing currently pins one.
 - [ ] The os1-based rescue script (PR #51) has never been run against
       os1 itself.
-- [ ] Wi-Fi reassociating after a resume is well-exercised for the
-      broker's own sleep/wake path (65 unattended cycles, 0 restore
-      failures, overnight 2026-09-03/04) but thin for the case where
-      KOReader's own idle timer is what triggers the sleep — only 4
-      samples in that same run.
+- [x] Wi-Fi reassociating after a resume is exercised on both paths:
+      27 unattended cycles overnight 2026-09-03/04 (broker-triggered)
+      and 32 more on 2026-09-04 of which 28 were KOReader's own idle
+      timer, 0 restore failures in either run (`doc/status.md`). The
+      driver rebind and the association retry underneath have still
+      never fired on glass — harness-proven only.
 - [ ] The watchdog self-reset's timing is not fully understood: the
       reset that proved it landed roughly 3.5 minutes after the dog was
       armed, not the ~44 s the configured timeout predicts. Harmless,
       but unexplained.
-- [ ] wkelly's own device is currently running a "convenience" build
-      (`WILKBOOK_VERY_INSECURE_FOR_CONVENIENCE=1` — a passwordless root
-      shell over USB) on generations 11–12, for debugging the Wi-Fi fix
-      above. The product build does not carry this flag; it's recorded
-      here as a live reminder that the flag exists and is easy to leave
-      on, not as a defect in the shipping build.
+- [ ] Generations 11–12, still inside wkelly's device's `KEEP` window,
+      are "convenience" builds (`WILKBOOK_VERY_INSECURE_FOR_CONVENIENCE=1`
+      — a passwordless root shell over USB), built to debug the Wi-Fi fix
+      with no UART. The device runs generation 15, a normal build; do not
+      roll back into 11 or 12 for reading. Recorded as a live reminder
+      that the flag exists and is easy to leave on, not as a defect in
+      the shipping build.
 
 ## Explicitly deferred to the pre-1.0 optimization pass
 

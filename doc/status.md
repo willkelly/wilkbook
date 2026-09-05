@@ -21,7 +21,7 @@ not patch 14's; the five dangling-else warnings of the first patch-14
 derivation are gone.
 
 **2. Patch 14 on glass.** EXTRACT_FBS with valid pointers still returns
-0 (three 2.6 MB belief dumps); RECT_HINTS with a well-formed batch
+0 (three dumps: hints and prelim 2.6 MB each, packed 7.9 MB); RECT_HINTS with a well-formed batch
 applies (1 rect, then 100). The new guards: `rect_hint_batch=0` → the
 ioctl fails with errno 22 in 0.000 s (no spin, the kernel unchanged),
 70 000 rects → errno 7 (E2BIG); `dmesg` silent (no `WARNING:` from the
@@ -34,8 +34,9 @@ injected `KEY 158` turns three seconds apart produced forty-one
 interrupts, with the EBC runtime-suspended throughout. The panel was
 fine: a `herd restart reader-session` lands in KOReader's **file
 manager** (no `start_with` is seeded, so `lastfile` is not reopened —
-no `opening file` line after the restart, where every operator-started
-session that day has one), and 158 there is a same-screen repaint the
+no `opening file` line after the restart, where every
+operator-started session in the log has one — the last on 2026-09-03
+at 16:53), and 158 there is a same-screen repaint the
 driver correctly drops — the 2026-08-26 "48 clamped same-page repaints"
 trap in a new coat. Re-run with the book open (`start_with="last"` set
 for the run, restored after): six turns, **47 interrupts each**, the
@@ -118,14 +119,16 @@ the session's wrap-up restores `enabled=1`.
 
 **6. The rig, part 2 — the KOReader idle path, at last.** `wifi-cycle.sh
 koreader-idle 120`, then `wifi-cycle-host.sh 15 45 300` (backstop
-45 s, settle 300 s), 20:18–21:50 UTC. The first 45 minutes ran with the
-USB cable in and produced broker-path cycles only: **KOReader's
-AutoSuspend never fires while the battery reports charging** (its own
-rule — it reschedules by the full timeout instead of counting idle), and
-`rk817-battery/status` flaps to `Charging` with the cable in even at
-99 %. That is also why the overnight phase B saw "2 KOReader-initiated
-of 43". The operator unplugged the cable at 20:48 and the path fired
-every cycle from then on.
+45 s, settle 300 s), 20:18–21:50 UTC. The first three transactions
+(20:18–20:31) ran with the USB cable in and were broker-path only:
+**KOReader's AutoSuspend never fires while the battery reports
+charging** (its own rule — it reschedules by the full timeout instead of
+counting idle), and `rk817-battery/status` flaps to `Charging` with the
+cable in even at 99 %. The operator pulled the cable during that window;
+from the fourth transaction (20:33:17) on, KOReader's idle timer won
+every cycle. (The workstation only *observed* `Discharging` at 20:48,
+which is not when the cable came out; the broker log's first
+`trigger=koreader` at 20:33 is the real boundary.)
 
 | | |
 |---|---|
@@ -140,9 +143,12 @@ every cycle from then on.
 | dmesg `WARNING` | 1: `dwc3 … No resource for ep0out` at the rig's first suspend (20:18:41), while the host still held the gadget on the cable — the gadget unbind under an attached host, not the display; harmless, the transaction completed |
 
 Wi-Fi after resume, on the direct kernel, through KOReader's own idle
-sleep: 28 of 28. Combined with the overnight run, that is 97 hands-off
-cycles with zero restore failures; the rebind and the association retry
-have still never fired on glass.
+sleep: **27 of 28 measurable** — the 28th wake is the button wake below,
+whose radio came up and was torn down one second later by the stale
+settle deadline, before association could be observed; no cycle failed
+to restore. Combined with the overnight run's corrected count, that is
+**59 hands-off cycles** with zero restore failures; the rebind and the
+association retry have still never fired on glass.
 
 **The rig also found a broker bug, on the operator's own button.** After
 the rig's `stop`, the last RTC wake at 21:48:44 had set the settle
@@ -162,13 +168,21 @@ unless its wake was the RTC (`settle_after`), pinned by four new
 `test-broker-protocol.lua` cases (button wake, cover wake, a failed
 settle re-suspend, and the RTC re-arm that must survive).
 
-**Post-resume page turns, after those 32 cycles** (`turn-check.sh 6`, the
-book open, `fb0/state=0`): 47 frames per turn again, the framebuffer's
-own hash and the driver's belief both different after every turn,
-runtime status `active` at 0.6 s — the fbdev damage path is intact
-after a day of rails-off resumes on the kernel that deleted the
+**Post-resume page turns, after those 32 cycles** (`turn-check.sh 6` at
+22:46 UTC, the book open, `fb0/state=0`): 47 frames per turn again, the
+framebuffer's own hash and the driver's belief both different after
+every turn, runtime status `active` at 0.6 s — the fbdev damage path is
+intact after a day of rails-off resumes on the kernel that deleted the
 forward-port's fbdev resume barrier. `fb-damage-gates.sh`: G1 open, the
-reader holds DRM master on card1, plane fb=40, CRTC active.
+reader holds DRM master on card1, plane fb=40, CRTC active. *Provenance:
+this run's output and the gate dump were read live and are on the device
+at `/root/turn-check.log`; the copy in the session's artifact directory
+is the earlier 20:15 run (before the rig), and the device was asleep
+when the later one was to be fetched. Copy both during the operator
+half.* Four other numbers in this entry — `suspend_stats`, the 20:07
+`globally inhibited` rejection, the idle-timer value at the rig's end,
+and the `/proc/vmallocinfo` page counts — were likewise read live and
+not saved as files.
 
 **Housekeeping the rig taught.** `wifi-cycle.sh report` counted every
 run since the *first* start mark (an awk latch) — fixed to the last
@@ -177,7 +191,7 @@ And the rig's `koreader-idle 900` restore did not land before the
 device slept (the settings file still said 120 at the end): the reader
 came back at 15 minutes only after the post-rig restart.
 
-## 2026-09-03/04 overnight (wkelly PineNote, operator away) — the Wi-Fi fix's four layers held for 65 hands-off cycles; generations 11 and 12 are console-enabled convenience builds
+## 2026-09-03/04 overnight (wkelly PineNote, operator away) — the Wi-Fi fix's four layers held for 27 hands-off cycles; generations 11 and 12 are console-enabled convenience builds
 
 **Access.** With the UART unplugged and the operator away, the reader's
 USB gadget console was made real: generation 11 is generation 10's code
@@ -209,8 +223,26 @@ re-suspends; `report` counts the broker log and `wifi.log`):
 | A, broker path | backstop 45, settle 60, 12 cycles (~25 min) | 30 | 26 | 2 | 14 / 14 | 0 | 0 warnings |
 | B, KOReader path | idle timer 120 s, backstop 45, settle 200, 12 cycles (~57 min) | 43 | 39 | 2 | 13 / 13 | 0 | 4 × `suspend_test_finish` |
 
+**CORRECTION, 2026-09-04 (a review of this entry against its own
+artifacts).** The broker-log columns above — transactions, RTC wakes,
+KOReader-initiated — are **cumulative, not per phase**: `report`'s awk
+latched on the *first* `cycle test start` mark in the broker log, so
+phase B's figures contain phase A's and phase A's contain the previous
+night's run (the latch is fixed as of 2026-09-04; reports taken before
+that date over-count unless the log was rotated). The per-phase truth
+is in the two columns that were reset each run and in the kernel's own
+counter: **phase A = 14 cycles, phase B = 13, twenty-seven in all** —
+`wifi.log` (truncated at every start) shows 14 then 13 `on`/`associated
+within 15 s`, and `suspend_stats` reads 14/0 at the end of A and 27/0 at
+the end of B. The trigger split cannot be recovered from these logs at
+all, so the "2 KOReader-initiated" in each row is not evidence of
+anything; the KOReader-idle path's real measurement is the 2026-09-04
+rig above (28 of 32). What is unaffected: zero rebinds, zero association
+retries, zero restore failures, `wifi_was_on` true at the end, no
+`rxctl`/`attach failed`.
+
 Zero rebinds were needed (the driver-attach failure of 16:42 did not
-recur in 65 resumes), zero association retries, `wifi_was_on` true at
+recur in 27 resumes), zero association retries, `wifi_was_on` true at
 the end, `suspend_stats` 27/0, no `rxctl`/`attach failed` lines.
 **Two caveats, stated plainly.** (1) Phase B was meant to make KOReader
 initiate every sleep (its idle timer set to 120 s, shorter than the

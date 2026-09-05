@@ -15,11 +15,13 @@ land together, on top of `v0.2.0-prealpha` (2026-08-27), which cut the
 `reader-direct` image as the direct-mode lineage in the first place. The
 `v0.1.0-prealpha` image `9a08803e…` on Linux 7.0.11 remains the last
 build of the old shipping-only driver as a separate flavor; from this
-tag on there is one kernel and it is the direct-mode one. Everything
-under **v0.3.0-prealpha** below was proven on wkelly's device across the
+tag on there is one kernel and it is the direct-mode one. Every hardware
+claim under **v0.3.0-prealpha** below is from wkelly's device across the
 sessions it cites, moved onto the device generation-by-generation by
-`make deploy` rather than by a single `dd`'d image; **Unreleased** above
-it is empty until the next round of work lands.
+`make deploy` rather than by a single `dd`'d image; what has *not* been
+run is listed under **Known broken**, and no second operator has run
+this lineage. **Unreleased** above it is empty until the next round of
+work lands.
 
 ## Unreleased
 
@@ -55,13 +57,17 @@ not yet been repeated on this lineage.
 - **The kernel gives the Wi-Fi module 100 ms to settle** after its power
   rail comes up, closing a race that could otherwise show up as the
   same symptom.
-- **Run overnight, unattended, 2026-09-03/04**: 65 sleep/wake cycles
-  through the device's own broker-driven path, zero Wi-Fi restore
-  failures, zero driver rebinds needed. The path where KOReader's own
-  idle timer — rather than the power button, the cover, or the RTC
-  backstop — triggers the sleep is exactly the path the memory repair is
-  for, and it fired only four times in that run: thin evidence for the
-  case that matters most.
+- **Run unattended twice.** Overnight 2026-09-03/04: 27 sleep/wake
+  cycles through the device's own broker-driven path, zero Wi-Fi restore
+  failures, zero driver rebinds needed. Then 2026-09-04, off the
+  charger so that KOReader's own idle timer — rather than the power
+  button, the cover, or the RTC backstop — was what triggered the
+  sleep, which is exactly the path the memory repair is for: 32 more
+  cycles, 28 of them idle-timer sleeps, the radio back on every wake
+  that could be measured. 59 hands-off cycles in all, no restore
+  failures. The recovery *underneath* that — the driver rebind and the
+  second association attempt — has still never fired on a real device;
+  it is proven in the offline harness only.
 
 ### Display driver corrections from an outside review
 
@@ -69,15 +75,18 @@ not yet been repeated on this lineage.
   checked, in `doc/reviews/2026-09-03-third-party-audit.md`) found four
   correctness bugs; all four are fixed in this tag's kernel: the
   blue-noise dither pattern no longer repeats its first half every
-  16 pixels (you may notice greys and images dither slightly
-  differently), a malformed rectangle-hint request can no longer wedge
-  the display ioctl, and two diagnostic ioctls return proper errors.
-  These fixes reached a device in this tag's own test session
-  (2026-09-04): the new guards behave as designed on glass — a zeroed
-  batch parameter is refused instantly instead of spinning, an
-  oversized request is refused with the right error, the healthy paths
-  unchanged. The dither change is a visible one no person has looked
-  at yet.
+  16 pixels, a batch size of zero can no longer spin the rectangle-hint
+  ioctl forever, an oversized hint list is refused outright instead of
+  monopolising the driver, and the sleep-image and belief-dump ioctls
+  report a failed copy as an error instead of a byte count. The guards
+  reached a device in this tag's own test session (2026-09-04) and
+  behave as designed on glass: the zeroed batch refused instantly
+  instead of spinning, the oversized list refused with the right error,
+  the healthy paths unchanged. **The dither correction is not on the
+  route the reader draws through** — reading is 16 greys with no dither
+  hint — so it should change nothing you see; it affects
+  dither-hinted 1- and 2-bit rectangles and the driver's fast mode,
+  which only pen work and the lab tools reach today.
 - **Still open from that review**: the driver leaks memory and DMA
   mappings when its probe fails, and the direct-mode image's first probe
   fails by design once per boot; the leak is bounded per boot and is
@@ -172,7 +181,9 @@ too, above.
   second press. The device's hourly self-wake leaves behind a short
   "go back to sleep" deadline; if anything else put the device to sleep
   inside that window, the deadline survived and fired on the next real
-  wake. Seen on glass 2026-09-04 (a 7-second wake), fixed the same day.
+  wake. Seen on glass 2026-09-04 (a 7-second wake); fixed in the sleep
+  broker the same day and pinned by its offline protocol tests — the
+  on-glass check of the fix is still to come.
 - **A malformed rectangle hint could corrupt kernel memory** in the
   direct driver's `RECT_HINTS` ioctl (the pen/UI hint path). Nothing in
   the shipped reader sends malformed rectangles today, but this closes
@@ -216,9 +227,26 @@ too, above.
   not the ~44 seconds the configured watchdog timeout would predict.
   Harmless, but unexplained — don't assume it failed just because a
   minute has passed.
-- **Wi-Fi-after-sleep is well-tested for the normal case** (button,
-  cover, the automatic backstop) but thin for the case where KOReader's
-  own idle timer is what puts the device to sleep — see above.
+- **The Wi-Fi recovery underneath the restore has never fired on a real
+  device**: if the driver itself gives up during a resume, the rebind
+  and second association attempt that should fix it are proven only in
+  the offline harness. Both sleep paths themselves are well tested (59
+  unattended cycles — see above).
+- **The exact build this tag names has been installed and health-checked
+  but not cold-booted** (it arrived by the wireless update, which boots
+  the new kernel without going through the boot loader). Nothing in it
+  changes the hardware description, so there is nothing new to fail
+  there — but the first cold boot of it is the operator's next step.
+- **The re-sleep-after-a-press fix has not itself been re-run on a
+  device.** It is built and installed; the case that produced it takes a
+  specific timing window to reproduce.
+- **The reader opens in the library, not in your book**, after a reboot
+  or an update — your place is kept, you tap the book.
+- **A trial that dies partway through the update tool's own shutdown**
+  (rather than in the new kernel) leaves the reader stopped with its
+  radio off and no message delivered, and the tool reports it as a
+  dead trial that the watchdog will reset — which, at that point, it
+  will not. Found by review 2026-09-04, not fixed.
 - If you're handed a device running a "convenience" build (a build flag
   that turns the USB console into a no-login root shell for debugging),
   that's deliberate and isn't what ships by default — don't mistake it

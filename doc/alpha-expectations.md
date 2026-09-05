@@ -12,8 +12,11 @@ report; if it does better, brag.
 Two things changed about how this device *stays* current, not just how
 it reads. First, it can now update itself: a new build reaches your
 PineNote over `make deploy` — no cable, no reflash — and if the new
-version ever fails to come up, the device notices on its own and reboots
-back to the version that was already working. Second, there is only one
+version ever fails to come up, the device notices on its own and resets
+itself. Where it lands then depends on the cable: with the debug cable
+attached the update tool answers the boot menu and your reader comes
+back on its own; with no cable the device comes up in the stock rescue
+system (os1) and waits for you. Second, there is only one
 reader image now: the direct-mode display driver, previously an
 experiment running alongside the original driver, is the shipping
 driver on every build — page turns should feel the same or better
@@ -157,25 +160,40 @@ sleep instead of occasionally needing a manual toggle.
 - **We haven't re-run the full page-turn/ghosting quality check since
   switching to the direct-mode driver as standard.** It should look and
   feel like v0.2.0 did; say something if it doesn't.
-- **If a wireless update ever seems to hang**, give it a few minutes —
-  the device is designed to notice and put itself back on the version
-  that was already working, with no cable and no button press. Two
-  rough edges in that recovery: it takes about five minutes before the
-  update tool itself starts looking for a stuck device, and in the rare
-  case the device's own self-recovery doesn't fire either, it can land
-  back on the stock rescue system (os1) instead of your reader.
+- **If a wireless update ever seems to hang**, give it a few minutes:
+  the device resets itself (about 3.5 minutes in the session that proved
+  it). What happens next depends on the cable. **With the debug cable
+  attached** the update tool answers the boot menu and your reader comes
+  back by itself. **With no cable it comes up in the stock rescue system
+  (os1)** — not a rare corner, the normal outcome, because that is what
+  this boot loader defaults to. It waits there; nothing is lost, and the
+  last working version is still on the device.
 - **Old versions aren't yet protected from automatic cleanup** — there's
   no "never delete this one" pin on a known-good version yet.
 - **The rescue procedure for a badly broken update has never actually
   been run**, only written and reasoned about.
-- **Wi-Fi reconnecting after sleep is well-tested for the ordinary
-  case** (power button, cover, the automatic wake) but only lightly
-  tested for the case where KOReader's own idle timer is what puts the
-  device to sleep.
+- **Wi-Fi reconnecting after sleep is now well-tested for both cases** —
+  the ordinary one (power button, cover, the automatic wake) and the one
+  where KOReader's own idle timer puts the device to sleep: 59 unattended
+  sleep/wake cycles across two runs, 28 of them idle-timer sleeps, with
+  the radio back every time. What has *never* fired on a real device is
+  the deeper recovery underneath it (the driver rebind and the second
+  association attempt): it is proven only in the offline harness, so if
+  Wi-Fi ever does stay down after a wake, that is the code that gets its
+  first real test — tell us.
 - **If the display driver's very first startup attempt is interrupted**
   (it is *expected* to fail once and recover a moment later — that part
   is normal and not a bug), it can leak a small amount of memory instead
   of freeing it. Found by an outside code review, not yet fixed.
+- **A wake by the power button could be followed by an automatic
+  re-sleep a few seconds later**, leaving the reader looking dead until
+  a second press. Found and fixed 2026-09-04; the fix has been built and
+  installed but the button-inside-the-window case has not itself been
+  re-run on a device yet. If it happens to you, press again — the second
+  press holds — and say so.
+- **The reader opens in the library, not in your book**, after a reboot
+  or an update. Your place is kept; you tap the book. That is today's
+  behaviour, not a decision anyone has defended.
 - **The debug serial port still logs in as root with no password**, if
   someone has physical access and the right cable.
 - If you're handed a device with the console-debug build flag on (a
