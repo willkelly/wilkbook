@@ -187,10 +187,11 @@ sleep instead of occasionally needing a manual toggle.
   of freeing it. Found by an outside code review, not yet fixed.
 - **A wake by the power button could be followed by an automatic
   re-sleep a few seconds later**, leaving the reader looking dead until
-  a second press. Found and fixed 2026-09-04; the fix has been built and
-  installed but the button-inside-the-window case has not itself been
-  re-run on a device yet. If it happens to you, press again — the second
-  press holds — and say so.
+  a second press. Found and fixed 2026-09-04, and the fix was re-run
+  the same evening on the build this tag names: a button sleep inside
+  the self-wake's window, then a button wake that held. If it ever
+  happens to you anyway, press again — the second press holds — and
+  say so.
 - **The reader opens in the library, not in your book**, after a reboot
   or an update. Your place is kept; you tap the book. That is today's
   behaviour, not a decision anyone has defended.

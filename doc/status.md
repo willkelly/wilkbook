@@ -227,6 +227,20 @@ the script's own pid is the group to reap (the deployer runs from
 `make`, no job control, where `$!` is right and the reap was verified
 clean after the generation-16 deploy).
 
+**Operator half, second pass (21:10 MDT) — the tag's last two items.**
+All four rotations on a real page: fine. The settle-window check of the
+broker fix, on the cold-booted 16 with `backstop=60`: button sleep
+(`KEY_SLEEP` 03:08:57 UTC), the RTC woke it after 61 s (`detail=rtc`),
+the button slept it again 7 s into the settle window (03:10:10), the
+button woke it 11 s later (`detail=button`) — and it stayed awake,
+nothing re-suspended it. On generation 14 that last wake went dark after
+7 s; the fix holds on glass. `suspend_stats` 5/0 on this boot; config
+back to `enabled=1`. **`v0.3.0-prealpha` is cut here**, at the merge of
+PR #72, naming generation 16 (`8czi9ry1z0gph24n5yls7iiy83y4n0b8-system`,
+kernel `6rhnmj09…-linux-pinenote-7.1.8-pinenote.drv`). Not run for the
+tag, and listed as such: #51, R1/R2/R7, the optics check, a second
+operator on this lineage.
+
 **The rig also found a broker bug, on the operator's own button.** After
 the rig's `stop`, the last RTC wake at 21:48:44 had set the settle
 deadline (300 s); KOReader's idle timer suspended the device at

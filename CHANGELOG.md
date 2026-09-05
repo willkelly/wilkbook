@@ -8,7 +8,7 @@ means an instrument or a log said so, and anything that is division from
 a measurement is labelled as such. Depth lives in `doc/`; these entries
 are pointers, not summaries.
 
-`v0.3.0-prealpha` (date to be set at tagging) is the current tag: the
+`v0.3.0-prealpha` (2026-09-04) is the current tag: the
 update path (deploy without a cable) and the embrace sweep (one reader
 flavor, on the direct-mode kernel — no more direct-vs-shipping split)
 land together, on top of `v0.2.0-prealpha` (2026-08-27), which cut the
@@ -25,7 +25,7 @@ work lands.
 
 ## Unreleased
 
-## v0.3.0-prealpha — (date to be set at tagging)
+## v0.3.0-prealpha — 2026-09-04
 
 **Cable-free updates, one reader flavor, and a device that puts itself
 back together when an update goes wrong.** The direct-vs-shipping split
@@ -248,14 +248,10 @@ too, above.
   and second association attempt that should fix it are proven only in
   the offline harness. Both sleep paths themselves are well tested (59
   unattended cycles — see above).
-- **The exact build this tag names has been installed and health-checked
-  but not cold-booted** (it arrived by the wireless update, which boots
-  the new kernel without going through the boot loader). Nothing in it
-  changes the hardware description, so there is nothing new to fail
-  there — but the first cold boot of it is the operator's next step.
-- **The re-sleep-after-a-press fix has not itself been re-run on a
-  device.** It is built and installed; the case that produced it takes a
-  specific timing window to reproduce.
+- **The build this tag names (generation 16) has been cold-booted once**
+  — the evening it was cut, with the debug cable attached and the update
+  tool's boot-menu watcher doing the picking, which was also that
+  watcher's first real run. One cold boot, one device.
 - **The reader opens in the library, not in your book**, after a reboot
   or an update — your place is kept, you tap the book.
 - **A trial that dies partway through the update tool's own shutdown**

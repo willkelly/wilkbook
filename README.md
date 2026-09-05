@@ -350,7 +350,7 @@ build time, never hand-copied — so they cannot drift from the driver.
   credentials, key-only SSH, and since 2026-09 the direct-mode display
   driver as *the* driver (no more direct-vs-shipping split) plus
   cable-free updates. Tags: `v0.1.0-prealpha`, `v0.2.0-prealpha`
-  (2026-08-27), `v0.3.0-prealpha` in preparation; the alpha sign-off
+  (2026-08-27), `v0.3.0-prealpha` (2026-09-04); the alpha sign-off
   (`doc/alpha-signoff.md`) has not happened, and no second operator has
   run the current lineage.
 - **Ultra suspend is in production** (2026-08-08): hrdl's rails-off

@@ -253,9 +253,10 @@ gitignored `build/`, or the reader's static address.
   Wi-Fi with out-of-band credentials, key-only SSH, ACM gadget (console
   shell opt-in via `WILKBOOK_VERY_INSECURE_FOR_CONVENIENCE`).
   `v0.1.0-prealpha` and `v0.2.0-prealpha` are tagged and the repo is
-  public (github.com/willkelly/wilkbook); `v0.3.0-prealpha` is the
-  candidate on the device (generation 15, branch `prealpha-candidate`),
-  not yet tagged; the alpha sign-off has NOT happened
+  public (github.com/willkelly/wilkbook); `v0.3.0-prealpha` was cut
+  2026-09-04 at the merge of PR #72, naming generation 16 — the build on
+  the device, cold-booted the same evening; the alpha sign-off has NOT
+  happened
   (`doc/alpha-signoff.md`, `doc/alpha-checklist.md`).
 - **Direct mode (the handwriting experiment) ran on glass 2026-08-25**:
   the `reader-direct` study image booted on os2, D1–D4 of the ladder

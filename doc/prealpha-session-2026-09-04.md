@@ -191,7 +191,13 @@ reader restart or boot lands in the library by design.
    own).
 2. The adversarial review's blockers closed — **done** (B1 rebuilt as
    `6rhnmj09…`, B2 reworded; `doc/reviews/2026-09-04-adversarial-review.md`).
-3. Operator half run, at least items 1–5.
+3. Operator half run, at least items 1–5 — **done** 2026-09-04
+   evening: the generation-16 deploy with the watcher, page turns, pen,
+   cover and button, all four rotations, the settle-window check of the
+   broker fix (button sleep 7 s into the RTC wake's window, then a button
+   wake that held — `suspend_stats` 5/0), and the cold boot of 16 with
+   the menu picked by the watcher. Not run: #51, R1/R2/R7, the optics
+   check; these stay in the CHANGELOG's known-broken list.
 4. CHANGELOG, alpha-checklist, alpha-expectations, README's Status
    section, CLAUDE.md's "Where we are" and the kernel inventory true for
    the candidate — re-audited by review 2026-09-04 evening
