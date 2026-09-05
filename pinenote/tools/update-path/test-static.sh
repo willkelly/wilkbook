@@ -15,6 +15,11 @@ after 'if not ebc_quiesce() then' 'kexec -l %s/Image' "$helper"
 grep -q 'no EBC to quiesce' "$helper"
 after 'kexec -l %s/Image' 'remount,ro' "$helper"
 after 'remount,ro' 'sbin/kexec -e")' "$helper"
+# The data partition is remounted read-only too, after the root and before
+# kexec -e (2026-09-04, generation 18: a kexec'd boot lost /data to a journal
+# recovery racing udev's probe), and the bail-out puts it back read-write.
+after 'remount,ro / 2>/dev/null' 'remount,ro /data 2>/dev/null' "$helper"
+after 'remount,ro /data 2>/dev/null' 'sbin/kexec -e")' "$helper"
 [ "$(grep -c 'sbin/kexec -e")' "$helper")" -eq 1 ]
 grep -q 'refusing to replace the kernel under a refresh' "$helper"
 grep -q 'DEFAULT is unchanged' "$helper"
@@ -152,6 +157,7 @@ bail_body=$(sed -n '/^local function bail(/,/^end$/p' "$helper")
 printf '%s\n' "$bail_body" | grep -q 'record_refusal(torn.generation'
 printf '%s\n' "$bail_body" | grep -q 'sbin/kexec -u >/dev/null 2>&1'
 printf '%s\n' "$bail_body" | grep -q 'remount,rw / >/dev/null 2>&1'
+printf '%s\n' "$bail_body" | grep -q 'remount,rw /data >/dev/null 2>&1'
 printf '%s\n' "$bail_body" | grep -q 'write_file, WATCHDOG, "V"'
 printf '%s\n' "$bail_body" | grep -q 'write_file, DWC3_CONTROL, torn.dwc3'
 printf '%s\n' "$bail_body" | grep -q 'write_file, UDC, torn.udc'

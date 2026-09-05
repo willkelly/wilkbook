@@ -78,6 +78,7 @@ end
 local function bail(fmt, ...)
     local message = fmt:format(...)
     if torn.readonly then run("mount -o remount,rw / >/dev/null 2>&1") end
+    if torn.data_readonly then run("mount -o remount,rw /data >/dev/null 2>&1") end
     record_refusal(torn.generation or 0, message)
     if torn.loaded then run("/run/current-system/profile/sbin/kexec -u >/dev/null 2>&1") end
     -- The magic close: the core stops the dog, or -- the dw_wdt has no
@@ -341,6 +342,16 @@ function commands.trial(n)
     torn.loaded = true
     run("sync")
     if run("mount -o remount,ro / 2>/dev/null") then torn.readonly = true end
+    -- The data partition too (2026-09-04, generation 18).  Every kexec
+    -- had left p7 mounted read-write -- a crash, from ext4's point of
+    -- view -- and its journal covered for that until one boot's recovery
+    -- raced udev's probe of the same partition: blkid saw a superblock
+    -- changing under it ("incorrect ext4 checksum"), the label link never
+    -- appeared, and /data fell back to the library's placeholder.  A
+    -- read-only remount commits the journal and marks the filesystem
+    -- clean, so the next boot mounts it with nothing to recover.
+    if run("mount -o remount,ro /data 2>/dev/null") then torn.data_readonly = true
+    else log("/data did not remount read-only (busy, or not mounted): the next boot recovers its journal") end
     log("kexec -e into generation %d", n)
     run("sync")
     -- Arm the SoC watchdog last.  A kernel that dies before its drivers

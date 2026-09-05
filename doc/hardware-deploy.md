@@ -308,7 +308,7 @@ N+1 (`add`: profile link, `/boot/gen-N+1/{Image,initrd,dtb,append}`,
 the extlinux menu re-rendered with `DEFAULT` unchanged), kexecs into
 it (`trial`: the device-tree notes and the model line first, then the
 reader stopped INT-first, Wi-Fi off, gadget unbound, EBC quiescent,
-then `kexec -e`; the ssh link dies at the Wi-Fi off, before the kexec
+root and data partitions remounted read-only, then `kexec -e`; the ssh link dies at the Wi-Fi off, before the kexec
 — by design, so nothing the helper says after that point reaches the
 deployer live. Since 2026-09-04 the trial's output is captured to a
 temp file and echoed with a `trial>` prefix once the ssh link returns
