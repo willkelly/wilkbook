@@ -1,0 +1,254 @@
+drm/rockchip/ebc: release everything a failed probe acquired; free the custom LUT on remove
+
+hrdl's direct-mode rework of rockchip_ebc_probe() acquires, in order:
+two plain vmalloc()s (packed_inner_outer_nextprev at 3 * num_pixels and
+hints_ioctl at num_pixels -- ~10 MB together on the PineNote's 1872x1404
+panel), streaming DMA mappings of the two phase buffers (plus zero_handle
+in the LUT-walk mode), pm_runtime_enable(), the custom LUT
+(rockchip_ebc_waveform_init() vzalloc()s lut_custom.luts,
+num_temp_ranges * sizeof(struct drm_epd_lut_temp_v2) -- 228 kB for this
+device's 14 temperature bins) and two parked kthreads. Only remove()
+gave the vmallocs and the mappings back, and nothing anywhere freed the
+LUT. Every failure return between the vmallocs and the thread creation
+leaked what came before it: the three -ENOMEM returns, the two
+mapping-error returns (which unmapped the earlier mappings but not the
+vmallocs), eight devm_* lookups, the manual runtime-resume fallback, and
+rockchip_ebc_waveform_init() itself -- the one that fails on every boot
+of wilkbook's direct image, because custom_wf.bin does not exist until
+the CLUT one-shot compiles it from the device's own waveform: the
+initrd's raw-loaded driver probes first, fails there, and the one-shot
+rebinds. The 2026-09-03 probe-unwind patch restored the drm_init()
+unwind, which that boot-path failure never reaches. The two
+thread-creation failures and the drm_init() failure also left the
+parked temperature thread alive.
+
+Glass, 2026-09-04 (wilkbook generation 14, doc/status.md): the rebind
+still logs "rockchip-ebc fdec0000.ebc: Unbalanced pm_runtime_enable!"
+at 8.2 s, after "Unable to load custom_wf.bin" at 2.8 s;
+/proc/vmallocinfo holds two 1926-page packed_inner_outer_nextprev
+entries where one is live and eight 642-page entries where seven are
+accounted for -- the failed first probe's ~10 MB, once per boot. Five
+unbind/bind cycles of fdec0000.ebc with the reader stopped raised
+VmallocUsed by 212-276 kB per cycle: one 57-page lut_custom.luts entry
+per successful probe, never freed.
+
+Give the probe a label chain in reverse acquisition order -- stop the
+refresh thread, stop the temperature thread, free the LUT, disable
+runtime PM, unmap zero_handle if it was mapped, unmap the two phase
+buffers, free the two vmallocs -- and route every failure to the label
+that undoes exactly what it had acquired. A failed manual runtime
+resume (runtime PM compiled out) disables runtime PM and skips the
+suspend it never got to. remove() frees the LUT once the threads are
+stopped and the CRTC is shut down, where the two vmallocs already go.
+The success path is unchanged.
+
+The 2026-09-03 third-party audit's item 2
+(doc/reviews/2026-09-03-third-party-audit.md); wilkbook
+doc/upstream-register.md item 23. Applies on top of
+linux-pinenote-7.1-probe-unwind.patch and keeps its err_stop_kthread
+label and goto. Unproven on glass as of 2026-09-04.
+
+--- a/drivers/gpu/drm/rockchip/rockchip_ebc.c
++++ b/drivers/gpu/drm/rockchip/rockchip_ebc.c
+@@ -2440,32 +2440,35 @@
+ 	      (direct_mode || (ebc->hardware_wf && ebc->zero)) &&
+ 	      ebc->hints_ioctl && ebc->phase[0] &&
+ 	      ebc->phase[1])) {
+-		return dev_err_probe(dev, -ENOMEM, "Failed to allocate buffers\n");
++		ret = dev_err_probe(dev, -ENOMEM, "Failed to allocate buffers\n");
++		goto err_free_buffers;
+ 	}
+ 	ebc->phase_sequence = drmm_kzalloc(
+ 		&ebc->drm, sizeof(struct drm_rockchip_ebc_phase_sequence),
+ 		GFP_KERNEL);
+-	if (!ebc->phase_sequence)
+-		return dev_err_probe(dev, -ENOMEM, "Failed to allocate phase_sequence buffer\n");
++	if (!ebc->phase_sequence) {
++		ret = dev_err_probe(dev, -ENOMEM, "Failed to allocate phase_sequence buffer\n");
++		goto err_free_buffers;
++	}
+ 	ebc->phase_handles[0] = dma_map_single(dev, ebc->phase[0], ebc->phase_size,
+ 					       DMA_TO_DEVICE);
+ 	if (dma_mapping_error(dev, ebc->phase_handles[0])) {
+-		return dev_err_probe(dev, -ENOMEM, "phase_handles[0] dma mapping error");
++		ret = dev_err_probe(dev, -ENOMEM, "phase_handles[0] dma mapping error");
++		goto err_free_buffers;
+ 	}
+ 	ebc->phase_handles[1] = dma_map_single(dev, ebc->phase[1], ebc->phase_size,
+ 					       DMA_TO_DEVICE);
+ 	if (dma_mapping_error(dev, ebc->phase_handles[1])) {
+-		dma_unmap_single(dev, ebc->phase_handles[0], ebc->phase_size, DMA_TO_DEVICE);
+-		return dev_err_probe(dev, -ENOMEM, "phase_handles[1] dma mapping error");
++		ret = dev_err_probe(dev, -ENOMEM, "phase_handles[1] dma mapping error");
++		goto err_unmap_phase0;
+ 	}
+ 	if (!direct_mode) {
+ 		ebc->zero_handle = dma_map_single(
+ 						  dev, ebc->zero, ebc->gray4_size, DMA_TO_DEVICE);
+ 		if (dma_mapping_error(dev, ebc->zero_handle)) {
+-			dma_unmap_single(dev, ebc->phase_handles[0], ebc->phase_size, DMA_TO_DEVICE);
+-			dma_unmap_single(dev, ebc->phase_handles[1], ebc->phase_size, DMA_TO_DEVICE);
+-			return dev_err_probe(dev, -ENOMEM,
+-					     "zero_handle dma mapping error");
++			ret = dev_err_probe(dev, -ENOMEM,
++					    "zero_handle dma mapping error");
++			goto err_unmap_phase1;
+ 		}
+ 		dma_sync_single_for_device(dev, ebc->zero_handle, ebc->gray4_size, DMA_TO_DEVICE);
+ 	}
+@@ -2499,60 +2502,79 @@
+ 	init_completion(&ebc->display_end);
+ 
+ 	base = devm_platform_ioremap_resource(pdev, 0);
+-	if (IS_ERR(base))
+-		return PTR_ERR(base);
++	if (IS_ERR(base)) {
++		ret = PTR_ERR(base);
++		goto err_unmap_zero;
++	}
+ 
+ 	ebc->regmap = devm_regmap_init_mmio(dev, base,
+ 					    &rockchip_ebc_regmap_config);
+-	if (IS_ERR(ebc->regmap))
+-		return PTR_ERR(ebc->regmap);
++	if (IS_ERR(ebc->regmap)) {
++		ret = PTR_ERR(ebc->regmap);
++		goto err_unmap_zero;
++	}
+ 
+ 	regcache_cache_only(ebc->regmap, true);
+ 
+ 	ebc->dclk = devm_clk_get(dev, "dclk");
+-	if (IS_ERR(ebc->dclk))
+-		return dev_err_probe(dev, PTR_ERR(ebc->dclk),
+-				     "Failed to get dclk\n");
++	if (IS_ERR(ebc->dclk)) {
++		ret = dev_err_probe(dev, PTR_ERR(ebc->dclk),
++				    "Failed to get dclk\n");
++		goto err_unmap_zero;
++	}
+ 
+ 	ebc->hclk = devm_clk_get(dev, "hclk");
+-	if (IS_ERR(ebc->hclk))
+-		return dev_err_probe(dev, PTR_ERR(ebc->hclk),
+-				     "Failed to get hclk\n");
++	if (IS_ERR(ebc->hclk)) {
++		ret = dev_err_probe(dev, PTR_ERR(ebc->hclk),
++				    "Failed to get hclk\n");
++		goto err_unmap_zero;
++	}
+ 
+ 	ebc->cpll_333m = devm_clk_get(dev, "cpll_333m");
+-	if (IS_ERR(ebc->cpll_333m))
+-		return dev_err_probe(dev, PTR_ERR(ebc->cpll_333m),
+-				     "Failed to get cpll_333m\n");
++	if (IS_ERR(ebc->cpll_333m)) {
++		ret = dev_err_probe(dev, PTR_ERR(ebc->cpll_333m),
++				    "Failed to get cpll_333m\n");
++		goto err_unmap_zero;
++	}
+ 
+ 	ebc->temperature_channel = devm_iio_channel_get(dev, NULL);
+-	if (IS_ERR(ebc->temperature_channel))
+-		return dev_err_probe(dev, PTR_ERR(ebc->temperature_channel),
+-				     "Failed to get temperature I/O channel\n");
++	if (IS_ERR(ebc->temperature_channel)) {
++		ret = dev_err_probe(dev, PTR_ERR(ebc->temperature_channel),
++				    "Failed to get temperature I/O channel\n");
++		goto err_unmap_zero;
++	}
+ 
+ 	for (i = 0; i < EBC_NUM_SUPPLIES; i++)
+ 		ebc->supplies[i].supply = rockchip_ebc_supplies[i];
+ 
+ 	ret = devm_regulator_bulk_get(dev, EBC_NUM_SUPPLIES, ebc->supplies);
+-	if (ret)
+-		return dev_err_probe(dev, ret, "Failed to get supplies\n");
++	if (ret) {
++		ret = dev_err_probe(dev, ret, "Failed to get supplies\n");
++		goto err_unmap_zero;
++	}
+ 
+ 	ret = devm_request_irq(dev, platform_get_irq(pdev, 0),
+ 			       rockchip_ebc_irq, 0, dev_name(dev), ebc);
+-	if (ret < 0)
+-		return dev_err_probe(dev, ret, "Failed to request IRQ\n");
++	if (ret < 0) {
++		ret = dev_err_probe(dev, ret, "Failed to request IRQ\n");
++		goto err_unmap_zero;
++	}
+ 
+ 	pm_runtime_set_autosuspend_delay(dev, EBC_SUSPEND_DELAY_MS);
+ 	pm_runtime_use_autosuspend(dev);
+ 	pm_runtime_enable(dev);
+ 	if (!pm_runtime_enabled(dev)) {
+ 		ret = rockchip_ebc_runtime_resume(&pdev->dev);
+-		if (ret)
+-			return ret;
++		if (ret) {
++			/* Nothing to suspend: the manual resume failed. */
++			pm_runtime_disable(dev);
++			goto err_unmap_zero;
++		}
+ 	}
+ 
+ 	ret = rockchip_ebc_waveform_init(ebc);
+ 	if (ret)
+-		return ret;
++		goto err_disable_pm;
+ 
+ 	// Make sure ebc->lut_custom_active is initialised
+ 	rockchip_ebc_change_lut(ebc);
+@@ -2564,7 +2586,7 @@
+ 		ret = dev_err_probe(
+ 			dev, PTR_ERR(ebc->temp_upd_thread),
+ 			"Failed to start temperature update thread");
+-		goto err_disable_pm;
++		goto err_free_lut;
+ 	}
+ 	kthread_park(ebc->temp_upd_thread);
+ 
+@@ -2574,7 +2596,7 @@
+ 	if (IS_ERR(ebc->refresh_thread)) {
+ 		ret = dev_err_probe(dev, PTR_ERR(ebc->refresh_thread),
+ 				    "Failed to start refresh thread\n");
+-		goto err_disable_pm;
++		goto err_stop_temp_kthread;
+ 	}
+ 
+ 	kthread_park(ebc->refresh_thread);
+@@ -2588,10 +2610,25 @@
+ 
+ err_stop_kthread:
+ 	kthread_stop(ebc->refresh_thread);
++err_stop_temp_kthread:
++	kthread_stop(ebc->temp_upd_thread);
++err_free_lut:
++	vfree(ebc->lut_custom.luts);
+ err_disable_pm:
+ 	pm_runtime_disable(dev);
+ 	if (!pm_runtime_status_suspended(dev))
+ 		rockchip_ebc_runtime_suspend(dev);
++err_unmap_zero:
++	if (!direct_mode)
++		dma_unmap_single(dev, ebc->zero_handle, ebc->gray4_size,
++				 DMA_TO_DEVICE);
++err_unmap_phase1:
++	dma_unmap_single(dev, ebc->phase_handles[1], ebc->phase_size, DMA_TO_DEVICE);
++err_unmap_phase0:
++	dma_unmap_single(dev, ebc->phase_handles[0], ebc->phase_size, DMA_TO_DEVICE);
++err_free_buffers:
++	vfree(ebc->hints_ioctl);
++	vfree(ebc->packed_inner_outer_nextprev);
+ 
+ 	return ret;
+ }
+@@ -2620,6 +2657,8 @@
+ 	kthread_stop(ebc->temp_upd_thread);
+ 	drm_atomic_helper_shutdown(&ebc->drm);
+ 
++	vfree(ebc->lut_custom.luts);
++
+ 	dma_unmap_single(dev, ebc->phase_handles[0], ebc->phase_size, DMA_TO_DEVICE);
+ 	dma_unmap_single(dev, ebc->phase_handles[1], ebc->phase_size, DMA_TO_DEVICE);
+ 
