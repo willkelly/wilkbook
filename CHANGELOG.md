@@ -188,6 +188,20 @@ too, above.
   direct driver's `RECT_HINTS` ioctl (the pen/UI hint path). Nothing in
   the shipped reader sends malformed rectangles today, but this closes
   the door before more hint-driven work opens it.
+- **The update tool could give up silently right after a successful
+  self-recovery.** With the debug cable attached, the very case its
+  serial watcher exists for — a dead trial reset by the watchdog, picked
+  back to the reader at the boot menu, the old version answering again —
+  would have made the tool exit between "device is back" and "promote",
+  with no message, leaving the trial version un-promoted (harmless: a
+  power-cycle returns to the old one). Found by review 2026-09-04, fixed
+  and pinned; it had never run on a device because no deploy so far had
+  the cable attached. The same watcher also used to leave a reader on
+  the serial port behind after every run.
+- **Wi-Fi could end up with two supplicant daemons after a bad resume**:
+  if the driver dropped the interface under a running daemon, the
+  recovery started a second one instead of stopping the first. Found by
+  review 2026-09-04, fixed and pinned in the offline harness.
 - **Pinch-to-font-size could crash the reader** (KOReader exited and
   respawned in about a second, losing nothing but your gesture). Fixed
   at the source: the reader no longer hands the gesture detector a

@@ -126,11 +126,26 @@ earlier generation it is a kernel spin.
 ## Operator half (eyes, hands, UART)
 
 The unattended half ran 2026-09-04 (results inline above and in
-`doc/status.md`); the candidate on the device is now **generation 15**
+`doc/status.md`); the candidate on the device is **generation 15**
 (347a7b1: the unattended half's two fixes on top of 14 — the notice
-before the teardown, and the broker's stale settle deadline). Open the
-book first: a reader restart or boot lands in the library by design.
+before the teardown, and the broker's stale settle deadline), and the
+branch has since taken the tag-readiness review's userspace fixes
+(bac9e4a: the deployer's own recovery path could abort under `set -e`
+and orphaned its UART reader; the Wi-Fi script could start a second
+supplicant over one that lost its interface; the broker's fallback
+settle was measured from before the suspend). Those want a device too,
+so the operator half now begins with a deploy. Open the book first: a
+reader restart or boot lands in the library by design.
 
+0. **Deploy the branch head as generation 16 with the UART attached**:
+   `WILKBOOK_UART=/dev/ttyUSB0 make deploy DEVICE=pinenote-os2
+   KEEP=8` from the branch. This is the first deploy ever to run the
+   deployer's watcher path on glass (armed before the kexec, in its own
+   process group, reaped after): expect the `== UART watcher armed on`
+   line, the two device-tree notes, health, promote, generation 8
+   pruned — and afterwards `pgrep -f 'cat /dev/ttyUSB'` on the
+   workstation must find nothing. Everything below is then on 16, the
+   tag candidate.
 1. UART capture and the menu watcher armed before anything reboots.
 2. **Visual pass on generation 15**: text edges on a real page,
    ghosting after twenty real turns, rotation flash in all four
@@ -148,7 +163,7 @@ book first: a reader restart or boot lands in the library by design.
    to sleep it inside the settle window, wake it again with the button —
    it must stay awake.
 5. **Cold boot with the UART**: `reboot`, the watcher picks os2,
-   generation 15 boots cold — the tag candidate without a kexec in its
+   generation 16 boots cold — the tag candidate without a kexec in its
    lineage (patch 13's device-tree change is already proven live this
    way on generation 10; 15's tree is 14's, i.e. 10's plus nothing).
 6. **The os1 rescue (#51)**: let a boot land on os1, run

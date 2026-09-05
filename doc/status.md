@@ -155,6 +155,22 @@ to restore. Combined with the overnight run's corrected count, that is
 **59 hands-off cycles** with zero restore failures; the rebind and the
 association retry have still never fired on glass.
 
+**Review follow-up, the same evening (branch bac9e4a, not yet on the
+device).** The tag-readiness review's userspace lens, re-run after the
+session limit killed it, found three things the day's runs could not
+have: the deployer's success branch killed its UART watcher with a bare
+`kill` under `set -e`, so the one scenario the watcher exists for (a
+dead trial reset by the dog, picked back to os2, the old DEFAULT
+answering ssh) would have aborted the deployer between the ssh wait and
+promote with no message — never seen because neither deploy today had a
+UART; the picker's `cat` of the tty outlived every deploy (two readers on
+one tty split the bytes); and `pinenote-wifi-control on`, finding a live
+supplicant with no `wlan0`, deleted its pid file and started a second
+one over it. All three fixed and pinned (`test-static.sh`, harness case
+4), plus the broker's fallback-path settle measured from the wake and
+the helper's `prune` default aligned to 5. They reach the device as
+generation 16 at the start of the operator half.
+
 **The rig also found a broker bug, on the operator's own button.** After
 the rig's `stop`, the last RTC wake at 21:48:44 had set the settle
 deadline (300 s); KOReader's idle timer suspended the device at
