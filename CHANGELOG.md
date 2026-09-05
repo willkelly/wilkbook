@@ -161,7 +161,7 @@ too, above.
   was already working. Rolling back is the identical move in reverse.
 - **Proven end to end**, both in an automated QEMU rig and on glass:
   the first cable-free deploy landed 2026-09-02, and every generation
-  cited elsewhere in this release (7 through 15) moved onto the device
+  cited elsewhere in this release (7 through 16) moved onto the device
   the same way afterward.
 - One dd-from-os1 reflash is still needed to put this capability on a
   device that doesn't already have it; after that, it's `make deploy
@@ -195,9 +195,11 @@ too, above.
   would have made the tool exit between "device is back" and "promote",
   with no message, leaving the trial version un-promoted (harmless: a
   power-cycle returns to the old one). Found by review 2026-09-04, fixed
-  and pinned; it had never run on a device because no deploy so far had
-  the cable attached. The same watcher also used to leave a reader on
-  the serial port behind after every run.
+  and pinned; the first deploy with the cable attached ran the same
+  evening (generation 16) and the fixed path held on the success side —
+  the recovery side, where the tool answers the boot menu for you, has
+  still never fired on a device. The same watcher also used to leave a
+  reader on the serial port behind after every run.
 - **Wi-Fi could end up with two supplicant daemons after a bad resume**:
   if the driver dropped the interface under a running daemon, the
   recovery started a second one instead of stopping the first. Found by

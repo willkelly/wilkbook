@@ -1,0 +1,287 @@
+[    0.000000] software IO TLB: area num 4.
+[    0.000000] software IO TLB: SWIOTize roundup to 4MB
+[    0.000000] software IO TLB: mapped [mem 0x00000000e9400000-0x00000000e98.000000] Built 1 zonelists, mobility grouping on.  Total pages: 978432
+[    0.000000] mem auto-, heap alloc:off, heap free:off
+[    0.000000] SLUB: HWalign=64, Order=0-3, MinObjects=0, CPUs=00000] ftrace: allocating 39739 entries in 156 pages
+[    0.000000] ftrace: allocated 156 pages.000000] rcu: Preemptible hierarchical RCU implementation.
+[    0.000000] rcu: 	RCU event traci0.000000] rcu: 	RCU priority boosting: priority 1 delay 500 ms.
+[    0.000000] rcu: 	RCU_SOFTIRto rcuc kthreads.
+[    0.000000] 	No expedited grace period (rcu_normal_after_boot).
+[    0.00t of Tasks RCU enabled.
+[    0.000000] 	Rude variant of Tasks RCU enabled.
+[    0.000000] 	Traks RCU enabled.
+[    0.000000] rcu: RCU calculated value of scheduler-enlistment delay is 100 j0000] RCU Tasks: Setting shift to 2 and lim to 1 rcu_task_cb_adjust=1 rcu_task_cpu_ids=4.
+[    : Setting shift to 2 and lim to 1 rcu_task_cb_adjust=1 rcu_task_cpu_ids=4.
+[    0.000000] NR_IR preallocated irqs: 0
+[    0.000000] GIC: enabling workaround for GICv3: non-coherent attribute: GIC: Using split EOI/Deactivate mode
+[    0.000000] GICv3: 320 SPIs implemented
+[    0.00000 SPIs implemented
+[    0.000000] GICv3: MBI range [296:319]
+[    0.000000] GICv3: Using MBI fr00
+[    0.000000] Root IRQ handler: gic_handle_irq
+[    0.000000] GICv3: GICv3 features: 16 PPv3: GICD_CTLR.DS=0, SCR_EL3.FIQ=1
+[    0.000000] GICv3: CPU0: found redistributor 0 region 0:0x   0.000000] rcu: srcu_init: Setting srcu_struct sizes based on contention.
+[    0.000000] cloc: 0xffffffff max_cycles: 0xffffffff, max_idle_ns: 1911260446275000 ns
+[    0.000000] arch_timerat 24.00MHz (phys).
+[    0.000000] clocksource: arch_sys_counter: mask: 0xffffffffffffff max_cyidle_ns: 440795202592 ns
+[    0.000001] sched_clock: 56 bits at 24MHz, resolution 41ns, wraps e[    0.001073] Console: colour dummy device 80x25
+[    0.001150] Calibrating delay loop (skippeusing timer frequency.. 48.00 BogoMIPS (lpj=24000)
+[    0.001168] pid_max: default: 32768 minim1539] Mount-cache hash table entries: 8192 (order: 4, 65536 bytes, linear)
+[    0.001577] Mountntries: 8192 (order: 4, 65536 bytes, linear)
+[    0.002179] VFS: Finished mounting rootfs on nurcu: Hierarchical SRCU implementation.
+[    0.006150] rcu: 	Max phase no-delay instances is 400er migration: 1 hierarchy levels; 8 children per group; 1 crossnode level
+[    0.420464] EFI selable.
+[    0.517790] smp: Bringing up secondary CPUs ...
+[    1.096538] Detected VIPT I-cache] GICv3: CPU1: found redistributor 100 region 0:0x00000000fd480000
+[    1.096783] CPU1: Booted 00000100 [0x412fd050]
+[    1.623883] Detected VIPT I-cache on CPU2
+[    1.624063] GICv3: CPU2:00 region 0:0x00000000fd4a0000
+[    1.624120] CPU2: Booted secondary processor 0x0000000200 [0x7] Detected VIPT I-cache on CPU3
+[    2.425610] GICv3: CPU3: found redistributor 300 region 0:0.425666] CPU3: Booted secondary processor 0x0000000300 [0x412fd050]
+[    2.586244] smp: Brought 2.586258] SMP: Total of 4 processors activated.
+[    2.586263] CPU: All CPU(s) started at EL2atures: detected: 32-bit EL0 Support
+[    2.586275] CPU features: detected: Data cache clean tor I/D coherence
+[    2.586281] CPU features: detected: Common not Private translations
+[    2.etected: CRC32 instructions
+[    2.586298] CPU features: detected: RCpc load-acquire (LDAPR)
+[es: detected: LSE atomic instructions
+[    2.586310] CPU features: detected: Privileged Access 5] CPU features: detected: RAS Extension Support
+[    2.586322] CPU features: detected: XNX
+[ es: detected: Speculative Store Bypassing Safe (SSBS)
+[    2.586401] alternatives: applying sys[    2.591196] CPU features: detected: ICV_DIR_EL1 trapping
+[    2.591673] Memory: 3778080K/391160K kernel code, 2516K rwdata, 3316K rodata, 1920K init, 507K bss, 113680K reserved, 16384K cma67] devtmpfs: initialized
+[    2.618630] posixtimers hash table entries: 2048 (order: 5, 81920 .618805] futex hash table entries: 1024 (65536 bytes on 1 NUMA nodes, total 64 KiB, linear).
+[ es in range for non-PLT usage
+[    2.619278] 519120 pages in range for PLT usage
+[    2.621233r invalid.
+[    2.623896] NET: Registered PF_NETLINK/PF_ROUTE protocol family
+[    2.626073] D KiB GFP_KERNEL|GFP_DMA pool for atomic allocations
+[    2.626575] initcall rockchip_grf_init b461] thermal_sys: Registered thermal governor 'fair_share'
+[    2.627470] thermal_sys: Registerng_bang'
+[    2.627477] thermal_sys: Registered thermal governor 'step_wise'
+[    2.627482] th thermal governor 'user_space'
+[    2.627487] thermal_sys: Registered thermal governor 'power_a7598] cpuidle: using governor menu
+[    2.627923] ASID allocator initialised with 65536 entriesial: AMBA PL011 UART driver
+[    2.653610] rockchip-gpio fdd60000.gpio: probed /pinctrl/gpio@fd rockchip-gpio fe740000.gpio: probed /pinctrl/gpio@fe740000
+[    2.656188] rockchip-gpio fe7500trl/gpio@fe750000
+[    2.657339] rockchip-gpio fe760000.gpio: probed /pinctrl/gpio@fe760000
+[ p-gpio fe770000.gpio: probed /pinctrl/gpio@fe770000
+[    2.664202] HugeTLB: registered 1.00 GiBcated 0 pages
+[    2.664220] HugeTLB: 0 KiB vmemmap can be freed for a 1.00 GiB page
+[    2.66tered 32.0 MiB page size, pre-allocated 0 pages
+[    2.664235] HugeTLB: 0 KiB vmemmap can be frge
+[    2.664242] HugeTLB: registered 2.00 MiB page size, pre-allocated 0 pages
+[    2.664246]memmap can be freed for a 2.00 MiB page
+[    2.664253] HugeTLB: registered 64.0 KiB page size, [    2.664258] HugeTLB: 0 KiB vmemmap can be freed for a 64.0 KiB page
+[    3.066108] iommu: Dethrough
+[    3.091663] usbcore: registered new interface driver usbfs
+[    3.094145] usbcore: ace driver hub
+[    3.094710] usbcore: registered new device driver usb
+[    3.096020] pps_corr. 1 registered
+[    3.096029] pps_core: Software ver. 5.3.6 - Copyright 2005-2007 Rodolfo Giom.it>
+[    3.096060] PTP clock support registered
+[    3.096322] scmi_core: SCMI protocol bus r01115] vgaarb: loaded
+[    3.101701] clocksource: Switched to clocksource arch_sys_counter
+[  k quotas dquot_6.6.0
+[    3.104429] VFS: Dquot-cache hash table entries: 512 (order 0, 4096 bytNET: Registered PF_INET protocol family
+[    3.164876] IP idents hash table entries: 65536 (ordlinear)
+[    3.169633] tcp_listen_portaddr_hash hash table entries: 2048 (order: 5, 81920 bytes9779] Table-perturb hash table entries: 65536 (order: 6, 262144 bytes, linear)
+[    3.169809] Tsh table entries: 32768 (order: 6, 262144 bytes, linear)
+[    3.170360] TCP bind hash table ent2621440 bytes, linear)
+[    3.173108] TCP: Hash tables configured (established 32768 bind 32768 hash table entries: 2048 (order: 7, 327680 bytes, linear)
+[    3.174140] NET: Registered PF_UNamily
+[    3.174253] PCI: CLS 0 bytes, default 64
+[    3.175010] Unpacking initramfs...
+[    system trusted keyrings
+[    3.180229] workingset: timestamp_bits=46 (anon: 42) max_order=20 bu)
+[    3.182173] SGI XFS with ACLs, security attributes, scrub, repair, no debug enabled
+[    ymmetric registered
+[    3.184488] Asymmetric key parser 'x509' registered
+[    3.185122] io sered
+[    3.203954] dma-pl330 fe530000.dma-controller: Loaded driver for PL330 DMAC-241330
+[  e530000.dma-controller: 	DBUFF-128x8bytes Num_Chans-8 Num_Peri-32 Num_Events-16
+[    3.209788] a-controller: Loaded driver for PL330 DMAC-241330
+[    3.209813] dma-pl330 fe550000.dma-controles Num_Chans-8 Num_Peri-32 Num_Events-16
+[    3.211289] rockchip-suspend-mode rockchip-suspend:ate override: LINUX_PM_STATE=5 on every suspend
+[    3.211312] rockchip-suspend-mode rockchip-sicy activated
+[    3.212968] Serial: 8250/16550 driver, 4 ports, IRQ sharing disabled
+[    3.2al: ttyS1 at MMIO 0xfe650000 (irq = 24, base_baud = 115200) is a 16550A
+[    3.230466] serial syS1 registered
+[    3.336289] fe660000.serial: ttyS2 at MMIO 0xfe660000 (irq = 25, base_baud = [    3.612775] printk: legacy cod
+[    3.612775] printk: legacy console [ttyS2] enabled
+[    3797] printk: legacy bootconsole [uart0] disabled
+[    3.612797] printk: legacy bootconsole [uar[    3.619967] platform fdea0000.video-codec: Adding to iommu group 0
+[    3.622399] platform fdee0000.video-codec: Adding to iommu group 1
+[    3.626016] loop: module loaded
+[    3.635784] usbcore: registered new interface driver usbserial_generic
+[    3.635846] usbser registered for generic
+[    3.636288] i2c_dev: i2c /dev entries driver
+[    3.640019] fan53555-regulator 0-001c: FAN53555 Option[12] Rev[15] Detected!
+[    3.754465] input: rk805 pwrkey as /devices/platform/fdd40000.i2c/i2c-0/0-0020/rk805-pwrkey.2[    3.768470] rk808-rtc rk808-rtc.3.auto: registered as rtc0
+[    3.771454] rk808-rtc rk808-rtc.3.auto: setting system clock to 2026-09-05T02:34:41 UTC (1788[    3.783497] lm3630a_bl 3-0036: LM3630A backlight register OK.
+[    3.830619] dwmmc_rockchip fe2c0000.mmc: IDMAC supports 32-bit address mode.
+[    3.830680] 00.mmc: Using internal DMA contrc_rockchip fe2c0000.mmc: Version ID is 270a
+[    3.831631] arm-scmi arm-scmi.7.auto: Using scmi.831648] arm-scmi arm-scmi.7.auto: SCMI max-rx-timeout: 30ms / max-msg-size: 104bytes / max-msg:otocol scmi_dev.1: Enabled polling mode TX channel - prot_id:16
+[    3.832548] arm-scmi arm-scms - Core Enabled.
+[    3.832636] arm-scmi arm-scmi.7.auto: Malformed reply - real_sz:8  calc_sz 3.832649] arm-scmi arm-scmi.7.auto: SCMI Protocol v2.0 'rockchip:' Firmware version 0x0
+[    3.7.auto: Enabling SCMI Quirk [quirk_clock_rates_triplet_out_of_spec]
+[    3.834429] hid: raw HIina
+[    3.834856] usbcore: registered new interface driver usbhid
+[    3.834866] usbhid: USB 4] NET: Registered PF_INET6 protocol family
+[    3.840788] dwmmc_rockchip fe2c0000.mmc: DW MMC controller at irq 61,32 bit host data width,256 deep fifo
+[    88] Segment Routing with IPv6
+[    3.842265] In-situ OAM (IOAM) with IPv6
+[    3.842391] NET: mily
+[    3.845474] dwmmc_rockchip femc: allocated mmc-pwrseq
+[    3.845515] mmc_host mmc1: card is emovable.
+[    3.857763] registered taskstats version 1
+[    3.857816] Loading compiled-in X.509 certific[    3.943002] input: gpio-keys as /devices/platform/gpio-keys/input/input1
+[    3.944356] clk:[    3.945414] PM: genpd: Disablns
+[    3.962824] mmc_host mmc1: Bus speed = 375000Hz (req 400000Hz, actual 375000HZ div = 0)
+[    4.040384] Freeing initrd memory: 12548K
+[    4.041477] dw-apb-uart fe660000.serial: forbidnel console
+[    4.064508] mmc0: SDHCI controller on fe310000.mmc [fe310000.mmc] using ADMA
+[    4.067210] Freeing unused kernel memory: 1920K
+[    4.067348] Run /init as init process
+[ [    4.067357]     /init
+[    4.067360]   with environment:
+[    4.067363]     HOME=/
+[    4.GC Warning: pthread_getattr_np oead_attr_getstack failed for main thread
+GC Warning: Could not /stat
+[    4.080404] mmc_host mmc1: Bus speed = 150000000Hz (req 150000000Hz, actual 150000000HZ div =[    4.142580] sdhci-dwcmshc fe310000.mmc: Can't reduce the clock below 52MHz in HS200/HS400 mode
+[    4.142636] sdhci-dwcmshc .mmc: Can't reduce the clock below 52MHz in HS200/HS400 mode
+[    4.142648] sdhci-dwcmshc fe310low 52MHz in HS200/HS400 mode
+[    4.144604] mmc0: new HS200 MMC card at address 0001
+[    4.145649] mmcblk0: mmc0:0001 AKJ21X[    4.148877]  mmcblk0: p1 p2 p3 p4 p5 p6 p7
+[    4.150665] mmcblk0boot0: mmc0:0001 AKJ21X 4.00 MiB
+[    4.152514] mmcblk0boot1: mmc0:0001 AKJ21X 4.00 MiB
+[    4.154222] mmcblk0rpmb: mmc0:chardev (248:0)
+[    4.217852] dwmmc_rockchip fe2c0000.mmc: Successfully tuned phase to 219
+[    4.221948] mmc1: new UHS-I speed SDR104 SDIO card at address 0001
+Welcome, this is GNU's early boot Guile.
+Use 'gnu.repl' for an loading kernel modules...
+PineNote initrd: pre-mount diagnostics starting
+PineNote initrd: installed waveform firmware from /dev/mmcblk0p2 loading EBC display modules
+[    4.531494] hwmon hwmon4: temp1_input not attached to any thermal zone
+[    4.620366] panel-simple panel: Expected bpc in {6,8} but got: 4
+[    4.620434] panel-simple panel: supply power not found, mmy regulator
+[    5.621501] rockchip-drm display-subsystem: [drm:0xffff80007955764c] *ERROR* No available vop[    6.021978] rockchip_ebc_probe start
+[    6.038363] rockchip-ebc fdec0000.ebc: [drm] Loaded 4-bit PVI waveform version 0x19[    6.041544] rockchip-ebc fdec0000.ebc: Direct firmware load for rockchip/custom_wf.bin failed with error -2
+[    6.041574] rhip-ebc fdec0000.ebc: [drm] *ERROR* Unable to load custom_wf.bin
+[    6.041584] rockchip-ebc fdip-ebc failed with error -22
+PineNote initrd: loaded EBC display modules
+PineNote initrd: PNGuixRoot is visible before Guix root mount at /dev/mmcblk0p6
+PineNote initrd: handoff to Guix root mount for PNGuixRoot
+PNGuixRoot: recovering journal
+PNGuixRoot: Clearing orphaned inode 129820 (uid=0, gid=0, mode=0ng orphaned inode 129822 (uid=0, gid=0, mode=0100600, size=217032)
+PNGuixRoot: clean, 95390/957216 files, 740021/3840000 blocks
+[    6.278445] EXT4-fs (mmcblk0p6): mounted filesystem 70c4c247--126d-ef67-4d4970c4c247 r/w with ordered data mode. Quota mode: loading '/gnu/store/8czi9ry1z0gph24n5yls7iiy83y4n0b8-system/bootmaking '/gnu/store/8czi9ry1z0gph24n5yls7iiy83y4n0b8-system' the populating /etc from /gnu/store/b2shf0s7cq0ykj8xqcaa5k8lldz5yncdsetting up privileged programs in '/run/privileged/bin'...
+[    8.368963] shepherd[1]: GNU Shepherd 1.0.9 (Guile 3.0.9, Fibwn-linux-gnu)
+[    8.369437] shepherd[1]: bit-count is deprecatvector-count, or a loop over array-ref if array support is needed.
+[    8.370344] shepherd[1]:  Use scm_c_bitvector_length instead.
+[    8.370808] shepherd[1]: Starting service root...
+[    started.
+[    8.372010] shepherd[1]: Service root running with value #<<process> id: 1 command: Service root has been started.
+[    8.377954] shepherd[1]: starting services...
+[    8.378376]ation successfully loaded from '/gnu/store/w3dwr5zy9x7iv52vbpzcsdjczrdk3j-shepherd.conf'.
+[    8.416403] shepherd[1]: Starting service root-file-system...pherd[1]: Starting service host-name...
+[    8.421284] shepherd[1]: Starting service pam...
+[    8.421973] shepherd[1]: Starting service sysctl...
+[    8.423924] shepherd[1]: Starting service log-rotation...
+[    8.424550] shepherd[1]: Starting service loopback...
+[    8.426603] shepherd[1]: Service root-file-system started.
+[    8.42]: Service host-name started.
+[    8.428317] shepherd[1]: Service pam started.
+[    8.428881] shepherd[1]: Service log-rotation started.
+[    8.430037] shepherd[1]: Service root-file-system running with value #t.
+[    8.430626] shepherd[1]: Service host-name running with value "pinen".
+[    8.432229] shepherd[1]: Service pam running with value #t.
+[    8.432899] shepherd[1]: Service log-rotation running with value #<timer #<<calendar-even: (0) minutes: (0) hours: (22) days-of-month: (1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 2nths: (1 2 3 4 5 6 7 8 9 10 11 12) days-of-week: (0)> #<procedure rotation ()> ffff9f532de0>.
+[ervice root-file-system has been started.
+[    8.434456] shepherd[1]: Service host-name has beeerd[1]: Service pam has been started.
+[    8.436348] shepherd[1]: Service log-rotation has been1]: [sysctl] fs.protected_hardlinks = 1
+[    8.438477] shepherd[1]: [sysctl] fs.protected_symlinks = 1
+[    8.439886] shepherd[1]: Service sysctl started.
+[    8.440484] shepherd[1]: Service sysctl running with value #t.
+[    8.442205] shepherd[1]: Service sysctl has been started.
+[    8.468417] shepherd[1]: Starting service udev...
+[    8.500102] udevd[149]: starting version 3.2.14
+[    8.569832] udevd[149]: starting eudev-3.2.14
+[    8.975294] udevd[149]: no sender credentials received, message ignored
+[    8.990851] shepherd[1]: waiting for udevd...
+[    8.996417] shepherd[1]: [9vjrncay1bkzwqf77x1sywf88ma9dr01-sefor network device 'lo'...
+[    8.997598] shepherd[1]: Registernew logger for udev.
+[    9.001794] shepherd[1]: Service loopback started.
+[    9.004254] shepherd[1]: Service loopback running with value #t.
+[    9.005657] shepherd[1]: Service loopback has been started.
+[    9.164931] mc: Linux media interface: v0.10
+[    9.183293] panfrost fde60000.gpu: clock rate = 600000000
+[    9.183336] panfrost fde60000.gpu: bus_clock rate = 0
+[    9.191833] panfrost fde60000.gpu: [drm:panfrost_devfreq_init [panfrost]] Failed to register ing device
+[    9.191939] panfrost fde60000.gpu: mali-g52 id 0xx1 minor 0x0 status 0x0
+[    9.191948] panfrost fde60000.gpu: features: 00000000,00000df7, issu00400
+[    9.191954] panfrost fde60000.gpu: Features: L2:0x07110000209 Mem:0x1 MMU:0x00002823 AS:0xff JS:0x7
+[    9.191959] panfrost fde60000.gpu: shader_pres[    9.205808] [drm] Initialized panfrost 1.6.0 for fde60000.gpu on minor 0
+[    9.215011] videodev: Linux video capture interface: v2.00
+[    9.276775] i2c_hid_of 1-0009: supply vddl not found, using dummy regulator
+[    9.290061] cyttsp5 5-0024: supply vddio not found, using dummy regulator
+[    9.320650] rockchip-rga fdeb0000.rga: HW Version: 0x03.02
+[    9.322487] rockchip-rga fdeb0000.rga: Registered rockchip-rga as /dev/video0
+[    9.508896] input: w9013 2D1F:0095 Stylus as /devices/platform/fe5a0000.i2c/i2c-1/1-0009/0018:2D1F:0095.0001/input/input3
+[    9.509233] input: w9013 2D1F:0vices/platform/fe5a0000.i2c/i2c-1/1-0009/0018:2D1F:0095.0001/input/input4
+[    9.509492] hid-geut,hidraw0: I2C HID v1.00 Device [w9013 2D1F:0095] on 1-0009
+[    9.559763] input: adc-keys as /devices/platform/adc-keys/input/input6
+[    9.572103] rockchip-i2s-tdm fe410000.i2s: using zero-initialmay cause unexpected behavior
+[    9.577832] st-accel-i2c 5-0018: mounting matrix not found: using identity...
+[    9.584140] st-accel-i2c 5-0018: interrupts on the falling edge or active low level
+[    9.603046] cfg80211: Loading compiled-in X.509 certificates for regulatory database
+[    9.604408] hantro-vpu fdea0000.video-codec: registered rockchip,rk3 /dev/video1
+[    9.611275] hantro-vpu fdee0000.video-codec: registered rockchip,rk3568-vepu-enc as /dev/vide[    9.625885] Bluetooth: Core ver 2.22
+[    9.625993] NET: Regrotocol family
+[    9.625997] Bluetooth: HCI device and connectn manager initialized
+[    9.626016] Bluetooth: HCI socket layer initialized
+[    9.626023] Blialized
+[    9.626036] Bluetooth: SCO socket layer initialized
+[    9.639620] Bluetooth: HCI UART driver ver 2.3
+[    9.639640] Bluetooth: HCI UART protocol H4 registered
+[    9.640911] Bluetooth: HCI UART protocol Broadcom registered
+[    9.741137] input: ws8100_pen as /devices/platform/spi-gpio/spi_master/spi4/spi4.0/input/inpu[    9.742817] mousedev: PS/2 mofor all mice
+[    9.816887] Loaded X.509 cert 'sforshee: 00b28ddf47aef9cea7'
+[    9.817321] Loaded X.509 cers: 61c038651aabdcf94bd0ac7ff06c7248db18c600'
+[    9.821092] faux_driver regulatory: Direct firmware load for regulatory.db.p7s failed with er   9.821116] cfg80211: loaded regulatory.db is malformed or signng/invalid
+[    9.982498] Bluetooth: hci0: BCM: chip id 107
+[    9.984916] Bluetooth: hci0: BCM: features 0x2f
+[   10.001874] mmc_host mmc1: Bus speed = 375000Hz (req 400000Hz, actual 375000HZ div = 0)
+[   10.011074] Bluetooth: hci0: BCM4345C0
+[   10.011096] Bluetooth: hci0: BCM4345C0 (003.001.02 0000
+[   10.015008] Bluetooth: hci0: BCM4345C0 'brcm/BCM4345C0.pine64,pinenote-v1.2.hcd' Patch
+[   10.119749] mmc_host mmc1: Bus speed = 150000000Hz (req 150000000Hz, actual 150000000HZ div =[   10.122770] power_supply ws8100_pen: driver failed to report `status' property: -74
+[   10.188479] input input2: Parameters are specified but the axis 53 is not set up
+[   10.1885input2: Parameters are specified but the axis 54 is not set up
+505] input input2: Parameters are specified but the axis 58 is not set up
+[   10.188837] input:m/fe5e0000.i2c/i2c-5/5-0024/input/input2
+[   10.266908] dwmmc_rockchip fe2c0000.mmc: Successfully tuned phase to 219
+[   10.280976] brcmfmac: brcmf_fw_alloc_request: using brcm/brcm/dev/disk/by-partlabel/data: recovering journal
+[   10.510538] brcmfmac: brcmf_c_process_txcap_blob: no txcap_blob available (err=-2)
+[   10.51cmf_c_preinit_dcmds: Firmware: BCM4345/6 wl0: Apr 15 2021 03:03:.45.234 (4ca95bb CY) FWID 01-996384e2
+/dev/disk/by-partlabel/data: clean, 579/5627904 files, 11947706/[   10.649478] EXT4-fs (mmcblk0p7): mounted filesystem 73e99bbd-f1cc-4afb-8371-d7c8bf8dd009 r/w  data mode. Quota mode: none.
+[   11.104259] rockchip_ebc_probe start
+[   11.115215] rockchip-ebc fdec0000.ebc: Unbalanced pm_runtime_enable!
+[   11.124497] rockchip-ebc fdec0000.ebc: [drm] Loaded 4-bit PVI waveform version 0x19
+[   11.129350] rockchip-ebc fdec0000.ebc: Direct firmware load for rockchip/rockchip_ebc_defaulty4.bin failed with error -2
+[   11.132130] ebc: rockchip_ebc_plane_reset
+[   11.132800] [drm] Initialized rockchip-ebc 0.3..ebc on minor 1
+[   11.139962] fbcon: Deferring console take-over
+[   11.139983] rockchip-ebc fdec0000.ebc: [drckchip-ebcdrm frame buffer device
+[   11.262390] dwc3 fcc00000.usb: failed to enable ep0out
+[   11.699952] 8021q: 802.1Q VLAN Support v1.8
+[   11.908915] input: wilkbook-power-control as /devices/virtual/input/input8
+[   11.949737] input: wilkbook-orientation as /devices/virtual/input/input9
+[   12.044397] fbcon: Taking over console
+
+
+This is the GNU system.  Welcome.
+pinenote-reader login: [   13.606888] rockchip-ebc: override temperature from 27 to 22[   13.628125] print_lut temp_lower=21 temp_upper=24 offsets=01 05 0e 17 20 28 00 00 00 00 00 0000 00 00
+[   13.628151] print_lut lut=00 98 21 00 00 04 98 21 00 00 00 00 00 00 00 00 58 04 98 05 58 04 98 22 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 Bluetooth: hci0: BCM: features 0x2f
+[   17.297064] Bluetooth: hci0: BCM43455 37.4MHz Raspberry Pi 3+5C0 (003.001.025) build 0382
+[   24.062808] rockchip-ebc: override temperature from 27 to 22

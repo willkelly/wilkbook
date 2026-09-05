@@ -1,0 +1,29 @@
+sh pinenote/tools/deploy/deploy.sh "pinenote-os2" "reader" "8"
+== 1/7 build: pinenote-reader (cross, aarch64-linux-gnu)
+   /gnu/store/8czi9ry1z0gph24n5yls7iiy83y4n0b8-system
+== 2/7 transfer: only what root@pinenote-os2 is missing (the guix copy algorithm over OpenSSH)
+   15 of 439 store paths missing on the device
+== 3/7 add
+wilkbook-generation: generation 16: payload staged in /boot/gen-16
+wilkbook-generation: extlinux menu: 9 generation(s), DEFAULT gen-15
+   generation 16
+== UART watcher armed on /dev/ttyUSB0 (pid 1387676): a dead trial resets into U-Boot and is picked back to os2
+== trial: kexec into generation 16 (DEFAULT unchanged; the ssh link dies at the helper's Wi-Fi off, before the kexec)
+wilkbook-generation: trial boot of generation 16: DEFAULT is unchanged; a power-cycle returns to it
+wilkbook-generation: machine model "Pine64 PineNote v1.2" -> generation DTB
+wilkbook-generation: NOTE: the running kernel was kexec'd; its device tree is the last cold boot's, not gen-15's -- a device-tree change is proven only by a cold boot
+Timeout, server <reader address> not responding.
+== waiting for the new generation to answer ssh
+== health
+current_system=/gnu/store/8czi9ry1z0gph24n5yls7iiy83y4n0b8-system
+booted_generation=16
+broker_ready=true
+reader_started=true
+health=ok
+== promote
+wilkbook-generation: extlinux menu: 9 generation(s), DEFAULT gen-16
+promoted generation 16
+wilkbook-generation: pruned generation 8
+wilkbook-generation: extlinux menu: 8 generation(s), DEFAULT gen-16
+wilkbook-generation: guix gc (roots: the remaining profile links)
+DEPLOY OK -- generation 16 is DEFAULT (/gnu/store/8czi9ry1z0gph24n5yls7iiy83y4n0b8-system)

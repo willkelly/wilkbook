@@ -155,8 +155,8 @@ to restore. Combined with the overnight run's corrected count, that is
 **59 hands-off cycles** with zero restore failures; the rebind and the
 association retry have still never fired on glass.
 
-**Review follow-up, the same evening (branch bac9e4a, not yet on the
-device).** The tag-readiness review's userspace lens, re-run after the
+**Review follow-up, the same evening (branch bac9e4a; on the device as
+generation 16, below).** The tag-readiness review's userspace lens, re-run after the
 session limit killed it, found three things the day's runs could not
 have: the deployer's success branch killed its UART watcher with a bare
 `kill` under `set -e`, so the one scenario the watcher exists for (a
@@ -170,6 +170,25 @@ one over it. All three fixed and pinned (`test-static.sh`, harness case
 4), plus the broker's fallback-path settle measured from the wake and
 the helper's `prune` default aligned to 5. They reach the device as
 generation 16 at the start of the operator half.
+
+**Generation 16, deployed with the UART attached — the deployer's
+watcher path on glass for the first time (20:31 MDT).** From the branch
+head (f64b093; system `8czi9ry1z0gph24n5yls7iiy83y4n0b8-system`, the
+kernel unchanged), `WILKBOOK_UART=/dev/ttyUSB0 make deploy … KEEP=8`:
+15 of 439 paths sent; `== UART watcher armed on /dev/ttyUSB0` printed
+before the trial; both helper lines (model, kexec'd-kernel note) arrived;
+the trial answered ssh on its own, health ok, promoted, generation 8
+pruned (9–16 remain). Afterwards neither the picker nor its `cat` of the
+tty was left running — the group reap works — and the watcher's capture
+holds the trial kernel's own boot console, 32 kB from `software IO TLB`
+to the Bluetooth firmware line and the EBC's temperature override:
+`doc/artifacts/pinenote-gen16-deploy-20260904/` (deploy log and capture,
+the reader's address redacted). The capture is **lossy** — bytes drop
+mid-line every few hundred (`CPUs=00000] ftrace:`), the raw `cat` of a
+1.5 Mbaud port with no termios setup — enough to see a boot, not a clean
+transcript; the picker's menu match rides on a single short string and
+has never fired on glass, so the recovery half of this path is still
+unproven. The device is on 16, `enabled=1`, the operator's half begins.
 
 **The rig also found a broker bug, on the operator's own button.** After
 the rig's `stop`, the last RTC wake at 21:48:44 had set the settle

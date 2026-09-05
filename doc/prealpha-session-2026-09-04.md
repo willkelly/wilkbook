@@ -148,6 +148,11 @@ reader restart or boot lands in the library by design.
    the two device-tree notes, health, promote, generation 8 pruned —
    and afterwards `pgrep -f 'cat /dev/ttyUSB'` on the workstation must
    find nothing. Everything below is then on 16, the tag candidate.
+   *Run 20:31 MDT: all of it as expected; the watcher's 32 kB capture of
+   the trial kernel's boot console is in
+   `doc/artifacts/pinenote-gen16-deploy-20260904/` (lossy — the raw
+   `cat` drops bytes at 1.5 Mbaud; the menu-pick half of the watcher is
+   still unexercised on glass).*
 1. UART capture and the menu watcher armed before anything reboots.
 2. **Visual pass on generation 15**: text edges on a real page,
    ghosting after twenty real turns, rotation flash in all four
