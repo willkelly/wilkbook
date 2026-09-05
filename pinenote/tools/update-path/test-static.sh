@@ -106,15 +106,37 @@ grep -q 'recover_after_failed_trial "$gen"' "$deploy"
 # within minutes and U-Boot's menu shows for 15 s); recovery then waits on it.
 after 'trial_health_promote() {' 'uboot-pick-slot.sh" "$uart_log" --slot os2' "$deploy"
 after 'uboot-pick-slot.sh" "$uart_log" --slot os2' 'wilkbook-generation trial' "$deploy"
-after 'recover_after_failed_trial() {' 'wait "$watcher" && wait_for_ssh' "$deploy"
+after 'recover_after_failed_trial() {' 'watcher_wait && wait_for_ssh' "$deploy"
 sed -n '/^recover_after_failed_trial() {/,/^}/p' "$deploy" | grep -q '^  exit 1$'
 ! grep -q 'never answered; a power-cycle boots' "$deploy"
 echo "PASS: a trial that never answers is recovered over the UART when one is configured, and never promoted"
 # The watcher runs in its own process group and is reaped as a group, on both
 # paths, and never through a bare kill that set -e can turn into an abort
 # (review 2026-09-04: a watcher that had done its job and exited made the
-# deployer die between a passed ssh wait and promote).
+# deployer die between a passed ssh wait and promote).  The group and the
+# pid come from the picker's own handle file ("$uart_log.watcher"), read
+# after the arm, with $! only as the fallback: from a shell with job control
+# `setsid sh ... &` forks and $! is a wrapper that exited at once, so a reap
+# or a wait by $! reached nothing (the 2026-09-04 hand-run trap); from make
+# they coincide.  The picker writes pid=, pgid=, reader= before it opens the
+# port and exit= when it has one (pinned in scripts/uart/test-uboot-pick-slot.sh).
 grep -q 'setsid sh "$repo/pinenote/scripts/uart/uboot-pick-slot.sh"' "$deploy"
-[ "$(grep -c 'kill -- -"$watcher" 2>/dev/null || true' "$deploy")" -eq 2 ]
+after 'rm -f "$uart_log.watcher"' 'setsid sh "$repo/pinenote/scripts/uart/uboot-pick-slot.sh"' "$deploy"
+after 'setsid sh "$repo/pinenote/scripts/uart/uboot-pick-slot.sh"' 'watcher_handle || true' "$deploy"
+after 'watcher_handle || true' 'wilkbook-generation trial' "$deploy"
+sed -n '/^watcher_handle() {/,/^}/p' "$deploy" | grep -q "watcher_pid=\$(sed -n 's/^pid=//p' \"\$uart_log.watcher\")"
+sed -n '/^watcher_handle() {/,/^}/p' "$deploy" | grep -q "watcher_pgid=\$(sed -n 's/^pgid=//p' \"\$uart_log.watcher\")"
+sed -n '/^watcher_handle() {/,/^}/p' "$deploy" | grep -q 'watcher_pid=$watcher; watcher_pgid=$watcher'
+sed -n '/^watcher_wait() {/,/^}/p' "$deploy" | grep -q 'wait "$watcher"'
+sed -n '/^watcher_wait() {/,/^}/p' "$deploy" | grep -q "sed -n 's/^exit=//p' \"\$uart_log.watcher\""
+sed -n '/^watcher_reap() {/,/^}/p' "$deploy" | grep -q 'kill -- -"$watcher_pgid" 2>/dev/null || true'
+[ "$(grep -c '^    watcher_reap$\|^    \[ -z "$watcher" \] || watcher_reap$' "$deploy")" -eq 2 ]
 ! grep -q 'kill "$watcher"' "$deploy"
-echo "PASS: the UART watcher is reaped as a process group, and a dead watcher cannot abort a successful deploy"
+! grep -q 'kill -- -"$watcher"' "$deploy"
+! grep -q 'wait "$watcher" && wait_for_ssh' "$deploy"
+picker="$here/../../scripts/uart/uboot-pick-slot.sh"
+after 'echo "pid=$$"' 'stty -F "$tty"' "$picker"
+after 'stty -F "$tty"' 'cat "$tty" >> "$log"' "$picker"
+after 'cat "$tty" >> "$log"' 'echo "reader=$reader" >> "$handle"' "$picker"
+grep -q 'echo "exit=$status" >> "$handle"' "$picker"
+echo "PASS: the UART watcher is reaped and waited for by the group and pid it records itself, and a dead watcher cannot abort a successful deploy"
