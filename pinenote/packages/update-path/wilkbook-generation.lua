@@ -9,10 +9,14 @@
 --   promote N            make N the DEFAULT (and Guix's current profile)
 --   demote               promote the newest generation older than DEFAULT
 --   health [--expect S]  report; exit 0 iff the running system is healthy
---   prune --keep K       delete generations beyond K (never DEFAULT/booted), guix gc
+--   pin N / unpin N      mark N known-good (a cold boot proved it): prune keeps it
+--   prune --keep K       delete generations beyond K (never DEFAULT/booted/pinned), guix gc
 --
 -- Every write is confined to p6's /boot, /var/guix/profiles and, through
 -- guix gc, the store.  Nothing here touches p7, os1 or the partition table.
+-- The pin is a marker file in the generation's own payload directory
+-- (/boot/gen-N/pinned): it dies with the generation, never dangles, and
+-- adds nothing to the write set.
 local script_dir = (arg[0] or "."):match("^(.*)/[^/]+$") or "."
 package.path = script_dir .. "/?.lua;" .. package.path
 local L = require("generation_ledger")
@@ -49,6 +53,8 @@ local function profile_generations()
     return gens
 end
 local function numbers_of(gens) local t = {} for _, g in ipairs(gens) do t[#t + 1] = g.number end return t end
+local function is_pinned(n) return exists(L.pin_path(n)) end
+local function pinned_set(gens) local t = {} for _, g in ipairs(gens) do if is_pinned(g.number) then t[g.number] = true end end return t end
 local function booted_number(gens)
     local sys = L.booted_system(read_file("/proc/cmdline"))
     for _, g in ipairs(gens) do if g.system == sys then return g.number end end
@@ -125,8 +131,9 @@ function commands.list()
     local gens = ledger_with_payloads()
     local default, booted = default_number(gens), booted_number(gens)
     for _, g in ipairs(gens) do
-        print(string.format("gen-%d  %s%s%s", g.number, g.system,
-                            g.number == default and "  [promoted]" or "", g.number == booted and "  [booted]" or ""))
+        print(string.format("gen-%d  %s%s%s%s", g.number, g.system,
+                            g.number == default and "  [promoted]" or "", g.number == booted and "  [booted]" or "",
+                            is_pinned(g.number) and "  [pinned]" or ""))
     end
 end
 
@@ -302,10 +309,42 @@ function commands.health(flag, expected)
     end
 end
 
+-- A pin says "a cold boot proved this generation, keep it": prune keeps
+-- the K newest, which are the least proven, and without a pin the only
+-- cold-booted generation is kept by nothing but the size of the window
+-- (2026-09-04: the generation-16 deploy's KEEP=8 left generation 10 as
+-- the seventh of eight, a deploy or two from going).  Pin after the
+-- cold boot and before the next deploy -- the deployer prunes right
+-- after promote; unpin when a newer generation has been cold-booted
+-- and pinned in its place.
+function commands.pin(n)
+    n = tonumber(n) or die("pin needs a generation number")
+    local gens = ledger_with_payloads()
+    local found = false
+    for _, g in ipairs(gens) do if g.number == n then found = true end end
+    if not found then die("no generation %d", n) end
+    write_file(L.pin_path(n), "")
+    run("sync")
+    print(string.format("pinned generation %d", n))
+end
+
+function commands.unpin(n)
+    n = tonumber(n) or die("unpin needs a generation number")
+    local gens = ledger_with_payloads()
+    local found = false
+    for _, g in ipairs(gens) do if g.number == n then found = true end end
+    if not found then die("no generation %d", n) end
+    if not is_pinned(n) then print(string.format("generation %d was not pinned", n)); return end
+    if not run(string.format("rm -f %s && sync", L.pin_path(n))) then die("could not unpin generation %d", n) end
+    print(string.format("unpinned generation %d", n))
+end
+
 function commands.prune(flag, keep)
     keep = (flag == "--keep") and tonumber(keep) or 5 -- the deployer's default too
     local gens = ledger_with_payloads()
-    local plan = L.prune_plan(numbers_of(gens), default_number(gens), booted_number(gens), keep)
+    local pinned = pinned_set(gens)
+    local plan = L.prune_plan(numbers_of(gens), default_number(gens), booted_number(gens), keep, pinned)
+    for _, n in ipairs(numbers_of(gens)) do if pinned[n] then log("generation %d is pinned; kept", n) end end
     if #plan == 0 then print("nothing to prune"); return end
     for _, n in ipairs(plan) do
         run(string.format("rm -rf %s %s/system-%d-link", L.gen_dir(n), PROFILES, n))
@@ -321,7 +360,7 @@ end
 
 local cmd = commands[arg[1] or ""]
 if not cmd then
-    io.stderr:write("usage: wilkbook-generation list|add SYSTEM|render|trial N|promote N|demote|health [--expect S]|prune [--keep K]\n")
+    io.stderr:write("usage: wilkbook-generation list|add SYSTEM|render|trial N|promote N|demote|health [--expect S]|pin N|unpin N|prune [--keep K]\n")
     os.exit(2)
 end
 cmd(arg[2], arg[3])

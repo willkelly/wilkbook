@@ -220,7 +220,13 @@ address-redacted) holds SPL, U-Boot, the menu with both slots, extlinux,
 and the 7.1.8 boot line; a fragment reading "generation 15" in it is the
 extlinux menu's own entry list garbled by cursor escapes, not a wrong
 pick. Generations 9–16 remain; 16 is the only cold-booted one in the
-window (10 was pruned by this deploy's `KEEP=8`). One trap for hand-run
+window (10 was pruned by this deploy's `KEEP=8`) [correction
+2026-09-04: both halves wrong — `deploy.log` says `pruned generation
+8` and the menu it left is 9–16, so generation 10, the previous
+cold-booted one, survived as the seventh of the eight kept and the
+window holds two cold-booted generations; nothing but the window keeps
+10 — the next deploy at the default `KEEP=5` takes it, one at `KEEP=8`
+the deploy after]. One trap for hand-run
 watchers, not for the deployer: from a shell with job control a
 backgrounded `setsid` forks and `$!` is the wrapper, not the script;
 the script's own pid is the group to reap (the deployer runs from

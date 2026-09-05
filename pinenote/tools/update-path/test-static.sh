@@ -4,6 +4,7 @@
 set -eu
 here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 helper="$here/../../packages/update-path/wilkbook-generation.lua"
+ledger="$here/../../packages/update-path/generation_ledger.lua"
 deploy="$here/../deploy/deploy.sh"
 line() { grep -n -- "$1" "$2" | head -1 | cut -d: -f1; }
 after() { [ "$(line "$2" "$3")" -gt "$(line "$1" "$3")" ] || { echo "FAIL: expected '$2' after '$1' in $3" >&2; exit 1; }; }
@@ -43,6 +44,32 @@ echo "PASS: add stages payloads for generations that predate the helper"
 # writes are confined to /boot, /var/guix/profiles and guix gc.
 ! grep -q '/data\|mmcblk0p7\|mmcblk0p5\|sfdisk\|parted' "$helper"
 echo "PASS: helper never names p7, os1 or the partition table"
+# The ledger pin (2026-09-04, the review's S5): pin/unpin exist, list shows the
+# marker, prune hands the pinned set to the planner and never deletes a pinned
+# generation, and the marker lives inside /boot/gen-N -- so the write set is
+# unchanged (the pin above still holds) and the marker dies with the payload.
+grep -q '^function commands.pin(n)' "$helper"
+grep -q '^function commands.unpin(n)' "$helper"
+grep -q 'write_file(L.pin_path(n), "")' "$helper"
+grep -q 'rm -f %s && sync", L.pin_path(n)' "$helper"
+grep -q 'is_pinned(g.number) and "  \[pinned\]" or ""' "$helper"
+grep -q 'L.prune_plan(numbers_of(gens), default_number(gens), booted_number(gens), keep, pinned)' "$helper"
+grep -q 'return M.gen_dir(number) .. "/pinned"' "$ledger"
+grep -q 'and not pinned\[n\] then' "$ledger"
+grep -q 'pin N|unpin N|prune' "$helper"
+! grep -q 'gen-pinned\|/boot/pinned\|pins\.conf' "$helper" "$ledger"
+echo "PASS: pin/unpin mark a generation inside its own /boot/gen-N and prune honours the pinned set"
+# ...and rung 4u exercises it: pin A, a prune that would take A, unpin, then
+# the positive control after the rollback.
+harness="$here/../../scripts/qemu/run-virt-update-flow.sh"
+grep -q 'vm "wilkbook-generation pin 1"' "$harness"
+grep -q 'vm "wilkbook-generation unpin 1"' "$harness"
+grep -q 'vm "wilkbook-generation prune --keep 1"' "$harness"
+grep -q 'vm "wilkbook-generation prune --keep 0"' "$harness"
+after 'wilkbook-generation pin 1' 'wilkbook-generation unpin 1' "$harness"
+after 'wilkbook-generation unpin 1' 'wilkbook-generation trial 1' "$harness"
+after 'wilkbook-generation trial 1' 'wilkbook-generation prune --keep 0' "$harness"
+echo "PASS: the QEMU rig pins, prunes around the pin, unpins, and prunes for real after the rollback"
 # deployer: promote only after a passing health check; failure exits 1 without promoting.
 after 'wilkbook-generation health --expect' 'wilkbook-generation promote' "$deploy"
 grep -q 'NOT PROMOTED: health check failed' "$deploy"
