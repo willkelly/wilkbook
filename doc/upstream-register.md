@@ -836,7 +836,7 @@ unattached state (`doc/artifacts/pinenote-ultra-soak-20260815/`). Same
 DT, same userspace; only the kernel series moved.
 
 **Where it would go:** linux-usb / dwc3 maintainers, if it reproduces
-outside our patch stack. None of our fourteen patches touches dwc3 or
+outside our patch stack. None of our fifteen patches touches dwc3 or
 the gadget core (the forward-port's defconfig only enables them), but
 the BSP SIP suspend patch changes the suspend ordering around it, so we
 cannot yet exclude an interaction.
@@ -1073,7 +1073,15 @@ unmap the two phase buffers, free the two `vmalloc`s), every one of the
 fifteen failure sites between the `vmalloc`s and the thread creation
 routed to the label that undoes what it had acquired — `waveform_init`'s
 included — the temperature thread stopped on the later failures, and
-`remove()` freeing the LUT. The success path is untouched. **Glass
+`remove()` freeing the LUT. The success path is untouched. Note for
+whoever ports it: the driver's `remove()` calls `drm_dev_unregister()`,
+not `drm_dev_unplug()`, so an ioctl on an already-open DRM fd is not
+gated after remove — `hints_ioctl` was already `vfree`'d in that window
+before this patch, and `lut_custom.luts` now joins it; every reader of
+the LUT is thread-side (`rockchip_ebc_change_lut()` and the
+phase-sequence and advance code the refresh thread drives,
+`rockchip_ebc_upd_temp()` on the temperature thread), and both threads
+are stopped before the free. **Glass
 pending**; what upstream would want is that same fix rebased onto hrdl's
 current tree, which we have not checked still has this shape.
 

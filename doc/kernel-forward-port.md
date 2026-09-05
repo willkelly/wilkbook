@@ -210,6 +210,13 @@ correctness, then the probe's resource lifetime):
     the boot path) jumps to the label that undoes exactly what it had
     acquired; `remove()` frees the LUT once the threads are stopped and
     the CRTC is shut down, where the two `vmalloc`s already went. The
+    order of the first three labels is load-bearing: `kthread_stop()` of
+    the parked, never-run refresh thread (the `drm_init` failure path)
+    unparks it into its thread function, which calls
+    `rockchip_ebc_change_lut()` — a read of `lut_custom.luts` — once
+    before it sees the stop, so `err_stop_kthread` and
+    `err_stop_temp_kthread` must precede `err_free_lut`; `remove()`
+    stops both threads before its `vfree` for the same reason. The
     success path is unchanged; item 11's `err_stop_kthread` label and
     `goto` are kept as context. Written against the fourteen-patch 7.1.8
     tree (the fourteen hand-applied onto the base package's source with
@@ -552,7 +559,7 @@ glass. 7.0.11 remains the proven version.
    `Makefile`. Expect `kernel-version-check` to be the first thing that
    moves.
 2. Dry-run every patch in `%linux-pinenote-patches`, in list order
-   (fourteen as of 2026-09-04). **Failures here are the deliverable**, not
+   (fifteen as of 2026-09-04). **Failures here are the deliverable**, not
    an obstacle — each one is either a hunk mainline absorbed (delete it)
    or a hunk that needs rebasing (do that).
 3. **Known for 7.1:** mainline carries `1d608a269e24`, so **both** the

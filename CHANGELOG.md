@@ -20,8 +20,7 @@ claim under **v0.3.0-prealpha** below is from wkelly's device across the
 sessions it cites, moved onto the device generation-by-generation by
 `make deploy` rather than by a single `dd`'d image; what has *not* been
 run is listed under **Known broken**, and no second operator has run
-this lineage. **Unreleased** above it is empty until the next round of
-work lands.
+this lineage. **Unreleased** above it collects what has landed since.
 
 ## Unreleased
 
