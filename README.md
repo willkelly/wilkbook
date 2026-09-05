@@ -139,10 +139,11 @@ guix time-machine -C channels.scm -- \
   pinenote/systems/pinenote-reader.scm
 ```
 
-That command is true of the `v0.1.0-prealpha` tag with its committed
-pin. **On current `main` it fails** (2026-08-25): the kernel moved to
-the 7.1 series pin and `channels.scm` has not been re-pinned yet, so
-build with your ambient `guix pull` instead — plain `make
+That command is true of every tag with its committed pin: the pin was
+re-made for the 7.1 series on 2026-08-25 and, re-checked 2026-09-04,
+`make kernel-drv TIME_MACHINE=1` resolves the identical kernel
+derivation as an ambient `guix pull`. Without the flag you build
+against your ambient `guix` instead — plain `make
 rootfs-reader`, which builds the image *and* extracts the rootfs you
 will actually write (an ext4 labelled `PNGuixRoot`) into
 `$(ARTIFACTS)`. `TIME_MACHINE=1` (the wrapper for the pinned path

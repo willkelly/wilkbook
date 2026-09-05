@@ -115,11 +115,14 @@ before the teardown, and the broker's stale settle deadline). Open the
 book first: a reader restart or boot lands in the library by design.
 
 1. UART capture and the menu watcher armed before anything reboots.
-2. **Visual pass on generation 15**: the 32×32 dither on a grey image
-   or gradient (patch 14's second-half load: the blue-noise pattern must
-   not repeat every 16 pixels — no person has looked at this yet), text
-   edges on a real page, ghosting after twenty real turns, rotation
-   flash in all four orientations.
+2. **Visual pass on generation 15**: text edges on a real page,
+   ghosting after twenty real turns, rotation flash in all four
+   orientations. Patch 14's dither correction is **not on the reading
+   route** (the reader draws Y4 through `default_hint=32`, no dither
+   bit; the dithered route is hint 64 and FAST mode), so an ordinary
+   page cannot show it. To look at it anyway: `rect-hints.lua --default
+   64` for one screen of a grey gradient (the blue-noise pattern must
+   not repeat every 16 pixels), then `--default 32` to restore. Optional.
 3. Pen: strokes, fast scribble, erase, settling after pen-up.
 4. Cover close and open; power button; suspend immediately after a turn
    and during pen activity (R5's hardware half). Then the bug the rig
@@ -144,10 +147,18 @@ book first: a reader restart or boot lands in the library by design.
    KOReader-initiated count no longer thin.
 2. The adversarial review's blockers closed.
 3. Operator half run, at least items 1–5.
-4. CHANGELOG, alpha-checklist and alpha-expectations true for the
-   candidate (branch `prealpha-docs`).
-5. The candidate merged to main through one PR, tagged
-   `v0.3.0-prealpha` at the merge commit, the tag pushed to both remotes.
+4. CHANGELOG, alpha-checklist, alpha-expectations, README's Status
+   section, CLAUDE.md's "Where we are" and the kernel inventory true for
+   the candidate — re-audited by review 2026-09-04 evening
+   (`doc/status.md`), the blockers it found closed on the branch.
+5. After the operator half: pull the two live-read artifacts from the
+   device (`/root/turn-check.log`, the post-rig run, and a fresh
+   `fb-damage-gates.sh` dump) into `doc/artifacts/`; set the date at
+   both CHANGELOG placeholders in the branch's final commit; then the
+   candidate merged to main through one PR, tagged `v0.3.0-prealpha` at
+   the merge commit with the promoted generation's system path and
+   kernel derivation in the tag message (`doc/release.md`), the tag
+   pushed to both remotes.
 
 Standing exclusions from this session, recorded so nobody expects them:
 the audit's item 2 (probe/remove resource lifetime) is not in the
