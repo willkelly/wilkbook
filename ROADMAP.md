@@ -87,11 +87,16 @@ community convention and stays).
       booted generation, shown by `list`; offline-proven (planner cases,
       static pins, the QEMU rig). The glass half — `pin 16`, then a
       prune that would have taken it — is owed (`doc/hardware-deploy.md`).
-- [ ] A trial that dies after the helper's own Wi-Fi off (an EBC that
-      never goes idle, a failed `kexec -l`) strands the reader stopped
-      and silent, and the deployer misreads it as a dead trial the
-      watchdog will reset; bring the radio and the reader back on those
-      paths, or arm the watchdog earlier (`doc/hardware-deploy.md`).
+- [x] A trial that dies after the helper's own Wi-Fi off (an EBC that
+      never goes idle, a failed `kexec -l`) used to strand the reader
+      stopped and silent, and the deployer misread it as a dead trial
+      the watchdog would reset; since 2026-09-04 the helper bails out
+      (teardown undone in reverse: gadget, radio, reader) before it
+      refuses, and the deployer says `refused` from the helper's exit
+      status or its per-boot record. Rig-proven (rung 4u); the glass
+      proof — a trial forced to fail at the EBC quiesce, coming back
+      with the reader running and Wi-Fi up — is still to run
+      (`doc/update-path.md`).
 - [ ] A trial cannot deliver a device tree (`kexec_file_load` ignores
       `--dtb`): a DT change is proven only by a cold boot, which the
       deployer cannot do without the UART. Either a `kexec_load`
