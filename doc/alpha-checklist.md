@@ -481,17 +481,27 @@ blacklist is ever wrong on a future kernel change.
       (the dog is armed later). Found by review 2026-09-04, not fixed.
 - [x] Generation pruning (`KEEP=`) had no guard against deleting the
       last generation known to work — nothing pinned one, and the
-      generation-16 deploy (`KEEP=8`) pruned generation 10, the previous
-      cold-booted one. Since 2026-09-04 `wilkbook-generation pin N`
-      marks a generation known-good (`/boot/gen-N/pinned`), `prune`
+      generation-16 deploy (`KEEP=8`) pruned generation 8 and left
+      generation 10, the previous cold-booted one, as the seventh of
+      the eight kept, a deploy or two from going. Since 2026-09-04
+      `wilkbook-generation pin N` marks a generation known-good
+      (`/boot/gen-N/pinned`), `prune`
       never deletes a pinned generation on top of `DEFAULT` and the
       booted one, and `list` shows `[pinned]`; planner cases and static
       pins in `make update-path-check`, and the QEMU rig (rung 4u) pins,
       prunes around the pin and prunes for real — green 2026-09-04. The
       standing rule
       "keep a cold-booted generation in the window by hand" is now "pin
-      it after the cold boot". Not yet run on the device: `pin 16`, then
-      a prune with a small `KEEP` that must leave 16 in place.
+      it after the cold boot" — and before the next deploy, whose prune
+      runs right after `promote`. Not yet run on the device, and it is
+      not `pin 16` then a prune on 16: prune never takes `DEFAULT` or
+      the booted generation, and 16's helper has no `pin` verb. It is a
+      deploy of a generation built with the verb (hand-touch
+      `/boot/gen-10/pinned` first, or use `KEEP=8` again, if 10 is to
+      survive that deploy's own prune), then from the new generation
+      `pin 16` and `prune --keep 1`, which takes every unpinned
+      generation between, and `list` still showing 16 `[pinned]`
+      (`doc/hardware-deploy.md`).
 - [ ] The os1-based rescue script (PR #51) has never been run against
       os1 itself.
 - [x] Wi-Fi reassociating after a resume is exercised on both paths:

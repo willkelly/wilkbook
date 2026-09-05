@@ -322,10 +322,20 @@ gitignored `build/`, or the reader's static address.
   generation proves its tree, so **pin it** once it has one
   (`wilkbook-generation pin N`, 2026-09-04: `prune` keeps the newest,
   the least proven, and never a pinned one — `/boot/gen-N/pinned`,
-  `[pinned]` in `list`; the glass proof, `pin 16` then a prune that
-  would have taken it, is still owed). The device is on **generation
-  16 = v0.3.0-prealpha** (cold-booted 2026-09-04; 9–16 kept; 10, the
-  previous cold-booted one, was pruned by that deploy's `KEEP=8` — the
+  `[pinned]` in `list`; the glass proof is still owed and is NOT
+  "`pin 16` then prune": 16's helper lacks the verb, and prune never
+  takes `DEFAULT` or the booted generation, so it is a deploy of a
+  generation built with the verb — whose own prune runs right after
+  `promote`, before anyone can `pin`, so hand-touch
+  `/boot/gen-10/pinned` beforehand if 10 is to survive it; the marker
+  is the whole pin and the new helper honours it — then, from that
+  newer booted generation, `pin 16` and `prune --keep 1`, which takes
+  every unpinned generation between; recipe in
+  `doc/hardware-deploy.md`). The device is on **generation 16 =
+  v0.3.0-prealpha** (cold-booted 2026-09-04; 9–16 kept — that deploy's
+  `KEEP=8` pruned 8 and left 10, the previous cold-booted one, as the
+  seventh of eight, held by nothing but the window: the next deploy at
+  the default `KEEP=5` takes it, one at `KEEP=8` the deploy after — the
   case the pin exists for). Pause suspend (`enabled=0`) before a session and restore
   it after; a session that ends with `enabled=1` on battery leaves only
   the hourly backstop's 20 s ssh windows (`doc/device-access.md`).

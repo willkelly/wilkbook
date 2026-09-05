@@ -108,12 +108,16 @@ promote/prune decisions, the pinned set — are tested offline.
 
 **The pin (2026-09-04).** `prune --keep K` keeps the K *newest*
 generations, which are the least proven; without a pin the only
-cold-booted generation was kept inside the window by hand, until the
-deploy of generation 16 (`KEEP=8`) pruned generation 10 — the previous
-cold-booted one — exactly that way. `wilkbook-generation pin N` marks
+cold-booted generation is kept by nothing but the size of the window —
+the deploy of generation 16 (`KEEP=8`) pruned generation 8 and left
+generation 10, the previous cold-booted one, as the seventh of the
+eight kept, which the next deploy at the default `KEEP=5` takes and
+one at `KEEP=8` the deploy after. `wilkbook-generation pin N` marks
 N known-good and `prune` then never deletes it, on top of never
-deleting `DEFAULT` or the booted generation; pinned generations do not
-count against K. `list` shows `[pinned]`; `unpin N` clears it. The
+deleting `DEFAULT` or the booted generation: the plan keeps the K
+newest plus those three kinds whatever their age, so a pin protects a
+generation that has aged out of the window and changes nothing for one
+still inside it. `list` shows `[pinned]`; `unpin N` clears it. The
 marker is an empty file in the generation's own payload directory,
 `/boot/gen-N/pinned`, chosen over a separate list file because it dies
 with the generation (prune removes `/boot/gen-N` whole, so a pin cannot
@@ -123,10 +127,21 @@ generation once a cold boot has proven it (the trial does not run its
 device tree — "Device-tree changes do not ride a trial" below); unpin
 the previous one when a newer generation has been cold-booted and
 pinned in its place. The deployer needs no change: its
-`prune --keep $KEEP` honours the pins. Not yet run on a device: the
-glass proof is a `pin` of the cold-booted generation followed by a
-prune with a `KEEP` small enough to have taken it, and `list` still
-showing it.
+`prune --keep $KEEP` honours the pins — and runs right after
+`promote`, before an operator can `pin`, so pin before the deploy,
+not after; on the deploy that first lands the verb the running helper
+cannot, but `touch /boot/gen-N/pinned` by hand is the whole marker and
+the new generation's helper, which runs that prune after the kexec,
+reads it the same. Not yet run on a device, and not as "`pin 16` then
+prune": generation 16's helper answers `pin` with the usage error, and
+prune never takes `DEFAULT` or the booted generation, pin or no pin.
+The proof is (1) a deploy of a generation built from this tree — the
+default `KEEP=5` leaves 16 as the second newest and takes 9–12,
+generation 10 included, unless `/boot/gen-10/pinned` was touched first
+or `KEEP=8` is used again; (2) from that newer, promoted, booted
+generation, `pin 16` (and `pin 10` if it is to stay); (3) `prune --keep
+1`, which deletes every unpinned generation between; (4) `list` still
+showing 16 `[pinned]`.
 
 **On the workstation** (`make deploy DEVICE=…`): build, copy, add,
 trial, health-check, promote, with every step refusing rather than

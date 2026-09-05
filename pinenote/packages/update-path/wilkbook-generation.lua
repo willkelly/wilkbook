@@ -311,9 +311,12 @@ end
 
 -- A pin says "a cold boot proved this generation, keep it": prune keeps
 -- the K newest, which are the least proven, and without a pin the only
--- cold-booted generation is kept in the window by hand until it is not
--- (2026-09-04, generation 10).  Pin after the cold boot; unpin when a
--- newer generation has been cold-booted and pinned in its place.
+-- cold-booted generation is kept by nothing but the size of the window
+-- (2026-09-04: the generation-16 deploy's KEEP=8 left generation 10 as
+-- the seventh of eight, a deploy or two from going).  Pin after the
+-- cold boot and before the next deploy -- the deployer prunes right
+-- after promote; unpin when a newer generation has been cold-booted
+-- and pinned in its place.
 function commands.pin(n)
     n = tonumber(n) or die("pin needs a generation number")
     local gens = ledger_with_payloads()

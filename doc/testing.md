@@ -350,11 +350,13 @@ device. The rules that make the glass half honest:
   cold boot of that generation has run — with the UART, since U-Boot's
   default is os1 and the deployer's watcher answers the menu only when
   `WILKBOOK_UART` is set.
-- **Pin the cold-booted generation** (`wilkbook-generation pin N`);
-  `prune` keeps the newest, which are the least proven, and never a
-  pinned one (2026-09-04 — before the pin, the only cold-booted
-  generation was kept in the window by hand, and one deploy's `KEEP`
-  took it; `doc/hardware-deploy.md`).
+- **Pin the cold-booted generation** (`wilkbook-generation pin N`),
+  before the next deploy — the deployer's prune runs right after
+  `promote`; `prune` keeps the newest, which are the least proven, and
+  never a pinned one (2026-09-04 — before the pin, the only cold-booted
+  generation was kept by nothing but the size of the window: the
+  generation-16 deploy's `KEEP=8` left generation 10 as the seventh of
+  eight, a deploy or two from going; `doc/hardware-deploy.md`).
 - **A trial that never answers** is reset by the SoC watchdog into
   U-Boot from generation 9 on (kernel patch 8); before that it is the
   power button plus the UART. A trial that dies after the helper's own

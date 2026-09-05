@@ -333,14 +333,29 @@ its own device tree, no kexec in its lineage — run
 `wilkbook-generation pin N` on the device: `prune` (the deployer's or
 yours) then never deletes it, whatever `KEEP` says, and `list` shows it
 `[pinned]`. Until the pin existed the only cold-booted generation was
-kept in the window by hand, and the generation-16 deploy (`KEEP=8`)
-pruned generation 10, the previous cold-booted one. `unpin N` when a
+kept by nothing but the size of the window: the generation-16 deploy
+(`KEEP=8`) pruned generation 8 and left generation 10, the previous
+cold-booted one, as the seventh of the eight kept — the next deploy at
+the default `KEEP=5` takes it, one at `KEEP=8` the deploy after. Pin
+before the next deploy, not after it: the deployer's `prune --keep
+$KEEP` runs right after `promote`, before you can type `pin`. On the
+deploy that first lands the verb the running helper (generation 16's)
+has no `pin`; `touch /boot/gen-N/pinned` by hand is the same marker,
+and the new generation's helper — which is what runs that prune, after
+the kexec — honours it. `unpin N` when a
 newer generation has been cold-booted and pinned in its place; a pinned
 generation costs only its store delta, so there is no hurry. The marker
 is `/boot/gen-N/pinned` and goes with the generation if you ever prune
-it after unpinning. Glass proof still owed: `pin 16` on the device,
-then a prune with a `KEEP` small enough to have taken 16, and `list`
-still showing it.
+it after unpinning. Glass proof still owed, with preconditions: `pin
+16` then a prune on 16 proves nothing while 16 is `DEFAULT` and booted
+(prune never takes either, pin or no pin), and 16's helper cannot pin
+at all. So: (1) `make deploy` a generation built from this tree — at
+the default `KEEP=5` 16 stays as the second newest and 9–12 go,
+generation 10 included, unless `/boot/gen-10/pinned` was touched first
+or `KEEP=8` is used again; (2) from that newer, promoted and booted
+generation, `pin 16` (and `pin 10` if it is to stay); (3) `prune
+--keep 1`, which deletes every unpinned generation between; (4) `list`
+still shows 16 `[pinned]`.
 
 **Rules learned on glass (2026-09-02, `doc/update-path.md` "Glass
 notes"):**

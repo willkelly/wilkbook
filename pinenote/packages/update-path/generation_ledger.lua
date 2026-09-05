@@ -90,10 +90,14 @@ end
 -- the promoted default, the booted one and every PINNED one, whatever
 -- their age.  `pinned` is a set ({ [number] = true }): the generations an
 -- operator marked known-good (a cold boot proved the tree) -- the newest
--- generations are the least proven, so "keep K newest" on its own would
--- delete the proven one first (2026-09-04: generation 10, the last
--- cold-booted one, went that way).  Pinned generations do not count
--- against `keep`, exactly like the default and the booted one.
+-- generations are the least proven, so "keep K newest" on its own
+-- deletes the proven one as soon as it ages out of the window
+-- (2026-09-04: the generation-16 deploy's KEEP=8 left generation 10,
+-- the last cold-booted one, as the seventh of eight -- a deploy or two
+-- from going).  A pinned generation is kept IN ADDITION to the `keep`
+-- newest, exactly like the default and the booted one: a pin protects
+-- one that has aged out of the window and changes nothing for one
+-- still inside it.
 function M.prune_plan(numbers, default_number, booted_number, keep, pinned)
     pinned = pinned or {}
     local sorted = {}
