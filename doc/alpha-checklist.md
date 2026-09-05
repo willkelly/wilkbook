@@ -474,11 +474,16 @@ blacklist is ever wrong on a future kernel change.
       since 2026-09-04 (review S4) it is armed before the `kexec -e` and
       the recovery path waits on it, pinned in the update-path
       `test-static.sh`. With no cable the landing is still os1.
-- [ ] A trial that dies *after* the helper's own Wi-Fi off — an EBC that
-      never goes idle, a failed `kexec -l` — strands the reader stopped
-      and radio-off with no message delivered, and the deployer reports
-      it as a dead trial the watchdog will reset, which it will not
-      (the dog is armed later). Found by review 2026-09-04, not fixed.
+- [x] A trial that dies *after* the helper's own Wi-Fi off — an EBC that
+      never goes idle, a failed `kexec -l` — used to strand the reader
+      stopped and radio-off with no message delivered, and the deployer
+      reported it as a dead trial the watchdog would reset, which it
+      would not (the dog is armed later). Found by review 2026-09-04;
+      fixed the same day: the helper bails out (teardown undone in
+      reverse, reader and radio back) before it refuses, and the
+      deployer says `refused` from the exit status or the per-boot
+      record. Rig-proven in rung 4u; the glass proof (a trial forced to
+      fail at the EBC quiesce) has not been run (`doc/update-path.md`).
 - [ ] Generation pruning (`KEEP=`) has no guard against deleting the
       last generation known to work — nothing currently pins one.
 - [ ] The os1-based rescue script (PR #51) has never been run against

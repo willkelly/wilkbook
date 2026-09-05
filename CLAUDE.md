@@ -489,7 +489,12 @@ gitignored `build/`, or the reader's static address.
   ssh will ever read** — the deployer included. Two trials "never
   captured" the device-tree notice for that reason before the source
   order was read (2026-09-04). When output stops, ask what the code
-  did to the transport before suspecting a flush.
+  did to the transport before suspecting a flush. The failure half of
+  the same lesson: a helper that *died* there stranded the reader
+  stopped and silent; since 2026-09-04 it bails out (teardown undone in
+  reverse, reader and radio back) and leaves a per-boot record the
+  deployer reads back (`wilkbook-generation last-trial`) — rig-proven,
+  not yet on glass (`doc/update-path.md`).
 - **Never glob `/sys/kernel/debug/regmap/*`** — that glob includes
   `dummy-syscon@fdc50000`, the PIPE GRF whose pclk the running kernel
   gates (upstream register item 22), and reading it wedges the bus just

@@ -355,9 +355,11 @@ device. The rules that make the glass half honest:
   no ledger pin yet (`ROADMAP.md`).
 - **A trial that never answers** is reset by the SoC watchdog into
   U-Boot from generation 9 on (kernel patch 8); before that it is the
-  power button plus the UART. A trial that dies after the helper's own
-  Wi-Fi off strands the reader stopped and silent instead — a known
-  gap (`doc/hardware-deploy.md`).
+  power button plus the UART. A trial the helper *refuses* after its
+  own Wi-Fi off (an EBC that never goes idle, a failed `kexec -l`)
+  bails out instead — teardown undone, reader and radio back, the
+  deployer printing `the trial helper refused` — since 2026-09-04;
+  rig-proven (rung 4u), not yet on glass (`doc/update-path.md`).
 - **Pause suspend for the session** (`enabled=0` in
   `/data/wilkbook/autosuspend.conf`) and restore it as the last step;
   a session that ends with `enabled=1` on battery leaves only the
