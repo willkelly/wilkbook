@@ -11,7 +11,9 @@ question answered on hardware** — answered, not necessarily landed.
 able to build from source and drive a UART. The repo goes public at the
 same time, but for *reading and stealing*, not for installing: no
 general-audience install path, no update mechanism, no support promise.
-The disclaimer carries that.
+The disclaimer carries that. [The update mechanism arrived 2026-09-02
+(`doc/update-path.md`); the audience and the support promise are
+unchanged.]
 
 **Missing a target is acceptable** and gets the pre-1.0 optimization
 pass. Publishing a number we never measured is not. Alpha ships measured
@@ -96,8 +98,11 @@ configuration.  The bench kernel and flavor are retired.
 **Consequence, documented not hidden:** during suspend the GPIO0 pad bank
 is unpowered, so the only wake sources are rk817-internal (RTC alarm,
 power button, charger).  The pen cannot wake it. The **cover
-can**, confirmed 2026-08-09 — which contradicts the model above and is
-an open question rather than a settled tradeoff (`doc/power-management.md`).  A cold touch controller times out once on
+can**, confirmed 2026-08-09 — which contradicted the model above until
+2026-08-24, when the rails half was solved (the hall sensor is powered
+from the battery through two always-on regulators); how the PMU latches
+the edge with the pad rails down is the half still open
+(`doc/power-management.md`).  A cold touch controller times out once on
 resume and is reset by the carried workaround.
 
 ### 3c. ~~NEW BLOCKER — the multi-day ultra soak~~ — DONE 2026-08-15

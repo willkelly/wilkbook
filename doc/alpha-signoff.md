@@ -132,7 +132,8 @@ not on this list that costs them anything, it is a defect.
   device, so this costs one deliberate selection, not a cable.
 - **Suspend is ultra (rails-off), and only the power button, the RTC,
   the charger, and the cover can wake it.** The pen cannot. (Cover wake
-  was confirmed 2026-08-09 and contradicts the rails model — see
+  was confirmed 2026-08-09; its sensor turns out to be battery-powered,
+  2026-08-24, and only the PMU's edge latch is still unexplained — see
   `doc/power-management.md`; the tradeoff below is otherwise
   5.47 mA idle standby vs deep's ~20 mA, measured over six unplugged
   days with 170 wakes and no failures,
