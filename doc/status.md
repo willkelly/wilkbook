@@ -125,6 +125,48 @@ recovery script that presses ENTER must first know what is on the
 line; and the os1 detour is the recovery path the tester brief
 describes, exercised for real.
 
+**Generation 19 and the data-partition proof (2026-09-05 evening).**
+From the cold-booted 18 with `/data` read-write: `make deploy` with the
+UART attached — `== UART watcher armed on /dev/ttyUSB0 (pid 1095084,
+pgid 1095084, reader 1095096; …watcher)`, 12 of 439 paths, the trial
+block with the model line and **no** `/data did not remount` line (19's
+helper, which the trial runs, remounted it silently), health ok,
+promoted, the two `is pinned; kept` lines, nothing to prune. Then
+`deploy.sh pinenote-os2 --rollback 19` with the partition read-write
+and written to a second earlier: the kexec'd-kernel note this time, no
+remount complaint, health ok, promoted. **Both boots mounted the data
+partition clean**: `/dev/disk/by-partlabel/data /data ext4 rw`,
+`EXT4-fs (mmcblk0p7): mounted filesystem … r/w with ordered data
+mode` — no recovery, no orphan cleanup, zero `incorrect ext4 checksum`
+/ `lookup blockdev` lines, the library present; boot ids
+`b0d6f0df…` → `22f8e3dc…` → `12fa8b15…`. The watcher was reaped by its
+recorded group after each deploy (`exit=terminated` in both `.watcher`
+handles — the trial answered, so the picker was reaped before any
+menu), no reader left on the port. **#76's deployer side is therefore
+proven too**, its menu-pick side by the os1 → os2 boot above.
+
+**What the broker log says about the "fast re-sleeps".** Not a bug.
+While the config was unreachable the hourly RTC backstop woke the
+reader every 3600 s and the default 20 s settle put it back down
+(`resumed after 3599s` … `KEY_SLEEP` … `trigger=rtc`, at 00:12, 01:12,
+02:12 UTC). The operator's press at 06:23 UTC landed on an *awake*
+reader — the three KOReader-initiated transactions before it (05:41,
+05:56, 06:11) show no resume lines, i.e. they did not suspend, cause
+not read — and put it to sleep (`trigger=power`); the next press woke
+it 14 s later; KOReader's own 15-minute timer slept it at 06:38. What
+stays unexplained is why the serial login answered nothing during that
+awake window (the console works before and after boots). Cosmetic and
+unrelated: `uptime` on the image says `couldn't get boot time` — there
+is no utmp; `/proc/uptime` is fine.
+
+Device at the end: **generation 19** DEFAULT, promoted, kexec'd;
+10 `[pinned]`, 16 `[pinned]`, 17, 18, 19; `enabled=1`; the library
+visible. Owed: nothing for the four PRs. Open for later: why three
+KOReader-initiated suspends did not take on the placeholder boot;
+the serial getty's silence while awake; the Wi-Fi service's fallback
+mount racing the `/data` unit at boot (it requires only udev, not
+`file-system-/data`, so a slow probe still loses).
+
 ## 2026-09-04 (wkelly PineNote, operator mostly away) — the v0.3.0-prealpha candidate is generation 14: patch 14's guards behave on glass, the "zero-IRQ page turns" were the file manager, the trial notes were dying with the radio
 
 The candidate (`prealpha-candidate`: main + PRs #66, #70, #67, #69 + the

@@ -527,9 +527,13 @@ blacklist is ever wrong on a future kernel change.
       and the deployer reaps by that, and a picker reaped before the
       menu records `exit=terminated` there, not the `exit=0` a bash `sh`
       used to leave; `make uart-pick-check` replays the real captured
-      menu bytes through a pty. **Glass still owed:** one deploy or cold
-      boot with the UART reaped by the recorded pgid, and a capture with
-      no mid-line drops (a different adapter, or a lower console baud).
+      menu bytes through a pty. **On glass 2026-09-05**: the deployer armed
+      the watcher on two deploys with the cable, wrote its handle, and
+      reaped it by the recorded group with nothing left on the port; a
+      hand-armed watcher picked os2 at U-Boot's menu on the way back from
+      os1 (`doc/status.md`). The capture still drops bytes mid-line — the
+      adapter; a cleaner capture wants a different adapter or a lower
+      console baud.
 - [ ] The os1-based rescue script (PR #51) has never been run against
       os1 itself.
 - [x] Wi-Fi reassociating after a resume is exercised on both paths:

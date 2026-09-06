@@ -71,7 +71,9 @@ this lineage. **Unreleased** above it collects what has landed since.
   auto-sleep stuck off because the partition failed to mount in time.
   Now both partitions are remounted read-only first, and if the update
   has to give up, both come back read-write. Found on generation 18;
-  the fix rides every update from the next one on.
+  **proven on generation 19 the next evening**: two updates in a row,
+  the second with the library partition freshly written, both coming
+  up with it mounted clean (`doc/status.md`, 2026-09-05).
 - **An update that has to give up partway through its own shutdown
   now puts the reader back on its own.** Before, if the trial stalled
   after the device had already turned its radio off — the screen
