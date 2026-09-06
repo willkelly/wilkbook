@@ -271,9 +271,12 @@ for extlinux's generation menu (which the same bootmenu code draws with
 the same title and "Press UP/DOWN" line — matching either would answer
 the wrong menu), and that a picker reaped before any menu records
 `exit=terminated`, never `exit=0`, under `sh` and under dash or bash when
-the other is on PATH. **Glass proof still owed:** the next deploy
-or cold boot with the UART attached, reaped by the recorded pgid and
-leaving no `cat /dev/ttyUSB0` behind (`pgrep -f 'cat /dev/ttyUSB'`).
+the other is on PATH. **On glass 2026-09-05:** two deploys with the
+cable armed the watcher, wrote its handle, and reaped it by the
+recorded pgid with `pgrep -f 'cat /dev/ttyUSB'` empty afterwards; a
+hand-armed watcher (`setsid`, pid read from the handle) picked os2 at
+U-Boot's menu on the way back from os1 (`doc/status.md`). The capture
+is still lossy, as above.
 
 ### Proving the link end to end (2026-08-06)
 

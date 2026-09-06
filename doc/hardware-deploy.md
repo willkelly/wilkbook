@@ -376,16 +376,11 @@ the kexec — honours it. `unpin N` when a
 newer generation has been cold-booted and pinned in its place; a pinned
 generation costs only its store delta, so there is no hurry. The marker
 is `/boot/gen-N/pinned` and goes with the generation if you ever prune
-it after unpinning. Glass proof still owed, with preconditions: `pin
-16` then a prune on 16 proves nothing while 16 is `DEFAULT` and booted
-(prune never takes either, pin or no pin), and 16's helper cannot pin
-at all. So: (1) `make deploy` a generation built from this tree — at
-the default `KEEP=5` 16 stays as the second newest and 9–12 go,
-generation 10 included, unless `/boot/gen-10/pinned` was touched first
-or `KEEP=8` is used again; (2) from that newer, promoted and booted
-generation, `pin 16` (and `pin 10` if it is to stay); (3) `prune
---keep 1`, which deletes every unpinned generation between; (4) `list`
-still shows 16 `[pinned]`.
+it after unpinning. Proven on glass 2026-09-04 late (`doc/status.md`):
+generation 17 was deployed at `KEEP=8` (so 10 survived that deploy's
+own prune), then from 17 — promoted and booted — `pin 16` and `pin 10`,
+and `prune --keep 1` deleted 11–15, kept 10 and 16 by their pins and 17
+as DEFAULT and booted; `list` shows both `[pinned]`.
 
 **Rules learned on glass (2026-09-02, `doc/update-path.md` "Glass
 notes"):**
