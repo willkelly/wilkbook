@@ -228,15 +228,20 @@ correctness, then the probe's resource lifetime):
     `frame_counter` at `rockchip_ebc.c:903`). Pinned by `make
     direct-probe-quirk-check` (its labels, the LUT freed in probe *and*
     remove, `waveform_init` routed through the chain, listed after item
-    11). **Not yet on glass.** The proof, on a generation carrying it:
-    `dmesg` with no `Unbalanced pm_runtime_enable!` at the rebind;
-    `/proc/vmallocinfo` with no orphan 642- or 1926-page entries after
-    boot (one `hints_ioctl`, one `packed_inner_outer_nextprev`, plus the
-    six context planes once the reader has set a mode); and five
+    11). **On glass 2026-09-04/05** (generations 17 and 18,
+    `doc/status.md`): `dmesg` with no `Unbalanced pm_runtime_enable!`
+    at the rebind; `/proc/vmallocinfo` with no orphan 642- or 1926-page
+    entries after boot (one `hints_ioctl`, one
+    `packed_inner_outer_nextprev`, the six context planes); and five
     unbind/bind cycles of `fdec0000.ebc` with the reader stopped leaving
-    `VmallocUsed` flat (±16 kB of kernel-stack jitter) with exactly one
-    57-page `lut_custom.luts` entry throughout — the 2026-09-04 rebind ×5
-    procedure re-run.
+    `VmallocUsed` flat with exactly one 57-page `lut_custom.luts` entry
+    throughout. The first cycle on generation 17 exposed a
+    `WARNING kthread.c:707 kthread_park` the leak had masked: v1's
+    `remove()` stopped the kthreads before the DRM shutdown, and the
+    CRTC disable then tried to park a thread already reaped. **v2**
+    runs `drm_atomic_helper_shutdown()` first, then stops the kthreads
+    — five cycles warning-free on generation 18 (the patch header
+    records both).
 
 **A patch refresh must carry all fifteen.** The refresh procedure below
 regenerates only the forward-port patch — the other fourteen are separate
@@ -981,8 +986,8 @@ records the real failure site). **Fixed in the tree 2026-09-04 as
 patch 15** (`linux-pinenote-7.1-probe-lifetime.patch`, inventory item
 15 above: every failure site unwinds, the temperature thread is
 stopped too, `remove()` frees the LUT); the pin now asserts hrdl's
-shape, item 11 and item 15 in order. **Not yet on glass** — the proof
-is spelled out under item 15.
+shape, item 11 and item 15 in order. **On glass 2026-09-04/05** — the
+proof, and the teardown warning v2 fixed, are under item 15.
 
 ## Why the base is vanilla, not linux-libre (history)
 

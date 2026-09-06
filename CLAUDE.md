@@ -246,7 +246,7 @@ truth is per-device, so never overwrite another operator's entries; add
 your own. Don't commit the per-device waveform, anything under a tool's
 gitignored `build/`, or the reader's static address.
 
-## Where we are (2026-09-04)
+## Where we are (2026-09-05)
 
 - **Product**: the reader image on os2 — KOReader natively on fbdev with
   pen/finger input, four orientations, publish-on-call single-pass page
@@ -323,21 +323,13 @@ gitignored `build/`, or the reader's static address.
   generation proves its tree, so **pin it** once it has one
   (`wilkbook-generation pin N`, 2026-09-04: `prune` keeps the newest,
   the least proven, and never a pinned one — `/boot/gen-N/pinned`,
-  `[pinned]` in `list`; the glass proof is still owed and is NOT
-  "`pin 16` then prune": 16's helper lacks the verb, and prune never
-  takes `DEFAULT` or the booted generation, so it is a deploy of a
-  generation built with the verb — whose own prune runs right after
-  `promote`, before anyone can `pin`, so hand-touch
-  `/boot/gen-10/pinned` beforehand if 10 is to survive it; the marker
-  is the whole pin and the new helper honours it — then, from that
-  newer booted generation, `pin 16` and `prune --keep 1`, which takes
-  every unpinned generation between; recipe in
-  `doc/hardware-deploy.md`). The device is on **generation 16 =
-  v0.3.0-prealpha** (cold-booted 2026-09-04; 9–16 kept — that deploy's
-  `KEEP=8` pruned 8 and left 10, the previous cold-booted one, as the
-  seventh of eight, held by nothing but the window: the next deploy at
-  the default `KEEP=5` takes it, one at `KEEP=8` the deploy after — the
-  case the pin exists for). Pause suspend (`enabled=0`) before a session and restore
+  `[pinned]` in `list`; **proven on glass 2026-09-04 late**: from
+  generation 17, `pin 16` and `pin 10`, then `prune --keep 1` deleted
+  11–15 and kept both pins and DEFAULT; recipe in
+  `doc/hardware-deploy.md`). The device is on **generation 19**
+  (2026-09-05: the post-tag fixes of PR #77, kexec'd 18→19 and 19→19;
+  the ledger holds 10 `[pinned]`, 16 `[pinned]` = v0.3.0-prealpha, 18
+  and 19 — 10, 16 and 18 cold-booted, 19 not yet). Pause suspend (`enabled=0`) before a session and restore
   it after; a session that ends with `enabled=1` on battery leaves only
   the hourly backstop's 20 s ssh windows (`doc/device-access.md`).
 - **Kernel — read this carefully, the tree and the device differ.**
@@ -376,19 +368,23 @@ gitignored `build/`, or the reader's static address.
   Fifteen patches as of 2026-09-04 (seven from the 7.0/7.1 series, four for the direct-mode driver and our fixes on it, one mfd rk8xx kexec fix, one Wi-Fi power-sequence settle delay, two further direct-driver passes from a third-party audit — correctness, then the probe's resource lifetime); the 7.1 move *deleted* two hunks mainline absorbed. The
   rk8xx one is glass-proven and merged (2026-09-03); the sdio-pwrseq-delay
   and direct-correctness patches are glass-exercised on generations
-  10–15 (the sdio delay's device-tree half only on the cold-booted 10)
-  and reach main with the v0.3.0-prealpha sync PR (branch
-  `prealpha-candidate`), which wants the operator's review for them.
+  10–19 (the sdio delay's device-tree half only on the cold-booted 10,
+  16 and 18) and reached main with the v0.3.0-prealpha sync (PR #72,
+  2026-09-04).
   Inventory in `doc/kernel-forward-port.md`. The probe-unwind patch's
   claim is corrected there: the boot's failed first probe is at
   `waveform_init`, which it does not cover. **Patch 15 (probe-lifetime,
   2026-09-04) is the audit's item 2 fix** — every probe failure unwinds
   everything it acquired (the ~10 MB of vmalloc, the phase DMA maps,
   the runtime-PM count, both kthreads) and `remove()` frees the 228 kB
-  custom LUT — in the tree and NOT yet on glass; its proof is no
+  custom LUT — **on glass 2026-09-04/05** (PR #73, merged via #77): no
   `Unbalanced pm_runtime_enable!` at the rebind, no orphan 642/1926-page
   `/proc/vmallocinfo` entries after boot, and `VmallocUsed` flat across
-  five unbind/bind cycles with the reader stopped.
+  five unbind/bind cycles with the reader stopped. Its v1 exposed a
+  `kthread_park` WARNING the leak had masked (the CRTC disable parked a
+  thread `kthread_stop()` had already reaped); v2's `remove()` runs
+  `drm_atomic_helper_shutdown()` before stopping the kthreads —
+  warning-free across five cycles on generation 18.
 - **Suspend**: **ultra suspend is the shipping suspend** (2026-08-08,
   R12): hrdl's configuration adopted whole — standing
   `rockchip,suspend-state-override = <5>` + three `*_pmu` rails
@@ -514,8 +510,21 @@ gitignored `build/`, or the reader's static address.
   the same lesson: a helper that *died* there stranded the reader
   stopped and silent; since 2026-09-04 it bails out (teardown undone in
   reverse, reader and radio back) and leaves a per-boot record the
-  deployer reads back (`wilkbook-generation last-trial`) — rig-proven,
-  not yet on glass (`doc/update-path.md`).
+  deployer reads back (`wilkbook-generation last-trial`) — proven on
+  glass 2026-09-04 late: a painter kept the EBC busy, the trial refused
+  at the quiesce after its radio-off, ssh came back on the same boot id
+  with the reader running, and the deployer said refused
+  (`doc/update-path.md`).
+- **A kexec is a crash for every filesystem still mounted read-write**
+  (2026-09-04 night): the trial remounted `/` read-only before `kexec
+  -e` but left `/data` alone, so the next boot's journal recovery raced
+  udev's probe (`incorrect ext4 checksum on /dev/mmcblk0p7`), `/data`
+  came up on the library placeholder, and Wi-Fi never returned after a
+  sleep because the restore reads the real partition's
+  `wlan0.conf`. The teardown now remounts `/data` read-only after `/`
+  (the bail-out puts it back) — proven by two kexecs on generation 19.
+  When a kexec'd boot loses something only a sleep reveals, check what
+  was mounted where before suspecting the radio.
 - **The UART capture drops ~25 bytes every 150–250 at 1.5 Mbaud, and it
   is the adapter, not termios** (2026-09-04, measured from the two
   generation-16 captures): `uboot-pick-slot.sh` has always set the port

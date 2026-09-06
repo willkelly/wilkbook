@@ -364,7 +364,9 @@ device. The rules that make the glass half honest:
   own Wi-Fi off (an EBC that never goes idle, a failed `kexec -l`)
   bails out instead — teardown undone, reader and radio back, the
   deployer printing `the trial helper refused` — since 2026-09-04;
-  rig-proven (rung 4u), not yet on glass (`doc/update-path.md`).
+  rig-proven (rung 4u) and on glass 2026-09-04 late — a forced
+  refusal at the EBC quiesce came back on the same boot id
+  (`doc/update-path.md`, `doc/status.md`).
 - **Pause suspend for the session** (`enabled=0` in
   `/data/wilkbook/autosuspend.conf`) and restore it as the last step;
   a session that ends with `enabled=1` on battery leaves only the
