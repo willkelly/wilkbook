@@ -102,6 +102,29 @@ operator was away from the button. The device sits on 18 with the
 partition read-only at the Wi-Fi service's mount and the reader on an
 empty library until then.
 
+**The next day (2026-09-05, morning to evening): getting back in.** With
+`/data` on the placeholder the reader could not keep Wi-Fi across a
+sleep (the restore reads `/data/wifi/wlan0.conf`, absent there), the
+gadget port carried no shell on this build, and every button wake was
+followed by a re-sleep within a minute or two — the broker on its
+defaults, cause not yet read from its log. Two serial-recovery attempts
+over the UART landed in resume chatter and then in silence (a sleeping
+device's UART returns NUL bytes); a self-acting recovery held the line
+for two hours and saw no resume at all. The operator's power-cycle in
+the evening reached U-Boot's menu at the very moment the recovery
+script sent ENTER, which took the default entry: **os1** booted. From
+there the clean path: the menu watcher armed (the branch's version —
+the `.watcher` handle appeared with pid, pgid, reader and termios),
+`sudo reboot` on os1, `== menu seen at poll 60: selected os2`, and
+**generation 18 cold-booted** with `/dev/disk/by-partlabel/data` on
+`/data` read-write, `EXT4-fs (mmcblk0p7): mounted filesystem … r/w
+with ordered data mode` — no recovery, no checksum complaint, the
+library back, Wi-Fi up 26 s after ssh first tried, the watcher reaped
+by its recorded group with no reader left. Lessons for the record: a
+recovery script that presses ENTER must first know what is on the
+line; and the os1 detour is the recovery path the tester brief
+describes, exercised for real.
+
 ## 2026-09-04 (wkelly PineNote, operator mostly away) — the v0.3.0-prealpha candidate is generation 14: patch 14's guards behave on glass, the "zero-IRQ page turns" were the file manager, the trial notes were dying with the radio
 
 The candidate (`prealpha-candidate`: main + PRs #66, #70, #67, #69 + the
