@@ -10,7 +10,11 @@
 #   -> wilkbook-generation trial N    (kexec inside the guest; the ssh link dies)
 #   -> the guest answers again as B   (hostname, /run/current-system)
 #   -> health --expect B; promote N   (DEFAULT now B)
+#   -> pin 1; prune --keep 1; unpin 1 (the pinned A survives a prune that would
+#      otherwise delete it -- the ledger pin, 2026-09-04)
 #   -> trial A; health --expect A; promote A   (rollback is the same move)
+#   -> prune --keep 0                 (the positive control: B, unpinned, goes;
+#      keep 1 would keep it as the newest -- the first run of this step said so)
 #
 # Proves the mechanism -- transfer, registration, menu, kexec, health,
 # promote, rollback -- with no glass.  What it cannot prove is the SoC:
@@ -135,6 +139,28 @@ dflt=$(vm 'sed -n "s/^DEFAULT gen-//p" /boot/extlinux/extlinux.conf')
 vm "test -f /boot/gen-$n/Image && test -f /boot/gen-$n/initrd.cpio.gz && test -f /boot/gen-1/Image" \
   && pass "payloads staged for gen-1 (pre-helper generation) and gen-$n" || fail "payload staging"
 
+# 3b. a trial the helper must REFUSE, after its teardown: B's kernel image is
+# moved away, so kexec -l fails once the reader is stopped and the radio is
+# off.  The bail-out must put the guest back -- reachable on the same boot,
+# reader running, health passing -- and the refusal must reach the caller as
+# the helper's own exit status with the kexec binary's words, not as a
+# dropped link (review 2026-09-04: a helper that died there stranded the
+# reader stopped and silent, and the deployer called it a dead trial).
+vm "mv /boot/gen-$n/Image /boot/gen-$n/Image.away"
+refused_rc=0
+vm_trial "wilkbook-generation trial $n" >"$log.trial-$n-refused" 2>&1 || refused_rc=$?
+sed "s/^/        trial> /" "$log.trial-$n-refused"
+vm "mv /boot/gen-$n/Image.away /boot/gen-$n/Image"
+[ "$refused_rc" -eq 1 ] && pass "refused trial: the helper exited 1 (a refusal, not a dropped link)" || fail "refused trial: exit $refused_rc"
+grep -q 'kexec -l failed for generation' "$log.trial-$n-refused" && grep -q 'trial abandoned: teardown undone' "$log.trial-$n-refused" \
+  && pass "refused trial: the kexec -l failure and the bail-out both reached the caller" || fail "refused trial: the refusal did not reach the caller"
+boot_still=$(vm cat /proc/sys/kernel/random/boot_id 2>/dev/null || true)
+[ "$boot_still" = "$boot_a1" ] && pass "refused trial: the guest is reachable on the same boot" || fail "refused trial: boot id $boot_still (was $boot_a1)"
+vm "wilkbook-generation health --expect $sys_a" >/dev/null && pass "refused trial: health passes on A again (the reader was restarted)" || fail "refused trial: health on A after the bail-out"
+vm "wilkbook-generation last-trial" | grep -q '^result=refused$' && pass "refused trial: the record names this boot" || fail "refused trial: no record for this boot"
+dflt=$(vm 'sed -n "s/^DEFAULT gen-//p" /boot/extlinux/extlinux.conf')
+[ "$dflt" = "1" ] && pass "refused trial: DEFAULT still gen-1" || fail "DEFAULT after the refused trial: $dflt"
+
 # 4. trial: kexec into B
 vm_trial "wilkbook-generation trial $n" >"$log.trial-$n" 2>&1 || true
 sed "s/^/        trial> /" "$log.trial-$n"
@@ -146,6 +172,8 @@ boot_b=$(vm cat /proc/sys/kernel/random/boot_id)
 [ -n "$boot_b" ] && [ "$boot_b" != "$boot_a1" ] && pass "after kexec: a new boot id (the kernel really was replaced)" || fail "boot id unchanged after the trial: the kexec did not happen"
 hn=$(vm hostname)
 [ "$hn" = "pinenote-reader-genb" ] && pass "after kexec: hostname is generation B's" || fail "hostname $hn"
+# the refusal record from 3b belongs to A's boot: it must never pass for this one
+if vm "wilkbook-generation last-trial" >/dev/null 2>&1; then fail "a stale refusal record passed on the new boot"; else pass "after kexec: the earlier refusal record does not pass for this boot"; fi
 if vm "wilkbook-generation health --expect $sys_b" >/dev/null; then pass "health check passes on B"; else fail "health on B"; fi
 dflt=$(vm 'sed -n "s/^DEFAULT gen-//p" /boot/extlinux/extlinux.conf')
 [ "$dflt" = "1" ] && pass "DEFAULT still gen-1 while B is only on trial" || fail "DEFAULT during trial: $dflt"
@@ -155,6 +183,20 @@ vm "wilkbook-generation promote $n" >/dev/null && pass "promote $n"
 dflt=$(vm 'sed -n "s/^DEFAULT gen-//p" /boot/extlinux/extlinux.conf')
 [ "$dflt" = "$n" ] && pass "DEFAULT is gen-$n after promote" || fail "DEFAULT after promote: $dflt"
 vm "test \$(readlink /var/guix/profiles/system) = system-$n-link" && pass "Guix's current profile points at generation $n" || fail "profile link"
+
+# 5b. the ledger pin (2026-09-04): with DEFAULT and the booted generation both
+# B, `prune --keep 1` would delete A -- the generation the rollback below needs
+# and, on a device, the one a cold boot proved.  Pinned, it stays; unpinned,
+# the plan is back to what it was (the positive control is step 6b).
+vm "wilkbook-generation pin 1" >/dev/null && pass "pin 1" || fail "pin 1"
+vm wilkbook-generation list | grep -q '^gen-1  .*\[pinned\]' && pass "list shows gen-1 [pinned]" || fail "list has no [pinned] marker on gen-1"
+out=$(vm "wilkbook-generation prune --keep 1" 2>&1 || true)
+printf '%s\n' "$out" | sed "s/^/        prune> /"
+printf '%s\n' "$out" | grep -q 'nothing to prune' && pass "prune --keep 1 with gen-1 pinned: nothing to prune" || fail "prune with a pin: $out"
+vm "test -f /boot/gen-1/Image && test -f /boot/gen-1/pinned && test -L /var/guix/profiles/system-1-link" \
+  && pass "gen-1's payload, marker and profile link survive the prune" || fail "gen-1 was pruned despite the pin"
+vm "wilkbook-generation unpin 1" >/dev/null && pass "unpin 1" || fail "unpin 1"
+if vm wilkbook-generation list | grep -q '\[pinned\]'; then fail "a [pinned] marker remains after unpin"; else pass "no [pinned] marker after unpin"; fi
 
 # 6. rollback: trial A, health, promote A
 vm_trial "wilkbook-generation trial 1" >"$log.trial-1" 2>&1 || true
@@ -169,6 +211,18 @@ vm "wilkbook-generation health --expect $sys_a" >/dev/null && pass "health check
 vm "wilkbook-generation promote 1" >/dev/null && pass "promote 1 (rollback complete)"
 dflt=$(vm 'sed -n "s/^DEFAULT gen-//p" /boot/extlinux/extlinux.conf')
 [ "$dflt" = "1" ] && pass "DEFAULT is gen-1 after rollback" || fail "DEFAULT after rollback: $dflt"
+
+# 6b. the positive control for 5b: nothing pinned, DEFAULT and booted back on
+# A, so `prune --keep 0` deletes B (and runs guix gc in the guest).  Not
+# `--keep 1`: B is the newest and the window keeps it -- the planner answered
+# "nothing to prune" to that, correctly, on this step's first run (2026-09-04).
+out=$(vm "wilkbook-generation prune --keep 0" 2>&1 || true)
+printf '%s\n' "$out" | sed "s/^/        prune> /"
+printf '%s\n' "$out" | grep -q "pruned generation $n" && pass "prune --keep 0 with nothing pinned: generation $n pruned" || fail "positive control: $out"
+vm "test ! -e /boot/gen-$n && test ! -e /var/guix/profiles/system-$n-link && test -f /boot/gen-1/Image" \
+  && pass "gen-$n's payload and profile link are gone, gen-1's stay" || fail "prune left gen-$n or took gen-1"
+dflt=$(vm 'sed -n "s/^DEFAULT gen-//p" /boot/extlinux/extlinux.conf')
+[ "$dflt" = "1" ] && pass "DEFAULT is still gen-1 after the prune" || fail "DEFAULT after prune: $dflt"
 
 # 7. evidence.  Boot ids are the proof (above); the console is informational:
 # a generation's APPEND carries the PineNote's console=ttyS2, so after a

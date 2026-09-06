@@ -70,7 +70,13 @@ master; it is a design item, not a flag change.
    acquisition order for failed probe and remove; an on-device
    bind/unbind and fault-injection test counting threads, DMA warnings,
    vmalloc, runtime-PM balance, kmemleak where available. The most
-   important substantive follow-up.
+   important substantive follow-up. [Glass-confirmed 2026-09-04 on
+   generation 14 — the boot's first probe fails at `waveform_init`,
+   not `drm_init`, and leaks ~10 MB plus the runtime-PM count; each
+   successful probe leaks the 228 kB LUT. Fixed in the tree the same
+   day as kernel patch 15, `linux-pinenote-7.1-probe-lifetime.patch`
+   (`doc/kernel-forward-port.md` item 15); the on-device bind/unbind
+   count is the proof still owed. Fault injection is not written.]
 3. **Direct-driver correctness pass** — the ioctl access audit with the
    live node facts recorded first (item 6, with the fbdev caution).
 4. **Validation** — the applied-tree behavioural tests, then the skipped

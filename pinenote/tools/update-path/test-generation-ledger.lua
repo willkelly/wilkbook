@@ -43,6 +43,21 @@ check(L.next_number({ 1, 3, 2 }) == 4 and L.next_number({}) == 1, "next_number i
 local plan = L.prune_plan({ 1, 2, 3, 4, 5, 6 }, 2, 6, 3)
 check(table.concat(plan, ",") == "1,3", "prune: keeps the 3 newest (4,5,6), never the promoted (2) or booted (6), deletes 1 and 3", table.concat(plan, ","))
 check(#L.prune_plan({ 1, 2 }, 2, 2, 3) == 0, "prune: nothing to delete under the keep count")
+-- The pin (2026-09-04): a pinned generation is kept whatever its age, and
+-- does not count against the keep window -- like the promoted and booted ones.
+local pinned_in = L.prune_plan({ 1, 2, 3, 4, 5, 6 }, 2, 6, 3, { [5] = true })
+check(table.concat(pinned_in, ",") == "1,3", "prune: a pin inside the window changes nothing (5 was kept anyway)", table.concat(pinned_in, ","))
+local pinned_out = L.prune_plan({ 1, 2, 3, 4, 5, 6 }, 2, 6, 3, { [1] = true })
+check(table.concat(pinned_out, ",") == "3", "prune: a pin outside the window keeps the oldest (1) and still deletes 3", table.concat(pinned_out, ","))
+local pinned_two = L.prune_plan({ 1, 2, 3, 4, 5, 6 }, 2, 6, 3, { [1] = true, [3] = true })
+check(#pinned_two == 0, "prune: two pins outside the window leave nothing to delete", table.concat(pinned_two, ","))
+local pinned_default = L.prune_plan({ 1, 2, 3, 4, 5, 6 }, 2, 6, 3, { [2] = true })
+check(table.concat(pinned_default, ",") == "1,3", "prune: pinning the promoted generation is redundant, not harmful", table.concat(pinned_default, ","))
+local all_pinned = L.prune_plan({ 1, 2, 3, 4, 5, 6 }, 6, 6, 1, { [1] = true, [2] = true, [3] = true, [4] = true, [5] = true, [6] = true })
+check(#all_pinned == 0, "prune: everything pinned means nothing to prune, even with keep=1", table.concat(all_pinned, ","))
+local no_set = L.prune_plan({ 1, 2, 3, 4, 5, 6 }, 2, 6, 3, nil)
+check(table.concat(no_set, ",") == "1,3", "prune: no pinned set behaves as before (nothing pinned)", table.concat(no_set, ","))
+check(L.pin_path(16) == "/boot/gen-16/pinned", "pin_path: the marker lives in the generation's own payload directory", L.pin_path(16))
 
 -- 5. Health predicate.
 local ok1 = L.health_ok({ current_system = S, broker_ready = true, reader_started = true }, S)

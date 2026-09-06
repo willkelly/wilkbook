@@ -435,11 +435,21 @@ broker and the direct driver together), followed by a cold boot.
       not a tag blocker. R4 held the same day.
 - [ ] The third-party audit's item 2: the direct driver's probe/remove
       path doesn't release everything it acquires when a probe fails —
-      six vmalloc planes, two DMA maps, and the custom LUT (the LUT is
-      never freed even on a clean remove). Confirmed against the source
-      2026-09-03 (`doc/reviews/2026-09-03-third-party-audit.md`); not
-      yet fixed — the review calls it "the most important substantive
-      follow-up."
+      the two plain vmallocs (~10 MB), two DMA maps, the runtime-PM
+      count, and the custom LUT (the LUT is never freed even on a clean
+      remove). Confirmed against the source 2026-09-03
+      (`doc/reviews/2026-09-03-third-party-audit.md`), on glass
+      2026-09-04 (generation 14: the by-construction first probe fails
+      at `waveform_init`, which the probe-unwind patch never reaches);
+      the review calls it "the most important substantive follow-up."
+      **Fixed in the tree 2026-09-04** as kernel patch 15
+      (`linux-pinenote-7.1-probe-lifetime.patch`, branch
+      `probe-lifetime`; `doc/kernel-forward-port.md` item 15). **Glass
+      pending** — this box closes when a generation carrying it shows no
+      `Unbalanced pm_runtime_enable!` at the rebind, no orphan 642/1926-page
+      `/proc/vmallocinfo` entries after boot, and `VmallocUsed` flat
+      (±16 kB) across five unbind/bind cycles with the reader stopped,
+      the 57-page LUT entry count staying at 1.
 - [x] Kernel patch 14 (four correctness fixes from that same audit) ran
       on glass 2026-09-04 (generation 14): a zeroed `rect_hint_batch` is
       refused with EINVAL in 0.000 s instead of spinning, an oversized
@@ -474,13 +484,56 @@ blacklist is ever wrong on a future kernel change.
       since 2026-09-04 (review S4) it is armed before the `kexec -e` and
       the recovery path waits on it, pinned in the update-path
       `test-static.sh`. With no cable the landing is still os1.
-- [ ] A trial that dies *after* the helper's own Wi-Fi off — an EBC that
-      never goes idle, a failed `kexec -l` — strands the reader stopped
-      and radio-off with no message delivered, and the deployer reports
-      it as a dead trial the watchdog will reset, which it will not
-      (the dog is armed later). Found by review 2026-09-04, not fixed.
-- [ ] Generation pruning (`KEEP=`) has no guard against deleting the
-      last generation known to work — nothing currently pins one.
+- [x] A trial that dies *after* the helper's own Wi-Fi off — an EBC that
+      never goes idle, a failed `kexec -l` — used to strand the reader
+      stopped and radio-off with no message delivered, and the deployer
+      reported it as a dead trial the watchdog would reset, which it
+      would not (the dog is armed later). Found by review 2026-09-04;
+      fixed the same day: the helper bails out (teardown undone in
+      reverse, reader and radio back) before it refuses, and the
+      deployer says `refused` from the exit status or the per-boot
+      record. Rig-proven in rung 4u and **on glass 2026-09-04 late**
+      (generation 17: a painter kept the panel busy, the helper refused
+      at the quiesce, radio and reader came back, the deployer printed
+      the refusal from the record, same boot id — `doc/status.md`).
+- [x] Generation pruning (`KEEP=`) had no guard against deleting the
+      last generation known to work — nothing pinned one, and the
+      generation-16 deploy (`KEEP=8`) pruned generation 8 and left
+      generation 10, the previous cold-booted one, as the seventh of
+      the eight kept, a deploy or two from going. Since 2026-09-04
+      `wilkbook-generation pin N` marks a generation known-good
+      (`/boot/gen-N/pinned`), `prune`
+      never deletes a pinned generation on top of `DEFAULT` and the
+      booted one, and `list` shows `[pinned]`; planner cases and static
+      pins in `make update-path-check`, and the QEMU rig (rung 4u) pins,
+      prunes around the pin and prunes for real — green 2026-09-04. The
+      standing rule
+      "keep a cold-booted generation in the window by hand" is now "pin
+      it after the cold boot" — and before the next deploy, whose prune
+      runs right after `promote`. **Run on the device 2026-09-04 late**
+      (`doc/status.md`): from generation 17 (the first with the verb),
+      `pin 16`, `pin 10`, then `prune --keep 1` deleted 11–15 and kept
+      both pinned generations and the booted 17 — the recipe in
+      `doc/hardware-deploy.md`, as written.
+- [x] (offline, 2026-09-04) The watcher's menu match rode on one short
+      string in a capture that drops ~25 bytes every 150–250 (the
+      adapter at 1.5 Mbaud, not termios — `doc/device-access.md`), and a
+      hand-run watcher's `$!` was a dead `setsid` wrapper so its `cat`
+      outlived the session. Now: any of the three menu entry lines or
+      the countdown line triggers (U-Boot draws the entries once and
+      repeats only the countdown; never the title or "Press UP/DOWN",
+      which extlinux's generation menu shares, nor the pre-menu CTRL+C
+      prompt), the picker writes its pid/pgid/reader to `LOG.watcher`
+      and the deployer reaps by that, and a picker reaped before the
+      menu records `exit=terminated` there, not the `exit=0` a bash `sh`
+      used to leave; `make uart-pick-check` replays the real captured
+      menu bytes through a pty. **On glass 2026-09-05**: the deployer armed
+      the watcher on two deploys with the cable, wrote its handle, and
+      reaped it by the recorded group with nothing left on the port; a
+      hand-armed watcher picked os2 at U-Boot's menu on the way back from
+      os1 (`doc/status.md`). The capture still drops bytes mid-line — the
+      adapter; a cleaner capture wants a different adapter or a lower
+      console baud.
 - [ ] The os1-based rescue script (PR #51) has never been run against
       os1 itself.
 - [x] Wi-Fi reassociating after a resume is exercised on both paths:

@@ -295,12 +295,13 @@ build time, never hand-copied — so they cannot drift from the driver.
 - `pinenote/patches/linux-pinenote-7.0-forward-port.patch` — the EBC
   display stack, `drm_epd_helper`, WS8100 pen, PineNote DTS and
   `pinenote_defconfig`, forward-ported onto vanilla 7.0.x and
-  hardware-validated. Thirteen smaller patches ride alongside it: six
+  hardware-validated. Fourteen smaller patches ride alongside it: six
   for power (BSP SIP suspend, cpuidle, vdd_cpu PFM, DDR static-low,
   st_accel PM, and the ultra rails-off suspend — 4.64 mA measured
   2026-08-08), hrdl's direct-mode driver with three of ours on it, a
-  PMIC kexec fix, a Wi-Fi power-sequence delay, and a correctness pass
-  from a third-party audit.
+  PMIC kexec fix, a Wi-Fi power-sequence delay, a correctness pass
+  from a third-party audit, and the probe-lifetime pass that closes that
+  audit's item 2.
   `doc/kernel-forward-port.md` carries the inventory, the refresh
   procedure, the config lessons, and the community cherry-pick record.
 - `pinenote/tools/ddr-sip-probe/src` — a ~zero-risk out-of-tree module
@@ -370,7 +371,7 @@ build time, never hand-copied — so they cannot drift from the driver.
   KOReader in 2026-08 (15 minutes by default, settable, and never while
   on a charger), with a supervised broker as the sole writer of
   `/sys/power/state`.
-- **Kernel**: Linux 7.1.8 with fourteen patches — the vanilla forward
+- **Kernel**: Linux 7.1.8 with fifteen patches — the vanilla forward
   port (display, PREEMPT_RT, Wi-Fi/BT, gadget), hrdl's direct-mode EBC
   driver and our fixes on it, a PMIC kexec fix and a Wi-Fi
   power-sequence delay. 7.0.11 remains the last hardware-proven kernel
@@ -409,7 +410,7 @@ prealpha tag and that bar.
 
 - `pinenote/packages/` — two kernel packages (`linux-pinenote`, the
   forward port plus hrdl's direct-mode driver and the rest of the
-  fourteen-patch stack; `linux-pinenote-6.6.30`, the regression
+  fifteen-patch stack; `linux-pinenote-6.6.30`, the regression
   baseline — `linux-pinenote-debug` was retired by the embrace sweep,
   the direct driver carrying `EXTRACT_FBS` natively), Broadcom Wi-Fi/BT
   firmware packages, firmware helper scripts, the KOReader device
@@ -418,8 +419,10 @@ prealpha tag and that bar.
   pen, PineNote DTS, `pinenote_defconfig`) plus the smaller
   power-management patches (BSP SIP suspend, cpuidle, vdd_cpu PFM, DDR
   DVFS, st_accel PM, ultra rails-off), the direct-mode driver and our
-  fixes on it, the rk8xx kexec fix and the sdio power-sequence delay —
-  fourteen in all. `doc/kernel-forward-port.md` has the inventory.
+  fixes on it (the parallel advance, the RECT_HINTS bounds, the probe
+  unwind, the correctness pass, the probe-lifetime pass), the rk8xx
+  kexec fix and the sdio power-sequence delay — fifteen in all.
+  `doc/kernel-forward-port.md` has the inventory.
 - `pinenote/services/` — Shepherd services: waveform install, the
   direct driver's CLUT one-shot, EBC parameters, reader session,
   orientation bridge, the platform-controls broker (sleep/wake — the

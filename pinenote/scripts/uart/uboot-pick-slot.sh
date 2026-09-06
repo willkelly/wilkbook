@@ -13,11 +13,52 @@
 # trap 3).  Without --reboot it waits for a menu you produce by hand (a
 # power-cycle after a hang).  Everything the port says goes to LOG; the
 # capture keeps running after the pick so the whole boot is recorded --
-# kill the reader pid it prints when done.  Only NEW bytes are searched, so
-# a LOG that already holds an earlier menu is fine.
+# reap the process group recorded in LOG.watcher when done.  Only NEW
+# bytes are searched, so a LOG that already holds an earlier menu is fine.
 #
-# The menu is drawn without a contiguous "Hit any key" string, so the
-# trigger is the menu text itself (doc/status.md 2026-08-26).
+# LOG.watcher (written before the port is opened, appended at exit) is the
+# handle for whoever started this script:
+#   pid=      this script
+#   pgid=     its process group -- `kill -- -PGID` reaps script and reader
+#             together; equals pid when started under setsid or from a
+#             shell with job control
+#   reader=   the `cat` of the tty (outlives the pick by design)
+#   termios=  what the port was actually set to, as evidence
+#   exit=     the script's exit status, once it has one: 0 = menu seen,
+#             slot chosen; 1 = no menu in time; 2 = the port refused the
+#             setup; "terminated" = reaped (TERM/INT/HUP) before it had one
+# From a shell WITH job control a backgrounded `setsid sh ...` forks, so
+# the caller's $! is a wrapper that has already exited and names nothing
+# to reap; from make (no job control) setsid execs in place and $! is this
+# script (doc/status.md 2026-09-04).  The file says the same thing in
+# both cases.
+#
+# U-Boot draws the menu ONCE and then reprints only its countdown line
+# ("Hit any key to stop autoboot: 15", "14", ...) each second; the next
+# full draw is its response to a keystroke.  So the picker gets exactly
+# one draw of the entries to match before it sends keys (2026-09-04's
+# cold-boot capture, doc/artifacts/pinenote-gen16-deploy-20260904/
+# uart-coldboot.log line 220: one countdown value, then two more draws,
+# the second after the one keypress clear ESC[9;1H ESC[2K that follows
+# the countdown and the third directly after it -- the menu answering
+# this script's DOWN, DOWN, not further chances).  The capture
+# loses ~20-30 bytes every 150-250 at 1.5 Mbaud (the CH340 side, not
+# termios -- see device-access.md), so a single 16-byte string can be the
+# one clipped in that draw: the match was widened from two strings to any
+# ONE of the three entry lines, plus the countdown line as a fourth -- it
+# is the only string that repeats for the 15 s the menu is up.  Matched
+# exactly as "Hit any key to stop autoboot" and never assumed contiguous
+# (2026-08-26 lost it to a drop, doc/status.md; the entry lines stay for
+# that).  NOT matched: the title "U-Boot Boot Menu" and "Press UP/DOWN to
+# move, ENTER to select", which the same bootmenu code draws for
+# extlinux's generation menu right after the pick ("Enter choice:"),
+# where two DOWNs would choose an old generation; and "Hit key to stop
+# autoboot('CTRL+C')" -- different text -- which this U-Boot prints
+# BEFORE the menu, where a keystroke would stop autoboot into the
+# console.  Pinned by test-uboot-pick-slot.sh.
+#
+# WILKBOOK_UBOOT_MENU_TIMEOUT: seconds to wait for the menu (default 900;
+# the offline test shortens it).
 set -u
 log=${1:?usage: uboot-pick-slot.sh LOG [--slot os2|os1] [--reboot SSH_DEST] [--tty DEV]}; shift
 slot=os2; reboot_dest=; tty=/dev/ttyUSB0
@@ -34,29 +75,59 @@ case $slot in
   os1) keys='\033[B\r' ;;
   *) echo "slot must be os2 or os1" >&2; exit 2 ;;
 esac
-stty -F "$tty" 1500000 cs8 -cstopb -parenb -crtscts clocal -echo raw || exit 2
+menu='Search for extlinux.conf on all partitions\|Boot OS1 (part 5)\|Boot OS2 (part 6)\|Hit any key to stop autoboot'
+timeout=${WILKBOOK_UBOOT_MENU_TIMEOUT:-900}
+polls=$((timeout * 2))
+
+# /proc/self/stat field 5 is the pgrp; skip past the "(comm)" so a comm
+# with spaces cannot shift the fields.
+pgid=$(sed 's/^.*) //' "/proc/$$/stat" | cut -d' ' -f3)
+handle="$log.watcher"
+reader=
+# exit= is recorded only from this script's own exit paths (status is set
+# right before each exit) -- never from $?: bash as sh runs the EXIT trap
+# on an untrapped SIGTERM with $? of the last command, so a reaped picker
+# recorded exit=0, the handle's "slot chosen" (dash runs no EXIT trap on
+# an untrapped TERM and recorded nothing).  TERM/INT/HUP are trapped
+# first and record "terminated".
+status=
+finish() {
+  if [ -n "$status" ]; then echo "exit=$status" >> "$handle"; fi
+}
+trap 'status=terminated; exit 143' TERM INT HUP
+trap finish EXIT
+{ echo "pid=$$"; echo "pgid=$pgid"; } > "$handle"
+
+# 1.5 Mbaud, 8N1, no flow control (neither RTS/CTS nor XON/XOFF: the
+# console's bytes must never be eaten as ^S/^Q), no CR/NL translation, no
+# echo, no signals from the line, 1-byte reads -- the settings
+# device-access.md documents.  `raw` covers -icrnl -inlcr -igncr -ixon
+# -ixoff -icanon -isig -opost -istrip; -echo is separate from raw.
+stty -F "$tty" 1500000 cs8 -cstopb -parenb -crtscts -ixon -ixoff clocal raw -echo || { status=2; exit 2; }
+echo "termios=$(stty -F "$tty" -a 2>/dev/null | tr '\n' ' ')" >> "$handle"
 touch "$log"
 start=$(wc -c < "$log")
 cat "$tty" >> "$log" 2>/dev/null &
 reader=$!
+echo "reader=$reader" >> "$handle"
 sleep 0.5
 if [ -n "$reboot_dest" ]; then
   echo "== one reboot attempt via $reboot_dest (exit status ignored; no reconnect until U-Boot)"
   ssh -o BatchMode=yes -o ConnectTimeout=8 "$reboot_dest" 'sudo -n reboot 2>/dev/null || reboot' >/dev/null 2>&1 || true
 fi
-echo "== watching $tty beyond byte $start of $log for the U-Boot menu (reader pid $reader)"
+echo "== watching $tty beyond byte $start of $log for the U-Boot menu (pid $$, pgid $pgid, reader pid $reader; $handle)"
 i=0
-while [ $i -lt 1800 ]; do
-  if tail -c +$((start + 1)) "$log" | grep -a -q 'U-Boot Boot Menu\|Boot OS2 (part 6)'; then
+while [ $i -lt "$polls" ]; do
+  if tail -c +$((start + 1)) "$log" | grep -a -q "$menu"; then
     printf "$keys" > "$tty"
     echo "== menu seen at poll $i: selected $slot"
     sleep 5
     tail -c +$((start + 1)) "$log" | tr -d '\r' \
       | grep -a -o 'Boot OS[12] (part [56])\|Retrieving file[^\n]*\|Starting kernel[^\n]*\|Linux version [^\n]*' | tail -5
-    echo "== capture continues in $log (kill $reader to stop it)"
-    exit 0
+    echo "== capture continues in $log (kill -- -$pgid to stop it, or kill $reader)"
+    status=0; exit 0
   fi
   sleep 0.5; i=$((i + 1))
 done
-echo "!! no U-Boot menu in 15 min; an unattended countdown lands on os1" >&2
-kill "$reader" 2>/dev/null; exit 1
+echo "!! no U-Boot menu in $timeout s; an unattended countdown lands on os1" >&2
+kill "$reader" 2>/dev/null; status=1; exit 1

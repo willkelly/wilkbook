@@ -21,7 +21,7 @@ code review — before a single reboot. That's the standard.
 ## Repo shape
 
 - `pinenote/packages/kernel.scm` — two kernels: `linux-pinenote` (vanilla
-  7.1.x + the fourteen-patch stack, hrdl's direct-mode EBC driver
+  7.1.x + the fifteen-patch stack, hrdl's direct-mode EBC driver
   included — the **primary** and, since the embrace sweep, the only
   reader kernel) and `linux-pinenote-6.6.30` (m-weigand baseline,
   **regression-isolation only** — 7.0 reached parity 2026-07-04).
@@ -33,12 +33,13 @@ code review — before a single reboot. That's the standard.
   `pinenote_defconfig`. This single patch is the most rebase-fragile,
   highest-value artifact in the repo. Treat edits to it with care; it is
   also **treated as permanent** (mainline has no EPD infrastructure and
-  won't for years — see `doc/eink-research.md`). Thirteen more patches
+  won't for years — see `doc/eink-research.md`). Fourteen more patches
   ride alongside it — six for power (BSP SIP suspend, cpuidle, vdd_cpu
   PFM, DDR DVFS, st_accel PM, ultra rails-off suspend), hrdl's
   direct-mode driver and three of ours on it, the rk8xx kexec fix, the
-  sdio power-sequence delay, and the direct-correctness pass — fourteen
-  in all; the inventory lives in `doc/kernel-forward-port.md`.
+  sdio power-sequence delay, the direct-correctness pass, and the
+  probe-lifetime pass — fifteen in all; the inventory lives in
+  `doc/kernel-forward-port.md`.
 - `pinenote/services/`, `pinenote/images/`, `pinenote/systems/` — Guix
   system services, initrd, and flavor entrypoints.
 - `pinenote/tools/` — the test and diagnostic tools, host-side and
@@ -319,11 +320,24 @@ gitignored `build/`, or the reader's static address.
   runs on the last cold boot's tree — the helper says so with a NOTE,
   printed before its teardown because the teardown's Wi-Fi off is where
   the ssh link dies; `doc/update-path.md`); only a cold boot of a
-  generation proves its tree, so keep one cold-booted generation in the
-  `KEEP` window by hand (there is no ledger pin yet; `prune` keeps the
-  newest, the least proven). The device is on **generation 15 = the
-  v0.3.0-prealpha candidate** (kexec'd; 10 is the last cold-booted one;
-  8–15 kept). Pause suspend (`enabled=0`) before a session and restore
+  generation proves its tree, so **pin it** once it has one
+  (`wilkbook-generation pin N`, 2026-09-04: `prune` keeps the newest,
+  the least proven, and never a pinned one — `/boot/gen-N/pinned`,
+  `[pinned]` in `list`; the glass proof is still owed and is NOT
+  "`pin 16` then prune": 16's helper lacks the verb, and prune never
+  takes `DEFAULT` or the booted generation, so it is a deploy of a
+  generation built with the verb — whose own prune runs right after
+  `promote`, before anyone can `pin`, so hand-touch
+  `/boot/gen-10/pinned` beforehand if 10 is to survive it; the marker
+  is the whole pin and the new helper honours it — then, from that
+  newer booted generation, `pin 16` and `prune --keep 1`, which takes
+  every unpinned generation between; recipe in
+  `doc/hardware-deploy.md`). The device is on **generation 16 =
+  v0.3.0-prealpha** (cold-booted 2026-09-04; 9–16 kept — that deploy's
+  `KEEP=8` pruned 8 and left 10, the previous cold-booted one, as the
+  seventh of eight, held by nothing but the window: the next deploy at
+  the default `KEEP=5` takes it, one at `KEEP=8` the deploy after — the
+  case the pin exists for). Pause suspend (`enabled=0`) before a session and restore
   it after; a session that ends with `enabled=1` on battery leaves only
   the hourly backstop's 20 s ssh windows (`doc/device-access.md`).
 - **Kernel — read this carefully, the tree and the device differ.**
@@ -359,7 +373,7 @@ gitignored `build/`, or the reader's static address.
   off (`DEFAULT_ENABLE=0x0`), BREAK+`sysrq` arms, BREAK+key fires —
   the sequence is an arming toggle, NOT a per-use guard
   (`doc/kernel-forward-port.md`). 6.6.30 remains regression-isolation only.
-  Fourteen patches as of 2026-09-04 (seven from the 7.0/7.1 series, four for the direct-mode driver and our fixes on it, one mfd rk8xx kexec fix, one Wi-Fi power-sequence settle delay, one further direct-driver correctness pass from a third-party audit); the 7.1 move *deleted* two hunks mainline absorbed. The
+  Fifteen patches as of 2026-09-04 (seven from the 7.0/7.1 series, four for the direct-mode driver and our fixes on it, one mfd rk8xx kexec fix, one Wi-Fi power-sequence settle delay, two further direct-driver passes from a third-party audit — correctness, then the probe's resource lifetime); the 7.1 move *deleted* two hunks mainline absorbed. The
   rk8xx one is glass-proven and merged (2026-09-03); the sdio-pwrseq-delay
   and direct-correctness patches are glass-exercised on generations
   10–15 (the sdio delay's device-tree half only on the cold-booted 10)
@@ -367,7 +381,14 @@ gitignored `build/`, or the reader's static address.
   `prealpha-candidate`), which wants the operator's review for them.
   Inventory in `doc/kernel-forward-port.md`. The probe-unwind patch's
   claim is corrected there: the boot's failed first probe is at
-  `waveform_init`, which it does not cover (audit item 2, still open).
+  `waveform_init`, which it does not cover. **Patch 15 (probe-lifetime,
+  2026-09-04) is the audit's item 2 fix** — every probe failure unwinds
+  everything it acquired (the ~10 MB of vmalloc, the phase DMA maps,
+  the runtime-PM count, both kthreads) and `remove()` frees the 228 kB
+  custom LUT — in the tree and NOT yet on glass; its proof is no
+  `Unbalanced pm_runtime_enable!` at the rebind, no orphan 642/1926-page
+  `/proc/vmallocinfo` entries after boot, and `VmallocUsed` flat across
+  five unbind/bind cycles with the reader stopped.
 - **Suspend**: **ultra suspend is the shipping suspend** (2026-08-08,
   R12): hrdl's configuration adopted whole — standing
   `rockchip,suspend-state-override = <5>` + three `*_pmu` rails
@@ -489,7 +510,22 @@ gitignored `build/`, or the reader's static address.
   ssh will ever read** — the deployer included. Two trials "never
   captured" the device-tree notice for that reason before the source
   order was read (2026-09-04). When output stops, ask what the code
-  did to the transport before suspecting a flush.
+  did to the transport before suspecting a flush. The failure half of
+  the same lesson: a helper that *died* there stranded the reader
+  stopped and silent; since 2026-09-04 it bails out (teardown undone in
+  reverse, reader and radio back) and leaves a per-boot record the
+  deployer reads back (`wilkbook-generation last-trial`) — rig-proven,
+  not yet on glass (`doc/update-path.md`).
+- **The UART capture drops ~25 bytes every 150–250 at 1.5 Mbaud, and it
+  is the adapter, not termios** (2026-09-04, measured from the two
+  generation-16 captures): `uboot-pick-slot.sh` has always set the port
+  up (`stty … 1500000 … raw -echo`), the drop size and cadence are the
+  CH340's, and a second reader would halve the stream rather than clip
+  it. Read a capture as a boot you can see, not a transcript. **Reap the
+  picker by the pgid in `LOG.watcher`, never by `$!`**: from a
+  job-control shell `setsid … &` forks and `$!` is a wrapper that has
+  already exited (`doc/device-access.md`; `make uart-pick-check` pins
+  both start shapes against the real captured menu bytes).
 - **Never glob `/sys/kernel/debug/regmap/*`** — that glob includes
   `dummy-syscon@fdc50000`, the PIPE GRF whose pclk the running kernel
   gates (upstream register item 22), and reading it wedges the bus just

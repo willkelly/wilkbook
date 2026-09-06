@@ -184,7 +184,9 @@ sleep instead of occasionally needing a manual toggle.
 - **If the display driver's very first startup attempt is interrupted**
   (it is *expected* to fail once and recover a moment later — that part
   is normal and not a bug), it can leak a small amount of memory instead
-  of freeing it. Found by an outside code review, not yet fixed.
+  of freeing it. Found by an outside code review; fixed in the tree
+  2026-09-04 (kernel patch 15, branch `probe-lifetime`), not yet run on
+  a device.
 - **A wake by the power button could be followed by an automatic
   re-sleep a few seconds later**, leaving the reader looking dead until
   a second press. Found and fixed 2026-09-04, and the fix was re-run

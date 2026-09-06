@@ -20,10 +20,101 @@ claim under **v0.3.0-prealpha** below is from wkelly's device across the
 sessions it cites, moved onto the device generation-by-generation by
 `make deploy` rather than by a single `dd`'d image; what has *not* been
 run is listed under **Known broken**, and no second operator has run
-this lineage. **Unreleased** above it is empty until the next round of
-work lands.
+this lineage. **Unreleased** above it collects what has landed since.
 
 ## Unreleased
+
+- **The display driver stops leaking memory on every boot and every
+  rebind (kernel patch 15, `probe-lifetime`; on no device yet).** Every
+  boot, the driver's first probe fails on purpose — the compiled
+  waveform table does not exist until a one-shot builds it a few
+  seconds later — and until now that failed probe walked away from
+  ~10 MB of kernel memory and a power-management count, which is the
+  `Unbalanced pm_runtime_enable!` line you may have seen in `dmesg`
+  around 8 s. Separately, every *successful* probe kept a 228 kB
+  waveform table that nothing ever freed, so each unbind/bind of the
+  display grew kernel memory by that much. Both are released now.
+  What this does **not** change: anything you see on the panel, page
+  turns, pen, suspend, or the one deliberate failed probe per boot
+  (the `Unable to load custom_wf.bin` line stays). A reader that is
+  never rebound after boot had only ever lost that memory once per
+  boot. **Proven on the device the same evening** (generations 17 and
+  18): no `Unbalanced` line at the rebind, the leaked buffers gone
+  from the kernel's own accounting, and kernel memory flat across five
+  unbind/bind cycles. The first run also caught an older ordering bug
+  in the driver's teardown that only the fix made visible (a kernel
+  warning on the first unbind); the second version corrects it and
+  runs warning-free (`doc/kernel-forward-port.md` item 15).
+- **You can now mark a version of the OS as "keep this one" so the
+  automatic clean-up never deletes it.** `wilkbook-generation pin N` on
+  the device (and `unpin N` to release it); the version list shows
+  `[pinned]`. Clean-up after an update keeps the newest few versions,
+  which are the *least* proven, and the one version that had been
+  booted the slow, thorough way was kept inside that window by nothing
+  but the window's size — the update that produced the v0.3.0 build
+  left the previous such version as the seventh of the eight it kept,
+  one or two updates from being deleted. Proven offline, in the QEMU
+  rig, and **on the device the same evening**: from the first version
+  built with the verb, the v0.3.0 build and the older thorough-booted
+  one were pinned, a clean-up that keeps only one version was run, and
+  it deleted exactly the five unpinned versions between them and kept
+  both pinned ones (`doc/status.md`, 2026-09-04 late). Clean-up can
+  never delete the version you are running or the one set to boot next,
+  pin or no pin, so pinning the current version proves nothing; pin the
+  *previous* good one.
+- **A wireless update no longer leaves your library's partition
+  unclean.** The update tool put the system partition to bed before
+  handing over to the new kernel but not the data partition (books,
+  settings, Wi-Fi credentials), so from the filesystem's point of view
+  every update was a crash there. Its journal covered for that until
+  2026-09-04, when one update came up with an empty library and
+  auto-sleep stuck off because the partition failed to mount in time.
+  Now both partitions are remounted read-only first, and if the update
+  has to give up, both come back read-write. Found on generation 18;
+  **proven on generation 19 the next evening**: two updates in a row,
+  the second with the library partition freshly written, both coming
+  up with it mounted clean (`doc/status.md`, 2026-09-05).
+- **An update that has to give up partway through its own shutdown
+  now puts the reader back on its own.** Before, if the trial stalled
+  after the device had already turned its radio off — the screen
+  refusing to go quiet, or the new kernel failing to load — the reader
+  stayed stopped with Wi-Fi off and nothing to say, and the update tool
+  waited five minutes and then blamed a self-reset that was never
+  coming (the v0.3.0 known-broken item). Now the device undoes its own
+  shutdown in reverse (USB console back, Wi-Fi back, reader restarted)
+  before it reports why, the report carries the kernel loader's own
+  error text, and `make deploy` prints `NOT PROMOTED: the trial helper
+  refused` at once — or, if the network link had already dropped, reads
+  the reason back from the device the moment it answers. Proven in the
+  QEMU rig with a deliberately broken kernel image, and **on the device
+  the same evening**: with the screen kept busy on purpose, the update
+  refused, put Wi-Fi and the reader back by itself, and the tool printed
+  the refusal it read back from the device — no reboot, same boot id
+  before and after (`doc/status.md`, 2026-09-04 late). What it
+  does not cover: an update that dies *after* the new kernel has been
+  told to start is the new kernel's failure, handled by the self-reset
+  as before.
+- **The UART menu picker is harder to lose and easier to stop.** If you
+  deploy or cold-boot with the debug cable attached, the script that
+  answers U-Boot's boot menu (`uboot-pick-slot.sh`, also the deployer's
+  `WILKBOOK_UART` watcher) now recognises the menu from any of its three
+  entry lines or its countdown line (`Hit any key to stop autoboot`)
+  rather than one short string — U-Boot draws the entries once and then
+  repeats only the countdown, and the serial capture drops ~25 bytes
+  every 150–250 at 1.5 Mbaud (the USB adapter, not a setting;
+  `doc/device-access.md`), so a single string could be the one clipped.
+  It writes its own pid and process group to `<capture>.watcher`; stop
+  it with `kill -- -$(sed -n 's/^pgid=//p' <capture>.watcher)`, which
+  takes its `cat` of the port with it — the pid your shell reports for
+  a backgrounded `setsid` is a wrapper that has already exited, and
+  killing that left a reader holding the port for the next reboot.
+  Stopped that way its `exit=` line says `terminated`, not the `exit=0`
+  ("slot chosen") a bash `sh` used to leave. The deployer uses the same
+  file. It will not answer extlinux's generation menu by mistake (same
+  look, wrong menu). `make uart-pick-check` proves all of it offline by
+  replaying the real captured boot through a pseudo-terminal. Not yet
+  run on the device since the change; the capture itself is still lossy
+  until the adapter or the console baud changes.
 
 ## v0.3.0-prealpha — 2026-09-04
 

@@ -167,10 +167,11 @@
         ;; pinned by make direct-rect-hints-check.
         (local-file "../patches/linux-pinenote-7.1-rect-hints-bounds.patch")
         ;; Ours, on top of hrdl's: the probe unwinds again when drm_init
-        ;; fails (stop the parked refresh kthread, disable runtime PM) --
-        ;; the by-construction first probe no longer leaks and the rebind
-        ;; stops logging "Unbalanced pm_runtime_enable!".  Item 23; pinned
-        ;; by make direct-probe-quirk-check.
+        ;; fails (stop the parked refresh kthread, disable runtime PM).
+        ;; Glass 2026-09-04: the by-construction first probe of every boot
+        ;; fails EARLIER, at waveform_init, which this never reaches -- the
+        ;; probe-lifetime patch below covers that.  Item 23; pinned by
+        ;; make direct-probe-quirk-check.
         (local-file "../patches/linux-pinenote-7.1-probe-unwind.patch")
         ;; Ours, for upstream: mfd rk8xx keeps the RK817 sleep pin's
         ;; function across a kexec (kernel_kexec() runs device_shutdown()
@@ -192,7 +193,19 @@
         ;; no inline band on queue_work() false (WARN instead), the 32x32
         ;; dither's second half loaded 16 bytes in, rect_hint_batch
         ;; validated and the count capped, -EFAULT on short user copies.
-        (local-file "../patches/linux-pinenote-7.1-direct-correctness.patch")))
+        (local-file "../patches/linux-pinenote-7.1-direct-correctness.patch")
+        ;; Ours, on top of hrdl's: the probe's resource lifetime (the same
+        ;; audit's item 2, glass-confirmed 2026-09-04).  Every failure after
+        ;; the two plain vmallocs now releases what it had acquired -- the
+        ;; vmallocs, the phase DMA maps, the runtime-PM count, the custom LUT,
+        ;; both parked kthreads -- so the failed first probe of every boot
+        ;; (waveform_init: no custom_wf.bin until the CLUT one-shot) stops
+        ;; leaking ~10 MB of vmalloc and the pm_runtime_enable count behind
+        ;; the rebind's "Unbalanced pm_runtime_enable!"; remove() frees
+        ;; lut_custom.luts (228 kB per rebind, never freed before).  Must
+        ;; apply after the probe-unwind patch, whose label it extends.
+        ;; doc/upstream-register.md item 23; NOT yet proven on glass.
+        (local-file "../patches/linux-pinenote-7.1-probe-lifetime.patch")))
 
 (define %linux-pinenote-source
   (origin

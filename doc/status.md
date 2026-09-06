@@ -1,7 +1,171 @@
 # Hardware status
 
-Last updated: 2026-09-04. Update protocol: add a dated entry at the top
+Last updated: 2026-09-04 (late). Update protocol: add a dated entry at the top
 after every hardware session; entries are per-device/per-operator.
+
+## 2026-09-04 late (wkelly PineNote, operator present, no UART) — the four post-tag fixes on glass: generations 17 and 18, the pin prunes for real, the trial refuses and comes back, patch 15's leaks gone and its one warning fixed
+
+After the tag, four branches (PRs #73–#76: kernel patch 15 for the
+audit's item 2, the ledger pin, the trial bail-out, the UART watcher
+handle) were merged into one deployable tree (`post-tag-glass`) and
+put on the device the same evening, without the debug cable (the
+operator had it out; they were at the device).
+
+**Generation 17** (`8gg44r7adziazhn1ng3hwhd6r0z1jr3d-system`, kernel
+`s3d0cbj9…` = patch 15 v1): 17 of 439 paths, kexec trial from the
+cold-booted 16, health ok, promoted, generation 9 pruned. No kexec'd-kernel
+note this time — correct, 16 had been cold-booted.
+
+**Patch 15 (#73), first run.** `Unbalanced pm_runtime_enable!`: **0**
+on the boot, with the deliberate failed first probe (`custom_wf.bin`,
+2.9 s) and the second probe (8.4 s) still there. `/proc/vmallocinfo`
+with the reader running: **7 × 642-page, 1 × 1926-page, 1 × 57-page**
+(generation 14 had 8, 2, 1 — the failed probe's two buffers are freed
+now). Five unbind/bind cycles with the reader stopped: the 57-page LUT
+entry stayed at **1** throughout (it grew by one per cycle before),
+`VmallocUsed` 21 584 → 21 632 → 21 632 → 21 616 → 21 664 kB (±48 kB,
+against +212–276 kB per cycle before), threads 2, `card1` after every
+bind. And one thing patch 15 had not caused but exposed: on cycle 1 —
+the unbind that shuts down the reader-era CRTC — the kernel logged
+`WARNING: kernel/kthread.c:707 at kthread_park` from
+`drm_atomic_helper_shutdown → commit_crtc_disable`. hrdl's `remove()`
+runs `kthread_stop()` on both threads and only then
+`drm_atomic_helper_shutdown()`, whose CRTC disable guards its
+`kthread_park` with the thread's `__state` — after `kthread_stop()`
+that is a finished task's: generation 14 happened to read `TASK_DEAD`
+and skipped the park, 17 did not and `WARN_ON(PF_EXITING)` fired.
+**Patch 15 v2** (693a0a6): shutdown first, then stop the threads —
+the reverse of probe's order, where the threads exist before
+`drm_init`. Built clean (kernel `7xb8ib7…`, the EBC files' only warning
+hrdl's `frame_counter`).
+
+**The pin (#74), proven and used.** From generation 17: `pin 16`,
+`pin 10` (the two cold-booted generations), then `prune --keep 1`:
+`generation 10 is pinned; kept`, `generation 16 is pinned; kept`,
+`pruned generation 11 … 15`, the menu re-rendered with three entries,
+`guix gc`. Generations 11 and 12 (the convenience builds) and 13–15
+(superseded candidates) are gone for good; ~300 MB freed; the ledger is
+10 `[pinned]`, 16 `[pinned]`, 17 `[promoted] [booted]`.
+
+**The bail-out (#75), proven on the second try.** First try: a painter
+writing 256 kB to `/dev/fb0` every 150 ms left a ≥250 ms quiet gap, the
+helper's quiesce passed, and the trial simply went ahead (17 kexec'd
+into itself, harmless). Second try, a painter with no pause (3 MB of
+noise per iteration, 75 s): interrupts climbing 28 per 300 ms, then
+`deploy.sh pinenote-os2 --rollback 17` — the helper stopped the reader,
+turned the radio off (the link died as always), failed its quiesce, and
+**bailed out**: gadget re-bound, Wi-Fi back, reader restarted, the
+record written; the deployer read it back and printed
+`NOT PROMOTED: the trial helper refused after the ssh link had dropped;
+it undid its teardown (reader and radio back), DEFAULT is unchanged`
+with `reason=EBC did not go idle`, exit 1. Boot id identical before and
+after (no kexec), the reader running 26 s after, `wlan0` up with its
+addresses. A trap for the next person: the quiesce is 250 ms of a
+flat interrupt count, so the painter must never pause.
+
+**The watcher handle (#76)** stays offline-proven only: no cable this
+evening.
+
+**Generation 18** (`rkw61vxxzifrqwz407gf751w70afignb-system`, the v2
+kernel `7xb8ib7…` plus the three userspace fixes): 6 of 439 paths,
+trial from 17 (the kexec'd-kernel note printed, correctly), health ok,
+promoted, `generation 10 is pinned; kept`, `generation 16 is pinned;
+kept`, nothing to prune. **Patch 15 v2 proven**: `Unbalanced` 0,
+`WARNING:` 0 on the boot, the census 7/1/1 again, and five unbind/bind
+cycles with the reader stopped — cycle 1 released the reader-era
+context with **no warning at all**, cycles 2–5 flat (21 616 → 21 664
+→ 21 616 → 21 632 → 21 632 kB), the LUT entry at 1, threads 2, `card1`
+every bind, five `Initialized` lines, `WARNING:` still 0 for the whole
+boot afterwards. The audit's item 2 is closed on glass.
+
+**A new finding, on the kexec into 18: the data partition did not
+mount.** udev logged `incorrect ext4 checksum on /dev/mmcblk0p7` and
+`/dev/disk/by-partlabel/data: Can't lookup blockdev`; shepherd's
+`file-system-/data` fell back to the library's placeholder (the reader
+came up with an empty library), while the Wi-Fi service found the real
+partition and mounted it **read-only** at `/run/pinenote-wifi`
+(`orphan cleanup on readonly fs`) — its tree intact (books, manuals,
+`wilkbook/`, `wifi/`, `ssh/`), `autosuspend.conf` there reading the
+session's `enabled=0`. The trial helper syncs and remounts **the root**
+read-only before `kexec -e`, and leaves `/data` mounted read-write:
+every kexec so far has left p7 unclean, ext4's journal has covered for
+it, and this one lost udev's race at probe time. The fix is the
+teardown remounting `/data` read-only too (and the bail-out putting it
+back) — added to PR #75, whose branch owns the teardown, and built as
+generation 19. A cold boot would prove nothing about this: the proof
+is two kexecs from the fixed helper, each landing with `/data` mounted
+from the partition and no checksum complaint — the second with the
+partition read-write and freshly written beforehand. Not run yet at
+the time of writing: the reader had gone to sleep (the placeholder
+`/data` has no config, so the broker used its default timer) and the
+operator was away from the button. The device sits on 18 with the
+partition read-only at the Wi-Fi service's mount and the reader on an
+empty library until then.
+
+**The next day (2026-09-05, morning to evening): getting back in.** With
+`/data` on the placeholder the reader could not keep Wi-Fi across a
+sleep (the restore reads `/data/wifi/wlan0.conf`, absent there), the
+gadget port carried no shell on this build, and every button wake was
+followed by a re-sleep within a minute or two — the broker on its
+defaults, cause not yet read from its log. Two serial-recovery attempts
+over the UART landed in resume chatter and then in silence (a sleeping
+device's UART returns NUL bytes); a self-acting recovery held the line
+for two hours and saw no resume at all. The operator's power-cycle in
+the evening reached U-Boot's menu at the very moment the recovery
+script sent ENTER, which took the default entry: **os1** booted. From
+there the clean path: the menu watcher armed (the branch's version —
+the `.watcher` handle appeared with pid, pgid, reader and termios),
+`sudo reboot` on os1, `== menu seen at poll 60: selected os2`, and
+**generation 18 cold-booted** with `/dev/disk/by-partlabel/data` on
+`/data` read-write, `EXT4-fs (mmcblk0p7): mounted filesystem … r/w
+with ordered data mode` — no recovery, no checksum complaint, the
+library back, Wi-Fi up 26 s after ssh first tried, the watcher reaped
+by its recorded group with no reader left. Lessons for the record: a
+recovery script that presses ENTER must first know what is on the
+line; and the os1 detour is the recovery path the tester brief
+describes, exercised for real.
+
+**Generation 19 and the data-partition proof (2026-09-05 evening).**
+From the cold-booted 18 with `/data` read-write: `make deploy` with the
+UART attached — `== UART watcher armed on /dev/ttyUSB0 (pid 1095084,
+pgid 1095084, reader 1095096; …watcher)`, 12 of 439 paths, the trial
+block with the model line and **no** `/data did not remount` line (19's
+helper, which the trial runs, remounted it silently), health ok,
+promoted, the two `is pinned; kept` lines, nothing to prune. Then
+`deploy.sh pinenote-os2 --rollback 19` with the partition read-write
+and written to a second earlier: the kexec'd-kernel note this time, no
+remount complaint, health ok, promoted. **Both boots mounted the data
+partition clean**: `/dev/disk/by-partlabel/data /data ext4 rw`,
+`EXT4-fs (mmcblk0p7): mounted filesystem … r/w with ordered data
+mode` — no recovery, no orphan cleanup, zero `incorrect ext4 checksum`
+/ `lookup blockdev` lines, the library present; boot ids
+`b0d6f0df…` → `22f8e3dc…` → `12fa8b15…`. The watcher was reaped by its
+recorded group after each deploy (`exit=terminated` in both `.watcher`
+handles — the trial answered, so the picker was reaped before any
+menu), no reader left on the port. **#76's deployer side is therefore
+proven too**, its menu-pick side by the os1 → os2 boot above.
+
+**What the broker log says about the "fast re-sleeps".** Not a bug.
+While the config was unreachable the hourly RTC backstop woke the
+reader every 3600 s and the default 20 s settle put it back down
+(`resumed after 3599s` … `KEY_SLEEP` … `trigger=rtc`, at 00:12, 01:12,
+02:12 UTC). The operator's press at 06:23 UTC landed on an *awake*
+reader — the three KOReader-initiated transactions before it (05:41,
+05:56, 06:11) show no resume lines, i.e. they did not suspend, cause
+not read — and put it to sleep (`trigger=power`); the next press woke
+it 14 s later; KOReader's own 15-minute timer slept it at 06:38. What
+stays unexplained is why the serial login answered nothing during that
+awake window (the console works before and after boots). Cosmetic and
+unrelated: `uptime` on the image says `couldn't get boot time` — there
+is no utmp; `/proc/uptime` is fine.
+
+Device at the end: **generation 19** DEFAULT, promoted, kexec'd;
+10 `[pinned]`, 16 `[pinned]`, 17, 18, 19; `enabled=1`; the library
+visible. Owed: nothing for the four PRs. Open for later: why three
+KOReader-initiated suspends did not take on the placeholder boot;
+the serial getty's silence while awake; the Wi-Fi service's fallback
+mount racing the `/data` unit at boot (it requires only udev, not
+`file-system-/data`, so a slow probe still loses).
 
 ## 2026-09-04 (wkelly PineNote, operator mostly away) — the v0.3.0-prealpha candidate is generation 14: patch 14's guards behave on glass, the "zero-IRQ page turns" were the file manager, the trial notes were dying with the radio
 
@@ -189,6 +353,16 @@ mid-line every few hundred (`CPUs=00000] ftrace:`), the raw `cat` of a
 transcript; the picker's menu match rides on a single short string and
 has never fired on glass, so the recovery half of this path is still
 unproven. The device is on 16, `enabled=1`, the operator's half begins.
+[Corrected 2026-09-04, offline (branch `uart-watcher-termios`): "no
+termios setup" was wrong — the picker has always run `stty … 1500000 …
+raw -echo` before its `cat`. Measured from this capture and the cold
+boot's: ~25 bytes (19–29) lost every 150–250 bytes, the same rate in
+both, which fits the CH340 adapter overrunning at 1.5 Mbaud and rules
+out termios and a second reader (`doc/device-access.md`, "The capture is
+lossy"). The single-string match is widened to the three entry lines and
+the countdown line — U-Boot draws the entries once and repeats only the
+countdown, so there is one draw to match — and pinned offline (`make
+uart-pick-check`); the glass proof is still owed.]
 
 **Operator half on generation 16, first pass (20:45 MDT, the
 operator's own words: "pages turn fine, pen works, cover and button
@@ -220,12 +394,20 @@ address-redacted) holds SPL, U-Boot, the menu with both slots, extlinux,
 and the 7.1.8 boot line; a fragment reading "generation 15" in it is the
 extlinux menu's own entry list garbled by cursor escapes, not a wrong
 pick. Generations 9–16 remain; 16 is the only cold-booted one in the
-window (10 was pruned by this deploy's `KEEP=8`). One trap for hand-run
+window (10 was pruned by this deploy's `KEEP=8`) [correction
+2026-09-04: both halves wrong — `deploy.log` says `pruned generation
+8` and the menu it left is 9–16, so generation 10, the previous
+cold-booted one, survived as the seventh of the eight kept and the
+window holds two cold-booted generations; nothing but the window keeps
+10 — the next deploy at the default `KEEP=5` takes it, one at `KEEP=8`
+the deploy after]. One trap for hand-run
 watchers, not for the deployer: from a shell with job control a
 backgrounded `setsid` forks and `$!` is the wrapper, not the script;
 the script's own pid is the group to reap (the deployer runs from
 `make`, no job control, where `$!` is right and the reap was verified
-clean after the generation-16 deploy).
+clean after the generation-16 deploy). [Since 2026-09-04, offline: the
+picker writes pid/pgid/reader to `LOG.watcher` and the deployer reaps
+by that file — `doc/device-access.md`, "the hand-run trap".]
 
 **Operator half, second pass (21:10 MDT) — the tag's last two items.**
 All four rotations on a real page: fine. The settle-window check of the
