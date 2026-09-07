@@ -5,8 +5,9 @@ typed suspend model, and generic executor from
 `pinenote/patches/linux-pinenote-7.0-bsp-sip-probe.patch`. It compiles those
 sources with fake operations only. `check.py` proves that production links the
 strict parser, model, executor, and real backend. The activation object owns a
-separate platform driver and the only device-PM `.prepare`/executor edge; hidden
-exact-default-n Kconfig omits that object from the PineNote candidate.
+separate platform driver and the only device-PM `.prepare`/executor edge. Its
+Kconfig choice is explicit and defaults off for other platforms; the PineNote
+defconfig deliberately enables it.
 
 The C tests cover the donor's probe ordering, repeated GPIO records and
 terminator, PM-prepare regulator actions, and descriptive virtual-poweroff
@@ -38,6 +39,24 @@ object registration, config, ABI, zero-call boundary, patch-metadata form, and
 activation-surface invariant and requires the static validator to fail closed.
 `make suspend-check` owns the compiled policy-free DT blacklist mutations.
 
+`check.py PATCH` validates the canonical BSP patch stage: its PineNote DTS hunk
+must carry only the measured baseline-deep properties and must not add the
+standing ultra override. `check.py --source-tree ROOT` instead validates the
+fully applied stack, where the final PineNote DTS must contain exactly one
+`rockchip,suspend-state-override = <5>;`, directly on the unique top-level
+`rockchip-suspend` node with its reviewed compatible. Its source mutations
+remove, change, duplicate, and move that assignment to `/chosen`, and disable
+the exact unique production `CONFIG_ROCKCHIP_SUSPEND_MODE_ACTIVATE=y` line;
+each must be rejected. The activation-source check is structural rather than a
+general C control-flow proof: after removing comments it requires the one exact
+DT snapshot restore in `rockchip_suspend_prepare()`'s direct function scope,
+before one-shot handling, policy construction, and execution. Focused controls
+move it late, put it behind braced/bare/preprocessor conditions, or leave it
+only in a comment. The separate `validate-ultra-coupling.sh` gate proves that
+the required final override is owned by the later ultra patch together with the
+three rail flips and card-power change. Neither checker mode substitutes for
+that coupling gate.
+
 Run it from the repository root:
 
 ```sh
@@ -62,10 +81,12 @@ activation-hard-off boundary; the scenario binary itself links and calls fake
 operations only.
 
 Passing proves the compiled host logic, compiled fixture interpretation,
-canonical patch shape, and actual supplied-source-tree architecture. Host tests
-never invoke the real backend. It does not execute the platform driver, boot the
-PineNote, activate suspend policy, or prove firmware, DDR retention, wake,
-resume, display repair, or power use.
+canonical patch shape, and actual supplied-source-tree architecture. The C/DTB
+tests cover the extracted fake model/executor and fixture adapter; the Python
+source checker separately owns final-DTS node placement and activation-source
+ordering. Host tests never invoke the real backend. They do not execute the
+platform driver, boot the PineNote, activate suspend policy, or prove firmware,
+DDR retention, wake, resume, display repair, or power use.
 
 ## Why the donor probe values are what they are
 
