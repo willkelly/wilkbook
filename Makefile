@@ -77,7 +77,7 @@ FLAVORS = minimal slim networked dev usb-console usb-console-linux-6-6 reader
         manuals-check ultra-coupling-check timesync-check \
         settings-check koreader-profile-check ebc-modprobe-options-check \
         ebc-clut-check ebc-card-resolution-check ebc-ioctl-roster-check direct-probe-quirk-check direct-rect-hints-check update-path-check uart-pick-check deploy reader-stop-check pen-check ebc-lab-check \
-        $(FLAVORS) $(addprefix image-,$(FLAVORS)) $(addprefix rootfs-,$(FLAVORS))
+        check-source $(FLAVORS) $(addprefix image-,$(FLAVORS)) $(addprefix rootfs-,$(FLAVORS))
 
 help:
 	@echo "Targets:"
@@ -94,6 +94,7 @@ help:
 	@echo "  refresh-episodes-check  self-test of the episode analyser against the issue-#14 fixture"
 	@echo "  refresh-trigger-check   self-test of the trigger analyser against the COMMITTED issue-#14 traces"
 	@echo "  check-host        every host suite needing no hardware ([WBF=..] adds wbf-check + waveform-gated tests)"
+	@echo "  check-source      finite Book Computer source lane (SOURCE_ROOT=/absolute/fresh-candidate)"
 	@echo "  wbf-check         waveform parser checks (WBF=..; never committed)"
 	@echo "  clut-check        C CLUT compiler vs hrdl's wbf_to_custom.py, byte-identical ([WBF=..] [CLUT_REF=..])"
 	@echo "  ebc-clut-check    the direct-mode CLUT installer one-shot, driven through every branch"
@@ -134,6 +135,12 @@ help:
 
 $(FLAVORS): %:
 	$(GUIX) system build $(GUIX_FLAGS) pinenote/systems/pinenote-$*.scm
+
+check-source:
+	@test -n "$(SOURCE_ROOT)" || { \
+		echo "SOURCE_ROOT=/absolute/fresh-candidate is required" >&2; exit 2; }
+	"$(SOURCE_ROOT)/pinenote/tools/book-source-check/run.sh" check \
+		--source-root "$(SOURCE_ROOT)"
 
 $(addprefix image-,$(FLAVORS)): image-%:
 	$(GUIX) system image -t raw-with-offset $(GUIX_FLAGS) pinenote/systems/pinenote-$*.scm

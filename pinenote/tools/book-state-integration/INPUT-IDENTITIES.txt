@@ -1,0 +1,145 @@
+BOOK STATE NATIVE INTEGRATION — ACCEPTED INPUT AND DEPENDENCY IDENTITIES
+Date: 2026-09-06
+Status: fixed inputs for the new frozen host-only integration candidate
+
+Channel and host-test dependency boundary
+=========================================
+
+channels.scm SHA-256:
+  661e28e46437fd1e09d7f2482d15b4c6797edf1e157982cbdd1f3516d296b2f1
+Guix commit:
+  f250e74dd4a4ba2e7f4a62369bf04c1b06756f9c
+Host-test manifest packages:
+  bash-minimal
+  coreutils
+  findutils
+  grep
+  guile@3.0.9
+  guile-gcrypt@0.5.0
+  guile-json@4.7.3
+  guile-sqlite3@0.1.3
+  python@3.12.12 (fixture book and external test oracle only)
+Guix invocation constraints:
+  --no-grafts --cores=2 --max-jobs=1
+  GUIX_PACKAGE_PATH, GUIX_BUILD_OPTIONS, GUIX_ENVIRONMENT unset
+
+Accepted Book State backend
+===========================
+
+Immutable source snapshot manifest:
+  pinenote/tools/book-state/build/artifacts/book-state-backend-sources-20260906-v2/MANIFEST.sha256
+  6520e5ed592cbec37be4605544b7606387d8032335a474ce596a485c022f5426
+book-state.scm:
+  7c3a507d8f10bef6dc81683a5459464aa99378a762fe1d407fa44b749f28dab9
+schema-v1.sql:
+  70db8c3c6782a0b8d383f33c37fed06b2b67bd9f6915e21a9d7dacf042c97bdb
+Accepted backend review packet:
+  pinenote/tools/book-state/build/book-state-backend-review-packet-v2.txt
+  d4bc141b24020cf4df8316835a9d4aa1c7eb3c0c0d906ebd1143fee9e996a2f3
+
+Accepted state protocol and adapter
+===================================
+
+book-protocol.scm:
+  91f121adea358e198fac68aa399dec0b5d1f35df32d1f9f0dca42ccda8cefd44
+book-protocol/blocking-io.scm:
+  543570769d1f1cb3818c6c1bbdbca0025e1f865807f211ace043db42a30baccd
+book_protocol.py:
+  4e2423e09291d29758a6441d460ee2abfb82f24ed589f477ad62021c95ebe735
+book-state-operation-id.scm:
+  dab6c72bd6f22fab7ae15b25ed415bb3564eb7f974740e9cf27352a7525870ee
+book-state-protocol.scm:
+  425ccc468b49f126c561d029d5c4aa61e73d6cc807cfb15e464067f31d7f7257
+book-state-backend-adapter.scm:
+  349c960b63981b1ed39d8fc99b95dafaba2040623463a11a04878c8ac933f769
+Accepted adapter review:
+  doc/reviews/2026-09-06-book-state-backend-adapter-adversarial.md
+  56b0c160843fd5a82c7cd840586f0187457028eafe5c9065b9443aa7469513db
+
+Accepted optional Book Session state delegate
+=============================================
+
+Frozen successor packet manifest:
+  pinenote/tools/book-state-protocol/session-integration/bsd1-successor-v4/packet-manifest.json
+  0c446a3a8916a9d3fae0a9f7124da13cc0fa008d6795d598c6833fed4984fa37
+candidate/book-session.scm:
+  f0e2a0432ed6391806099ca791fa66b65cc3beb36df7a5f31d9cb959ab65a301
+book-state-session-delegate.scm:
+  eca58675dfd91615ae8695ca676d81ec7565311b076aebc1b79e3c6a665b2ca6
+complete accepted-base patch:
+  d779ed2c257d9fe0e995011e5a8c83ba9c6945b7eb189648067a29ed7a7d0280
+Independent accepted review:
+  doc/reviews/2026-09-06-book-session-state-delegate-adversarial.md
+  4a3e650c1519ae98c9c17548fad7b752b88c331b3f0040a8db1b7d9607307c34
+Accepted review results:
+  227 ordinary Book Session assertions
+  61 focused delegate assertions
+  24,666-byte version-1 4,096-NUL worker response delivered
+  24,681-byte maximum framed response bound attained
+
+AArch64 trusted-authority prerequisite
+======================================
+
+Immutable evidence manifest:
+  pinenote/tools/book-state/build/artifacts/aarch64-guile-sqlite3-0.1.3-20260906-v1/MANIFEST.sha256
+  20ec87ad8ae621e9af671667fba868bfb293a23f3863f01ba26643b852565a8e
+Target derivation:
+  /gnu/store/0h3cji7hx5wga9dn46zpgzndbwpisv3h-guile-sqlite3-0.1.3.drv
+Target output:
+  /gnu/store/0c81pri4sf9sm16578hjp7di823l5m7y-guile-sqlite3-0.1.3
+Target output recursive hash:
+  1psgz8kzrdn9c1n0pfaqbwq82k0yig48l7d8xw1g5in0ma8gwl0s
+Target SQLite:
+  /gnu/store/jcrkzfnla7pg7g07v7xsv58hwgzlin8x-sqlite-3.53.1
+Target SQLite recursive hash:
+  08xh0qr9bbd3sh8yppfhyspc0898whpzsbnabl6m5c3iikiprr0h
+Verified FFI target:
+  /gnu/store/jcrkzfnla7pg7g07v7xsv58hwgzlin8x-sqlite-3.53.1/lib/libsqlite3
+
+Sandbox exclusion invariant
+===========================
+
+Accepted sandbox language profile:
+  /gnu/store/kxwhmhxf2ykn40nc4krsr22wrzjwbrrr-wilkbook-book-execution-languages
+Recursive hash:
+  1lmksjn9k8k5bxpnckh5bdd0wwnz3ab7q7wp4cnk5wmfayp1dwln
+Closure path count:
+  45
+Changed by this integration:
+  no
+
+The accepted sandbox language closure does not gain guile-sqlite3. SQLite is
+loaded only by the trusted native Guile authority. The Guile fixture receives a
+source/load view consisting of Book Protocol plus guile-json; the Python fixture
+receives the exact snapshot Book Protocol Python codec through an explicit-path
+loader under `-I -S`. Neither fixture imports or opens the backend, SQLite, a
+state path, namespace identity, or SQL interface.
+
+V2 source-exact correction boundary
+===================================
+
+The v2 immutable snapshot contains the finite executable project closure:
+
+  accepted backend + schema
+  accepted Scheme/Python Book Protocol codecs + Scheme blocking-I/O helper
+  accepted state operation-ID/protocol/adapter modules
+  accepted Book Session + state delegate modules
+  integration factory, authorities, Guile/Python books, test factories/oracles
+  exact Python loader, Scheme origin checker, source-mutation gate
+  test manifest, inner runner, channels.scm
+
+`PACKET-ROSTER.txt` rejects every added/missing file.  The outer gate fixes the
+snapshot location and identities; the source verifier accepts only that one
+path argument and embeds the accepted core hashes above.  Legacy
+`BOOK_SESSION_STATE_*` source/hash variables have no authority.  The mutation
+suite must reject changed `book_protocol.py`, changed `blocking-io.scm`, a
+mutated source hash manifest which blesses changed code, an unlisted shadow
+module, a caller source/hash override, and an extra expected-hash argument,
+before a test-execution canary is created.
+
+The adversarial review at
+`doc/reviews/2026-09-06-book-state-native-integration-adversarial.md` (reviewed
+identity `16469cd08f246743caa4b0e3524cba3080cd75603fc84512f7f7a678f0998877`)
+is provenance for NI-1/NI-2, not a machine-gate dependency.  Historical v1 is
+preserved unchanged: review packet `02bd736c…`, snapshot manifest `42053ee2…`,
+and host log `23392544…`.

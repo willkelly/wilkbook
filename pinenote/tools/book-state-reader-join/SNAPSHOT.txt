@@ -1,0 +1,52 @@
+Book State native KOReader persistent-note join source packet v2
+Date: 2026-09-06
+Repository base: 549dded816e5f73d2c11557ffcd3130a018b82a8
+Status: successor candidate for independent recheck; not accepted or shipping
+
+Predecessor disposition:
+- immutable reader-join v1 adversarial review (BLOCKED):
+  cf31edc06b2c057f3c2c6bfd280940559255301eb76934bf0f603abb06a39d6e
+
+Join-local candidate delta:
+- `empty-action-successor/book-session.scm` is an exact patch over accepted
+  completion-observer candidate 0342e87c...;
+- one trusted state-text endpoint constructor permits 0..4096-byte action and
+  presentation text while all accepted constructors keep their old policy;
+- the patch, resulting source, and focused regression have separate identities.
+
+Accepted prerequisites, copied read-only at execution and left unchanged:
+- native-v2 snapshot MANIFEST.sha256:
+  261b5f018af7c00afe8b3b8db81c42e14bd4efde85ac85a465a459f2ce89013f
+- native-v2 acceptance review:
+  928885be26b58469c9012848260035428ac2eb1494f47bc9a90f940df4777c51
+- native-v2 review packet:
+  264bbfab85e4393322a6bba2051fe29f54be5958be3e50eb0c15e46888997224
+- accepted UI SHA256SUMS:
+  a77c989accef03d2a4698a6483b0d8968b8712dacbb097f69eaf4b5095f7d9ab
+- accepted UI review:
+  56a23f3acc1b2010a89ea8f00134687a0d07f290572f218477361cf0b6222301
+- completion-observer v1 packet SHA256SUMS:
+  e45002e153ce6ae94cd2ddfff2c1a3a9551ce0a0b9046c6cee9c7a08bea50d36
+- accepted completion-observer candidate:
+  0342e87c665626b01c5318d125d7f96a152e16ebe25cc310499ca92698002c8f
+- completion-observer acceptance review:
+  e4f1ae002ba07268c825ddc24b02477ba259a16226ca5a1e42344a6fdd0286a5
+- completion-observer evidence manifest identity, as attested by that accepted
+  review (the separately named artifact is not present in this checkout):
+  90362b51099718e710c2a4c42bf6d07f173b4136d980d5d6db536f18e5e68bb1
+
+The accepted process-identity helper and review provenance are frozen copies
+inside this source packet. The outer owner sources only the authenticated,
+read-only private-closure copy and keeps its functions in memory for cleanup.
+
+The active outer runner is intentionally outside this snapshot to avoid a
+self-referential manifest. Its exact identity is recorded in the review packet.
+It authenticates this packet before copying it to a private read-only closure;
+only the copied inner runner and project source are compiled/executed.
+
+Exact native KOReader input:
+/gnu/store/s48x0nhvrpma3i9mf6wvgqyjrf207fc2-koreader-bin-2026.03
+
+No QEMU, runsc, ARM, image, kernel, mount, network substitution, hardware,
+device, deployment, staging, commit, push, PR, merge, fetch, or rebase is part
+of this host packet.

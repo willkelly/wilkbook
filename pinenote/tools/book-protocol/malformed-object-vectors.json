@@ -1,0 +1,18 @@
+[
+  {
+    "name": "top-level missing comma",
+    "payload": "{\"a\":1 \"b\":2}"
+  },
+  {
+    "name": "top-level leading comma",
+    "payload": "{,\"a\":1}"
+  },
+  {
+    "name": "nested missing comma",
+    "payload": "{\"outer\":{\"a\":1 \"b\":2}}"
+  },
+  {
+    "name": "nested leading comma",
+    "payload": "{\"outer\":{,\"a\":1}}"
+  }
+]

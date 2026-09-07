@@ -1,0 +1,65 @@
+BOOK STATE COMPLETION OBSERVER — PRIVATE SOURCE SUCCESSOR V1
+Date: 2026-09-06
+Repository base: 50572d7796abdb0928969f4db8836fc5e30aeb58
+Disposition requested: independent source/evidence review; not live or UI-joined
+
+FROZEN REVIEW BOUNDARY
+e45002e153ce6ae94cd2ddfff2c1a3a9551ce0a0b9046c6cee9c7a08bea50d36  build/artifacts/book-state-completion-observer-sources-20260906-v1/SHA256SUMS
+dfbd19cbfc3f988992d1042f4f8e3faf30ca8feb15e1638e3073ec1a6a80da9b  SOURCE-IDENTITIES.sha256
+247895fe7cfe6d8202d03e9498a0c097460f3c3963b68133f4a44dea004d8a76  build/completion-observer-host-check-v1.log
+
+SOURCE OLD/NEW
+f0e2a0432ed6391806099ca791fa66b65cc3beb36df7a5f31d9cb959ab65a301  accepted base/book-session-v4.scm
+0342e87c665626b01c5318d125d7f96a152e16ebe25cc310499ca92698002c8f  candidate/book-session.scm
+bf93bafc254eafa5ed05b3fad7b86b442f9cc88f6a9254aaf3b2b6cc53726f49  exact base-to-candidate patch
+eca58675dfd91615ae8695ca676d81ec7565311b076aebc1b79e3c6a665b2ca6  unchanged accepted delegate
+
+ACCEPTED FUNCTIONAL INPUTS
+7c3a507d8f10bef6dc81683a5459464aa99378a762fe1d407fa44b749f28dab9  backend
+425ccc468b49f126c561d029d5c4aa61e73d6cc807cfb15e464067f31d7f7257  protocol
+349c960b63981b1ed39d8fc99b95dafaba2040623463a11a04878c8ac933f769  adapter
+d779ed2c257d9fe0e995011e5a8c83ba9c6945b7eb189648067a29ed7a7d0280  full accepted-core to BSD-1 patch
+4a3e650c1519ae98c9c17548fad7b752b88c331b3f0040a8db1b7d9607307c34  accepted BSD-1 review
+
+UNCHANGED ACCEPTED UI CONTRACT
+a77c989accef03d2a4698a6483b0d8968b8712dacbb097f69eaf4b5095f7d9ab  tools/book-state-reader/SHA256SUMS
+56a23f3acc1b2010a89ea8f00134687a0d07f290572f218477361cf0b6222301  UI adversarial review
+
+EXACT BOUNDED HOST RESULTS
+compile warnings: 0
+accepted Book Session assertions: 227/227
+accepted BSD-1 focused assertions: 61/61
+completion-observer focused assertions: 37/37
+accepted adapter/backend/SQLite and native-book assertions: 37/37
+patch forward reproduction: exact candidate
+patch inverse proof: exact accepted base
+4,096-NUL state-value framed bytes: 24,666
+maximum reserved framed bytes: 24,681
+native fixture processes: one fresh Guile book process using only donated FD 0
+native fixture storage access: none; child load view excludes guile-sqlite3
+
+PROVEN OBSERVER SHAPE
+- explicit opt-in constructor; accepted constructor remains observer-free
+- one endpoint-owned slot: empty, one opaque reservation, or one typed result
+- reserve before state dispatch; occupied slot rejects before backend mutation
+- read, committed, conflict, failure, and cached response observations
+- exact endpoint/session/surface/grant/operation/response validation
+- response queue insertion, accepted-model transition, and publication under one endpoint mutex
+- fail-close/no publication on exception, impossible metadata, pressure, close, or stale generation
+- close, EOF, revoke, release, restart, and navigation lifetime handling
+- defensive string/response copies preserve wire bytes, cache, and SQLite state
+- backend, transport, and UI I/O remain outside authority mutexes
+- a durable but unobserved commit requires reopen/read/exact retry recovery
+- presentation and paint are never receipt evidence
+
+NATIVE-V1 STATUS
+42053ee2907648aac4334b75bf26cc19c63f11984128705963aeae43bcdd9ffe  immutable v1 source manifest used only for accepted component copies
+16469cd08f246743caa4b0e3524cba3080cd75603fc84512f7f7a678f0998877  blocking native-v1 review
+Native-v1 execution evidence remains provisional because NI1/NI2 evidence gaps
+are under separate repair. This observer packet does not edit, repair, or claim
+acceptance of native-v1 root files or execution evidence.
+
+EXCLUDED
+No live source, native-v1 root, UI, demo, kernel, gVisor, image, or central doc
+was changed. No QEMU, runsc, AArch64, KOReader, image, hardware, deployment,
+staging, VCS commit/push/merge, fetch, or rebase was performed.

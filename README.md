@@ -391,6 +391,44 @@ like, and `doc/alpha-signoff.md` is the bar an actual alpha release has
 to clear. `doc/alpha-checklist.md` tracks what stands between the
 prealpha tag and that bar.
 
+## Book Computer prototype
+
+The experimental Book Computer lane has an independently checked native
+persistent-note editor: real KOReader editing, Guile or Python books, and a
+trusted Guile/SQLite authority. It supports repeated save/restart/reopen cycles,
+empty saves, and 4 KiB text. This remains a host-side, SDL-offscreen prototype;
+the shipping reader does not include it.
+
+Start with the [protocol and evidence reference](doc/book-computer-protocols.md),
+then the [demonstrations](doc/book-computer-demo.md) and
+[implementation record](doc/book-computer-implementation.md).
+
+On a GNU/Linux host with Guix, export an explicit source candidate and run the
+accepted public persistence checks from the repository root:
+
+```sh
+candidate="$(mktemp -d)"
+make -C pinenote/tools/book-source-check export-candidate \
+  SOURCE_ROOT="$PWD" OUTPUT="$candidate"
+make check-source SOURCE_ROOT="$candidate"
+```
+
+The command prepares authenticated private source views, resolves the pinned
+native dependencies through Guix, and runs the protocol/state suites and real
+KOReader save/reopen tests. Historical logs, images, databases, and machine-local
+source packets are not inputs. Dependency preparation may fetch packages; this
+is not a QEMU or device command.
+
+| Entry point | Scope |
+|---|---|
+| `make check-source SOURCE_ROOT=/absolute/candidate` | Source/unit checks and Guix-prepared native persistence integration |
+| `pinenote/tools/book-execution-spike/public-source/run.sh --source-root "$PWD"` | Authenticated source-package/system derivation graphs; no OS image build or runtime test |
+| [Retained replay commands](pinenote/tools/book-source-check/README.md) | Explicit external historical artifacts; missing evidence fails rather than being regenerated |
+
+The source-built sandbox runtime and persistent guest still need their joined
+two-boot QEMU proof. [Workbench self-revision](doc/wilkbook-self-hosting-book-computer.md)
+is a later implementation slice.
+
 ## Reading order (humans)
 
 1. This file, then `doc/status.md` (current-state header) — where we are.

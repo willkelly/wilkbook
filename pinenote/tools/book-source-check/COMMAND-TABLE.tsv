@@ -1,0 +1,13 @@
+task	category	command	bounded result
+private-cache	fresh-checkout bootstrap regression	automatic prerequisite of every run.sh check	exact guild.go poison in caller HOME and caller XDG cache; two legitimate Protocol pipelines; 600s
+protocol	fresh-checkout source/unit	pinenote/tools/book-source-check/run.sh check-task protocol --source-root ABSOLUTE_FRESH_CANDIDATE	private output; each Guile source test <=150s
+session	fresh-checkout source/unit	pinenote/tools/book-source-check/run.sh check-task session --source-root ABSOLUTE_FRESH_CANDIDATE	private output; Guile source test <=150s
+backend	fresh-checkout source/unit	make -C pinenote/tools/book-state -f Makefile.public check SOURCE_ROOT=ABSOLUTE_FRESH_CANDIDATE	private output; Guile source test <=150s
+state-protocol	fresh-checkout source/unit	pinenote/tools/book-source-check/run.sh check-task state-protocol --source-root ABSOLUTE_FRESH_CANDIDATE	private output; Guile source test <=150s
+state-protocol-suite	fresh-checkout source/unit	make -C pinenote/tools/book-state-protocol -f Makefile.public check SOURCE_ROOT=ABSOLUTE_FRESH_CANDIDATE	private output; typed protocol plus 42 adapter assertions
+observer	Guix-prepared native integration	make -C pinenote/tools/book-state-integration/completion-observer check SOURCE_ROOT=ABSOLUTE_FRESH_CANDIDATE	private output; component deadlines 90-120s
+native-v2	Guix-prepared native integration	make -C pinenote/tools/book-state-integration -f Makefile.public check SOURCE_ROOT=ABSOLUTE_FRESH_CANDIDATE	private output; bounded native scenarios
+reader-join-v2	Guix-prepared native integration	make -C pinenote/tools/book-state-reader-join -f Makefile.public check SOURCE_ROOT=ABSOLUTE_FRESH_CANDIDATE	private output; outer deadline 175s
+all	fresh-checkout source/unit	make check-source SOURCE_ROOT=ABSOLUTE_FRESH_CANDIDATE	stop-first-failure aggregate with Guix-prepared native stages
+retained-auth	retained-evidence replay	make -C pinenote/tools/book-source-check check-retained ARTIFACT_ROOT=ABSOLUTE_AUTHENTICATED_ROOT	authentication-only; exact historical v1 packet/log/review; missing evidence fails
+retained-runtime	retained-evidence replay	make -C pinenote/tools/book-source-check replay-retained SOURCE_ROOT=ABSOLUTE_FRESH_CANDIDATE ARTIFACT_ROOT=ABSOLUTE_AUTHENTICATED_ROOT	private historical runner; 420s deadline; exact 45-path profile; expected v1 codec block

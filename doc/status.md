@@ -1,7 +1,33 @@
 # Hardware status
 
-Last updated: 2026-09-04 (late). Update protocol: add a dated entry at the top
+Last updated: 2026-09-06. Update protocol: add a dated entry at the top
 after every hardware session; entries are per-device/per-operator.
+
+## 2026-09-06 (wkelly PineNote, book-computer lane) — read-only availability and sandbox prerequisite check
+
+With the operator making the device available again, two bounded read-only SSH
+checks through the existing `pinenote-os2` alias established:
+
+- Running root: `/dev/mmcblk0p6` (os2), kernel release `7.1.8`.
+- Both `/run/current-system` and `/run/booted-system` resolve to
+  `/gnu/store/8zcb8zq9x92sag30m68b6jww86xd1nq7-system`.
+- Battery capacity reported `93` percent.
+- `/data` is mounted from `/dev/disk/by-partlabel/data` as ext4 with
+  `rw,relatime`, rather than the library placeholder.
+- `/run/booted-system/kernel/.config` reports
+  `# CONFIG_USER_NS is not set`, `CONFIG_SECCOMP=y`, and
+  `CONFIG_SECCOMP_FILTER=y`; `/proc/self/ns/user` is absent.
+
+The current kernel therefore lacks the user namespaces required by the
+book-computer lane's chosen gVisor `isolation-userns` configuration. Its accepted
+QEMU demonstration used a separate PineNote test kernel with `CONFIG_USER_NS=y`.
+A device sandbox run needs a separately built and validated successor generation;
+the shared `7.1.8` release string does not make these kernels interchangeable.
+
+This inspection performed no deployment, service change, suspend, reboot, panel
+test, or book execution. Autosuspend configuration was not changed. The result
+establishes reachability and these prerequisites only; it adds no book-computer
+hardware acceptance.
 
 ## 2026-09-04 late (wkelly PineNote, operator present, no UART) — the four post-tag fixes on glass: generations 17 and 18, the pin prunes for real, the trial refuses and comes back, patch 15's leaks gone and its one warning fixed
 

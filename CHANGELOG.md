@@ -24,6 +24,20 @@ this lineage. **Unreleased** above it collects what has landed since.
 
 ## Unreleased
 
+- **Book-computer development has an offline lane.** The self-hosting design
+  and initial implementation plan are in
+  `doc/wilkbook-self-hosting-book-computer.md` and
+  `doc/book-computer-implementation.md`. This is prototype work, not an
+  interactive-book feature in the reader image; shipping defaults and hardware
+  behavior are unchanged.
+- **A native persistent-note prototype is reproducible on the host.** Fixed
+  Guile and Python books can save text through the trusted Guile/SQLite
+  authority, restart, reopen in real KOReader, and save again. Empty notes and
+  4 KiB text pass. `make check-source SOURCE_ROOT=…` prepares checked source
+  views and runs the native test ladder; the README gives the complete command.
+  This is an SDL-offscreen prototype, not a shipping tablet feature. Sandboxed
+  two-boot persistence and Workbench self-revision remain follow-up work.
+
 - **The display driver stops leaking memory on every boot and every
   rebind (kernel patch 15, `probe-lifetime`; on no device yet).** Every
   boot, the driver's first probe fails on purpose — the compiled

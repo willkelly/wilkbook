@@ -1,0 +1,568 @@
+--- a/book-session.scm
++++ b/book-session.scm
+@@ -1,6 +1,8 @@
+ ;;; Guile authority for the experimental one-surface Book Session contract.
+ (define-module (book-session)
+   #:use-module (book-protocol)
++  #:use-module (book-state-protocol)
++  #:use-module (book-state-session-delegate)
+   #:use-module (gcrypt random)
+   #:use-module (ice-9 threads)
+   #:use-module (rnrs bytevectors)
+@@ -26,6 +28,7 @@
+             max-outbound-frames
+             max-outbound-bytes
+             make-book-session-host
++            make-book-session-host-with-state
+             book-session-host?
+             open-session-endpoint!
+             session-endpoint?
+@@ -83,6 +86,7 @@
+ (define max-outbound-frames 8)
+ (define max-outbound-bytes (* max-outbound-frames (+ max-frame-size 4)))
+ (define max-inbound-bytes (+ max-frame-size 4 max-input-bytes-per-pump))
++(define max-state-outbound-frame-bytes (+ max-state-text-bytes 1024))
+ (define linux-msg-nosignal #x4000)
+ 
+ (define (session-error kind message)
+@@ -182,7 +186,8 @@
+ 
+ (define-record-type <session-endpoint>
+   (%make-session-endpoint host binding session mutex input-owner output-owner
+-                          input-buffer output-queue output-bytes transport-open?)
++                          input-buffer output-queue output-bytes transport-open?
++                          state-delegate)
+   session-endpoint?
+   (host session-endpoint-host)
+   (binding session-endpoint-binding)
+@@ -194,7 +199,8 @@
+   (output-queue endpoint-output-queue set-endpoint-output-queue!)
+   (output-bytes endpoint-output-bytes set-endpoint-output-bytes!)
+   (transport-open? endpoint-transport-open?
+-                   set-endpoint-transport-open!))
++                   set-endpoint-transport-open!)
++  (state-delegate endpoint-state-delegate set-endpoint-state-delegate!))
+ 
+ (define-record-type <outbound-frame>
+   (%make-outbound-frame bytes offset)
+@@ -214,13 +220,19 @@
+   (map copy-dispatch-result (%endpoint-pump-result-values result)))
+ 
+ (define-record-type <book-session-host>
+-  (%make-book-session-host endpoints mutex)
++  (%make-book-session-host endpoints mutex state-delegate-factory)
+   book-session-host?
+   (endpoints host-endpoints set-host-endpoints!)
+-  (mutex host-mutex))
++  (mutex host-mutex)
++  (state-delegate-factory host-state-delegate-factory))
+ 
+ (define (make-book-session-host)
+-  (%make-book-session-host '() (make-mutex)))
++  (%make-book-session-host '() (make-mutex) #f))
++
++(define (make-book-session-host-with-state factory)
++  (unless (book-state-delegate-factory? factory)
++    (session-error 'state "typed Book State delegate factory required"))
++  (%make-book-session-host '() (make-mutex) factory))
+ 
+ ;; The endpoint records and cleanup shape follow the small conventions in the
+ ;; pinned Shepherd 1.0.9 'endpoints.scm' and Guix e343ff0 'inferior.scm': make
+@@ -233,8 +245,9 @@
+ ;; Only the raw-payload decoder constructs this record.  Session dispatch can
+ ;; therefore never receive guile-json's normalized 1.0 as caller-supplied data.
+ (define-record-type <peer-message>
+-  (%make-peer-message value)
++  (%make-peer-message kind value)
+   peer-message?
++  (kind peer-message-kind)
+   (value peer-message-value))
+ 
+ (define (with-transition-owner mutex thunk)
+@@ -443,13 +456,31 @@
+         (bounded-integer! "count" (field message "count")
+                           present-item-count present-item-count evidence))))
+ 
++(define (state-type-name? value)
++  (and (string? value)
++       (or (string=? value "state-ready")
++           (string=? value "state-read")
++           (string=? value "state-value")
++           (string=? value "state-commit")
++           (string=? value "state-committed")
++           (string=? value "state-conflict")
++           (string=? value "state-commit-failed"))))
++
+ (define (decode-peer-payload payload)
+   (let* ((message (decode-payload payload))
+-         (text (utf8->string payload)))
+-    (schema-shape! message)
+-    (let ((evidence (scalar-token-evidence text message)))
+-      (validate-message! message evidence)
+-      (%make-peer-message message))))
++         (type-entry (and (pair? message) (assoc "type" message)))
++         (type (and type-entry (cdr type-entry))))
++    (if (state-type-name? type)
++        ;; The accepted state decoder owns all seven exact state shapes and
++        ;; direction checks.  Only STATE-READ/STATE-COMMIT survive this inbound
++        ;; direction; no generic Book Session JSON method is introduced.
++        (%make-peer-message
++         'state (decode-book-state-session-payload payload))
++        (let ((text (utf8->string payload)))
++          (schema-shape! message)
++          (let ((evidence (scalar-token-evidence text message)))
++            (validate-message! message evidence)
++            (%make-peer-message 'surface message))))))
+ 
+ ;; Private scheduling hook: tests pause after complete decoding to prove that
+ ;; close/restart invalidation wins before dispatch.  It is called without a
+@@ -508,7 +539,40 @@
+                   (cons 'book-session-endpoint 'identity) socket
+                   (string-copy diagnostic-name))))
+     (%make-session-endpoint host binding session (make-mutex)
+-                            #f #f (make-bytevector 0) '() 0 #t)))
++                            #f #f (make-bytevector 0) '() 0 #t #f)))
++
++(define (attach-state-delegate! endpoint)
++  ;; The endpoint is not returned to a caller until this finishes.  Grant
++  ;; creation and worker construction happen without host/endpoint mutexes.
++  (let ((factory
++         (host-state-delegate-factory (session-endpoint-host endpoint))))
++    (when factory
++      (let* ((identity
++              (endpoint-binding-identity
++               (session-endpoint-binding endpoint)))
++             (delegate
++              (open-book-state-session-delegate factory identity)))
++        (catch #t
++          (lambda ()
++            (start-book-state-session-delegate!
++             delegate
++             (lambda (completed-delegate operation outcome value)
++               (complete-state-backend-task!
++                endpoint identity completed-delegate operation outcome value)))
++            (with-endpoint-owner
++             endpoint
++             (lambda ()
++               (unless (and (endpoint-current? endpoint identity)
++                            (not (endpoint-state-delegate endpoint)))
++                 (session-error 'state
++                                "endpoint changed before state attachment"))
++               (set-endpoint-state-delegate! endpoint delegate)))
++            delegate)
++          (lambda arguments
++            (close-book-state-session-delegate-local!
++             delegate 'attachment-failed)
++            (finish-book-state-session-delegate-close! delegate)
++            (apply throw arguments)))))))
+ 
+ (define (close-port-quietly! port)
+   (when (and (port? port) (not (port-closed? port)))
+@@ -543,7 +607,7 @@
+   (call-with-values
+       open-owned-socketpair
+     (lambda (socket peer)
+-      (let ((published? #f))
++      (let ((published? #f) (registered-endpoint #f))
+         (dynamic-wind
+           (lambda () #t)
+           (lambda ()
+@@ -561,10 +625,17 @@
+                         (set-host-endpoints!
+                          host (cons endpoint (host-endpoints host)))
+                         endpoint)))))
++              (set! registered-endpoint endpoint)
++              (attach-state-delegate! endpoint)
+               (set! published? #t)
+               (values endpoint peer)))
+           (lambda ()
+             (unless published?
++              (when registered-endpoint
++                (catch #t
++                  (lambda ()
++                    (release-session-endpoint! registered-endpoint))
++                  (lambda arguments #f)))
+               (close-port-quietly! socket)
+               (close-port-quietly! peer))))))))
+ 
+@@ -664,11 +735,67 @@
+         (set-session-terminal! session terminal)
+         result)))))
+ 
++(define (state-output-reservation-available? endpoint)
++  (and (< (length (endpoint-output-queue endpoint)) max-outbound-frames)
++       (<= (+ (endpoint-output-bytes endpoint)
++              max-state-outbound-frame-bytes)
++           max-outbound-bytes)))
++
++(define (append-outbound-frame-under-owner! endpoint frame)
++  (let ((frame-length (bytevector-length frame)))
++    (when (or (>= (length (endpoint-output-queue endpoint))
++                  max-outbound-frames)
++              (> (+ (endpoint-output-bytes endpoint) frame-length)
++                 max-outbound-bytes))
++      (session-error 'backpressure "outbound queue limit reached"))
++    (set-endpoint-output-queue!
++     endpoint
++     (append (endpoint-output-queue endpoint)
++             (list (%make-outbound-frame frame 0))))
++    (set-endpoint-output-bytes!
++     endpoint (+ (endpoint-output-bytes endpoint) frame-length))
++    frame-length))
++
++(define (queue-state-response-under-owner! endpoint delegate response)
++  (let ((frame (encode-state-message response)))
++    (when (> (bytevector-length frame) max-state-outbound-frame-bytes)
++      (session-error 'state "bounded state response exceeded reservation"))
++    (append-outbound-frame-under-owner! endpoint frame)
++    (note-book-state-session-response-queued! delegate response)))
++
+ (define (dispatch-decoded! endpoint peer-message)
+   (let ((message (peer-message-value peer-message)))
+-    (if (string=? (field message "type") "hello")
+-        (accept-hello! (session-endpoint-session endpoint))
+-        (accept-present! endpoint message))))
++    (case (peer-message-kind peer-message)
++      ((surface)
++       (if (string=? (field message "type") "hello")
++           (let* ((initialize
++                   (accept-hello! (session-endpoint-session endpoint)))
++                  (delegate (endpoint-state-delegate endpoint)))
++             ;; The first value remains the exact accepted seven-field
++             ;; initialize envelope.  A state-enabled endpoint adds one typed
++             ;; state-ready value that the trusted pump owner queues second.
++             (if delegate
++                 (list initialize
++                       (book-state-session-delegate-ready-message delegate))
++                 (list initialize)))
++           (list (accept-present! endpoint message))))
++      ((state)
++       (require-active! (session-endpoint-session endpoint))
++       (let ((delegate (endpoint-state-delegate endpoint)))
++         (unless delegate
++           (session-error 'schema
++                          "persistent-state messages are not enabled"))
++         (unless (state-output-reservation-available? endpoint)
++           (session-error 'backpressure
++                          "no bounded output reservation for state result"))
++         (let ((result
++                (dispatch-book-state-session-message! delegate message)))
++           (when (state-delegate-dispatch-result-response result)
++             (queue-state-response-under-owner!
++              endpoint delegate
++              (state-delegate-dispatch-result-response result)))
++           (list result))))
++      (else (session-error 'schema "unknown decoded peer message kind")))))
+ 
+ (define (endpoint-current? endpoint identity)
+   (let ((session (session-endpoint-session endpoint)))
+@@ -781,11 +908,27 @@
+               '()))))))
+ 
+ (define (dispatch-if-current! endpoint identity peer-message)
+-  (with-endpoint-owner
+-   endpoint
+-   (lambda ()
+-     (and (endpoint-current? endpoint identity)
+-          (cons 'committed (dispatch-decoded! endpoint peer-message))))))
++  (catch 'book-state-protocol-error
++    (lambda ()
++      (with-endpoint-owner
++       endpoint
++       (lambda ()
++         (and (endpoint-current? endpoint identity)
++              (cons 'committed
++                    (dispatch-decoded! endpoint peer-message))))))
++    (lambda arguments
++      ;; A schema error leaves the pure model live.  Authority/generation or
++      ;; impossible-state failures close it; pair the outer endpoint close and
++      ;; backend revocation only after the endpoint mutex has been released.
++      (let ((closing?
++             (with-endpoint-owner
++              endpoint
++              (lambda ()
++                (let ((delegate (endpoint-state-delegate endpoint)))
++                  (and delegate
++                       (book-state-session-delegate-closing? delegate)))))))
++        (when closing? (close-session! endpoint)))
++      (apply throw arguments))))
+ 
+ (define (take-complete-payload! endpoint)
+   ;; Only the claimed input owner touches this buffer.
+@@ -850,9 +993,9 @@
+                                   ;; One authority commit per input pump keeps
+                                   ;; its returned value observable before any
+                                   ;; trailing frame can reject or close.
+-                                  (make-pump-result
+-                                   'committed bytes 1
+-                                   (list (cdr committed)))
++                                   (make-pump-result
++                                    'committed bytes 1
++                                    (reverse (cdr committed)))
+                                   (make-pump-result
+                                    'stale bytes frames values))))))
+                        ((>= bytes max-input-bytes-per-pump)
+@@ -907,32 +1050,100 @@
+                 (apply throw arguments))))
+           (lambda () (release-io-owner! endpoint 'input))))))
+ 
++(define (typed-state-message? message)
++  (or (state-ready-message? message)
++      (state-read-message? message)
++      (state-commit-message? message)
++      (state-value-message? message)
++      (state-committed-message? message)
++      (state-conflict-message? message)
++      (state-commit-failed-message? message)))
++
++(define (state-looking-object? message)
++  (and (list? message)
++       (assoc "type" message)
++       (let ((type (assoc-ref message "type")))
++         (and (string? type) (string-prefix? "state-" type)))))
++
+ (define (endpoint-queue-message! endpoint message)
+   (unless (session-endpoint? endpoint)
+     (error "Book Session endpoint record required"))
+   ;; Encoding is bounded by the accepted codec and intentionally happens
+   ;; outside every endpoint/host mutex.
+-  (let ((frame (encode-frame message)))
++  (when (and (typed-state-message? message)
++             (not (state-ready-message? message)))
++    (session-error 'authority
++                   "only the endpoint-owned state worker may queue state results"))
++  (when (state-looking-object? message)
++    (session-error 'schema
++                   "state output must use its accepted typed record"))
++  (let ((frame (if (state-ready-message? message)
++                   (encode-state-message message)
++                   (encode-frame message))))
+     (with-endpoint-owner
+      endpoint
+      (lambda ()
+        (let* ((identity
+               (endpoint-binding-identity
+                 (session-endpoint-binding endpoint)))
+-              (queue (endpoint-output-queue endpoint))
+-              (frame-length (bytevector-length frame)))
+-         (unless (endpoint-current? endpoint identity)
+-           (session-error 'state "session endpoint is closed or revoked"))
+-         (when (or (>= (length queue) max-outbound-frames)
+-                   (> (+ (endpoint-output-bytes endpoint) frame-length)
+-                      max-outbound-bytes))
+-           (session-error 'backpressure "outbound queue limit reached"))
+-         (set-endpoint-output-queue!
+-          endpoint
+-          (append queue (list (%make-outbound-frame frame 0))))
+-         (set-endpoint-output-bytes!
+-          endpoint (+ (endpoint-output-bytes endpoint) frame-length))
+-         frame-length)))))
++               (frame-length (bytevector-length frame)))
++          (unless (endpoint-current? endpoint identity)
++            (session-error 'state "session endpoint is closed or revoked"))
++          (when (or (>= (length (endpoint-output-queue endpoint))
++                        max-outbound-frames)
++                    (> (+ (endpoint-output-bytes endpoint) frame-length)
++                       max-outbound-bytes))
++            (session-error 'backpressure "outbound queue limit reached"))
++          (when (state-ready-message? message)
++            (let ((delegate (endpoint-state-delegate endpoint)))
++              (unless delegate
++                (session-error 'authority
++                               "endpoint has no persistent-state grant"))
++              (announce-book-state-session-delegate! delegate message)))
++          (append-outbound-frame-under-owner! endpoint frame))))))
++
++(define (complete-state-backend-task! endpoint identity delegate operation
++                                      outcome value)
++  ;; The delegate worker calls this after RUN-OPERATION has returned with no
++  ;; authority mutex held.  Reenter once, recheck exact endpoint/delegate
++  ;; lifetime, apply the exact typed result, and queue at most one response.
++  (let ((close? #f))
++    (if (eq? outcome 'error)
++        (set! close? #t)
++        (catch 'book-state-protocol-error
++          (lambda ()
++            (with-endpoint-owner
++             endpoint
++             (lambda ()
++               (cond
++                ((or (not (endpoint-current? endpoint identity))
++                     (not (eq? delegate
++                               (endpoint-state-delegate endpoint))))
++                 'stale)
++                ((not (state-output-reservation-available? endpoint))
++                 (close-book-state-session-delegate-local!
++                  delegate 'state-output-backpressure)
++                 (set! close? #t)
++                 'closing)
++                (else
++                 (let ((response
++                        (apply-book-state-session-backend-result!
++                         delegate value)))
++                   (if (book-state-session-delegate-closing? delegate)
++                       (begin (set! close? #t) 'closing)
++                       (begin
++                         (queue-state-response-under-owner!
++                          endpoint delegate response)
++                         'queued))))))))
++          (lambda arguments
++            ;; Protocol V2 has already invalidated its binding for an
++            ;; impossible backend result.  Pair that with outer close after
++            ;; leaving the endpoint authority mutex.
++            (set! close? #t)
++            'closing)))
++    (when close?
++      (close-session! endpoint))
++    (if close? 'closed 'complete)))
+ 
+ (define (output-head-snapshot endpoint identity)
+   (with-endpoint-owner
+@@ -1130,7 +1341,7 @@
+          generation)))))
+ 
+ (define (revoke-surface! endpoint)
+-  (let ((close-transport?
++  (let ((transition
+          (with-endpoint-owner
+           endpoint
+           (lambda ()
+@@ -1141,12 +1352,25 @@
+                       session (session-pending session) 'revoked)))
+                 (set-session-pending! session '())
+                 (set-session-terminal! session terminal)
+-                (set-session-state! session 'revoked)
+-                (let ((open? (endpoint-transport-open? endpoint)))
+-                  (set-endpoint-transport-open! endpoint #f)
+-                  open?)))))))
+-    (when close-transport?
+-      (shutdown-and-close-transport! endpoint))))
++                 (set-session-state! session 'revoked)
++                 (let ((open? (endpoint-transport-open? endpoint)))
++                   (set-endpoint-transport-open! endpoint #f)
++                   (set-endpoint-output-queue! endpoint '())
++                   (set-endpoint-output-bytes! endpoint 0)
++                   (list open?
++                         (detach-state-delegate-under-owner!
++                          endpoint 'surface-revoked)))))))))
++    (when (car transition)
++      (shutdown-and-close-transport! endpoint))
++    (when (cadr transition)
++      (finish-book-state-session-delegate-close! (cadr transition)))))
++
++(define (detach-state-delegate-under-owner! endpoint reason)
++  (let ((delegate (endpoint-state-delegate endpoint)))
++    (when delegate
++      (close-book-state-session-delegate-local! delegate reason)
++      (set-endpoint-state-delegate! endpoint #f))
++    delegate))
+ 
+ (define (close-one-session-transition! endpoint)
+   (let ((session (session-endpoint-session endpoint)))
+@@ -1158,6 +1382,8 @@
+         (set-session-state! session 'closed)))
+     (let ((open? (endpoint-transport-open? endpoint)))
+       (set-endpoint-transport-open! endpoint #f)
++      (set-endpoint-output-queue! endpoint '())
++      (set-endpoint-output-bytes! endpoint 0)
+       open?)))
+ 
+ (define (shutdown-and-close-transport! endpoint)
+@@ -1173,12 +1399,17 @@
+       (close-port-quietly! socket))))
+ 
+ (define (close-session! endpoint)
+-  (let ((close-transport?
++  (let ((transition
+          (with-endpoint-owner
+           endpoint
+-          (lambda () (close-one-session-transition! endpoint)))))
+-    (when close-transport?
+-      (shutdown-and-close-transport! endpoint))))
++          (lambda ()
++            (list (close-one-session-transition! endpoint)
++                  (detach-state-delegate-under-owner!
++                   endpoint 'session-closed))))))
++    (when (car transition)
++      (shutdown-and-close-transport! endpoint))
++    (when (cadr transition)
++      (finish-book-state-session-delegate-close! (cadr transition)))))
+ 
+ (define (host-session-snapshot endpoint)
+   (with-endpoint-owner
+@@ -1212,7 +1443,8 @@
+     (call-with-values
+         open-owned-socketpair
+       (lambda (new-socket new-peer)
+-        (let ((published? #f) (close-old? #f))
++        (let ((published? #f) (close-old? #f) (old-delegate #f)
++              (replacement-created #f))
+           (dynamic-wind
+             (lambda () #t)
+             (lambda ()
+@@ -1242,16 +1474,28 @@
+                              ;; No socket I/O occurs here.  The old lifetime is
+                              ;; invalid before the replacement is published.
+                              (set! close-old?
+-                                   (close-one-session-transition!
+-                                    old-endpoint))
+-                             (set-host-endpoints! host endpoints)
+-                             replacement)))))))
+-                (set! published? #t)
++                                    (close-one-session-transition!
++                                     old-endpoint))
++                              (set! old-delegate
++                                    (detach-state-delegate-under-owner!
++                                     old-endpoint 'session-restarted))
++                              (set-host-endpoints! host endpoints)
++                              replacement)))))))
++                (set! replacement-created replacement)
+                 (when close-old?
+                   (shutdown-and-close-transport! old-endpoint))
++                (when old-delegate
++                  (finish-book-state-session-delegate-close! old-delegate))
++                (attach-state-delegate! replacement)
++                (set! published? #t)
+                 (values replacement new-peer)))
+             (lambda ()
+               (unless published?
++                (when replacement-created
++                  (catch #t
++                    (lambda ()
++                      (release-session-endpoint! replacement-created))
++                    (lambda arguments #f)))
+                 (close-port-quietly! new-socket)
+                 (close-port-quietly! new-peer)))))))))
+ 
+@@ -1259,7 +1503,7 @@
+   (unless (session-endpoint? endpoint)
+     (error "Book Session endpoint record required"))
+   (let ((host (session-endpoint-host endpoint)))
+-    (let ((close-transport?
++    (let ((transition
+            (with-host-owner
+             host
+             (lambda ()
+@@ -1269,10 +1513,15 @@
+                  (unless (memq endpoint (host-endpoints host))
+                    (session-error 'state
+                                   "endpoint is no longer registered"))
+-                 (let ((close?
+-                        (close-one-session-transition! endpoint)))
+-                   (set-host-endpoints!
+-                    host (delq endpoint (host-endpoints host)))
+-                   close?)))))))
+-      (when close-transport?
+-        (shutdown-and-close-transport! endpoint)))))
++                  (let ((close?
++                         (close-one-session-transition! endpoint))
++                        (delegate
++                         (detach-state-delegate-under-owner!
++                          endpoint 'endpoint-released)))
++                    (set-host-endpoints!
++                     host (delq endpoint (host-endpoints host)))
++                    (list close? delegate))))))))
++      (when (car transition)
++        (shutdown-and-close-transport! endpoint))
++      (when (cadr transition)
++        (finish-book-state-session-delegate-close! (cadr transition))))))

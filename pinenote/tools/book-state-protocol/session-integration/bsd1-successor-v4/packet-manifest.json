@@ -1,0 +1,112 @@
+{
+  "accepted_inputs": {
+    "book-protocol.scm": "91f121adea358e198fac68aa399dec0b5d1f35df32d1f9f0dca42ccda8cefd44",
+    "book-session.scm": "f5823fa7fd7c6fd81780c70960fd80530e24f990af2fa346c30ed94604ba7668",
+    "book-state-operation-id.scm": "dab6c72bd6f22fab7ae15b25ed415bb3564eb7f974740e9cf27352a7525870ee",
+    "book-state-protocol-plus-read-only-accessor.scm": "425ccc468b49f126c561d029d5c4aa61e73d6cc807cfb15e464067f31d7f7257",
+    "test-book-session.scm": "dbd96cbc13fc601edb5d7db5b676cabd2dcf9ad7f832ce85ebdea93b93294aec"
+  },
+  "blocked_input": {
+    "adversarial_review": "5b01ce1e47b9efeac9c0f823da7015b32b22cf769818ec6d9076c078c5cf5e13",
+    "book-session.scm": "d60757f38812bd82b03d1e075303036dd0dae740bca4b5f2ba8e5f4b7b7ec813",
+    "packet_manifest": "9d1faa6eb166dba125c9752693cc5c76fd6d80e79981ca4ce5e0bf1794781624"
+  },
+  "bounds": {
+    "existing_output_bytes": 524320,
+    "existing_output_frames": 8,
+    "generic_max_frame_bytes_including_prefix": 65540,
+    "json_escape_bytes_per_state_text_byte": 6,
+    "queued_state_tasks_per_endpoint": 1,
+    "state_response_fixed_payload_bytes": 101,
+    "state_response_frame_prefix_bytes": 4,
+    "state_response_reservation_bytes": 24681,
+    "state_text_utf8_bytes": 4096,
+    "workers_per_state_endpoint": 1
+  },
+  "candidate_sources": {
+    "CONTRACT.md": "6d9b0f9323915eebd1390f47227f986cc81567f1af35d2718656187443dfbbf6",
+    "REVIEW.md": "9835a957cbcd8c86d8043de3948efd3b9f37988225c355dded4c0408c3d7b389",
+    "base/book-session-v3.scm": "d60757f38812bd82b03d1e075303036dd0dae740bca4b5f2ba8e5f4b7b7ec813",
+    "book-session-bsd1-correction.patch": "c229c218f48debd36d7209dd1106d22b6e5b9ec34c9f35e979b4ea8682a32d74",
+    "book-session-state-delegate.patch": "d779ed2c257d9fe0e995011e5a8c83ba9c6945b7eb189648067a29ed7a7d0280",
+    "book-state-session-delegate.scm": "eca58675dfd91615ae8695ca676d81ec7565311b076aebc1b79e3c6a665b2ca6",
+    "candidate/book-session.scm": "f0e2a0432ed6391806099ca791fa66b65cc3beb36df7a5f31d9cb959ab65a301",
+    "run-host-tests.sh": "4aa3aad3bdc0415327433c884457094a9fea829e15d6c0262761741ae9e447ca",
+    "test-book-session-state-integration.scm": "4008d9e4491e814b8a33d9a015038eb8684f2c9a0378966839cfd21309055562",
+    "test-manifest.scm": "d8bc9e8d542262d2888993859361aa87d7149de1e678f08972aac9a1d33f1d7c"
+  },
+  "completion_failure_order": [
+    "under endpoint mutex recheck exact endpoint identity and delegate object",
+    "close session and clear output bytes/frames",
+    "close state FSM, clear one task slot, stop and detach exact delegate",
+    "release endpoint mutex",
+    "shutdown transport",
+    "one cleanup owner attempts trusted revocation and reaps without self-join"
+  ],
+  "dependency_boundary": "typed mock only; no Book State backend, adapter, sqlite3, or guile-sqlite3 in source/test closure",
+  "evidence": {
+    "code-source-hashes.txt": "43ec7444648431030eb51ad75d32b68f943c93e8cf3f6950ba209691fcfedd2c",
+    "evidence-hashes.txt": "1403fb2773d433b0163769b95da6160c888a205a62666518ba62d82590405178",
+    "host-check.log": "b3ac8886438ea878a7acb3405763331730e6fc541d186650c2a768be7aad944d",
+    "source-old-new.txt": "1ba16081e9bf8e18f6411b5770adc436dfaf448634d638903104b58a1845c613"
+  },
+  "excluded": [
+    "accepted Book Session mutation",
+    "backend/adapter join",
+    "SQLite",
+    "existing guest",
+    "existing outer loop",
+    "UI",
+    "package",
+    "system",
+    "image",
+    "QEMU",
+    "runsc",
+    "ARM",
+    "hardware",
+    "deployment",
+    "staging",
+    "commit",
+    "push"
+  ],
+  "old_new": {
+    "accepted_base": "f5823fa7fd7c6fd81780c70960fd80530e24f990af2fa346c30ed94604ba7668",
+    "blocked_v3_base": "d60757f38812bd82b03d1e075303036dd0dae740bca4b5f2ba8e5f4b7b7ec813",
+    "focused_patch": "c229c218f48debd36d7209dd1106d22b6e5b9ec34c9f35e979b4ea8682a32d74",
+    "focused_patch_numstat": {
+      "deletions": 37,
+      "insertions": 90
+    },
+    "full_patch": "d779ed2c257d9fe0e995011e5a8c83ba9c6945b7eb189648067a29ed7a7d0280",
+    "full_patch_inverse_reproduces_accepted": true,
+    "full_patch_numstat": {
+      "deletions": 64,
+      "insertions": 366
+    },
+    "new_candidate": "f0e2a0432ed6391806099ca791fa66b65cc3beb36df7a5f31d9cb959ab65a301",
+    "patches_reproduce_candidate": true
+  },
+  "owner_lifetime_claims": [
+    "OPEN-BINDING receives only the fresh endpoint owner outside authority mutexes",
+    "RUN-OPERATION receives only one accepted typed operation outside authority mutexes",
+    "completion checks exact endpoint, delegate, operation, and generation",
+    "failure invalidation and detach are atomic before another input dispatch",
+    "REVOKE-BINDING receives only the retained typed binding outside endpoint mutex",
+    "worker-initiated cleanup avoids self-join and one cleanup owner attempts revocation once",
+    "fresh replacement endpoint cannot be selected by stale completion"
+  ],
+  "results": {
+    "accepted_book_session_assertions": 227,
+    "added_bsd1_and_race_assertions": 31,
+    "compile_warnings": 0,
+    "focused_assertions": 61,
+    "retained_v3_focused_assertions": 30
+  },
+  "scope": "private optional Book Session state-delegate BSD-1 source successor",
+  "separately_accepted_not_imported": {
+    "adapter": "349c960b63981b1ed39d8fc99b95dafaba2040623463a11a04878c8ac933f769",
+    "backend": "7c3a507d8f10bef6dc81683a5459464aa99378a762fe1d407fa44b749f28dab9"
+  },
+  "status": "review-ready private source successor; not accepted or live",
+  "trusted_callback_liveness": "OPEN-BINDING, RUN-OPERATION, and REVOKE-BINDING must be total and bounded; no thread cancellation or request timer is claimed"
+}

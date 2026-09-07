@@ -1333,3 +1333,25 @@ not required; the register-level mechanism (a documented shutdown hook
 racing a documented kexec code path) does not need a second board to be
 believed, only to be doubly corroborated.
 
+## 26. guile-json 4.7.3: permissive object separators and invalid control-character output
+
+**Status: needs-work; not sent.** Found by the book-computer lane's independent
+Guile/cross-language review on 2026-09-04, entirely offline.
+
+**Evidence:** `doc/reviews/2026-09-04-book-guile-adversarial.md` records the
+pinned Guix/dependency hashes and reproductions through a real Python/Guile
+socketpair. The underlying parser accepts `{"a":1 "b":2}` and `{,"a":1}`;
+the builder with `#:unicode #f` emits raw forbidden C0 characters for most of
+U+0000–U+001F (the five named escapes work). A valid escaped NUL input can
+therefore produce invalid JSON when decoded and echoed. Neither finding is
+hardware-dependent. The separate quadratic duplicate detector is our wrapper's
+bug, not attributed upstream.
+
+**For:** guile-json maintainers. **Form:** minimal standalone parser/builder
+reproductions and regression tests, independent of Wilkbook's framing wrapper.
+**Before sending:** independently recheck the dependency-only cases against
+current upstream, distinguish intentional permissive parsing from undocumented
+behavior, and verify the control-escaping fix/options. Wrapper fixes and
+cross-language regression tests are in progress; do not claim upstream is fixed
+because our wrapper rejects or escapes an input. The standing send gate above
+still applies.

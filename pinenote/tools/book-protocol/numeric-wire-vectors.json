@@ -1,0 +1,93 @@
+[
+  {
+    "name": "one-integer",
+    "token": "1",
+    "python_type": "int",
+    "python_type_after_guile": "int",
+    "python_repr_after_guile": "1",
+    "alias_group": "one"
+  },
+  {
+    "name": "one-float",
+    "token": "1.0",
+    "python_type": "float",
+    "python_type_after_guile": "int",
+    "python_repr_after_guile": "1",
+    "alias_group": "one"
+  },
+  {
+    "name": "large-exponent-zero",
+    "token": "0e1000",
+    "python_type": "float",
+    "python_type_after_guile": "int",
+    "python_repr_after_guile": "0",
+    "zero_sign_after_guile": 1.0,
+    "alias_group": "zero"
+  },
+  {
+    "name": "negative-integer-zero",
+    "token": "-0",
+    "python_type": "int",
+    "python_type_after_guile": "int",
+    "python_repr_after_guile": "0",
+    "zero_sign_after_guile": 1.0,
+    "alias_group": "zero"
+  },
+  {
+    "name": "positive-float-zero",
+    "token": "0.0",
+    "python_type": "float",
+    "python_type_after_guile": "int",
+    "python_repr_after_guile": "0",
+    "zero_sign_after_guile": 1.0,
+    "alias_group": "zero"
+  },
+  {
+    "name": "negative-float-zero",
+    "token": "-0.0",
+    "python_type": "float",
+    "python_type_after_guile": "int",
+    "python_repr_after_guile": "0",
+    "zero_sign_after_guile": 1.0,
+    "alias_group": "zero"
+  },
+  {
+    "name": "safe-minimum",
+    "token": "-9007199254740991",
+    "python_type": "int",
+    "python_type_after_guile": "int",
+    "python_repr_after_guile": "-9007199254740991"
+  },
+  {
+    "name": "safe-maximum",
+    "token": "9007199254740991",
+    "python_type": "int",
+    "python_type_after_guile": "int",
+    "python_repr_after_guile": "9007199254740991",
+    "alias_group": "safe-maximum"
+  },
+  {
+    "name": "rounded-near-safe-maximum",
+    "token": "9007199254740991.1",
+    "python_type": "float",
+    "python_type_after_guile": "float",
+    "python_repr_after_guile": "9007199254740991.0",
+    "alias_group": "safe-maximum"
+  },
+  {
+    "name": "decimal-tenth",
+    "token": "0.1",
+    "python_type": "float",
+    "python_type_after_guile": "float",
+    "python_repr_after_guile": "0.1",
+    "alias_group": "decimal-tenth"
+  },
+  {
+    "name": "rounded-decimal-tenth",
+    "token": "0.10000000000000001",
+    "python_type": "float",
+    "python_type_after_guile": "float",
+    "python_repr_after_guile": "0.1",
+    "alias_group": "decimal-tenth"
+  }
+]

@@ -1,0 +1,77 @@
+BOOK STATE NATIVE INTEGRATION — FROZEN SOURCE SNAPSHOT V2
+Date: 2026-09-06
+Status: host-only NI-1/NI-2 correction candidate; not pre-accepted
+
+Purpose
+=======
+
+This snapshot supersedes v1 only as executable evidence.  V1 remains immutable
+historical evidence.  V2 binds the complete finite project-source closure used
+by the native test: every Scheme/Python module, the backend schema, authorities,
+books, test factories/oracles, source gate, module-origin checker, host manifest,
+inner runner, and channels.scm.  No review document is a machine-gate input.
+
+Accepted executable cores
+=========================
+
+  backend                       7c3a507d8f10bef6dc81683a5459464aa99378a762fe1d407fa44b749f28dab9
+  schema                        70db8c3c6782a0b8d383f33c37fed06b2b67bd9f6915e21a9d7dacf042c97bdb
+  Scheme Book Protocol          91f121adea358e198fac68aa399dec0b5d1f35df32d1f9f0dca42ccda8cefd44
+  Scheme blocking I/O           543570769d1f1cb3818c6c1bbdbca0025e1f865807f211ace043db42a30baccd
+  Python Book Protocol          4e2423e09291d29758a6441d460ee2abfb82f24ed589f477ad62021c95ebe735
+  state protocol                425ccc468b49f126c561d029d5c4aa61e73d6cc807cfb15e464067f31d7f7257
+  backend adapter               349c960b63981b1ed39d8fc99b95dafaba2040623463a11a04878c8ac933f769
+  Book Session                  f0e2a0432ed6391806099ca791fa66b65cc3beb36df7a5f31d9cb959ab65a301
+  state delegate                eca58675dfd91615ae8695ca676d81ec7565311b076aebc1b79e3c6a665b2ca6
+  channels.scm                  661e28e46437fd1e09d7f2482d15b4c6797edf1e157982cbdd1f3516d296b2f1
+
+Identity model
+==============
+
+PACKET-ROSTER.txt is the exact file roster.  SOURCE-IDENTITIES.sha256 binds all
+accepted and candidate executable project sources.  MANIFEST.sha256 binds every
+file except itself; the outer repository runner hard-codes all three manifest
+identities.  It copies this tree into a private 0500/0400 execution tree, invokes
+the authenticated structural/source verifier there, and only then enters the
+pinned Guix shell.  Expected source hashes and source directories are not caller
+arguments or environment overrides.
+
+Python runs under -I -S through an exact-path loader which checks and reports the
+codec identity.  Project Scheme modules compile from this tree to one private
+cache; the test checks those runtime compiled origins.  Mutation tests cover the
+Python codec, blocking-I/O helper, a hash manifest changed to bless changed code,
+an unlisted shadow module, legacy caller source/hash variables, and an extra
+expected-hash argument.  Every mutation must reject before its execution canary.
+
+NI-2 execution
+==============
+
+The existing two-language scenarios remain positive acknowledged receipt replay.
+A separate Guile book sends one ordinary commit.  The test-only RUN-OPERATION
+wrapper calls the real accepted adapter, then pauses before returning the result
+to the delegate worker.  The endpoint closes while paused; the book must exit on
+EOF without parsing state-committed and outbound frames remain zero.  An external
+read-only SQLite connection observes version 1 plus one receipt before releasing
+the callback.  A fresh authority/book load the value and retry the exact
+operation ID/expected version, receive the original receipt, and leave value,
+version, and receipt count unchanged.  A book which really consumes the receipt
+and only then pretends loss is executed and rejected by the semantic oracle.
+
+Execution and exclusions
+========================
+
+From the repository root:
+
+  make -C pinenote/tools/book-state-integration check
+
+Expected coverage is 13 retained focused factory assertions, six retained
+normal/boundary authority phases with twelve Guile/Python books, three additional
+lost/retry/counterexample authority phases with three Guile books, exact module
+origins, six source mutation counterexamples, and the mandatory 4,096-byte NUL
+round trip.  Counts may increase only with explicit new coverage; v1's old counts
+are not used as a v2 success oracle.
+
+This is bounded native host Guile/Python/SQLite evidence only.  It does not use
+QEMU, runsc, ARM, KOReader, an image, kernel, mount, device, staging, commit, or
+push.  The accepted 45-path sandbox closure is checked unchanged, but the native
+execution is not claimed to be sandboxed.
