@@ -1,2 +1,4 @@
-# Unified-diff context prefixes source tabs with a mandatory space.
-pinenote/patches/*.patch whitespace=-space-before-tab,-blank-at-eol
+# Unified-diff context prefixes tabs and empty lines with a mandatory space;
+# an empty context line may also be the patch's final line.
+pinenote/patches/*.patch whitespace=-space-before-tab,-blank-at-eol,-blank-at-eof
+pinenote/tools/**/*.patch whitespace=-space-before-tab,-blank-at-eol,-blank-at-eof
