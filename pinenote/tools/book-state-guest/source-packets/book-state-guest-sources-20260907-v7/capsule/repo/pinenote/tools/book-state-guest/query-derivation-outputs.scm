@@ -1,0 +1,21 @@
+;;; Print one existing derivation's declared outputs without realizing them.
+(use-modules (guix derivations)
+             (ice-9 match))
+
+(unless (= (length (command-line)) 2)
+  (error "usage: query-derivation-outputs.scm /gnu/store/ROOT.drv"))
+(define root (cadr (command-line)))
+(unless (and (string-prefix? "/gnu/store/" root)
+             (string-suffix? ".drv" root)
+             (file-exists? root))
+  (error "root is not an existing store derivation" root))
+
+(let ((outputs (derivation-path->output-paths root)))
+  (unless (= (length outputs) 1)
+    (error "expected one derivation output" root outputs))
+  (match (car outputs)
+    ((name . path)
+     (unless (and (string=? name "out")
+                  (string-prefix? "/gnu/store/" path))
+       (error "unexpected derivation output" name path))
+     (format #t "OUTPUT ~a ~a~%" name path))))

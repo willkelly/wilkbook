@@ -1,0 +1,49 @@
+mfd: rk8xx: keep the sleep pin function across a kexec
+
+The i2c/spi shutdown hook switches the RK809/RK817 sleep pin to its
+power-down function so that the PSCI SYSTEM_OFF that follows a normal
+shutdown powers the board down.  kernel_kexec() runs the same
+device_shutdown(), but no power-off follows: the next kernel starts with
+the pin on its power-down function and nothing restores it (only a
+suspend/resume cycle does).  From then on any SoC reset that asserts the
+sleep pin turns into a power-off.
+
+On a PineNote (RK3566 + RK817) with the DesignWare watchdog armed just
+before kexec -e: SYS_CFG3 reads 0x20 (SLPPIN_NULL_FUN) after a cold boot
+and 0x30 (SLPPIN_DN_FUN) after a kexec; when the watchdog expires in the
+kexec'd kernel the chip reboots at 0x20 and powers off at 0x30.  A trial
+kernel that hangs during boot therefore needs a power button instead of
+recovering by watchdog.  Skip the switch while a kexec is in progress.
+
+wilkbook: doc/upstream-register.md item 25; doc/status.md 2026-09-03.
+
+--- a/drivers/mfd/rk8xx-core.c	2026-09-03 14:15:37.025994261 -0600
++++ b/drivers/mfd/rk8xx-core.c	2026-09-03 14:16:22.423779972 -0600
+@@ -12,6 +12,7 @@
+ 
+ #include <linux/bitfield.h>
+ #include <linux/interrupt.h>
++#include <linux/kexec.h>
+ #include <linux/mfd/rk808.h>
+ #include <linux/mfd/core.h>
+ #include <linux/module.h>
+@@ -738,6 +739,19 @@
+ 	struct rk808 *rk808 = dev_get_drvdata(dev);
+ 	int ret;
+ 
++	/*
++	 * A kexec is not a power-off.  The next kernel inherits the PMIC as
++	 * we leave it, and nothing in its boot restores the sleep pin's
++	 * function (only a suspend/resume cycle does); with the pin left on
++	 * its power-down function every later SoC reset -- a watchdog expiry
++	 * in a kernel that hangs during boot, say -- becomes a power-off
++	 * instead of a restart.  Measured on a PineNote (RK3566 + RK817):
++	 * SYS_CFG3 reads 0x20 on a cold boot and 0x30 after a kexec; the
++	 * armed watchdog reboots the chip at 0x20 and powers it off at 0x30.
++	 */
++	if (kexec_in_progress)
++		return;
++
+ 	switch (rk808->variant) {
+ 	case RK805_ID:
+ 		ret = regmap_update_bits(rk808->regmap,

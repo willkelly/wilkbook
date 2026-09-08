@@ -184,8 +184,24 @@ fi
 flavor=${2:-reader}
 keep=${3:-5}
 echo "== 1/7 build: pinenote-$flavor (cross, aarch64-linux-gnu)"
-system=$(cd "$repo" && guix system build --no-grafts -L . --target=aarch64-linux-gnu \
-           "pinenote/systems/pinenote-$flavor.scm" | tail -n 1)
+if [ "$flavor" = book-state-device-reader ]; then
+  # This experimental flavor has a derivation-only pin gate for its already
+  # proven USER_NS kernel and source-built gVisor outputs.  Use it instead of
+  # Guix's recursive `system` module discovery: retained source packets under
+  # tools/ intentionally contain standalone .scm programs and are not Guile
+  # modules.  The ordinary reader path below is unchanged.
+  derivation=$(cd "$repo" && guix repl -L . \
+    pinenote/tools/book-state-device/derive-system.scm \
+    | sed -n 's/^SYSTEM-DERIVATION //p')
+  case "$derivation" in /gnu/store/*-system.drv) ;;
+    *) echo "experimental build gate did not yield a system derivation: $derivation" >&2; exit 1;;
+  esac
+  system=$(guix build --no-grafts --no-substitutes --max-jobs=1 --cores=2 \
+             "$derivation" | tail -n 1)
+else
+  system=$(cd "$repo" && guix system build --no-grafts -L . --target=aarch64-linux-gnu \
+             "pinenote/systems/pinenote-$flavor.scm" | tail -n 1)
+fi
 case "$system" in /gnu/store/*-system) ;; *) echo "build did not yield a system: $system" >&2; exit 1;; esac
 echo "   $system"
 echo "== 2/7 transfer: only what root@$device is missing (the guix copy algorithm over OpenSSH)"

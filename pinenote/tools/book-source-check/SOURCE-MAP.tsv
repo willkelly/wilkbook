@@ -170,9 +170,9 @@ repo	pinenote/tools/book-state/test-worker.scm	pinenote/tools/book-state/test-wo
 repo	pinenote/tools/book-state/test_book_state_crash.py	pinenote/tools/book-state/test_book_state_crash.py	caf39be259ad949dbbe0a36e66bc0effb2e92f8b9bba76e37eaba4cd6c6c39bb
 ui	pinenote/tools/book-state-reader/Makefile	Makefile	de361c5e2529c634d759df0bd9c09d4241b7975f43ad910c9749670235d524a8
 ui	pinenote/tools/book-state-reader/README.md	README.md	db1b7b7feac700732c25805c2bc6a497fad74c34d6b50fcdafaee4946becf2f4
-ui	pinenote/tools/book-state-reader/SHA256SUMS	SHA256SUMS	a77c989accef03d2a4698a6483b0d8968b8712dacbb097f69eaf4b5095f7d9ab
+ui	pinenote/tools/book-source-check/frozen-source-metadata/ui-v1/SHA256SUMS	SHA256SUMS	a77c989accef03d2a4698a6483b0d8968b8712dacbb097f69eaf4b5095f7d9ab
 ui	pinenote/tools/book-state-reader/fixture/bookstatereader.koplugin/_meta.lua	fixture/bookstatereader.koplugin/_meta.lua	64b2d8ad62e34854a8d4673b7b7aba01918f7aaa736497265449d31fa269e451
-ui	pinenote/tools/book-state-reader/fixture/bookstatereader.koplugin/main.lua	fixture/bookstatereader.koplugin/main.lua	17ac60feecff8b0b67a32845338f8969c8d6cdc4141ed346947389c94fe16fc3
+ui	pinenote/tools/book-source-check/frozen-source-metadata/ui-v1/main.lua	fixture/bookstatereader.koplugin/main.lua	17ac60feecff8b0b67a32845338f8969c8d6cdc4141ed346947389c94fe16fc3
 ui	pinenote/tools/book-state-reader/fixture/bookstatereader.koplugin/state_channel.lua	fixture/bookstatereader.koplugin/state_channel.lua	aa3c2cf9bbc025208e5ebdfe6745ac83d2e2d2572ceba7845b7b14c20bd6fc5c
 ui	pinenote/tools/book-state-reader/fixture/bookstatereader.koplugin/ui_audit.lua	fixture/bookstatereader.koplugin/ui_audit.lua	1765dcb1bf907002eae66457c2bc00bf66409c341a5bcf844f3fae3a37232130
 ui	pinenote/tools/book-state-reader/integration-host.scm	integration-host.scm	632e5283b2e894cb3ae8d81ddeade6d051adcb3ddc19dc6e3a27cc994072e821

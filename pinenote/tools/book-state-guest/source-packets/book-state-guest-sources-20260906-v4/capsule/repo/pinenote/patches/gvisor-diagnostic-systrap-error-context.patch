@@ -1,0 +1,78 @@
+diff --git a/pkg/sentry/pgalloc/pgalloc.go b/pkg/sentry/pgalloc/pgalloc.go
+index 6c2eae32a..3c09e434e 100644
+--- a/pkg/sentry/pgalloc/pgalloc.go
++++ b/pkg/sentry/pgalloc/pgalloc.go
+@@ -927,7 +927,7 @@ func (f *MemoryFile) extendChunksLocked(alloc *allocState) error {
+ 	var mapStart uintptr
+ 	if f.file != nil {
+ 		if err := f.file.Truncate(int64(newFileSize)); err != nil {
+-			return err
++			return fmt.Errorf("truncate MemoryFile backing old-size=%#x new-size=%#x: %w", oldFileSize, newFileSize, err)
+ 		}
+ 		m, _, errno := unix.Syscall6(
+ 			unix.SYS_MMAP,
+@@ -938,7 +938,7 @@ func (f *MemoryFile) extendChunksLocked(alloc *allocState) error {
+ 			f.file.Fd(),
+ 			uintptr(oldFileSize))
+ 		if errno != 0 {
+-			return errno
++			return fmt.Errorf("map MemoryFile backing chunk addr-hint=0 length=%#x offset=%#x: %w", incFileSize, oldFileSize, errno)
+ 		}
+ 		mapStart = m
+ 		f.madviseChunkMapping(mapStart, uintptr(incFileSize), alloc.huge)
+diff --git a/pkg/sentry/platform/systrap/subprocess.go b/pkg/sentry/platform/systrap/subprocess.go
+index 4de8f9a83..31fbedcb0 100644
+--- a/pkg/sentry/platform/systrap/subprocess.go
++++ b/pkg/sentry/platform/systrap/subprocess.go
+@@ -216,7 +216,7 @@ func (s *subprocess) initSyscallThread(ptraceThread *thread, seccompNotify bool)
+ 	}
+ 
+ 	if err := t.init(seccompNotify); err != nil {
+-		panic("failed to create a syscall thread")
++		panic(fmt.Sprintf("failed to initialize a syscall thread task-size=%#x: %v", maximumUserAddress, err))
+ 	}
+ 	s.syscallThread = &t
+ 
+diff --git a/pkg/sentry/platform/systrap/syscall_thread.go b/pkg/sentry/platform/systrap/syscall_thread.go
+index bf14741d0..3599ba27d 100644
+--- a/pkg/sentry/platform/systrap/syscall_thread.go
++++ b/pkg/sentry/platform/systrap/syscall_thread.go
+@@ -87,7 +87,7 @@ func (t *syscallThread) init(seccompNotify bool) error {
+ 	}
+ 	fr, err := t.subproc.memoryFile.Allocate(syscallThreadMessageSize, opts)
+ 	if err != nil {
+-		return err
++		return fmt.Errorf("allocate syscall-thread message length=%#x: %w", syscallThreadMessageSize, err)
+ 	}
+ 
+ 	t.stackRange = fr
+@@ -115,7 +115,7 @@ func (t *syscallThread) init(seccompNotify bool) error {
+ 		uintptr(t.subproc.memoryFile.FD()), uintptr(fr.Start))
+ 	if errno != 0 {
+ 		t.destroy()
+-		return fmt.Errorf("mmap failed: %v", errno)
++		return fmt.Errorf("map syscall-thread message into sentry addr-hint=0 length=%#x offset=%#x: %v", syscallThreadMessageSize, fr.Start, errno)
+ 	}
+ 	t.sentryAddr = sentryAddr
+ 
+@@ -172,7 +172,7 @@ func (t *syscallThread) mapMessageIntoStub() error {
+ 		arch.SyscallArgument{Value: uintptr(t.subproc.memoryFile.FD())},
+ 		arch.SyscallArgument{Value: uintptr(t.stackRange.Start)})
+ 	if err != nil {
+-		return err
++		return fmt.Errorf("map read-only syscall-thread page into stub addr=%#x length=%#x offset=%#x: %w", t.stubAddr, hostarch.PageSize, t.stackRange.Start, err)
+ 	}
+ 	// Map stubMessage as read-write.
+ 	_, err = t.thread.syscallIgnoreInterrupt(&t.thread.initRegs, unix.SYS_MMAP,
+@@ -182,7 +182,10 @@ func (t *syscallThread) mapMessageIntoStub() error {
+ 		arch.SyscallArgument{Value: unix.MAP_SHARED | unix.MAP_FILE | unix.MAP_FIXED},
+ 		arch.SyscallArgument{Value: uintptr(t.subproc.memoryFile.FD())},
+ 		arch.SyscallArgument{Value: uintptr(t.stackRange.Start + hostarch.PageSize)})
+-	return err
++	if err != nil {
++		return fmt.Errorf("map read-write syscall-thread page into stub addr=%#x length=%#x offset=%#x: %w", t.stubAddr+syscallStubMessageOffset, hostarch.PageSize, t.stackRange.Start+hostarch.PageSize, err)
++	}
++	return nil
+ }
+ 
+ // attach attaches to the stub thread with ptrace and unlock signals.

@@ -87,7 +87,7 @@
     ("oci-book-bundle.scm"
      . "c5f737301a113c4fb35df568b6ac59cb6b0369bb3bfa66b830f3eba1760743d7")
     ("guest-book-protocol.scm"
-      . "eb6a1af3713b4b58116c962ba39803310e18fa43ca0939ed5324fe9e456b6e5d")
+      . "10b2bf5155697ad4ef361e3a975bff5afa8c97a3988c44d6f7356248c6900e6e")
     ("guest-protocol-book.scm"
      . "9d18f28a3a2fdacb8b84ee5f3b9b454cb74e28a53661f0ffd61b8a2427bfcc6a")
     ("guest_protocol_book.py"
@@ -242,7 +242,7 @@
            #$%accepted-guest-smoke-source
            #$%accepted-book-session-source
            #$%guest-protocol-adapter-source
-             "eb6a1af3713b4b58116c962ba39803310e18fa43ca0939ed5324fe9e456b6e5d"
+             "10b2bf5155697ad4ef361e3a975bff5afa8c97a3988c44d6f7356248c6900e6e"
            #$(spike-private '%book-execution-kernel-release))
           #:file-creation-mask #o077)))
     (stop #~(make-kill-destructor)))))

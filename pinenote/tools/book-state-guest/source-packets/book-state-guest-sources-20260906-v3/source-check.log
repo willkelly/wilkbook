@@ -1,0 +1,39 @@
+PASS: public channel pin is exact
+PASS: public source-built gVisor package definition is exact
+PASS: OCI successor changes executable policy only by restoring Python -S
+PASS: OCI successor retains "--platform=systrap"
+PASS: OCI successor retains "--network=none"
+PASS: OCI successor retains "--sidecar-usage-policy=strict"
+PASS: OCI successor retains "--sidecar-release-enforcement-policy=always"
+PASS: OCI successor retains "--host-uds=none"
+PASS: OCI successor retains "--directfs=false"
+PASS: OCI successor retains "--pass-fd=3:3"
+PASS: threaded state authority never primitive-forks
+PASS: post-worker runsc launch uses spawn plus the fixed stopped FD adapter
+PASS: adapter reserves FD 3 before integer-owned /dev/null temporaries
+PASS: native exec matrix covers the BSG-1 identity counterexamples
+PASS: non-stopping pre-exec child returns to cooperative cleanup
+PASS: authority has no phase, expected-value, replay, or state-root environment input
+PASS: recovery and save success require typed book-issued completions
+PASS: source order preserves typed receipt before commit-ok before presentation
+PASS: operation and guest clocks are accurately limited to cooperative polling
+PASS: guest success follows writer cleanup, database close/inspection, and sync
+PASS: authority and system share the exact persistent-volume contract
+PASS: ext4 lost+found and private-root mode are explicit
+PASS: system binds the accepted rebased kernel and excludes historical 4d614
+PASS: system selects the public source-built gVisor package, not historical CONTROL
+PASS: fresh-checkout system import graph excludes local-wrapper-dependent systems
+PASS: system manifest makes the cooperative/outer/standalone boundary explicit
+PASS: trusted profile records exact AArch64 guile-sqlite3 and SQLite outputs
+PASS: authority opens only the accepted dedicated private UI adapter
+PASS: system consumes no generated snapshot, live review, or recursive source tree
+PASS: accepted outer guardian and its imported console module are exact
+PASS: accepted outer exposes bounded TERM/KILL/reap and explicit timeout CLI
+PASS: machine handoff requires the hard outer boundary without claiming integration
+PASS: host liveness tests exercise real cooperative and hard-owner boundaries
+PASS: human contract states the same non-fictional deadline boundary
+PASS: candidate roster contains only canonical public and guest source paths
+PASS: accepted reader-join source is exact: joined-note-book.scm
+PASS: accepted reader-join source is exact: joined_note_book.py
+PASS: accepted reader-join source is exact: empty-action-successor/book-session.scm
+PASS: explicit candidate/dependency source manifest passes

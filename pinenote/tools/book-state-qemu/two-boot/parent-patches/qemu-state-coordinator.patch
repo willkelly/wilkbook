@@ -1,0 +1,464 @@
+--- accepted/qemu-coordinator.scm
++++ two-boot/candidate/qemu-state-coordinator.scm
+@@ -1,14 +1,16 @@
+-;;; Trusted host lifetime coordinator for the native-reader/QEMU seam fixture.
+-;;; It owns processes and one private connection.  It never parses UI or Book
+-;;; Protocol traffic and relies on the existing outer process-group guardian.
++;;; Private two-boot successor of the accepted native-reader/QEMU coordinator.
++;;; It retains the accepted process ownership and adds only the exact state OFD
++;;; QEMU allowlist plus a bounded byte-transparent private-UI transcript proxy.
+ (use-modules (ice-9 binary-ports)
+              (ice-9 ftw)
+              (ice-9 match)
+              (ice-9 textual-ports)
+-             (rnrs bytevectors)
+-             (srfi srfi-1)
+-             (srfi srfi-9)
+-             (system foreign))
++              (rnrs bytevectors)
++              (srfi srfi-1)
++              (srfi srfi-9)
++              (system foreign)
++              (two-boot graph)
++              (two-boot ui-proxy))
+ 
+ (define socket-connect-timeout-seconds 30.0)
+ (define child-term-grace-seconds 5.0)
+@@ -16,6 +18,9 @@
+ (define qemu-log-limit (* 4 1024 1024))
+ (define max-unix-path-bytes 107)
+ (define expected-revision "v2026.03")
++(define state-image-size (* 64 1024 1024))
++(define qemu-state-fd #f)
++(define qemu-state-identity #f)
+ (define fixture-tool-dir
+   (dirname (canonicalize-path (car (command-line)))))
+ (define libc (dynamic-link))
+@@ -55,7 +60,7 @@
+          (apply format #f message arguments)))
+ 
+ (define (marker text)
+-  (format #t "BOOK_INTERACTION_QEMU_COORDINATOR: ~a~%" text)
++  (format #t "BOOK_STATE_QEMU_COORDINATOR: ~a~%" text)
+   (force-output))
+ 
+ (define (close-port-quietly! port)
+@@ -199,7 +204,7 @@
+        (loop (if (string=? head token) tail (cdr rest))
+              (if (string=? head token) (cons value values) values))))))
+ 
+-(define (validate-qemu-arguments arguments run-root socket-path)
++(define (validate-qemu-arguments arguments qemu run-root socket-path)
+   (unless (every string? arguments)
+     (fail "QEMU arguments must all be strings"))
+   (let ((append-values (values-after "-append" arguments)))
+@@ -224,38 +229,25 @@
+              ",\"node-name\":\"rootfs-overlay-file\",\"read-only\":false}"))
+            (overlay-format
+             "{\"driver\":\"qcow2\",\"file\":\"rootfs-overlay-file\",\"node-name\":\"rootfs-overlay\",\"read-only\":false}")
+-           (expected
+-            (list
+-             "-no-user-config"
+-             "-nodefaults"
+-             "-M" "virt"
+-             "-accel" "tcg,thread=multi"
+-             "-cpu" "max"
+-             "-smp" "4"
+-             "-m" "2048"
+-             "-display" "none"
+-             "-no-reboot"
+-             "-nic" "none"
+-             "-monitor" "none"
+-             "-chardev" console
+-             "-serial" "chardev:console0"
+-             "-chardev" ui
+-             "-device" "virtio-serial-pci,id=book-ui-serial"
+-             "-device"
+-             "virtserialport,id=book-ui-port,chardev=bookui0,name=org.wilkbook.book-interaction"
+-             "-kernel" kernel
+-             "-initrd" initrd
+-             "-append" append-line
+-             "-blockdev" overlay-file
+-             "-blockdev" overlay-format
+-             "-device" "virtio-blk-pci,drive=rootfs-overlay")))
++           (full (cons qemu arguments))
++           (state-proc-file (state-proc-file-from-arguments full))
++           (state-fd (state-proc-file->fd state-proc-file)))
+       (when (or (string-null? append-line)
+                 (string-index append-line #\nul)
+                 (string-index append-line #\newline)
+                 (string-index append-line #\return))
+         (fail "QEMU append value is empty or contains a control character"))
+-      (unless (equal? arguments expected)
+-        (fail "QEMU argument vector does not match the fixed reader shape")))))
++      (assert-two-boot-qemu-arguments
++       full qemu run-root kernel initrd append-line overlay state-proc-file)
++      (unless (and state-fd
++                   (let ((info (stat state-fd)))
++                     (and (eq? (stat:type info) 'regular)
++                          (= (stat:uid info) (getuid))
++                          (= (stat:nlink info) 1)
++                          (= (logand (stat:mode info) #o7777) #o600)
++                          (= (stat:size info) state-image-size))))
++        (fail "QEMU state graph does not name the inherited owned state image"))
++      state-fd)))
+ 
+ (define (validate-socket-path value run-root)
+   (let ((path (lexical-absolute value "private QEMU socket"))
+@@ -291,9 +283,9 @@
+          (ko-home (string-append root "/ko"))
+          (tmp (string-append root "/tmp"))
+          (plugins (string-append ko-home "/plugins"))
+-         (plugin (string-append plugins "/bookinteractionprobe.koplugin"))
+-         (source (string-append fixture-tool-dir
+-                                "/fixture/bookinteractionprobe.koplugin")))
++          (plugin (string-append plugins "/bookstatereader.koplugin"))
++          (source (string-append fixture-tool-dir
++                                "/fixture/bookstatereader.koplugin")))
+     (mkdir-exact root #o700)
+     (for-each (lambda (path) (mkdir-exact path #o700))
+               (list home ko-home tmp))
+@@ -312,12 +304,12 @@
+            (fail "fixture source is not regular: ~a" name))
+          (copy-file from to)
+          (chmod to #o400)))
+-     '("_meta.lua" "main.lua" "private_channel.lua" "ui_audit.lua"))
++      '("_meta.lua" "main.lua" "state_channel.lua" "ui_audit.lua"))
+     (write-fixed-file
+      (string-append root "/fixture-book.txt")
+      (string-append
+-      "Book interaction QEMU seam fixture\n\n"
+-      "This inert document only opens pinned KOReader ReaderUI.\n")
++       "Book State two-boot QEMU seam fixture\n\n"
++       "This inert document opens the pinned persistent-note InputDialog.\n")
+      #o400)
+     root))
+ 
+@@ -471,6 +463,19 @@
+       (format (current-error-port)
+               "BOOK_INTERACTION_QEMU_SPAWN: invalid-exec-fds:low=~s:leaked=~s~%"
+               low leaked)
++      (force-output (current-error-port))
++      (primitive-exit 125))))
++
++(define (validate-non-cloexec-fds! expected)
++  (let ((observed
++         (filter
++          (lambda (fd)
++            (zero? (logand (fcntl fd F_GETFD) FD_CLOEXEC)))
++          (open-fds))))
++    (unless (equal? observed (sort (delete-duplicates expected) <))
++      (format (current-error-port)
++              "BOOK_STATE_QEMU_SPAWN: invalid-non-cloexec-fds:expected=~s:observed=~s~%"
++              expected observed)
+       (force-output (current-error-port))
+       (primitive-exit 125))))
+ 
+@@ -505,16 +510,26 @@
+         (clear-close-on-exec! 3)
+         (mark-unrelated-close-on-exec! 3)
+         (validate-exec-fds! 3)
++        (validate-non-cloexec-fds! '(0 1 2 3))
+         (format #t
+-                "BOOK_INTERACTION_QEMU_SPAWN: ~a:exec-fd-hygiene:stdio-and-donated-only~%"
++                "BOOK_STATE_QEMU_SPAWN: ~a:exec-fd-hygiene:stdio-and-ui-fd3-only~%"
+                 name))
+       (begin
+-        ;; Preserve disposable-qemu.scm's reviewed rule: QEMU gets no inherited
+-        ;; protocol descriptor, and every descriptor above stderr is CLOEXEC.
++        ;; QEMU receives exactly the state OFD selected by the exact graph.  It
++        ;; never receives the private UI donation, a protocol FD, or another
++        ;; inherited descriptor.
++        (unless (and (string=? name "qemu") qemu-state-fd
++                     (equal? (let ((info (stat qemu-state-fd)))
++                               `((device . ,(stat:dev info))
++                                 (inode . ,(stat:ino info))
++                                 (size . ,(stat:size info))))
++                             qemu-state-identity))
++          (primitive-exit 125))
+         (mark-unrelated-close-on-exec! 2)
+-        (validate-exec-fds! 2)
++        (clear-close-on-exec! qemu-state-fd)
++        (validate-non-cloexec-fds! (list 0 1 2 qemu-state-fd))
+         (format #t
+-                "BOOK_INTERACTION_QEMU_SPAWN: ~a:exec-fd-hygiene:stdio-only~%"
++                "BOOK_STATE_QEMU_SPAWN: ~a:exec-fd-hygiene:stdio-and-state-ofd-only~%"
+                 name)))
+   (force-output)
+   (chdir directory)
+@@ -876,12 +891,12 @@
+           (string-append "TMPDIR=" reader-root "/tmp")
+           (string-append "PATH=" path)
+           "LC_ALL=C"
+-          (string-append "BOOK_INTERACTION_ROOT=" reader-root)
+-          "BOOK_INTERACTION_TRUSTED_NATIVE_FIXTURE=1"
+-          "BOOK_INTERACTION_QEMU_MODE=1"
+-          "BOOK_INTERACTION_CONTROL_FD=3"
+-          "SDL_VIDEODRIVER=offscreen"
+-          "SDL_AUDIODRIVER=dummy")))
++           (string-append "BOOK_STATE_READER_ROOT=" reader-root)
++           "BOOK_STATE_READER_TRUSTED_FIXTURE=1"
++           "BOOK_STATE_READER_MODE=automated"
++           "BOOK_STATE_READER_CONTROL_FD=3"
++           "SDL_VIDEODRIVER=offscreen"
++           "SDL_AUDIODRIVER=dummy")))
+ 
+ (define (count-exact-line text expected)
+   (count (lambda (line) (string=? line expected))
+@@ -899,8 +914,8 @@
+   (let ((text (call-with-input-file path get-string-all)))
+     (unless (= (count-exact-line
+                 text
+-                "BOOK_INTERACTION_QEMU_SPAWN: qemu:exec-fd-hygiene:stdio-only")
+-               1)
++                "BOOK_STATE_QEMU_SPAWN: qemu:exec-fd-hygiene:stdio-and-state-ofd-only")
++                1)
+       (fail "QEMU exec descriptor gate did not run exactly once"))))
+ 
+ (define (validate-reader-log! path)
+@@ -909,39 +924,34 @@
+                  (< (stat:size info) reader-log-limit))
+       (fail "reader log is invalid or reached its bound")))
+   (let ((text (call-with-input-file path get-string-all)))
+-    (when (or (string-contains text "BOOK_INTERACTION_READER: FAIL:")
+-              (string-contains text "Saving failed."))
++    (when (or (string-contains text "BOOK_STATE_READER: FAIL:")
++               (string-contains text "Saving failed."))
+       (fail "native reader reported a fixture failure"))
+     (for-each
+      (lambda (line)
+        (unless (= (count-exact-line text line) 1)
+          (fail "reader log lacks exactly one ~s" line)))
+-     (list
+-      (string-append " [*] Version: " expected-revision)
+-      "BOOK_INTERACTION_QEMU_SPAWN: koreader:exec-fd-hygiene:stdio-and-donated-only"
+-      "BOOK_INTERACTION_READER: plugin-init:trusted-qemu-ui-fixture"
+-      "BOOK_INTERACTION_READER: private-source-registered"
+-      "BOOK_INTERACTION_READER: selection-action:registered"
+-      "BOOK_INTERACTION_READER: selection-action:invoked-by-fixture"
+-      "BOOK_INTERACTION_READER: dialog-shown"
+-      "BOOK_INTERACTION_READER: startup-overlays-dismissed:2"
+-      "BOOK_INTERACTION_READER: dialog-topmost"
+-      "BOOK_INTERACTION_READER: cleanup-audit:before-quit"
+-      "BOOK_INTERACTION_UI_AUDIT: cleanup:dialog-source-counts-closed-fd-no-callback:ok"
+-      "BOOK_INTERACTION_UI_AUDIT: cleanup:selection-action-counts-registry:ok"
+-      "BOOK_INTERACTION_READER: cleanup-audit:dialog-source-channel-fd-callback:clean"
+-      "BOOK_INTERACTION_READER: selection-action:removed"
+-      "BOOK_INTERACTION_READER: qemu-presentations-painted:4"
+-      "BOOK_INTERACTION_READER: result:ok"))
++      (list
++       (string-append " [*] Version: " expected-revision)
++       "BOOK_STATE_QEMU_SPAWN: koreader:exec-fd-hygiene:stdio-and-ui-fd3-only"
++       "BOOK_STATE_READER: plugin-init:trusted-automated-fixture"
++       "BOOK_STATE_READER: private-source-registered"
++       "BOOK_STATE_READER: selection-action:registered"
++       "BOOK_STATE_READER: startup-overlays-dismissed:2"
++       "BOOK_STATE_READER: cleanup-audit:before-quit"
++       "BOOK_STATE_READER_UI_AUDIT: cleanup:dialogs-source-fd-action-callback:clean"
++       "BOOK_STATE_READER: cleanup-audit:all-generations-clean"
++       "BOOK_STATE_READER: selection-action:removed"))
+     (for-each
+-     (lambda (prefix)
+-       (unless (= (count-line-prefix text prefix) 4)
+-         (fail "reader log does not contain four ~s observations" prefix)))
+-     '("BOOK_INTERACTION_READER: dialog-input:qemu-"
+-       "BOOK_INTERACTION_READER: submit:qemu-"
+-       "BOOK_INTERACTION_READER: ui-wait-task:qemu-"
+-       "BOOK_INTERACTION_READER: present-painted-exact:"
+-       "BOOK_INTERACTION_UI_AUDIT: paintTo-topmost-exact:"))))
++     (lambda (generation)
++       (for-each
++        (lambda (stem)
++          (let ((line (format #f "BOOK_STATE_READER: ~a:generation=~a"
++                              stem generation)))
++            (unless (= (count-exact-line text line) 1)
++              (fail "reader log lacks exact lifecycle line ~s" line))))
++        '("dialog-shown" "dialog-ready" "closed")))
++     '(1 2))))
+ 
+ (define (run options qemu-arguments)
+   (call-with-values
+@@ -963,15 +973,32 @@
+              (qemu-stdout (string-append reader-root "/qemu.stdout"))
+              (qemu-stderr (string-append reader-root "/qemu.stderr"))
+              (reader-log (string-append reader-root "/reader.log"))
+-             (qemu-record (string-append reader-root "/qemu.pid"))
+-             (reader-record (string-append reader-root "/reader.pid"))
+-             (owned-process-group (getpgrp))
+-             (qemu-child #f)
+-             (reader-child #f)
+-             (connection #f)
+-             (reader-log-validated? #f)
+-             (completed? #f))
+-        (validate-qemu-arguments qemu-arguments run-root socket-path)
++              (qemu-record (string-append reader-root "/qemu.pid"))
++              (reader-record (string-append reader-root "/reader.pid"))
++              (proxy-record (string-append reader-root "/ui-proxy.scm"))
++              (coordinator-record
++               (string-append reader-root "/coordinator-result.scm"))
++              (owned-process-group (getpgrp))
++              (qemu-child #f)
++              (reader-child #f)
++              (connection #f)
++              (reader-peer #f)
++              (proxy #f)
++              (reader-log-validated? #f)
++              (completed? #f))
++        (set! qemu-state-fd
++              (validate-qemu-arguments qemu-arguments qemu run-root socket-path))
++        (let ((info (stat qemu-state-fd)))
++          (set! qemu-state-identity
++                `((device . ,(stat:dev info))
++                  (inode . ,(stat:ino info))
++                  (size . ,(stat:size info)))))
++        (unless (equal? (filter
++                         (lambda (fd)
++                           (zero? (logand (fcntl fd F_GETFD) FD_CLOEXEC)))
++                         (open-fds))
++                        (sort (list 0 1 2 qemu-state-fd) <))
++          (fail "coordinator entry authority is not stdio plus the state OFD"))
+         (dynamic-wind
+           (lambda () #t)
+           (lambda ()
+@@ -980,22 +1007,33 @@
+                    "qemu" qemu-record qemu qemu-arguments
+                    (fixed-qemu-environment run-root) run-root
+                    qemu-stdout qemu-stderr owned-process-group))
+-            (set! connection
+-                  (connect-private-socket!
+-                   socket-path run-identity qemu-child))
+-            (set! reader-child
+-                  (spawn-owned-child
+-                   "koreader" reader-record connection luajit
+-                   (list "reader.lua" book)
+-                   (fixed-reader-environment reader-root)
+-                   koreader-directory reader-log reader-log reader-log-limit
+-                   owned-process-group))
+-            (close-port-quietly! connection)
+-            (set! connection #f)
+-            (let loop ()
++             (set! connection
++                   (connect-private-socket!
++                    socket-path run-identity qemu-child))
++             (let ((pair
++                    (socketpair AF_UNIX
++                                (logior SOCK_STREAM SOCK_CLOEXEC) 0)))
++               (set! proxy
++                     (make-private-ui-proxy
++                      connection (car pair)
++                      (string-append reader-root "/ui-guest-to-reader.bin")
++                      (string-append reader-root "/ui-reader-to-guest.bin")))
++               (set! connection #f)
++               (set! reader-peer (cdr pair)))
++             (set! reader-child
++                   (spawn-owned-child
++                    "koreader" reader-record reader-peer luajit
++                    (list "reader.lua" book)
++                    (fixed-reader-environment reader-root)
++                    koreader-directory reader-log reader-log reader-log-limit
++                    owned-process-group))
++             (close-port-quietly! reader-peer)
++             (set! reader-peer #f)
++             (let loop ()
+               (when interrupted-signal
+                 (fail "received signal ~a" interrupted-signal))
+-              (pump-captures! (child-captures qemu-child) 0)
++               (pump-captures! (child-captures qemu-child) 0)
++               (pump-private-ui-proxy! proxy)
+               (reap-child! qemu-child)
+               (reap-child! reader-child)
+               (when (and (child-status qemu-child)
+@@ -1014,26 +1052,63 @@
+                 (set! reader-log-validated? #t))
+               (if (and (child-status qemu-child)
+                        (child-status reader-child))
+-                  (begin
+-                    (finalize-captures! (child-captures qemu-child))
++                   (begin
++                     (let drain ((attempt 0))
++                       (unless (private-ui-proxy-complete? proxy)
++                         (when (>= attempt 500)
++                           (fail "private UI transcript proxy did not reach EOF"))
++                         (pump-private-ui-proxy! proxy)
++                         (usleep 10000)
++                         (drain (+ attempt 1))))
++                     (finalize-captures! (child-captures qemu-child))
+                     (validate-qemu-log! qemu-stdout)
+                     (unless (same-identity? run-identity (lstat run-root))
+                       (fail "run root identity changed before log validation"))
+-                    (unless reader-log-validated?
+-                      (fail "reader lifecycle was not validated"))
+-                    (marker "children=zero; reader-lifecycle=pass")
+-                    (set! completed? #t))
++                     (unless reader-log-validated?
++                       (fail "reader lifecycle was not validated"))
++                     (write-fixed-file
++                      proxy-record
++                      (format #f "~s~%" (private-ui-proxy-snapshot proxy))
++                      #o400)
++                     (write-fixed-file
++                      coordinator-record
++                      (format
++                       #f
++                       "~s~%"
++                       `((schema . 1)
++                          (state-device . ,(assoc-ref qemu-state-identity 'device))
++                          (state-inode . ,(assoc-ref qemu-state-identity 'inode))
++                          (state-size . ,(assoc-ref qemu-state-identity 'size))
++                          (coordinator-pid . ,(getpid))
++                          (coordinator-process-group . ,owned-process-group)
++                          (qemu-pid . ,(child-pid qemu-child))
++                          (qemu-start-time . ,(child-start-time qemu-child))
++                          (qemu-process-group . ,(child-process-group qemu-child))
++                          (qemu-status . ,(child-status qemu-child))
++                          (reader-pid . ,(child-pid reader-child))
++                          (reader-start-time . ,(child-start-time reader-child))
++                          (reader-process-group
++                           . ,(child-process-group reader-child))
++                         (reader-status . ,(child-status reader-child))
++                         (children-zero . #t)
++                         (ui-proxy . ,(private-ui-proxy-snapshot proxy))))
++                      #o400)
++                     (marker
++                      "qemu-and-reader=reaped; reader-lifecycle=pass; ui-transcript=complete")
++                     (set! completed? #t))
+                   (begin (usleep 10000) (loop)))))
+-          (lambda ()
+-            (close-port-quietly! connection)
+-            (unless completed?
++           (lambda ()
++             (close-port-quietly! connection)
++             (close-port-quietly! reader-peer)
++             (unless completed?
+               (terminate-owned-set! (list reader-child qemu-child))
+               (when qemu-child
+                 (catch #t
+                   (lambda ()
+                     (pump-captures! (child-captures qemu-child) 0)
+                     (close-captures! (child-captures qemu-child)))
+-                  (lambda _ #f))))))
++                  (lambda _ #f))))
++             (when proxy (close-private-ui-proxy! proxy))))
+         (unless completed?
+           (fail "coordinator did not complete"))
+         0))))
+@@ -1053,12 +1128,12 @@
+          (lambda () (parse-command-line (cdr (command-line))))
+        run))
+    (lambda (key . arguments)
+-     (if (eq? key 'book-interaction-qemu-coordinator-error)
+-         (format (current-error-port)
+-                 "BOOK_INTERACTION_QEMU_COORDINATOR: FAIL:~a~%"
+-                 (car arguments))
+-         (format (current-error-port)
+-                 "BOOK_INTERACTION_QEMU_COORDINATOR: FAIL:~s ~s~%"
+-                 key arguments))
++      (if (eq? key 'book-interaction-qemu-coordinator-error)
++          (format (current-error-port)
++                  "BOOK_STATE_QEMU_COORDINATOR: FAIL:~a~%"
++                  (car arguments))
++          (format (current-error-port)
++                  "BOOK_STATE_QEMU_COORDINATOR: FAIL:~s ~s~%"
++                  key arguments))
+      (force-output (current-error-port))
+      1)))

@@ -1,0 +1,16 @@
+schema=1
+status=provisional-source-input-only-no-image-binding
+bsg3=closed
+guest-v4-source-manifest-sha256=7c71465c498449e96f63d943f392a2201cf6afad9b90e5ef110f9c1a46e77676
+guest-v4-source-snapshot-manifest-sha256=fbc5903f08046440d4a3b4f2d802f17dd496b6e90d71ba37ae032a54cada6934
+guest-v4-capsule-roster-sha256=1426d26f002b28a14b0e9913a8c6f39a088f2ec937d84ced28e43a22ebc3c6b4
+guest-v4-evidence-manifest-sha256=6c19a6abfbf6758d057fa49b8839183b5e767139687a5b1d9b120df9cd15821a
+guest-v4-contract-sha256=6bca96d57de552a9b70f716c637f0d41109f7959a5aa9336741587aa97bd7b46
+guest-system-source-sha256=ee43fd585dbc39fc163384bfddb9ae2b3c553b4b6a8e198b3f2734c62d953fc5
+guest-authority-source-sha256=688b2a9dbe5d9ce983cb3e8ca5604a12f494a6a592f5cf0b6cede4fbbeb3be73
+guest-fd3-adapter-source-sha256=15f8ec5c2eae9e99595e26e492b77a11a18ac10e4da6da9aa4f69a515b10bbeb
+guest-v4-system-derivation=/gnu/store/qb9s3c1p4xwzfy0i6j2qn084rc2g4wf8-system.drv
+guest-v5-bsg4-denial-probes=pending-will-change-image-embedded-source-manifest
+image-built=no
+image-reviewed=no
+production-image-binding=unavailable

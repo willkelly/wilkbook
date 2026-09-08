@@ -1,0 +1,10 @@
+schema=1
+policy=post-freeze-author-evidence-is-a-separate-sibling-artifact
+expected-evidence-directory=book-state-guest-sources-20260907-v9-r5-author-evidence
+expected-evidence-manifest=EVIDENCE.sha256
+independent-review=not-performed
+ambient-checkout-caches-module-and-package-views=hidden
+network=not-requested
+system-and-image-output-realization=forbidden
+image-build=separate-authorized-step
+packet-mutation-after-replay=forbidden

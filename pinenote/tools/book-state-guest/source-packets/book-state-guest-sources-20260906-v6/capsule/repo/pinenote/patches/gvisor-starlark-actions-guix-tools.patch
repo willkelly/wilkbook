@@ -1,0 +1,50 @@
+From: wilkbook packaging
+Subject: build: declare tools and environment for shell actions
+
+This is a build-environment adaptation, not a gVisor runtime fix.  These two
+Starlark shell actions otherwise use PATH-selected coreutils and discard the
+strict action environment needed by Bazel's transformed process-wrapper.
+Consume explicit Guix programs and Bazel's package-controlled action_env.
+
+--- a/tools/arch.bzl
++++ b/tools/arch.bzl
+@@ -36,10 +36,11 @@ def _arch_genrule_impl(ctx):
+             inputs = input_files,
+             outputs = [output],
+             mnemonic = "ArchGenruleCp",
+-            command = "cp %s %s" % (
++            command = '"$GVISOR_GUIX_CP" %s %s' % (
+                 " ".join([f.path for f in input_files.to_list()]),
+                 output.path,
+             ),
++            use_default_shell_env = True,
+         )
+     return [DefaultInfo(
+         files = depset(outputs),
+--- a/tools/release.bzl
++++ b/tools/release.bzl
+@@ -26,15 +26,15 @@ def _release_files_impl(ctx):
+         out = ctx.actions.declare_file("%s/%s" % (ctx.label.name, src.basename))
+         inputs.append(src)
+         outputs.append(out)
+-        commands.append('cp -f "%s" "%s"' % (src.path, out.path))
++        commands.append('"$GVISOR_GUIX_CP" -f "%s" "%s"' % (src.path, out.path))
+ 
+     # Sidecar binaries
+     for target, name in ctx.attr.sidecars.items():
+         src = _single_file(target)
+         out = ctx.actions.declare_file("%s/gvisor-bin/%s" % (ctx.label.name, name))
+         inputs.append(src)
+         outputs.append(out)
+-        commands.append('mkdir -p "$(dirname "%s")" && cp -f "%s" "%s"' % (out.path, src.path, out.path))
++        commands.append('"$GVISOR_GUIX_MKDIR" -p "$("$GVISOR_GUIX_DIRNAME" "%s")" && "$GVISOR_GUIX_CP" -f "%s" "%s"' % (out.path, src.path, out.path))
+ 
+     ctx.actions.run_shell(
+         inputs = inputs,
+@@ -42,5 +42,6 @@ def _release_files_impl(ctx):
+         command = "\n".join(commands),
+         mnemonic = "ReleaseFiles",
++        use_default_shell_env = True,
+     )
+ 
+     runfiles = ctx.runfiles(files = outputs)

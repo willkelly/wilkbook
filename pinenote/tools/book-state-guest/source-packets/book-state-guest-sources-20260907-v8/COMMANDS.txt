@@ -1,0 +1,241 @@
+#!/bin/sh
+# Exact post-freeze V8 source replay. Run only in an unprivileged networkless
+# namespace with the packet, accepted V7 parent, and prior review evidence
+# mounted read-only. EVIDENCE is the only writable retained bind. No output is
+# realized and no QEMU, runsc, ARM, KOReader, or device program is executed.
+set -eu
+umask 077
+
+: "${FROZEN_PACKET:?}"
+: "${V7_PACKET:?}"
+: "${V7_REVIEW_EVIDENCE:?}"
+: "${V5_REVIEW_DOCUMENT:?}"
+: "${EVIDENCE:?}"
+: "${BOOTSTRAP_GUIX:?}"
+: "${PYTHON_BIN:?}"
+case "$FROZEN_PACKET:$V7_PACKET:$V7_REVIEW_EVIDENCE:$V5_REVIEW_DOCUMENT:$EVIDENCE:$BOOTSTRAP_GUIX:$PYTHON_BIN" in
+    /*:/*:/*:/*:/*:/gnu/store/*-guix-command:/gnu/store/*-python-*/bin) ;;
+    *) exit 2 ;;
+esac
+[ "$(CDPATH= cd -- "$FROZEN_PACKET" && pwd -P)" = "$FROZEN_PACKET" ]
+[ "$(CDPATH= cd -- "$V7_PACKET" && pwd -P)" = "$V7_PACKET" ]
+[ "$(CDPATH= cd -- "$V7_REVIEW_EVIDENCE" && pwd -P)" = "$V7_REVIEW_EVIDENCE" ]
+[ "$(CDPATH= cd -- "$EVIDENCE" && pwd -P)" = "$EVIDENCE" ]
+[ -z "$(find "$EVIDENCE" -mindepth 1 -print -quit)" ]
+export PATH="$PYTHON_BIN:/usr/bin:/bin"
+
+find "$FROZEN_PACKET" -printf '%P\t%y\t%m\t%n\n' \
+    | LC_ALL=C sort > "$EVIDENCE/final-packet-modes-before.tsv"
+python3 -I -S -B - "$FROZEN_PACKET" "$V7_PACKET" \
+    > "$EVIDENCE/capsule-mode-byte-delta-audit.log" <<'PY'
+from __future__ import annotations
+import hashlib
+from pathlib import Path
+import stat
+import sys
+
+packet = Path(sys.argv[1])
+parent = Path(sys.argv[2])
+capsule = packet / "capsule"
+parent_capsule = parent / "capsule"
+
+def files(root: Path) -> dict[str, Path]:
+    return {p.relative_to(root).as_posix(): p for p in root.rglob("*") if p.is_file()}
+
+def digest(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+def mode(path: Path) -> str:
+    return f"{stat.S_IMODE(path.lstat().st_mode):04o}"
+
+for directory in [packet, *(p for p in packet.rglob("*") if p.is_dir())]:
+    info = directory.lstat()
+    assert stat.S_ISDIR(info.st_mode) and stat.S_IMODE(info.st_mode) == 0o555
+for path in packet.rglob("*"):
+    info = path.lstat()
+    assert stat.S_ISDIR(info.st_mode) or stat.S_ISREG(info.st_mode)
+    if stat.S_ISREG(info.st_mode):
+        assert info.st_nlink == 1
+        if path.parent == packet:
+            assert stat.S_IMODE(info.st_mode) == 0o444
+
+new_files = files(capsule)
+old_files = files(parent_capsule)
+assert len(new_files) == len(old_files) == 248
+assert set(new_files) == set(old_files)
+expected_changes = {
+    "metadata/CAPSULE-ROSTER.tsv",
+    "metadata/PREPARED.txt",
+    "module-view/pinenote/systems/pinenote-book-state-reader.scm",
+    "module-view/pinenote/tools/book-state-guest/SOURCE-MANIFEST.sha256",
+    "module-view/pinenote/tools/book-state-guest/book-state-guest-authority.scm",
+    "repo/pinenote/systems/pinenote-book-state-reader.scm",
+    "repo/pinenote/tools/book-state-guest/CAPSULE-ROSTER.tsv",
+    "repo/pinenote/tools/book-state-guest/CONTRACT.md",
+    "repo/pinenote/tools/book-state-guest/SOURCE-MANIFEST.sha256",
+    "repo/pinenote/tools/book-state-guest/book-state-guest-authority.scm",
+    "repo/pinenote/tools/book-state-guest/test-guest-modules.scm",
+    "repo/pinenote/tools/book-state-guest/test_source.py",
+}
+actual_changes: set[str] = set()
+generated = ["path\tv7-mode\tv8-mode\tv7-sha256\tv8-sha256\tdelta\n"]
+for relative in sorted(new_files):
+    old_path = old_files[relative]
+    new_path = new_files[relative]
+    old_hash, new_hash = digest(old_path), digest(new_path)
+    old_mode, new_mode = mode(old_path), mode(new_path)
+    if (old_hash, old_mode) != (new_hash, new_mode):
+        actual_changes.add(relative)
+        assert old_mode == new_mode
+        generated.append(
+            f"{relative}\t{old_mode}\t{new_mode}\t{old_hash}\t{new_hash}\tbytes-only\n"
+        )
+assert actual_changes == expected_changes
+assert "".join(generated).encode() == (packet / "V7-V8-DELTA.tsv").read_bytes()
+
+roster_lines = (capsule / "metadata/CAPSULE-ROSTER.tsv").read_text(
+    encoding="utf-8").splitlines()
+assert roster_lines[0] == "path\tsha256\tmode\trole"
+roster: dict[str, tuple[str, int, str]] = {}
+for line in roster_lines[1:]:
+    relative, expected_hash, raw_mode, role = line.split("\t")
+    roster[relative] = (expected_hash, int(raw_mode, 8), role)
+assert len(roster) == 134 and list(roster) == sorted(roster)
+for relative, (expected_hash, expected_mode, role) in roster.items():
+    repo_path = capsule / "repo" / relative
+    info = repo_path.lstat()
+    assert stat.S_ISREG(info.st_mode) and info.st_nlink == 1
+    assert stat.S_IMODE(info.st_mode) == 0o444 and digest(repo_path) == expected_hash
+    if role in {"module", "asset"}:
+        view_path = capsule / "module-view" / relative
+        view_info = view_path.lstat()
+        assert stat.S_ISREG(view_info.st_mode) and view_info.st_nlink == 1
+        assert stat.S_IMODE(view_info.st_mode) == expected_mode
+        assert digest(view_path) == expected_hash
+executables = {r for r, (_h, m, _role) in roster.items() if m == 0o555}
+assert executables == {
+    "pinenote/tools/gvisor-package/check.sh",
+    "pinenote/tools/gvisor-package/emit_guix_inputs.py",
+    "pinenote/tools/gvisor-package/inventory.py",
+    "pinenote/tools/gvisor-package/offline-check.sh",
+    "pinenote/tools/gvisor-package/test_inventory.py",
+    "pinenote/tools/gvisor-package/test_vendor.py",
+    "pinenote/tools/gvisor-package/vendor-discover.sh",
+    "pinenote/tools/gvisor-package/vendor_inputs.py",
+    "pinenote/tools/gvisor-package/vendor_manifest.py",
+}
+print("PASS: complete V8 packet has immutable regular records and mode-0555 directories")
+print("PASS: V7-to-V8 capsule delta is exactly 12 bytes-only records")
+print("PASS: all nine module-view wrappers retain authenticated mode 0555")
+PY
+python3 -I -S -B \
+    "$FROZEN_PACKET/capsule/repo/pinenote/tools/book-state-guest/check-source-capsule.py" \
+    "$FROZEN_PACKET/capsule" > "$EVIDENCE/capsule-check-positive.log" 2>&1
+(cd "$FROZEN_PACKET" && sha256sum --check --strict PACKET-CONTENTS.sha256) \
+    > "$EVIDENCE/packet-contents-check.log" 2>&1
+(cd "$FROZEN_PACKET" && sha256sum --check --strict SOURCE-SNAPSHOT.sha256) \
+    > "$EVIDENCE/source-snapshot-check.log" 2>&1
+
+(cd "$V7_PACKET" && sha256sum --check --strict PACKET-CONTENTS.sha256) \
+    > "$EVIDENCE/v7-parent-check.log" 2>&1
+(cd "$V7_PACKET" && sha256sum --check --strict SOURCE-SNAPSHOT.sha256) \
+    >> "$EVIDENCE/v7-parent-check.log" 2>&1
+(cd "$V7_REVIEW_EVIDENCE" && sha256sum --check --strict EVIDENCE.sha256) \
+    > "$EVIDENCE/v7-review-evidence-check.log" 2>&1
+[ "$(sha256sum "$V7_PACKET/PACKET-CONTENTS.sha256" | cut -d' ' -f1)" = \
+  8d9eb000cdd51754a6983ea69d5d561eedf9f039473d41779725c9d43dfbb206 ]
+[ "$(sha256sum "$V7_REVIEW_EVIDENCE/EVIDENCE.sha256" | cut -d' ' -f1)" = \
+  49bf1e84aeda168c97395a64cd754e796d1fc32eee1199957ee90f7da9af31cc ]
+[ "$(sha256sum "$V5_REVIEW_DOCUMENT" | cut -d' ' -f1)" = \
+  e219c97cf37129e86752f81fefa1bd4fa9df8054dcb20240d5af6b85d2e8acbe ]
+
+cp -a "$FROZEN_PACKET/capsule" /tmp/v8-mode-negative-capsule
+chmod 0444 \
+    /tmp/v8-mode-negative-capsule/module-view/pinenote/tools/gvisor-package/check.sh
+set +e
+python3 -I -S -B \
+    "$FROZEN_PACKET/capsule/repo/pinenote/tools/book-state-guest/check-source-capsule.py" \
+    /tmp/v8-mode-negative-capsule > "$EVIDENCE/wrapper-mode-negative.log" 2>&1
+negative_status=$?
+set -e
+[ "$negative_status" -eq 1 ]
+
+sh "$FROZEN_PACKET/capsule/repo/pinenote/tools/book-state-guest/run-prepared.sh" \
+    "$FROZEN_PACKET/capsule" "$BOOTSTRAP_GUIX" \
+    > "$EVIDENCE/frozen-source-native-static.log" 2>&1
+
+sh "$FROZEN_PACKET/capsule/repo/pinenote/tools/book-state-guest/pinned-guix.sh" \
+    /tmp/v8-system-derive-private "$FROZEN_PACKET/capsule/module-view" \
+    "$FROZEN_PACKET/capsule/package-view" \
+    "$FROZEN_PACKET/capsule/repo/channels.scm" "$BOOTSTRAP_GUIX" repl -q -- \
+    "$FROZEN_PACKET/capsule/repo/pinenote/tools/book-state-guest/derive-system.scm" \
+    > "$EVIDENCE/system-derive.log" 2>&1
+system_drv=$(sed -n 's/^SYSTEM-DERIVATION //p' "$EVIDENCE/system-derive.log")
+[ "$system_drv" = /gnu/store/35bsagzm09wjrn18my3jh61am624phlq-system.drv ]
+sh "$FROZEN_PACKET/capsule/repo/pinenote/tools/book-state-guest/pinned-guix.sh" \
+    /tmp/v8-system-output-private "$FROZEN_PACKET/capsule/module-view" \
+    "$FROZEN_PACKET/capsule/package-view" \
+    "$FROZEN_PACKET/capsule/repo/channels.scm" "$BOOTSTRAP_GUIX" repl -q -- \
+    "$FROZEN_PACKET/capsule/repo/pinenote/tools/book-state-guest/query-derivation-outputs.scm" \
+    "$system_drv" > "$EVIDENCE/system-output.log" 2>&1
+system_output=$(sed -n 's/^OUTPUT out //p' "$EVIDENCE/system-output.log")
+[ "$system_output" = /gnu/store/v536sbh5v4gfngx5yv5k4w3fv6ihh5vc-system ]
+[ ! -e "$system_output" ]
+
+mkdir -m 700 /tmp/v8-image-private
+for name in home cache config data state tmp empty-path compiled; do
+    mkdir -m 700 "/tmp/v8-image-private/$name"
+done
+image_guix () {
+    /usr/bin/env -i \
+        HOME=/tmp/v8-image-private/home \
+        XDG_CACHE_HOME=/tmp/v8-image-private/cache \
+        XDG_CONFIG_HOME=/tmp/v8-image-private/config \
+        XDG_DATA_HOME=/tmp/v8-image-private/data \
+        XDG_STATE_HOME=/tmp/v8-image-private/state \
+        TMPDIR=/tmp/v8-image-private/tmp PATH=/tmp/v8-image-private/empty-path \
+        LANG=C LC_ALL=C GUILE_AUTO_COMPILE=0 \
+        GUILE_LOAD_PATH="$FROZEN_PACKET/capsule/module-view" \
+        GUILE_LOAD_COMPILED_PATH=/tmp/v8-image-private/compiled \
+        GUILE_EXTENSIONS_PATH= \
+        BOOK_STATE_MODULE_VIEW="$FROZEN_PACKET/capsule/module-view" \
+        BOOK_STATE_PACKAGE_VIEW="$FROZEN_PACKET/capsule/package-view" \
+        "$BOOTSTRAP_GUIX" time-machine \
+          -L "$FROZEN_PACKET/capsule/package-view" \
+          -C "$FROZEN_PACKET/capsule/repo/channels.scm" \
+          --no-substitutes -- system \
+          -L "$FROZEN_PACKET/capsule/package-view" image \
+          --no-grafts --no-substitutes --max-jobs=1 --cores=2 \
+          --target=aarch64-linux-gnu -t raw-with-offset "$@" \
+          "$FROZEN_PACKET/capsule/module-view/pinenote/systems/pinenote-book-state-reader.scm"
+}
+image_guix -d > "$EVIDENCE/image-derive-stdout.log" \
+    2> "$EVIDENCE/image-derive-stderr.log"
+image_drv=$(cat "$EVIDENCE/image-derive-stdout.log")
+[ "$image_drv" = /gnu/store/iaw5idj7sbwcvv74fcal8i5nx7x3vvhq-disk-image.drv ]
+sh "$FROZEN_PACKET/capsule/repo/pinenote/tools/book-state-guest/pinned-guix.sh" \
+    /tmp/v8-image-output-private "$FROZEN_PACKET/capsule/module-view" \
+    "$FROZEN_PACKET/capsule/package-view" \
+    "$FROZEN_PACKET/capsule/repo/channels.scm" "$BOOTSTRAP_GUIX" repl -q -- \
+    "$FROZEN_PACKET/capsule/repo/pinenote/tools/book-state-guest/query-derivation-outputs.scm" \
+    "$image_drv" > "$EVIDENCE/image-output.log" 2>&1
+image_output=$(sed -n 's/^OUTPUT out //p' "$EVIDENCE/image-output.log")
+[ "$image_output" = /gnu/store/rj1a6k042gcchcmcsb8pli426b83w34g-disk-image ]
+[ ! -e "$image_output" ]
+image_guix --dry-run > "$EVIDENCE/image-prerequisites-dry-run.log" 2>&1
+grep -F "$image_drv" "$EVIDENCE/image-prerequisites-dry-run.log" >/dev/null
+[ -e /gnu/store/334ljs8qa7ww8vlg9gpv428bh8yjd1nx-linux-pinenote-book-execution-test-7.1.8-pinenote ]
+[ -e /gnu/store/djgy782a5fjmsfkr6hzff3g953r60c86-gvisor-source-built-20260831.0 ]
+[ ! -e "$system_output" ]
+[ ! -e "$image_output" ]
+
+find "$FROZEN_PACKET" -printf '%P\t%y\t%m\t%n\n' \
+    | LC_ALL=C sort > "$EVIDENCE/final-packet-modes-after.tsv"
+cmp "$EVIDENCE/final-packet-modes-before.tsv" \
+    "$EVIDENCE/final-packet-modes-after.tsv"
+printf '%s\n' \
+    'PASS: immutable V8 capsule and exact V7 parent authenticated' \
+    'PASS: V8 native producer tests include four saves, stable-B read-only, and missing/wrong result failures' \
+    'PASS: exact V8 system and image derivations lowered; both outputs remain absent' \
+    'PASS: image dry-run only; no output realization or runtime execution occurred' \
+    > "$EVIDENCE/FINAL-RESULT.txt"

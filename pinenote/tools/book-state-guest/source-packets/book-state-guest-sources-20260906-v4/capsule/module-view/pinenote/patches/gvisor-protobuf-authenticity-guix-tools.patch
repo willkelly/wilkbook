@@ -1,0 +1,42 @@
+From: wilkbook packaging
+Subject: build: give protoc authenticity check declared utilities
+
+This is a build-environment adaptation, not a protobuf or gVisor runtime fix.
+The custom run_shell action does not opt into Bazel's explicitly supplied
+strict action environment, so bare grep and cat resolve through an implicit
+host PATH.  Keep authenticity enforcement enabled, but name the declared Guix
+utilities and opt into the package-controlled environment.
+
+--- a/bazel/private/toolchains/prebuilt/protoc_authenticity.bzl
++++ b/bazel/private/toolchains/prebuilt/protoc_authenticity.bzl
+@@ -21,19 +21,19 @@ def _protoc_authenticity_impl(ctx):
+         tools = [proto_lang_toolchain_info.proto_compiler],
+         command = """\
+         {protoc} --version > {validation_output}
+-        grep -q -e "-dev$" {validation_output} && {{
++        "$GVISOR_GUIX_GREP" -q -e "-dev$" {validation_output} && {{
+           echo 'WARNING: Detected a development version of protoc.
+           Development versions are not validated for authenticity.
+           To ensure a secure build, please use a released version of protoc.'
+           exit 0
+         }}
+-        grep -q "^libprotoc {RELEASE_VERSION}" {validation_output} || {{
++        "$GVISOR_GUIX_GREP" -q "^libprotoc {RELEASE_VERSION}" {validation_output} || {{
+           echo '{severity}: protoc version does not match protobuf Bazel module; we do not support this.
+           It is considered undefined behavior that is expected to break in the future even if it appears to work today.'
+           echo '{suppression_note}'
+           echo 'Expected: libprotoc {RELEASE_VERSION}'
+           echo -n 'Actual:   '
+-          cat {validation_output}
++          "$GVISOR_GUIX_CAT" {validation_output}
+           exit {mismatch_exit_code}
+         }} >&2
+         """.format(
+@@ -46,6 +46,7 @@ def _protoc_authenticity_impl(ctx):
+             mismatch_exit_code = 1 if ctx.attr.fail_on_mismatch else 0,
+             severity = "ERROR" if ctx.attr.fail_on_mismatch else "INFO",
+         ),
++        use_default_shell_env = True,
+     )
+     return [OutputGroupInfo(_validation = depset([validation_output]))]
+ 

@@ -21,7 +21,7 @@
 (define scheduler-sleep-microseconds 5000)
 (define control-generation 1)
 (define accepted-guest-adapter-sha256
-  "eb6a1af3713b4b58116c962ba39803310e18fa43ca0939ed5324fe9e456b6e5d")
+  "10b2bf5155697ad4ef361e3a975bff5afa8c97a3988c44d6f7356248c6900e6e")
 (define accepted-private-control-sha256
   "1304b21dd9d0973dcb7b55a38e237d8f933f650276b415ccc91cfd6cedae932d")
 

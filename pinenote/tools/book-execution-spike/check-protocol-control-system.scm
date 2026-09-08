@@ -125,7 +125,7 @@
               (string-contains service-text "guest-book-protocol")
               (string-contains
                service-text
-                "eb6a1af3713b4b58116c962ba39803310e18fa43ca0939ed5324fe9e456b6e5d")
+                "10b2bf5155697ad4ef361e3a975bff5afa8c97a3988c44d6f7356248c6900e6e")
               (string-contains service-text
                                "accepted-book-protocol")
               (string-contains service-text

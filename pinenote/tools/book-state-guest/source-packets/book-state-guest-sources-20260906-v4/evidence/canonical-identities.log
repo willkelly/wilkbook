@@ -1,0 +1,5 @@
+688b2a9dbe5d9ce983cb3e8ca5604a12f494a6a592f5cf0b6cede4fbbeb3be73  pinenote/tools/book-state-guest/book-state-guest-authority.scm
+15f8ec5c2eae9e99595e26e492b77a11a18ac10e4da6da9aa4f69a515b10bbeb  pinenote/tools/book-state-guest/runsc-fd3-exec.scm
+ee43fd585dbc39fc163384bfddb9ae2b3c553b4b6a8e198b3f2734c62d953fc5  pinenote/systems/pinenote-book-state-reader.scm
+7c71465c498449e96f63d943f392a2201cf6afad9b90e5ef110f9c1a46e77676  pinenote/tools/book-state-guest/SOURCE-MANIFEST.sha256
+1426d26f002b28a14b0e9913a8c6f39a088f2ec937d84ced28e43a22ebc3c6b4  pinenote/tools/book-state-guest/CAPSULE-ROSTER.tsv

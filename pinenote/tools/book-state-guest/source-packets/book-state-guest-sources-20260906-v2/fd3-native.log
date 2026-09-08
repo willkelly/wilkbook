@@ -1,0 +1,9 @@
+PASS: production-direct-helper: stopped=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9] exec=[0, 1, 2, 3] fd0=/dev/null fd3=socket:[53760509]
+PASS: BSG-1-reviewer-fd3-free-negative: stopped=[0, 1, 2] exec=[0, 1, 2, 3] fd0=/dev/null fd3=socket:[53743590]
+PASS: fd3-initially-occupied: stopped=[0, 1, 2, 3] exec=[0, 1, 2, 3] fd0=/dev/null fd3=socket:[53743603]
+PASS: book-source-already-fd3-stdin-open: stopped=[0, 1, 2, 3] exec=[0, 1, 2, 3] fd0=/dev/null fd3=socket:[53741456]
+PASS: book-source-already-fd3-stdin-closed: stopped=[1, 2, 3] exec=[0, 1, 2, 3] fd0=/dev/null fd3=socket:[53741473]
+PASS: duplicate-book-aliases-closed: stopped=[0, 1, 2, 3, 4] exec=[0, 1, 2, 3] fd0=/dev/null fd3=socket:[53758718]
+PASS: closed-stdout-normalized-without-stderr-overwrite: stopped=[0, 2] exec=[0, 1, 2, 3] fd0=/dev/null fd3=socket:[53759224]
+PASS: closed-stderr-normalized-without-stdout-overwrite: stopped=[0, 1] exec=[0, 1, 2, 3] fd0=/dev/null fd3=socket:[53746368]
+PASS: FD 3 is the sole Book Session capability across native exec

@@ -1,0 +1,20 @@
+From: wilkbook packaging
+Subject: build: make prewarmer Linux headers explicit
+
+This is a build-environment adaptation, not a gVisor runtime fix.  The
+freestanding prewarmer is a genrule that invokes $(CC) directly, outside the
+normal C/C++ compile actions, and therefore does not receive the configured
+toolchain's include search flags.  The Guix package supplies the matching
+target Linux UAPI headers through the strict action environment.
+
+--- a/runsc/prewarmer/BUILD
++++ b/runsc/prewarmer/BUILD
+@@ -20,7 +20,7 @@ genrule(
+     name = "gvisor-sentry-prewarmer",
+     srcs = ["prewarmer.c"],
+     outs = ["gvisor-sentry-prewarmer"],
+-    cmd = "$(CC) $(CC_FLAGS) " +
++    cmd = "$(CC) $(CC_FLAGS) $$GVISOR_PREWARMER_INCLUDE_FLAGS " +
+           "-Os " +
+           "-ffreestanding " +
+           "-fno-sanitize=all " +

@@ -1,0 +1,19 @@
+/tmp/packet/capsule/repo/channels.scm:1:6: warning: channel 'nonguix' is not trusted
+/tmp/packet/capsule/repo/channels.scm:11:6: warning: channel 'saayix' is not trusted
+The following derivations would be built:
+  /gnu/store/6f442cki6vm908ykqjwnhdfblm87jw9a-wilkbook-book-state-guest-source-manifest.drv
+  /gnu/store/5g89fmsxffk668286kh8by8w5zrk6wzk-wilkbook-book-state-reader-build-manifest.drv
+  /gnu/store/h5q0by3psf1099mn6n00iv794kvfz6yz-etc.drv
+  /gnu/store/6szp544nisjrjhry324ywg508jcgj76d-activate-service.scm.drv
+  /gnu/store/dz2b2b9vmlyvdr9qh4108jj9v0dbl5x5-activate.scm.drv
+  /gnu/store/7y5hgdawnm16jqyldkzyb5s1dsl1fkj6-wilkbook-book-state-guest.drv
+  /gnu/store/mviz5clfqnjy7l1l6c7yrqwlfijirblm-shepherd-book-state-guest-gate.scm.drv
+  /gnu/store/s2kiwhdn3kjazdvkl6al93v35xrs9bv4-shepherd-book-state-guest-gate.go.drv
+  /gnu/store/djn07ymqv5ma2mi1khpbzgkmyc0aq3hi-shepherd.conf.drv
+  /gnu/store/qzm4gckswn1l53iqj5ca7g806n3hxshv-boot.drv
+  /gnu/store/hz8364zq1rqwwnyqmvb10lyvgjq94rgn-system.drv
+  /gnu/store/59f0i7bwn7cpizq1ssnz09yanbc1av79-extlinux.conf.drv
+  /gnu/store/sd2s8yqar0cjawxnfz3g23gibyr7mr98-partition.img.drv
+  /gnu/store/7zilg20wgs4yb8cx0bfig6finf15l14j-genimage.cfg.drv
+  /gnu/store/z714ddhf80rndbx4iz3qs1ys3wwryy5i-disk-image.drv
+

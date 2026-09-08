@@ -24,6 +24,18 @@ this lineage. **Unreleased** above it collects what has landed since.
 
 ## Unreleased
 
+- **An opt-in sandboxed persistent note now runs on the PineNote.** The
+  `book-state-device-reader` developer flavor adds a dormant fixed Guile note;
+  explicit activation is documented in `pinenote/tools/book-state-device/README.md`.
+  Human saves and recovery after restarting KOReader and its authority passed
+  on generation 20 with diagnostic overrides. The source includes those fixes;
+  a clean-generation boot and suspend qualification remain pending. The exact
+  PineNote-kernel QEMU campaign separately passed two-boot persistence for both
+  Guile and Python. Workbench and general book loading remain future work.
+- **Personal fonts can survive builds made from a fresh checkout.** Put fonts
+  under `/data/fonts`; the reader now searches that persistent directory as
+  well as optional build-time fonts. Restart KOReader after adding fonts.
+  No licensed fonts are included in the repository.
 - **Book-computer development has an offline lane.** The self-hosting design
   and initial implementation plan are in
   `doc/wilkbook-self-hosting-book-computer.md` and
@@ -36,7 +48,8 @@ this lineage. **Unreleased** above it collects what has landed since.
   4 KiB text pass. `make check-source SOURCE_ROOT=…` prepares checked source
   views and runs the native test ladder; the README gives the complete command.
   This is an SDL-offscreen prototype, not a shipping tablet feature. Sandboxed
-  two-boot persistence and Workbench self-revision remain follow-up work.
+  two-boot persistence has since passed as recorded above; Workbench self-revision
+  remains follow-up work.
 
 - **The display driver stops leaking memory on every boot and every
   rebind (kernel patch 15, `probe-lifetime`; on no device yet).** Every

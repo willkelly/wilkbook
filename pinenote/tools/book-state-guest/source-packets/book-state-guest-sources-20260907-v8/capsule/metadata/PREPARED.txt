@@ -1,0 +1,9 @@
+schema=1
+capsule-roster-sha256=fe12fb85efff2dd3be0d820f43a39287dc100270592b67cb7a6c07f60e5daac8
+source-files=134
+module-files=19
+asset-files=91
+check-files=24
+module-load-view=positive-explicit-modules-and-relative-local-file-assets
+package-discovery-view=zero-Scheme-files
+ambient-repository-fallback=forbidden

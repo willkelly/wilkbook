@@ -19,7 +19,370 @@ This is an execution record for that direction, not a replacement specification.
 Accepted source, active candidate, blocked gate, historical failure, and future
 product claims are intentionally kept separate.
 
-## Current snapshot — 2026-09-06
+## Current snapshot — 2026-09-08
+
+### Release scope: opt-in developer foundation
+
+The operator clarified the release goal on 2026-09-07: land a mergeable
+foundation that we can exercise intentionally and future contributors can
+continue. Book Computer does not need to become the default reader experience
+for this release.
+
+The delivery work is therefore:
+
+- Keep experimental systems and launch commands explicit and opt-in.
+- Complete the sandboxed persistent-note integration, retaining honest results
+  from the actual runs as well as component tests.
+- Provide a device-appropriate opt-in integration and an attended PineNote test
+  record. The QEMU guest automates input and shuts down; it is not that device
+  integration.
+- Leave reproducible source/build/test entrypoints and a concise handoff naming
+  the runtime boundaries, configuration/state ownership, known limits, and next
+  implementation seams. A temporary reviewed packet alone is not the reusable
+  scaffold.
+- Prepare the verified source and documentation for a PR; default activation,
+  Workbench self-editing, and everyday-use polish are subsequent work.
+
+#### Where the next contributor starts
+
+| Concern | Source / entrypoint | Current scope |
+| --- | --- | --- |
+| Public baseline checks | `pinenote/tools/book-source-check/`; README's `export-candidate` and `make check-source` commands | Published native persistent-editor and source validation |
+| Storage authority | `pinenote/tools/book-state/` and `pinenote/tools/book-state-protocol/` | Guile-owned SQLite, typed Book Session operations; books receive no direct storage capability |
+| Note presentation | `pinenote/tools/book-state-reader/`, `pinenote/tools/book-state-reader-join/`, and `pinenote/tools/book-state-device/` | Real native KOReader widget save/paint/reopen/disconnect tests; human device saves and restart recovery on generation 20 with source overrides |
+| Sandboxed ARM guest | `pinenote/tools/book-state-guest/` and `pinenote/systems/pinenote-book-state-reader.scm` | Explicit QEMU-only one-shot system, despite the system filename |
+| Two-boot execution | `pinenote/tools/book-state-qemu/two-boot/run-two-boot.sh` and its `CONTRACT.md` | Strict two-fresh-boot QEMU pass on one private 64 MiB state disk: both languages A/version 1, then recovery and B/version 2; opt-in only |
+| Device integration | `pinenote/systems/pinenote-book-state-device-reader.scm` and `pinenote/tools/book-state-device/README.md` | Opt-in inherited reader flavor; generation 20 trialled/promoted, then live-debugged successfully; clean fixed-generation boot remains |
+
+The PR #79 follow-up includes guest, two-boot and device sources and retained
+review history. The source/build/test entrypoints live alongside each tool;
+immutable review packets retain their historical identities. Exact hardware
+results and failed attempts are recorded in `doc/status.md`.
+
+### Latest execution checkpoint
+
+**Strict production two-fresh-boot pass:** the clean natural-grace successor
+completed both fresh ARM boots through the authenticated production graph. Boot
+1 saved Guile and Python A/version 1; boot 2 repainted/recovered both A values
+and saved B/version 2. All four operation/version-correlated sandbox boundary
+records are present. The boot consoles reached canonical power-down at 38.19 s
+and 32.79 s; QEMU, KOReader, runsc, checker, and guardian identities are reaped.
+The identity-safe campaign cleanup completed and the run base is empty.
+
+The immutable final evidence is
+`/tmp/opencode/book-state-natural-grace-r2-final-evidence-base-v2.IOI2LD/book-state-two-boot-evidence.qPQNl4`;
+`EVIDENCE.sha256` is
+`b9d08b88295df2feaa49b60ec9ca923e57aa964a54523682326fb8554d6da06b`.
+Its single-link mode-0400 state artifact is `ffb49189…`; read-only fsck and an
+independent final checker replay pass. The exact terminal result was:
+
+```text
+BOOK_STATE_TWO_BOOT: status=pass; evidence=/tmp/opencode/book-state-natural-grace-r2-final-evidence-base-v2.IOI2LD/book-state-two-boot-evidence.qPQNl4; manifest-sha256=b9d08b88295df2feaa49b60ec9ca923e57aa964a54523682326fb8554d6da06b; state-artifact=read-only
+```
+
+The reserved build produced `/gnu/store/j6i1p44vabm88dxa79f1dyzljzjgzyzc-disk-image`
+(`fd4f2fff…`) in 19 seconds across 15 small builders, reusing the exact cached
+kernel and gVisor. Its embedded system is `/gnu/store/b1i3hjgdpqvvy6wbny23gnb9wmr0mj6n-system`;
+the production bundle manifest is `bd7151f0…`. This remains an opt-in QEMU
+foundation, not a default-reader or hardware result.
+
+The device-appropriate opt-in note UI/authority and experimental reader system
+are now implemented and realized as the separate `book-state-device-reader`
+flavor. Generation 20 was trialled and promoted on wkelly's PineNote. Attended
+debugging fixed injected KOReader dialog ownership, the native saved baseline,
+authority control-structure nesting, language-vs-UI-label validation, and local
+dirty-status handling. Human saves and recovery after restarting both services
+passed with those source overrides. Normal suspend has been restored, but
+suspend/wake qualification of this experimental feature is still open. Book
+Computer stays opt-in; the independent `/data/fonts` fix applies to all readers.
+
+#### Experimental device reader: generation-20 build record
+
+`pinenote/systems/pinenote-book-state-device-reader.scm` inherits the full
+reader—including direct-mode EBC/waveform handling, `/data`, Wi-Fi, platform
+controls, suspend, and generation/kexec support—and changes only the USER_NS
+kernel, source-built gVisor package, cgroup2 mount, KOReader package, and two
+Book State services. With no exact root-owned mode-0600 `enabled` marker, the
+authority opens neither SQLite nor its Unix socket and the plugin registers no
+menu item. The deployed service fixes the one visible namespace and runner to
+the Guile note; Python remains a second compile-fixed runner with no UI selector.
+
+Focused native integration now exercises both fixed runners over donated FD 3,
+real SQLite save/close/reopen, authority restart, abrupt KOReader disconnect and
+reconnect, fresh session/grant identities, stale endpoint and stale `/run`
+refusal, natural child exit/reap, private database closure, active-session TERM,
+and idle TERM while blocked in `accept(2)`. It generates both OCI bundles and
+checks systrap,
+`network=none`, `directfs=false`, `host-uds=none`, and exactly
+`--pass-fd=3:3`. The accepted two-fresh-boot QEMU evidence remains unchanged;
+no third boot was run.
+
+The required pin gate still resolves exactly kernel
+`/gnu/store/334ljs8qa7ww8vlg9gpv428bh8yjd1nx-linux-pinenote-book-execution-test-7.1.8-pinenote`
+and gVisor
+`/gnu/store/djgy782a5fjmsfkr6hzff3g953r60c86-gvisor-source-built-20260831.0`.
+The final derivation-first build, using `--no-grafts --no-substitutes
+--max-jobs=1 --cores=2`, produced derivation
+`/gnu/store/nr0yc3rizlvbrmfdxxv7biwa8zqpmwkr-system.drv` and system
+`/gnu/store/7wyr4smys53jgf2cjrif0mm94n9cg11p-system`, with a 2596.6 MiB
+closure. Closure inspection found the exact pins, device KOReader/plugin,
+authority/module union, and 46-path language closure, with no QEMU or local-test
+authority artifact. This is the original generation-20 build, which required
+the later source overrides documented above. It must not be presented as an
+immutable build already containing the live-debugged fixes.
+
+Attempt 1 and the first host-finalization exit from attempt 2 are preserved.
+They exposed four producer/checker joins only: real same-paint UI audit order,
+Shepherd's non-UART status line, and ordered state-identity fields plus textual
+`0400`. No third production boot was run; attempt 2's already-complete,
+pre-cleanup-checked boots were finalized offline after exact fixes. See the
+runtime note for paths and full identities.
+
+**Pre-production direct-image two-boot success:** a bounded natural-exit grace in
+`finalize-owned-runsc!` fixed premature SIGTERM of `runsc run` during its
+deferred teardown. Both languages saved A/version 1 in a 33-second boot,
+then recovered A/version 1 and saved B/version 2 in a fresh 29-second boot
+using the same state disk. All four runsc exits were zero (0.210–0.229 seconds
+natural exit), cgroups were absent, only the expected `null-netns` remained
+before ownership-checked cleanup, and four attributed boundary records were
+published. Guest/UI shutdown passed and state fsck returned zero.
+
+These are **modified diagnostic-image results**, not strict production
+acceptance. Evidence is at
+`/tmp/opencode/book-state-successor-natural-grace-run.RrRdmf` and
+`/tmp/opencode/book-state-successor-natural-grace-run.REnDoM`;
+the diagnostic image/state and patch are retained under
+`/tmp/opencode/book-state-successor-natural-grace-direct-20260907-v1`.
+The verified grace change is ported to
+`pinenote/tools/book-execution-spike/guest-book-protocol.scm`; focused delayed-
+exit and stuck-child regressions pass, with TERM/KILL escalation and stale-state
+checks retained. The focused guest-suite log SHA-256 is
+`487ff7ab8e0897e0181583ee15cc647400e469c1ee142aef9bccf9f32818cccb`.
+The clean build and strict confirmation are recorded above. No PineNote
+deployment or test occurred.
+
+#### Earlier checkpoints retained chronologically
+
+**V9 attempt 1:** the corrected Guix filesystem declaration is proven on real
+AArch64 QEMU. `WBBookStateV1` passed fsck and mounted as ext4 at 6.7 seconds;
+the V8 `ext4: Unknown parameter 'noatime'` failure is gone. The run then reached
+the fixed 360-second VM deadline before `book-state-volume-ready` or the Book
+State authority emitted any record, so boot 2 never started and the strict
+checker did not pass. Journal replay on a private state-image copy followed by
+`debugfs` inspection found neither the sentinel nor SQLite database.
+
+The barrier is no longer unknown. A separately named diagnostic image retained
+ordered Shepherd syslog showing `udev` and the state filesystem service
+complete, followed by immediate `book-state-volume-ready` failure with
+`Unbound variable: get-string-all`. The generated service had put `use-modules`
+inside its compiled start lambda, where it did not provide lexical bindings to
+the compiled g-expression. The minimal canonical source fix declares
+`(ice-9 textual-ports)`, `(srfi srfi-1)`, and `(srfi srfi-13)` through the
+Shepherd service's `modules` field and removes that inner import. Its generated
+parser reaches the expected missing-mount rejection offline rather than an
+unbound-variable exception.
+
+Direct troubleshooting then replaced only the generated volume-ready `.scm`
+and `.go` in a disposable writable copy of the original V9 root, using
+`debugfs`; the immutable V9 image and failed campaigns were not modified. Two
+fresh diagnostic boots crossed the repaired gate: the state filesystem mounted,
+the sentinel and schema-1 SQLite database were created, source provenance and
+all kernel/network/mount checks passed, and the exact source-built gVisor
+version check passed. Read-only journal replay after the second run found the
+Guile namespace at state version 0 with no commit receipt, which is the expected
+point at which the host UI failure interrupted the run.
+
+The remaining blocker is outside the image. Under AArch64 TCG, the guest's
+reply to KOReader's `channel-ready` arrives after the three-second BookInfo
+startup notice has expired; the inherited UI fixture then rejects the missing
+second notice before the first note can become ready. A retry after `open`
+cannot recover an already-expired notice. The third and final authorized
+diagnostic tried consuming the exact two known notices before emitting
+`channel-ready`; it removed them, then failed because it incorrectly required
+the underlying ReaderUI to be visible even though `onReaderReady` runs before
+that widget enters the visible stack. No guest output was produced in that
+third run. All six recorded QEMU/KOReader PID/start-time identities from the
+three cycles were checked absent after cleanup.
+
+The UI correction is therefore narrow: consume exactly the two
+pinned clean-profile notices before `channel-ready`, require neither a third nor
+an already-visible underlying widget, and emit the historical
+`startup-overlays-dismissed:2` marker only after the first `dialog-shown` so the
+semantic evidence order is unchanged. The canonical and two-boot copies now
+carry that byte-identical change. It compiles with KOReader's LuaJIT and passes
+all 22 native reader-join lifecycles with exactly one marker per log and the
+historical marker order. The three-cycle diagnostic allowance is exhausted; no
+fourth diagnostic cycle was used.
+
+The reserved clean successor build then completed in 20 seconds with one job,
+two cores, and 17 small derivations; neither kernel nor gVisor was rebuilt.
+Image `/gnu/store/cbnpv8rxy7i7h5m58a5vkn929dq4yvvb-disk-image` is
+`2839f9fc…`, with embedded system `a4qgl0y3…`. Read-only extraction proved the
+installed mount flags and compiled volume-gate imports. The exact 88-field,
+eight-role production binding selects payload manifest `0336260c…` and bundle
+manifest `22cc91b2…`; the full host gate passes.
+
+The production campaign ran once from frozen source manifest `6e44b908…`. Boot
+1 crossed both repaired startup seams, and KOReader emitted the required
+`dialog-shown` → `startup-overlays-dismissed:2` → `dialog-ready` order. Guile
+read absent/version 0 and committed A/version 1. The authority then rejected
+`runtime left stale cgroup: wilkbook-guile-book-state` after runsc exited zero
+and was reaped. Python and boot 2 did not start; no checker `PASS` is claimed.
+Read-only inspection of a private state-image copy found one valid Guile
+version-1 receipt, integrity OK, no foreign-key rows or sidecars. Every recorded
+host process is reaped and the campaign lock is released.
+
+The exact teardown error is not in the retained evidence. Static gVisor source
+shows that `container.Run` ignores errors from deferred `Destroy`, so zero exit
+does not establish cgroup removal, but it does not identify whether this node
+was empty or busy. Another QEMU cycle or clean build requires authorization;
+the ready next step is bounded exact-path cgroup metadata and guaranteed runsc
+debug emission before selecting cleanup semantics. Exact evidence and
+continuation details are in
+`pinenote/tools/book-state-qemu/two-boot/RUNTIME-NOTE-20260907.md`.
+
+The historical finalized V9 post-run source copy is
+`/tmp/opencode/book-state-qemu-two-boot-v9-mount-flags-successor-20260907-v2`
+(`SOURCE-MANIFEST.sha256` `a7f3bbbb…`; runtime manifest `c24fd4ea…`). Its only
+functional provenance cleanup after attempt 1 renames the source-fixed external
+V9 author input from “review evidence” to neutral “binding evidence”; the closed
+88-field payload schema and parent review records do not change. The complete
+296-line host gate passed in 59 seconds. Sealed author evidence is
+`/tmp/opencode/book-state-qemu-two-boot-v9-mount-flags-successor-20260907-v2-author-evidence`
+(`EVIDENCE.sha256` `ee5bfe57…`, host log `c8766691…`). This is not independent
+review and does not turn the failed runtime into persistence acceptance.
+
+**Preserved V8 parent:** attempt 5 had already proved the corrected bare-label
+QEMU root handoff, Guix root mount, Shepherd startup, and KOReader fixture open,
+but failed the state mount because generic protections were passed as ext4 data.
+Its unchanged evidence remains at
+`/tmp/opencode/book-state-v8-attempt5-evidence-base.bMkfXc/book-state-two-boot-evidence.qGkYzd`.
+
+**Latest delivery state:** the joint V8 guest / V6 checker correlation change
+is independently accepted. V8's raw image built successfully in 18.88 seconds
+with two cores and one job:
+`/gnu/store/rj1a6k042gcchcmcsb8pli426b83w34g-disk-image`.
+Build records are at `/tmp/opencode/book-state-image-build-v8-hmm4o55_/`.
+Joint review SHA-256:
+`a7e13c9f7486f558da5bd2ec2feeaff809aca6fe46381d65c34e95004604de19`.
+Independent artifact-delta inspection and payload preparation are complete.
+V8 image SHA-256:
+`2a492559aece65eb92832bf836b6b90751f5475101db3642a174c058e5ffa366`.
+The immutable artifact packet is
+`/tmp/opencode/book-state-image-v8-independent-review-20260907/review-packet-v1`;
+its `evidence/PAYLOAD.sha256` digest is
+`c26dfa9416c438a59a6fe697773d5325cca863a171e2a6537e9fa93bec2491bc`.
+Artifact review SHA-256:
+`1a014ece021a59c12daebaa811938496754bf4e6e6b14679f89045ed37e51d53`.
+The exact V8 production binding is now independently accepted. Final binding
+review SHA-256:
+`b9e3d2adfe930ae363a730c57cc93b64e1509c3792e51bc3367d8a6ef742622a`.
+One invocation of the reviewed two-boot command has been launched from
+`/tmp/opencode/book-state-qemu-two-boot-v8-final-binding-20260907-v1`.
+The invocation **failed with exit 1 before QEMU launch**. The one-boot stderr
+contains `FAIL: APPEND must contain exactly one root=PNGuixRoot`. The prepared
+payload config uses `root=LABEL=PNGuixRoot` and `console=ttyAMA0`, whereas the
+launcher's `read-fixed-append` requires `root=PNGuixRoot` and the PineNote UART
+console before translating it to QEMU. The artifact/preflight checks did not
+exercise this downstream boot-config contract. No guest boot or semantic
+persistence acceptance occurred, and boot 2 was not attempted.
+
+Preserved attempt roots:
+
+- Campaign: `/tmp/opencode/book-state-v8-campaign-base.s8i2zM/book-state-campaign.xXf4ms`
+- Evidence: `/tmp/opencode/book-state-v8-evidence-base.zdqeQY/book-state-two-boot-evidence.kYJBbj`
+- Run base: `/tmp/opencode/book-state-v8-run-base.mbHv7r` (empty after the invocation)
+
+The failed boot record reports equal before/after state hashes:
+`45be558efd2f3a824972c48f9e34fdcb1f61df32b1cd162d0b97ff859339f5b2`.
+No cleanup, repair, or retry was performed after failure. The per-boot VM limit
+remains 360 seconds plus 5 seconds TERM grace for any separately accepted
+successor. Step 2, the device reader generation, has not started.
+
+### Resumed device delivery after PR #79
+
+PR [#79](https://github.com/willkelly/wilkbook/pull/79) publishes the accepted
+native milestone. Work has resumed on branch `book-computer-device` toward the
+operator's requested tablet prototype. Step 1 is the actual sandboxed ARM
+save/shutdown/fresh-boot/reopen test; step 2 is a device reader generation.
+Step 2 has not started, and no Book Computer generation is installed on the
+PineNote.
+
+The two-boot runner's v3 source/pre-image gate is independently accepted:
+BTQ-1 through BTQ-4 are closed, including the early dynamic-loader injection
+gap. Review SHA-256:
+`672c6c7d50e99e8d886b7ae93b94d803d2fc5922d702297770b4947924668b83`.
+Production still refuses execution without the exact reviewed image binding.
+The guest-v6 mode-only packet is now independently accepted for one bounded
+raw-image construction; it preserves v5 code and restores the nine required
+executable modes. Final guest review SHA-256:
+`4c1df07a0dd1db655f5668975636bdf7aecc8fee3b755d26823be7b4c89cc4e5`.
+The host build has been launched with two cores, one job, no substitutes and
+a 7200-second limit, after checking the frozen packet and reproducing image
+derivation `/gnu/store/p6iwha5axl4s5yi2qb9l76x00cw9vqzg-disk-image.drv`.
+Expected output:
+`/gnu/store/9yx1xmhf2hnsp6vdwnvvxzqv3i9i9fkz-disk-image`.
+**Build completed:** exit 0 in 24.94 seconds, producing the exact expected
+output above. The command, clean environment, derivation precheck, complete
+stdout/stderr and status are retained at
+`/tmp/opencode/book-state-image-build-v6-u_0r5j1z/`.
+Independent artifact inspection now accepts the exact image as an artifact.
+Image SHA-256:
+`53bee9f09d7b3a12ad5e9bf77f1dd91a1e2416be8ba205f06889becfd00de9d4`;
+actual image initrd SHA-256:
+`e842a865fcee63ae6c6364e64f1493907ccc90e81dc2dacf2edc4eddceb284ad`.
+Its layout is DOS/MBR, not GPT, with one clean ext4 partition. The reviewed
+boot payload changes only the root filesystem label from `Guix_image` to
+`PNGuixRoot` (97 bytes across superblocks); the original store image is intact.
+Review SHA-256:
+`02a4d7adecf9dc36dbd696ea488d00500999cd95d8304a6e76472403281ffa4b`.
+Two runner-consumer corrections are active: replace obsolete guest-v4 schema
+fields with truthful current identities, and permit legitimate deduplicated
+hard links for exact immutable Guix-store executables. No bundle was issued
+under the invalid schema. A corrected exact image-binding successor and its
+preflight precede actual two-boot execution; no QEMU boot or device deployment
+has occurred, and no image rebuild is required for these consumer fixes.
+
+**Later observability correction (2026-09-07):** final-checker review found
+that absent sandbox-boundary markers could pass. Source inspection established
+that successful guest runs retained those records only in ephemeral container
+stdout, so a checker-only correction could not prove the boundary. V7 now
+validates each finalized, bounded child capture and publishes the actual
+language-specific marker before cleanup. Its two 77-assertion relay matrices
+pass independently, including quoted-only and missing-newline negatives.
+Guest-v7 review SHA-256:
+`ee06d8be01eba8e970c9da59a273daae48d16c23cf0f26a75f8436cd54bc4065`.
+One successor raw-image build has started with two cores and one job, after
+authenticating the frozen packet and reproducing derivation
+`/gnu/store/z714ddhf80rndbx4iz3qs1ys3wwryy5i-disk-image.drv`.
+Expected output:
+`/gnu/store/lsk489hgzszvym56m5pnsbrvf5malhiy-disk-image`.
+**V7 build completed:** exit 0 in 18.83 seconds and exact expected output
+`lsk489h…`. The complete build record is retained at
+`/tmp/opencode/book-state-image-build-v7-acdmt6cy/`. Boot-artifact inspection
+is complete and sealed as historical artifact evidence. V7 image SHA-256:
+`7f38261ec047d5db9c0917ea73e42bfbe2d8475cfb90f276ceef799882770350`.
+It selects the exact V7 authority through the compiled Shepherd chain and has
+no preseeded state database or sentinel. The sealed payload manifest is
+`ce98c3c0bf70c4f1a2fbdd001648d19f35896eed425d36029eac9578b34a150f`
+(`evidence/PAYLOAD.sha256`, distinct from `STATUS.json`). Artifact review:
+`e6e8f415d5925e7d6b6a03be783f1d0afdb1dc0b0dc3283264d10d2c22b756bb`.
+
+V7 is not final-campaign bindable: independent checker review found that
+complete same-language attribution/marker pairs can be exchanged between
+boots while the sealed checker still passes. The producer/checker successor
+must bind each capture attribution to that invocation's actual book-owned
+operation ID and resulting state version. This joint correction is active;
+it does not change the sandbox or storage design. The image and prior evidence
+remain preserved. No QEMU or device execution has occurred.
+
+The clarified boundary permits SQLite software inside the book environment;
+the book must have no direct access to the authority's state volume/database
+or private UI channel. Both fixtures must execute their boundary probes and
+state operations inside the actual gVisor sandbox. Native fixture acceptance
+does not satisfy this runtime gate.
+
+### Published milestone and earlier checkpoints
 
 **Delivery checkpoint:** publish the accepted native persistent-note editor,
 public source/native test lane, reusable gVisor package and reviewed source

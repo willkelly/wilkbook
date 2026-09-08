@@ -136,8 +136,9 @@ ver=$(printf '%s' "$seeded" | grep -o '[0-9]\{6,\}' | head -1)
 
 # 10. The seeded font block must be CONDITIONAL on the fonts actually being
 #     staged: a fresh clone has no pinenote/fonts/local (gitignored,
-#     licensed), so pinenote-local-fonts is #f and EXT_FONT_DIR is never
-#     set -- naming "Equity A" there points at a font not in the image.
+#     licensed), so pinenote-local-fonts is #f. The persistent /data/fonts
+#     search path may also be empty; naming "Equity A" unconditionally would
+#     point at a font that is not necessarily installed.
 #
 #     "COMPLETE" used to be checked here too (cre_font without
 #     monospace_font / cre_font_family_fonts shipped on every fonts-present

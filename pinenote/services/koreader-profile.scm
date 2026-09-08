@@ -109,9 +109,9 @@
   (home-dir pinenote-koreader-profile-home-dir (default "/data/books"))
 
   ;; #f on a fresh clone: pinenote/fonts/local is gitignored and
-  ;; licensed, so pinenote-local-fonts is #f, EXT_FONT_DIR is never set,
-  ;; and naming "Equity A" would point the reader at a font that is not
-  ;; in the image.
+  ;; licensed, so pinenote-local-fonts is #f. The independent /data/fonts
+  ;; search path may be empty too; do not seed "Equity A" unless the font
+  ;; package is actually included in this image.
   (fonts pinenote-koreader-profile-fonts
          (default (and pinenote-local-fonts %pinenote-koreader-font-aliases)))
 

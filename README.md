@@ -393,15 +393,19 @@ prealpha tag and that bar.
 
 ## Book Computer prototype
 
-The experimental Book Computer lane has an independently checked native
-persistent-note editor: real KOReader editing, Guile or Python books, and a
-trusted Guile/SQLite authority. It supports repeated save/restart/reopen cycles,
-empty saves, and 4 KiB text. This remains a host-side, SDL-offscreen prototype;
-the shipping reader does not include it.
+The experimental Book Computer lane has an independently checked persistent-note
+foundation: real KOReader editing, fixed Guile and Python books, and a trusted
+Guile/SQLite authority. It supports repeated save/restart/reopen cycles, empty
+saves, and 4 KiB text. The default reader does not include it. A separate
+`book-state-device-reader` flavor now packages the real PineNote reader plus an
+explicitly activated Guile-note menu and source-built gVisor; it builds and
+passes focused offline lifecycle tests, but has not run on PineNote hardware.
 
 Start with the [protocol and evidence reference](doc/book-computer-protocols.md),
 then the [demonstrations](doc/book-computer-demo.md) and
-[implementation record](doc/book-computer-implementation.md).
+[implementation record](doc/book-computer-implementation.md). The experimental
+device flavor's build, activation, stop, and rollback instructions are in
+[`pinenote/tools/book-state-device/README.md`](pinenote/tools/book-state-device/README.md).
 
 On a GNU/Linux host with Guix, export an explicit source candidate and run the
 accepted public persistence checks from the repository root:
@@ -425,8 +429,12 @@ is not a QEMU or device command.
 | `pinenote/tools/book-execution-spike/public-source/run.sh --source-root "$PWD"` | Authenticated source-package/system derivation graphs; no OS image build or runtime test |
 | [Retained replay commands](pinenote/tools/book-source-check/README.md) | Explicit external historical artifacts; missing evidence fails rather than being regenerated |
 
-The source-built sandbox runtime and persistent guest still need their joined
-two-boot QEMU proof. [Workbench self-revision](doc/wilkbook-self-hosting-book-computer.md)
+The opt-in source-built sandbox runtime and persistent guest now have a strict
+two-fresh-boot QEMU proof: Guile and Python save A/version 1, recover it after a
+fresh boot, and save B/version 2 through one private 64 MiB state image. The
+authenticated command and exact evidence identities are in
+`pinenote/tools/book-state-qemu/two-boot/README.md`; this does not enable the
+feature in the default reader. [Workbench self-revision](doc/wilkbook-self-hosting-book-computer.md)
 is a later implementation slice.
 
 ## Reading order (humans)

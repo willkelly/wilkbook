@@ -1,0 +1,155 @@
+PASS: capsule path is canonical
+PASS: capsule top level has only four fixed views
+PASS: metadata roster is read-only regular data
+PASS: capsule roster paths are unique
+PASS: capsule roster paths are sorted
+PASS: repo and metadata carry the same capsule roster
+PASS: repo contains exactly rostered source plus its roster
+PASS: every repo source is mode 0444 with its rostered hash
+PASS: repo roster is immutable regular data
+PASS: positive module view contains exactly modules and relative local-file assets
+PASS: every module/local-file copy has its exact rostered mode and hash
+PASS: package discovery view contains one non-Scheme marker
+PASS: package marker is read-only
+PASS: package discovery view contains zero Scheme files
+PASS: metadata view contains only fixed preparation records
+PASS: preparation record binds capsule roster
+PASS: prepared capsule has no symlink, special, or unlisted source
+PASS: source preparer rejects pinenote/packages/gvisor-dependencies.scm
+PASS: source preparer rejects pinenote/packages/kernel.scm
+PASS: source preparer rejects pinenote/systems/base.scm
+PASS: source preparer rejects pinenote/patches/linux-pinenote-7.0-forward-port.patch
+PASS: source preparer rejects source-manifest tamper
+PASS: source preparer rejects symlinked project input
+PASS: source preparer rejects special project input
+PASS: source preparer rejects a source changed during capture
+PASS: capsule checker rejects unlisted Scheme code
+PASS: missing, manifest, link, special, changing, and unlisted-code gates
+/tmp/opencode/wilkbook-book-computer/pinenote/tools/book-state-guest/source-packets/book-state-guest-sources-20260906-v4/capsule/repo/channels.scm:1:6: warning: channel 'nonguix' is not trusted
+/tmp/opencode/wilkbook-book-computer/pinenote/tools/book-state-guest/source-packets/book-state-guest-sources-20260906-v4/capsule/repo/channels.scm:11:6: warning: channel 'saayix' is not trusted
+wrote `/tmp/opencode/book-state-guest-prepared.WJ0UJd/cache-test/attacker-default-home/.cache/guile/ccache/3.0-LE-8-4.6/tmp/opencode/wilkbook-book-computer/pinenote/tools/book-state-guest/source-packets/book-state-guest-sources-20260906-v4/capsule/module-view/pinenote/systems/pinenote-book-state-reader.scm.go'
+/tmp/opencode/wilkbook-book-computer/pinenote/tools/book-state-guest/source-packets/book-state-guest-sources-20260906-v4/capsule/repo/channels.scm:1:6: warning: channel 'nonguix' is not trusted
+/tmp/opencode/wilkbook-book-computer/pinenote/tools/book-state-guest/source-packets/book-state-guest-sources-20260906-v4/capsule/repo/channels.scm:11:6: warning: channel 'saayix' is not trusted
+WARNING: (pinenote systems pinenote-book-execution-spike): imported module (gnu services) overrides core binding `delete'
+PASS: default-home executable caller cache excluded before project module load
+wrote `/tmp/opencode/book-state-guest-prepared.WJ0UJd/cache-test/attacker-explicit-cache/guile/ccache/3.0-LE-8-4.6/tmp/opencode/wilkbook-book-computer/pinenote/tools/book-state-guest/source-packets/book-state-guest-sources-20260906-v4/capsule/module-view/pinenote/systems/pinenote-book-state-reader.scm.go'
+/tmp/opencode/wilkbook-book-computer/pinenote/tools/book-state-guest/source-packets/book-state-guest-sources-20260906-v4/capsule/repo/channels.scm:1:6: warning: channel 'nonguix' is not trusted
+/tmp/opencode/wilkbook-book-computer/pinenote/tools/book-state-guest/source-packets/book-state-guest-sources-20260906-v4/capsule/repo/channels.scm:11:6: warning: channel 'saayix' is not trusted
+WARNING: (pinenote systems pinenote-book-execution-spike): imported module (gnu services) overrides core binding `delete'
+PASS: explicit-xdg executable caller cache excluded before project module load
+PASS: caller HOME and XDG Guile cache boundaries are closed
+PASS: public channel pin is exact
+PASS: public source-built gVisor package definition is exact
+PASS: OCI successor changes executable policy only by restoring Python -S
+PASS: OCI successor retains "--platform=systrap"
+PASS: OCI successor retains "--network=none"
+PASS: OCI successor retains "--sidecar-usage-policy=strict"
+PASS: OCI successor retains "--sidecar-release-enforcement-policy=always"
+PASS: OCI successor retains "--host-uds=none"
+PASS: OCI successor retains "--directfs=false"
+PASS: OCI successor retains "--pass-fd=3:3"
+PASS: accepted BSG-1 authority and FD adapter bytes are unchanged
+PASS: threaded state authority never primitive-forks
+PASS: post-worker runsc launch uses spawn plus the fixed stopped FD adapter
+PASS: adapter reserves FD 3 before integer-owned /dev/null temporaries
+PASS: native exec matrix covers the BSG-1 identity counterexamples
+PASS: non-stopping pre-exec child returns to cooperative cleanup
+PASS: authority has no phase, expected-value, replay, or state-root environment input
+PASS: recovery and save success require typed book-issued completions
+PASS: source order preserves typed receipt before commit-ok before presentation
+PASS: operation and guest clocks are accurately limited to cooperative polling
+PASS: guest success follows writer cleanup, database close/inspection, and sync
+PASS: authority and system share the exact persistent-volume contract
+PASS: ext4 lost+found and private-root mode are explicit
+PASS: system binds the accepted rebased kernel and excludes historical 4d614
+PASS: system selects the public source-built gVisor package, not historical CONTROL
+PASS: fresh-checkout system import graph excludes local-wrapper-dependent systems
+PASS: system manifest makes the cooperative/outer/standalone boundary explicit
+PASS: trusted profile records exact AArch64 guile-sqlite3 and SQLite outputs
+PASS: authority opens only the accepted dedicated private UI adapter
+PASS: system consumes no generated snapshot, live review, or recursive source tree
+PASS: accepted outer guardian and its imported console module are exact
+PASS: accepted outer exposes bounded TERM/KILL/reap and explicit timeout CLI
+PASS: machine handoff requires the hard outer boundary without claiming integration
+PASS: host liveness tests exercise real cooperative and hard-owner boundaries
+PASS: human contract states the same non-fictional deadline boundary
+PASS: candidate manifest is a finite canonical project/check input roster
+PASS: capsule roster closes BSG-3 modules, kernel patch, and manifest binding
+PASS: Guix starts after private cache/code paths with zero-Scheme nested -L
+PASS: derivation graph query uses pinned repl store API, not ambient guix gc
+PASS: accepted reader-join source is exact: joined-note-book.scm
+PASS: accepted reader-join source is exact: joined_note_book.py
+PASS: accepted reader-join source is exact: empty-action-successor/book-session.scm
+PASS: explicit candidate/dependency source manifest passes
+/tmp/opencode/wilkbook-book-computer/pinenote/tools/book-state-guest/source-packets/book-state-guest-sources-20260906-v4/capsule/repo/channels.scm:1:6: warning: channel 'nonguix' is not trusted
+/tmp/opencode/wilkbook-book-computer/pinenote/tools/book-state-guest/source-packets/book-state-guest-sources-20260906-v4/capsule/repo/channels.scm:11:6: warning: channel 'saayix' is not trusted
+PASS: production-direct-helper: stopped=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9] exec=[0, 1, 2, 3] fd0=/dev/null fd3=socket:[56257260]
+PASS: BSG-1-reviewer-fd3-free-negative: stopped=[0, 1, 2] exec=[0, 1, 2, 3] fd0=/dev/null fd3=socket:[56247049]
+PASS: fd3-initially-occupied: stopped=[0, 1, 2, 3] exec=[0, 1, 2, 3] fd0=/dev/null fd3=socket:[56247054]
+PASS: book-source-already-fd3-stdin-open: stopped=[0, 1, 2, 3] exec=[0, 1, 2, 3] fd0=/dev/null fd3=socket:[56247059]
+PASS: book-source-already-fd3-stdin-closed: stopped=[1, 2, 3] exec=[0, 1, 2, 3] fd0=/dev/null fd3=socket:[56258068]
+PASS: duplicate-book-aliases-closed: stopped=[0, 1, 2, 3, 4] exec=[0, 1, 2, 3] fd0=/dev/null fd3=socket:[56258077]
+PASS: closed-stdout-normalized-without-stderr-overwrite: stopped=[0, 2] exec=[0, 1, 2, 3] fd0=/dev/null fd3=socket:[56258089]
+PASS: closed-stderr-normalized-without-stdout-overwrite: stopped=[0, 1] exec=[0, 1, 2, 3] fd0=/dev/null fd3=socket:[56247074]
+PASS: FD 3 is the sole Book Session capability across native exec
+wrote `/tmp/opencode/book-state-guest-prepared.WJ0UJd/host-output/ccache/book-state-guest-authority.go'
+wrote `/tmp/opencode/book-state-guest-prepared.WJ0UJd/host-output/ccache/runsc-fd3-exec.go'
+wrote `/tmp/opencode/book-state-guest-prepared.WJ0UJd/host-output/ccache/oci-book-bundle.go'
+%%%% Starting test book-state-guest-liveness-boundary  (Writing full log to "book-state-guest-liveness-boundary.log")
+LIVENESS-TEST stage=cooperative-child-start
+LIVENESS-TEST stage=cooperative-child-complete
+LIVENESS-TEST stage=blocking-waitpid-start
+LIVENESS-TEST stage=blocking-waitpid-complete
+LIVENESS-TEST stage=blocked-revoke-start
+LIVENESS-TEST stage=blocked-revoke-complete
+LIVENESS-TEST stage=blocked-join-start
+LIVENESS-TEST stage=blocked-join-complete
+# of expected passes      18
+%%%% Starting test book-state-guest-modules  (Writing full log to "book-state-guest-modules.log")
+# of expected passes      23
+/tmp/opencode/wilkbook-book-computer/pinenote/tools/book-state-guest/source-packets/book-state-guest-sources-20260906-v4/capsule/repo/channels.scm:1:6: warning: channel 'nonguix' is not trusted
+/tmp/opencode/wilkbook-book-computer/pinenote/tools/book-state-guest/source-packets/book-state-guest-sources-20260906-v4/capsule/repo/channels.scm:11:6: warning: channel 'saayix' is not trusted
+WARNING: (pinenote systems pinenote-book-execution-spike): imported module (gnu services) overrides core binding `delete'
+MODULE-ORIGIN (pinenote images pinenote-bootloader)=/tmp/opencode/wilkbook-book-computer/pinenote/tools/book-state-guest/source-packets/book-state-guest-sources-20260906-v4/capsule/module-view/pinenote/images/pinenote-bootloader.scm
+MODULE-ORIGIN (pinenote images pinenote-initramfs)=/tmp/opencode/wilkbook-book-computer/pinenote/tools/book-state-guest/source-packets/book-state-guest-sources-20260906-v4/capsule/module-view/pinenote/images/pinenote-initramfs.scm
+MODULE-ORIGIN (pinenote images pinenote-partitions)=/tmp/opencode/wilkbook-book-computer/pinenote/tools/book-state-guest/source-packets/book-state-guest-sources-20260906-v4/capsule/module-view/pinenote/images/pinenote-partitions.scm
+MODULE-ORIGIN (pinenote packages boot)=/tmp/opencode/wilkbook-book-computer/pinenote/tools/book-state-guest/source-packets/book-state-guest-sources-20260906-v4/capsule/module-view/pinenote/packages/boot.scm
+MODULE-ORIGIN (pinenote packages cross-fixes)=/tmp/opencode/wilkbook-book-computer/pinenote/tools/book-state-guest/source-packets/book-state-guest-sources-20260906-v4/capsule/module-view/pinenote/packages/cross-fixes.scm
+MODULE-ORIGIN (pinenote packages ebc-test)=/tmp/opencode/wilkbook-book-computer/pinenote/tools/book-state-guest/source-packets/book-state-guest-sources-20260906-v4/capsule/module-view/pinenote/packages/ebc-test.scm
+MODULE-ORIGIN (pinenote packages firmware)=/tmp/opencode/wilkbook-book-computer/pinenote/tools/book-state-guest/source-packets/book-state-guest-sources-20260906-v4/capsule/module-view/pinenote/packages/firmware.scm
+MODULE-ORIGIN (pinenote packages gvisor-dependencies)=/tmp/opencode/wilkbook-book-computer/pinenote/tools/book-state-guest/source-packets/book-state-guest-sources-20260906-v4/capsule/module-view/pinenote/packages/gvisor-dependencies.scm
+MODULE-ORIGIN (pinenote packages gvisor-source)=/tmp/opencode/wilkbook-book-computer/pinenote/tools/book-state-guest/source-packets/book-state-guest-sources-20260906-v4/capsule/module-view/pinenote/packages/gvisor-source.scm
+MODULE-ORIGIN (pinenote packages gvisor)=/tmp/opencode/wilkbook-book-computer/pinenote/tools/book-state-guest/source-packets/book-state-guest-sources-20260906-v4/capsule/module-view/pinenote/packages/gvisor.scm
+MODULE-ORIGIN (pinenote packages kernel)=/tmp/opencode/wilkbook-book-computer/pinenote/tools/book-state-guest/source-packets/book-state-guest-sources-20260906-v4/capsule/module-view/pinenote/packages/kernel.scm
+MODULE-ORIGIN (pinenote packages system-tools)=/tmp/opencode/wilkbook-book-computer/pinenote/tools/book-state-guest/source-packets/book-state-guest-sources-20260906-v4/capsule/module-view/pinenote/packages/system-tools.scm
+MODULE-ORIGIN (pinenote services diagnostics)=/tmp/opencode/wilkbook-book-computer/pinenote/tools/book-state-guest/source-packets/book-state-guest-sources-20260906-v4/capsule/module-view/pinenote/services/diagnostics.scm
+MODULE-ORIGIN (pinenote services ebc)=/tmp/opencode/wilkbook-book-computer/pinenote/tools/book-state-guest/source-packets/book-state-guest-sources-20260906-v4/capsule/module-view/pinenote/services/ebc.scm
+MODULE-ORIGIN (pinenote services state)=/tmp/opencode/wilkbook-book-computer/pinenote/tools/book-state-guest/source-packets/book-state-guest-sources-20260906-v4/capsule/module-view/pinenote/services/state.scm
+MODULE-ORIGIN (pinenote systems base)=/tmp/opencode/wilkbook-book-computer/pinenote/tools/book-state-guest/source-packets/book-state-guest-sources-20260906-v4/capsule/module-view/pinenote/systems/base.scm
+MODULE-ORIGIN (pinenote systems pinenote-book-execution-spike)=/tmp/opencode/wilkbook-book-computer/pinenote/tools/book-state-guest/source-packets/book-state-guest-sources-20260906-v4/capsule/module-view/pinenote/systems/pinenote-book-execution-spike.scm
+MODULE-ORIGIN (pinenote systems pinenote-book-state-reader)=/tmp/opencode/wilkbook-book-computer/pinenote/tools/book-state-guest/source-packets/book-state-guest-sources-20260906-v4/capsule/module-view/pinenote/systems/pinenote-book-state-reader.scm
+MODULE-ORIGIN (pinenote timezone)=/tmp/opencode/wilkbook-book-computer/pinenote/tools/book-state-guest/source-packets/book-state-guest-sources-20260906-v4/capsule/module-view/pinenote/timezone.scm
+PASS: all project module origins are the exact private positive view
+/tmp/opencode/wilkbook-book-computer/pinenote/tools/book-state-guest/source-packets/book-state-guest-sources-20260906-v4/capsule/repo/channels.scm:1:6: warning: channel 'nonguix' is not trusted
+/tmp/opencode/wilkbook-book-computer/pinenote/tools/book-state-guest/source-packets/book-state-guest-sources-20260906-v4/capsule/repo/channels.scm:11:6: warning: channel 'saayix' is not trusted
+WARNING: (pinenote systems pinenote-book-execution-spike): imported module (gnu services) overrides core binding `delete'
+PASS: guest system module originates in the canonical private positive view
+PASS: exact accepted USER_NS kernel object is inherited
+PASS: public official-binary gVisor package is replaced exactly once
+PASS: source-built gVisor package has the intended public identity
+PASS: kernel arguments are inherited
+PASS: initrd constructor is inherited
+PASS: one filesystem is prepended to the accepted root/cgroup graph
+PASS: persistent filesystem has exact mount point/type/options
+PASS: persistent filesystem uses exact label
+PASS: public spike gate is replaced and one volume-preparation service is added
+PASS: accepted 45-path sandbox profile object remains exact
+PASS: only trusted profile and source/build manifests are replaced
+PASS: trusted profile adds only accepted SQLite binding
+PASS: volume preparation waits for the exact file-system service
+PASS: authority waits for volume, udev, and user processes
+PASS: system source boundary is file-by-file and computed
+PASS: finite guest source/provenance checks from private capsule
+PASS: caller cache poison cannot precede canonical project modules
+PASS: cooperative guest poll plus hard outer wait/revoke/join containment
+PASS: static Guix system graph (no realization, image, QEMU, runsc, or ARM)

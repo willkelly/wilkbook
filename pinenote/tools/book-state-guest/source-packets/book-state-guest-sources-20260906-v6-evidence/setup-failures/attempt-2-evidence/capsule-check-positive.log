@@ -1,0 +1,17 @@
+PASS: capsule path is canonical
+PASS: capsule top level has only four fixed views
+PASS: metadata roster is read-only regular data
+PASS: capsule roster paths are unique
+PASS: capsule roster paths are sorted
+PASS: repo and metadata carry the same capsule roster
+PASS: repo contains exactly rostered source plus its roster
+PASS: every repo source is mode 0444 with its rostered hash
+PASS: repo roster is immutable regular data
+PASS: positive module view contains exactly modules and relative local-file assets
+PASS: every module/local-file copy has its exact rostered mode and hash
+PASS: package discovery view contains one non-Scheme marker
+PASS: package marker is read-only
+PASS: package discovery view contains zero Scheme files
+PASS: metadata view contains only fixed preparation records
+PASS: preparation record binds capsule roster
+PASS: prepared capsule has no symlink, special, or unlisted source

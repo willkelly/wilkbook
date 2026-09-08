@@ -1,0 +1,29 @@
+# Working directory for source and FD checks:
+# pinenote/tools/book-state-guest
+
+python3 -I -S test_source.py
+
+env -u GUIX_PACKAGE_PATH -u GUIX_BUILD_OPTIONS -u GUIX_ENVIRONMENT \
+  -u GUILE_LOAD_PATH -u GUILE_LOAD_COMPILED_PATH \
+  -u PYTHONPATH -u PYTHONHOME -u PYTHONSTARTUP -u PYTHONUSERBASE \
+  guix time-machine -C ../../../channels.scm --no-substitutes -- \
+  shell --pure --no-grafts --no-substitutes --max-jobs=1 --cores=2 \
+  -m test-manifest.scm -- python3 -I -S test-fd3-exec.py
+
+./run-tests.sh
+
+# Working directory for derivation lowering:
+# repository root
+
+env -u GUIX_PACKAGE_PATH -u GUIX_BUILD_OPTIONS -u GUIX_ENVIRONMENT \
+  -u GUILE_LOAD_PATH -u GUILE_LOAD_COMPILED_PATH -u GUIX_LOCPATH \
+  -u GUIX_PROFILE \
+  guix time-machine -C channels.scm --no-substitutes -- \
+  repl -q -L . -- pinenote/tools/book-state-guest/derive-system.scm
+
+guix gc --requisites \
+  /gnu/store/09a4002jpkh9c3snf55mg0azrfirsiwl-system.drv
+
+# Verify this packet from its own directory:
+sha256sum --check --strict SOURCE-SNAPSHOT.sha256
+sha256sum --check --strict EVIDENCE.sha256

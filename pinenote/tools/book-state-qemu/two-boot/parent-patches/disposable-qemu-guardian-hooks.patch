@@ -1,0 +1,609 @@
+--- accepted/disposable-qemu.scm
++++ two-boot/modules/disposable-qemu.scm
+@@ -1,4 +1,7 @@
+-;;; Trusted Guile outer-QEMU supervisor for the non-shipping execution spike.
++;;; Private successor candidate derived from the accepted disposable-QEMU outer.
++;;; The lifecycle implementation is unchanged.  One explicit, closed Book State
++;;; integration record carries the narrow graph, process, console, archive, and
++;;; observation callbacks.  No module binding is mutated at runtime.
+ ;;; Process style follows pinned Guix f250e74dd (direct command vectors,
+ ;;; explicit waitpid, child primitive-exit) and GNU Shepherd 1.0.9 (constructed
+ ;;; environments, CLOEXEC inheritance discipline, process-group TERM/KILL).
+@@ -12,11 +15,26 @@
+   #:use-module (ice-9 regex)
+   #:use-module (ice-9 textual-ports)
+   #:use-module (srfi srfi-1)
++  #:use-module (srfi srfi-9)
+   #:use-module (srfi srfi-13)
+   #:use-module (rnrs bytevectors)
+   #:use-module (system foreign)
+   #:use-module (guest-console-assertions)
+-  #:export (disposable-qemu-main
++  #:export (make-book-state-qemu-integration
++            book-state-qemu-integration?
++            make-book-state-process-hooks
++            book-state-process-hooks?
++            disposable-qemu-main
++            runner-error
++            lstat-or-false
++            same-identity?
++            same-stable-file?
++            supervisor-environment
++            run-owned-process
++            delete-created-tree
++            emit-qemu-failure-diagnostics
++            start-run-root-guardian
++            stop-run-root-guardian
+             note-disposable-qemu-signal))
+ 
+ (define default-timeout-seconds 600.0)
+@@ -55,6 +73,74 @@
+   (+ max-guest-diagnostic-data-bytes console-framing-and-boot-headroom))
+ (define max-retained-console-escaped-content-bytes
+   (* max-retained-console-bytes guest-diagnostic-escape-expansion))
++
++;; This is deliberately not a generic plugin API.  The one private successor
++;; role has a complete fixed callback set, is validated before RUN performs any
++;; action, and is passed lexically through the accepted call graph.
++(define-record-type <book-state-qemu-integration>
++  (%make-book-state-qemu-integration
++   role root-observer root-guardian-observer qemu-argv-builder
++   process-hooks-builder console-validator before-delete)
++  book-state-qemu-integration?
++  (role book-state-integration-role)
++  (root-observer book-state-integration-root-observer)
++  (root-guardian-observer book-state-integration-root-guardian-observer)
++  (qemu-argv-builder book-state-integration-qemu-argv-builder)
++  (process-hooks-builder book-state-integration-process-hooks-builder)
++  (console-validator book-state-integration-console-validator)
++  (before-delete book-state-integration-before-delete))
++
++(define-record-type <book-state-process-hooks>
++  (%make-book-state-process-hooks
++   exec-extension guardian-observer child-observer completion-observer)
++  book-state-process-hooks?
++  (exec-extension book-state-process-exec-extension)
++  (guardian-observer book-state-process-guardian-observer)
++  (child-observer book-state-process-child-observer)
++  (completion-observer book-state-process-completion-observer))
++
++(define book-state-process-roles
++  '(copy-kernel hash-kernel copy-initrd hash-initrd copy-config hash-config
++    copy-baseline hash-baseline qemu-img qemu))
++
++(define (make-book-state-process-hooks exec-extension guardian-observer
++                                       child-observer completion-observer)
++  (unless (and (or (not exec-extension) (procedure? exec-extension))
++               (procedure? guardian-observer)
++               (procedure? child-observer)
++               (procedure? completion-observer))
++    (runner-error "invalid typed Book State process hooks"))
++  (%make-book-state-process-hooks
++   exec-extension guardian-observer child-observer completion-observer))
++
++(define (make-book-state-qemu-integration
++         root-observer root-guardian-observer qemu-argv-builder
++         process-hooks-builder console-validator before-delete)
++  (unless (every procedure?
++                 (list root-observer root-guardian-observer qemu-argv-builder
++                       process-hooks-builder console-validator before-delete))
++    (runner-error "Book State integration requires its six fixed callbacks"))
++  (%make-book-state-qemu-integration
++   'book-state-two-fresh-boot root-observer root-guardian-observer
++   qemu-argv-builder process-hooks-builder console-validator before-delete))
++
++(define (validate-book-state-integration integration)
++  (unless (or (not integration)
++              (and (book-state-qemu-integration? integration)
++                   (eq? (book-state-integration-role integration)
++                        'book-state-two-fresh-boot)
++                   (every procedure?
++                          (list
++                           (book-state-integration-root-observer integration)
++                           (book-state-integration-root-guardian-observer
++                            integration)
++                           (book-state-integration-qemu-argv-builder integration)
++                           (book-state-integration-process-hooks-builder
++                            integration)
++                           (book-state-integration-console-validator integration)
++                           (book-state-integration-before-delete integration)))))
++    (runner-error "invalid closed Book State QEMU integration record"))
++  integration)
+ (define store-system-regexp
+   ;; Guix normally names this output HASH-system, with no extra name segment.
+   ;; Also accept named system outputs used by the host fixtures.
+@@ -191,6 +277,11 @@
+     (unless (= (length lines) 1)
+       (runner-error "extlinux.conf must contain exactly one APPEND line"))
+     (let* ((tokens (string-tokenize (car lines)))
++           (roots (filter (lambda (token) (string-prefix? "root=" token))
++                          tokens))
++           (consoles
++            (filter (lambda (token) (string-prefix? "console=" token))
++                    tokens))
+            (systems (filter-map
+                      (lambda (token)
+                        (and (string-prefix? "gnu.system=" token)
+@@ -201,32 +292,54 @@
+                      (and (string-prefix? "gnu.load=" token)
+                           (substring token (string-length "gnu.load="))))
+                    tokens)))
+-      (unless (equal? (filter (lambda (token) (string-prefix? "root=" token))
+-                              tokens)
+-                      '("root=PNGuixRoot"))
+-        (runner-error "APPEND must contain exactly one root=PNGuixRoot"))
+       (unless (and (= (length systems) 1)
+                    (regexp-exec store-system-regexp (car systems)))
+         (runner-error "APPEND must contain one canonical Guix gnu.system path"))
+       (unless (equal? loads (list (string-append (car systems) "/boot")))
+         (runner-error "APPEND gnu.load must be the selected gnu.system /boot"))
+-      (unless (= (count
+-                  (lambda (token)
+-                    (string=? token "console=ttyS2,1500000n8"))
+-                  tokens)
+-                 1)
+-        (runner-error "APPEND must contain the PineNote hardware console once"))
+-      (when (member "console=ttyAMA0" tokens)
+-        (runner-error "APPEND already contains the QEMU console"))
+-      (string-join
+-       (filter-map
+-        (lambda (token)
+-          (cond
+-           ((string=? token "console=tty0") #f)
+-           ((string=? token "console=ttyS2,1500000n8") "console=ttyAMA0")
+-           (else token)))
+-        tokens)
+-       " "))))
++      (cond
++       ;; A source image's PineNote extlinux line is converted once.  Keep this
++       ;; inherited compatibility path closed to the two known device consoles.
++       ((equal? roots '("root=PNGuixRoot"))
++        (unless (and (= (count
++                         (lambda (token)
++                           (string=? token "console=ttyS2,1500000n8"))
++                         consoles)
++                        1)
++                     (<= (count (lambda (token)
++                                  (string=? token "console=tty0"))
++                                consoles)
++                         1)
++                     (every (lambda (token)
++                              (member token
++                                      '("console=tty0"
++                                        "console=ttyS2,1500000n8")
++                                      string=?))
++                            consoles))
++          (runner-error "APPEND has a conflicting PineNote console layout"))
++        (string-join
++         (filter-map
++          (lambda (token)
++            (cond
++             ((string=? token "console=tty0") #f)
++             ((string=? token "console=ttyS2,1500000n8") "console=ttyAMA0")
++             (else token)))
++          tokens)
++         " "))
++       ;; The reviewed V8 payload is already QEMU-prepared.  Accept only its
++       ;; label root and one QEMU console, with no device/secondary console.
++       ((equal? roots '("root=LABEL=PNGuixRoot"))
++        (unless (equal? consoles '("console=ttyAMA0"))
++          (runner-error "APPEND has a conflicting prepared-QEMU console layout"))
++        (string-join
++         (map (lambda (token)
++                (if (string=? token "root=LABEL=PNGuixRoot")
++                    "root=PNGuixRoot"
++                    token))
++              tokens)
++         " "))
++       (else
++        (runner-error "APPEND must contain exactly one supported PNGuixRoot root"))))))
+ 
+ (define (validate-boot-bundle raw)
+   (let* ((bundle (canonical-existing raw "boot bundle"))
+@@ -378,7 +491,7 @@
+   (open-fdes path (logior O_WRONLY O_CREAT O_EXCL O_CLOEXEC) #o600))
+ 
+ (define (exec-owned-child argv environment cwd stdout-path stderr-path
+-                          inherited-ports)
++                          inherited-ports exec-extension)
+   (unless (and (every string? argv) (every string? environment))
+     (runner-error "process argv and environment must be lists of strings"))
+   (let ((stdout-fd (open-output stdout-path))
+@@ -402,6 +515,10 @@
+         (close-fdes stdout-fd)
+         (close-fdes stderr-fd)
+         (mark-inherited-fds-close-on-exec)
++        ;; The default remains "no inherited protocol FD".  A successor caller
++        ;; may provide one child-side validator which runs after the deny-all
++        ;; sweep and must itself clear only its exact reviewed descriptor.
++        (when exec-extension (exec-extension))
+         (environ environment)
+         (apply execl (car argv) argv))
+       (lambda arguments
+@@ -438,7 +555,27 @@
+                (if (and (char? value) (char=? value #\R))
+                    'ready
+                    'setup-failed)))
+-            (else (loop))))))))))
++             (else (loop))))))))))
++
++(define (wait-for-owner-observation owner-liveness deadline)
++  ;; The exec child remains blocked behind release-read until the owner has
++  ;; recorded its stable PID/start-time identity.  EOF means the owner failed or
++  ;; died, in which case the guardian tears down the still-unexecuted child.
++  (let loop ()
++    (let ((remaining (- deadline (monotonic-seconds))))
++      (cond
++       ((<= remaining 0) 'setup-timeout)
++       (else
++        (match (select (list owner-liveness) '() '()
++                       0 (inexact->exact
++                          (round (* 1000000 (min remaining 0.02)))))
++          ((() () ()) (loop))
++          ((_ () ())
++           (let ((value (read-char owner-liveness)))
++             (cond
++              ((eof-object? value) 'owner-dead)
++              ((char=? value #\R) 'ready)
++              (else 'setup-failed))))))))))
+ 
+ (define (wait-guarded-child child owner-liveness timeout)
+   (let ((deadline (+ (monotonic-seconds) timeout))
+@@ -485,7 +622,7 @@
+ 
+ (define (process-guardian-main argv environment cwd stdout-path stderr-path
+                                timeout grace owner-liveness report
+-                               root-liveness-port)
++                               root-liveness-port exec-extension)
+   ;; This process is both the exec child's parent and a Linux child subreaper.
+   ;; Thus TERM/KILL of its exact owned PGID can be followed by bounded reaping
+   ;; of a TERM-resistant descendant rather than leaving that work to PID 1.
+@@ -523,9 +660,9 @@
+                     (close-port-if-open release-read)
+                     (unless (and (char? release) (char=? release #\R))
+                       (primitive-exit 126)))
+-                  (exec-owned-child
+-                   argv environment cwd stdout-path stderr-path
+-                   (list owner-liveness report)))
++                   (exec-owned-child
++                    argv environment cwd stdout-path stderr-path
++                    (list owner-liveness report) exec-extension))
+                 (lambda arguments
+                   (format (current-error-port)
+                           "child process-group setup failed: ~s~%" arguments)
+@@ -544,11 +681,23 @@
+                 ('ready
+                  (set! group-established? #t)
+                  (write-guardian-message report (list 'ready child))
+-                 (write-char #\R release-write)
+-                 (force-output release-write)
+-                 (close-port-if-open release-write)
+-                 (set! outcome
+-                       (wait-guarded-child child owner-liveness timeout)))
++                  (match (wait-for-owner-observation
++                          owner-liveness
++                          (+ (monotonic-seconds)
++                             guardian-setup-timeout-seconds))
++                    ('ready
++                     (write-char #\R release-write)
++                     (force-output release-write)
++                     (close-port-if-open release-write)
++                     (set! outcome
++                           (wait-guarded-child child owner-liveness timeout)))
++                    ('owner-dead (set! outcome '(owner-dead)))
++                    ('setup-timeout
++                     (set! outcome
++                           '(error "owner child observation timed out")))
++                    ('setup-failed
++                     (set! outcome
++                           '(error "owner child observation failed")))))
+                 ('owner-dead (set! outcome '(owner-dead)))
+                 ('setup-timeout
+                  (set! outcome '(error "guardian child setup timed out")))
+@@ -608,8 +757,16 @@
+          ((>= (monotonic-seconds) deadline) #f)
+          (else (usleep 20000) (loop)))))))
+ 
+-(define (run-owned-process argv environment cwd stdout-path stderr-path
+-                           timeout grace root-liveness-port)
++(define* (run-owned-process argv environment cwd stdout-path stderr-path
++                            timeout grace root-liveness-port
++                            #:key
++                            (exec-extension #f)
++                            (guardian-observer (lambda (_pid) #t))
++                            (child-observer (lambda (_pid) #t)))
++  (unless (and (or (not exec-extension) (procedure? exec-extension))
++               (procedure? guardian-observer)
++               (procedure? child-observer))
++    (runner-error "invalid process-guardian integration hook"))
+   (let* ((liveness-pipe (cloexec-pipe))
+          (liveness-read (car liveness-pipe))
+          (liveness-write (cdr liveness-pipe))
+@@ -624,9 +781,9 @@
+           (close-port-if-open report-read)
+           (catch #t
+             (lambda ()
+-              (process-guardian-main
+-               argv environment cwd stdout-path stderr-path timeout grace
+-               liveness-read report-write root-liveness-port)
++               (process-guardian-main
++                argv environment cwd stdout-path stderr-path timeout grace
++                liveness-read report-write root-liveness-port exec-extension)
+               (primitive-exit 0))
+             (lambda (key . arguments)
+               (catch #t
+@@ -642,13 +799,18 @@
+           (dynamic-wind
+             (lambda () #t)
+             (lambda ()
++              (guardian-observer guardian)
+               (let ((ready
+                      (wait-guardian-message
+                       report-read
+                       (+ (monotonic-seconds)
+                          guardian-setup-timeout-seconds))))
+-                (match ready
+-                  (('ready pid) (set! owned-group pid))
++                 (match ready
++                   (('ready pid)
++                    (set! owned-group pid)
++                    (child-observer pid)
++                    (write-char #\R liveness-write)
++                    (force-output liveness-write))
+                   (('error message) (runner-error message))
+                   (_ (runner-error
+                       (format #f "invalid process guardian setup message: ~s"
+@@ -680,7 +842,50 @@
+                   (lambda arguments
+                     (unless (= ESRCH (system-error-errno arguments))
+                       (apply throw 'system-error arguments))))
+-                (wait-specific-child/bounded guardian 1.0))))))))
++                 (wait-specific-child/bounded guardian 1.0))))))))
++
++(define (process-hooks-for integration role argv environment cwd stdout-path
++                           stderr-path timeout grace)
++  (unless (memq role book-state-process-roles)
++    (runner-error (format #f "unknown fixed Book State process role: ~s" role)))
++  (let ((hooks
++         (if integration
++             ((book-state-integration-process-hooks-builder integration)
++              role argv environment cwd stdout-path stderr-path timeout grace)
++             (make-book-state-process-hooks
++              #f (lambda (_pid) #t) (lambda (_pid) #t)
++              (lambda (_role _result) #t)))))
++    (unless (book-state-process-hooks? hooks)
++      (runner-error
++       (format #f "Book State process role ~s returned untyped hooks" role)))
++    (when (and (not (eq? role 'qemu))
++               (book-state-process-exec-extension hooks))
++      (runner-error
++       (format #f "Book State process role ~s cannot receive an inherited FD"
++               role)))
++    ;; Revalidate the captured fields at the one action boundary.  The record is
++    ;; immutable and no module binding is consulted after this point.
++    (make-book-state-process-hooks
++     (book-state-process-exec-extension hooks)
++     (book-state-process-guardian-observer hooks)
++     (book-state-process-child-observer hooks)
++     (book-state-process-completion-observer hooks))))
++
++(define (run-owned-process/integration integration role argv environment cwd
++                                       stdout-path stderr-path timeout grace
++                                       root-liveness-port)
++  (let* ((hooks (process-hooks-for
++                 integration role argv environment cwd stdout-path stderr-path
++                 timeout grace))
++         (result
++          (run-owned-process
++           argv environment cwd stdout-path stderr-path timeout grace
++           root-liveness-port
++           #:exec-extension (book-state-process-exec-extension hooks)
++           #:guardian-observer (book-state-process-guardian-observer hooks)
++           #:child-observer (book-state-process-child-observer hooks))))
++    ((book-state-process-completion-observer hooks) role result)
++    result))
+ 
+ (define (supervisor-environment run-root qemu)
+   (let ((environment
+@@ -886,27 +1091,30 @@
+   (emit-full-console-diagnostic (string-append run-root "/console.log"))
+   (emit-bounded-file-diagnostic "qemu.stderr" stderr-path))
+ 
+-(define (validate-completed-guest-console path run-root stderr-path)
++(define (validate-completed-guest-console path run-root stderr-path integration)
+   ;; QEMU is already reaped when this runs.  Keep the completed log private and
+   ;; consume it inside the existing dynamic-wind scope so success/failure both
+   ;; flow through the identity-checked run-root cleanup below.
+   (catch #t
+     (lambda ()
+-      (assert-console-retainable path)
+-      (assert-guest-console-file path))
++       (assert-console-retainable path)
++       (if integration
++           ((book-state-integration-console-validator integration)
++            path run-root stderr-path)
++           (assert-guest-console-file path)))
+     (lambda (key . arguments)
+       (emit-qemu-failure-diagnostics run-root stderr-path)
+       (runner-error
+        (format #f "guest console assertions failed: ~s ~s" key arguments)))))
+ 
+-(define (run-checked-preparation argv environment run-root stem grace
+-                                 root-liveness-port)
++(define (run-checked-preparation integration role argv environment run-root stem
++                                 grace root-liveness-port)
+   (let* ((stdout-path (string-append run-root "/" stem ".stdout"))
+          (stderr-path (string-append run-root "/" stem ".stderr"))
+          (result
+-          (run-owned-process argv environment run-root stdout-path stderr-path
+-                             preparation-timeout-seconds grace
+-                             root-liveness-port)))
++          (run-owned-process/integration
++           integration role argv environment run-root stdout-path stderr-path
++           preparation-timeout-seconds grace root-liveness-port)))
+     (when (cdr result)
+       (runner-error
+        (format #f "~a exceeded its 60 second preparation timeout" stem)))
+@@ -916,13 +1124,15 @@
+                stem (car result) (string-trim-both (read-bounded-failure stderr-path)))))
+     stdout-path))
+ 
+-(define (private-snapshot source destination expected-sha256 label
++(define (private-snapshot integration copy-role hash-role
++                           source destination expected-sha256 label
+                            cp sha256sum environment run-root grace
+                            root-liveness-port)
+   (let ((before (lstat source)))
+     (run-checked-preparation
++     integration copy-role
+      (list cp "--reflink=auto" "--sparse=always" "--" source destination)
+-      environment run-root (string-append "copy-" label) grace
++     environment run-root (string-append "copy-" label) grace
+       root-liveness-port)
+     (let ((after (lstat source)))
+       (unless (same-stable-file? before after)
+@@ -931,7 +1141,7 @@
+     (chmod destination #o400)
+     (let* ((hash-output
+             (run-checked-preparation
+-              (list sha256sum "--" destination)
++              integration hash-role (list sha256sum "--" destination)
+               environment run-root (string-append "hash-" label) grace
+               root-liveness-port))
+            (line (call-with-input-file hash-output read-line))
+@@ -995,7 +1205,18 @@
+           "-append" append
+           "-blockdev" overlay-file
+           "-blockdev" overlay-format
+-          "-device" "virtio-blk-pci,drive=rootfs-overlay")))
++           "-device" "virtio-blk-pci,drive=rootfs-overlay")))
++
++(define (qemu-argv/integration integration qemu run-root kernel initrd append
++                               overlay)
++  (let ((arguments
++         (if integration
++             ((book-state-integration-qemu-argv-builder integration)
++              qemu run-root kernel initrd append overlay)
++             (qemu-argv qemu run-root kernel initrd append overlay))))
++    (unless (and (list? arguments) (pair? arguments) (every string? arguments))
++      (runner-error "Book State QEMU argv builder returned a malformed vector"))
++    arguments))
+ 
+ (define (delete-created-tree path)
+   (let ((info (lstat-or-false path)))
+@@ -1117,7 +1338,8 @@
+        (format #f "~a must be > 0 and <= ~a seconds" label maximum)))
+     (exact->inexact value)))
+ 
+-(define (run options)
++(define (run options integration)
++  (validate-book-state-integration integration)
+   (let* ((boot (validate-boot-bundle (option-ref options 'boot-bundle #f)))
+          (bundle (list-ref boot 0))
+          (kernel (list-ref boot 1))
+@@ -1181,8 +1403,14 @@
+                          (= (stat:uid run-identity) (getuid))
+                          (zero? (logand (stat:mode run-identity) #o077)))
+               (runner-error "private run directory identity/mode check failed"))
++            (when integration
++              ((book-state-integration-root-observer integration)
++               run-root run-identity))
+             (set! root-guardian
+-                  (start-run-root-guardian run-root run-identity grace)))
++                  (start-run-root-guardian run-root run-identity grace))
++            (when integration
++              ((book-state-integration-root-guardian-observer integration)
++               (car root-guardian))))
+ 
+           (let* ((environment (supervisor-environment run-root qemu))
+                   (root-liveness-port (list-ref root-guardian 1))
+@@ -1194,22 +1422,27 @@
+                  (overlay (string-append run-root "/disk-overlay.qcow2")))
+             (mkdir private-boot #o700)
+             (chmod private-boot #o700)
+-            (private-snapshot kernel private-kernel kernel-sha256 "kernel"
++            (private-snapshot integration 'copy-kernel 'hash-kernel
++                               kernel private-kernel kernel-sha256 "kernel"
+                                cp sha256sum environment run-root grace
+                                root-liveness-port)
+-            (private-snapshot initrd private-initrd initrd-sha256 "initrd"
++            (private-snapshot integration 'copy-initrd 'hash-initrd
++                               initrd private-initrd initrd-sha256 "initrd"
+                                cp sha256sum environment run-root grace
+                                root-liveness-port)
+-            (private-snapshot config private-config config-sha256 "config"
++            (private-snapshot integration 'copy-config 'hash-config
++                               config private-config config-sha256 "config"
+                                cp sha256sum environment run-root grace
+                                root-liveness-port)
+             (unless (string=? append-line (read-fixed-append private-config))
+               (runner-error "boot configuration changed while making private copy"))
+-            (private-snapshot baseline private-baseline baseline-sha256 "baseline"
++            (private-snapshot integration 'copy-baseline 'hash-baseline
++                               baseline private-baseline baseline-sha256 "baseline"
+                                cp sha256sum environment run-root grace
+                                root-liveness-port)
+ 
+             (run-checked-preparation
++             integration 'qemu-img
+              (qemu-img-argv qemu-img private-baseline overlay)
+              environment run-root "qemu-img" grace root-liveness-port)
+             (unless (and (lstat-or-false overlay)
+@@ -1222,9 +1455,11 @@
+             (let* ((stdout-path (string-append run-root "/qemu.stdout"))
+                    (stderr-path (string-append run-root "/qemu.stderr"))
+                    (result
+-                    (run-owned-process
+-                      (qemu-argv qemu run-root private-kernel private-initrd
+-                                 append-line overlay)
++                     (run-owned-process/integration
++                      integration 'qemu
++                      (qemu-argv/integration
++                       integration qemu run-root private-kernel private-initrd
++                       append-line overlay)
+                       environment run-root stdout-path stderr-path timeout grace
+                       root-liveness-port)))
+               (when (cdr result)
+@@ -1240,7 +1475,8 @@
+                           "QEMU exited with status ~a; guest status was not assessed"
+                            (car result))))
+                (validate-completed-guest-console
+-                (string-append run-root "/console.log") run-root stderr-path)
++                (string-append run-root "/console.log") run-root stderr-path
++                integration)
+                (display
+                 "OUTER-QEMU-STATUS=0; GUEST-CHECKER-STATUS=0; GUEST-ASSERTIONS=PASS\n")
+                 0)))
+@@ -1251,8 +1487,12 @@
+               (lambda ()
+                 (when (and run-root run-identity)
+                   (let ((current (lstat-or-false run-root)))
+-                    (if (and current (same-identity? current run-identity))
+-                        (delete-created-tree run-root)
++                     (if (and current (same-identity? current run-identity))
++                         (begin
++                           (when integration
++                             ((book-state-integration-before-delete integration)
++                              run-root run-identity))
++                           (delete-created-tree run-root))
+                         (when current
+                           (format
+                            (current-error-port)
+@@ -1296,7 +1536,7 @@
+           "usage: ~a --boot-bundle DIR --baseline RAW --kernel-sha256 HASH --initrd-sha256 HASH --config-sha256 HASH --baseline-sha256 HASH --run-base PRIVATE-DIR --dedicated-baseline [OPTIONS]\n"
+           program))
+ 
+-(define (disposable-qemu-main argv)
++(define* (disposable-qemu-main argv #:optional (integration #f))
+   ;; Unlike Shepherd's long-lived process monitor, these bounded guardians
+   ;; exist only for one synchronous invocation and one exec group at a time.
+   (sigaction SIGCHLD SIG_DFL)
+@@ -1313,7 +1553,7 @@
+                (usage (current-error-port) program)
+                (runner-error (format #f "missing required --~a" name))))
+            required-options)
+-          (run options)))
++          (run options integration)))
+       (lambda (key . arguments)
+         (cond
+          ((eq? key 'book-execution-qemu-signal)

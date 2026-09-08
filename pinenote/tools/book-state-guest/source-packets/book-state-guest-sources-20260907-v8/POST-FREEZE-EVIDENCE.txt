@@ -1,0 +1,10 @@
+schema=1
+policy=post-freeze-replay-evidence-is-a-separate-sibling-artifact
+reason=the-reviewed-v8-packet-must-be-finished-and-read-only-before-any-success-log-is-created
+expected-evidence-directory=book-state-guest-sources-20260907-v8-evidence
+expected-evidence-manifest=EVIDENCE.sha256
+ambient-checkout-caches-module-and-package-views=hidden
+network=unshared
+system-and-image-output-realization=forbidden
+image-build=forbidden
+packet-mutation-after-replay=forbidden

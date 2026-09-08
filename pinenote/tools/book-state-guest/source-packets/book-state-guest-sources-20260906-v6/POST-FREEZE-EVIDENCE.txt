@@ -1,0 +1,6 @@
+schema=1
+policy=post-freeze-replay-evidence-is-a-separate-sibling-artifact
+reason=the-reviewed-packet-must-be-finished-and-read-only-before-any-success-log-is-created
+expected-evidence-directory=book-state-guest-sources-20260906-v6-evidence
+expected-evidence-manifest=EVIDENCE.sha256
+packet-mutation-after-replay=forbidden

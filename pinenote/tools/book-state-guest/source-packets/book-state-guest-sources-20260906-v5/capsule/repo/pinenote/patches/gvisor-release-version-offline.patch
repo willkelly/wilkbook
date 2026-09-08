@@ -1,0 +1,111 @@
+From: wilkbook packaging
+Subject: build: stamp the pinned release without Git or an FHS shell
+
+git-fetch deliberately supplies no .git directory.  Stamp the fixed release
+and commit directly. Bazel's workspace-status action unconditionally invokes
+/bin/sh before it can execute this script, so the package disables that command
+and supplies the same release through Bazel's built-in BUILD_EMBED_LABEL. Point
+the existing x_defs and version-file rule at that stable built-in key.
+
+--- a/tools/workspace_status.sh
++++ b/tools/workspace_status.sh
+@@ -15,4 +15,5 @@
+ # limitations under the License.
+ 
+ # The STABLE_ prefix will trigger a re-link if it changes.
+-echo STABLE_VERSION "$(git describe --always --tags --abbrev=12 --dirty 2>/dev/null || echo 0.0.0)"
++echo STABLE_VERSION release-20260831.0
++echo STABLE_GVISOR_COMMIT fd2f6b2674208086e324c2f739155eb7e1b48ff2
+--- a/runsc/BUILD
++++ b/runsc/BUILD
+@@ -14,7 +14,7 @@ go_binary(
+     visibility = [
+         "//visibility:public",
+     ],
+-    x_defs = {"gvisor.dev/gvisor/runsc/version.version": "{STABLE_VERSION}"},
++    x_defs = {"gvisor.dev/gvisor/runsc/version.version": "{BUILD_EMBED_LABEL}"},
+     deps = [
+         "//runsc/cli/maincli",
+         "//runsc/version",
+@@ -32,7 +32,7 @@ go_binary(
+     visibility = [
+         "//visibility:public",
+     ],
+-    x_defs = {"gvisor.dev/gvisor/runsc/version.version": "{STABLE_VERSION}"},
++    x_defs = {"gvisor.dev/gvisor/runsc/version.version": "{BUILD_EMBED_LABEL}"},
+     deps = [
+         "//pkg/sentry/socket/plugin/stack",
+         "//runsc/cli/maincli",
+@@ -61,7 +61,7 @@ go_binary(
+     visibility = [
+         "//visibility:public",
+     ],
+-    x_defs = {"gvisor.dev/gvisor/runsc/version.version": "{STABLE_VERSION}"},
++    x_defs = {"gvisor.dev/gvisor/runsc/version.version": "{BUILD_EMBED_LABEL}"},
+     deps = [
+         "//runsc/cli/maincli",
+         "//runsc/version",
+--- a/runsc/checkpointgofer/BUILD
++++ b/runsc/checkpointgofer/BUILD
+@@ -13,7 +13,7 @@ go_binary(
+     visibility = [
+         "//visibility:public",
+     ],
+-    x_defs = {"gvisor.dev/gvisor/runsc/version.version": "{STABLE_VERSION}"},
++    x_defs = {"gvisor.dev/gvisor/runsc/version.version": "{BUILD_EMBED_LABEL}"},
+     deps = [
+         "//pkg/sentry/state/stateipc",
+         "//pkg/unet",
+--- a/runsc/cmd/metricserver/BUILD
++++ b/runsc/cmd/metricserver/BUILD
+@@ -15,7 +15,7 @@ go_binary(
+     visibility = [
+         "//:sandbox",
+     ],
+-    x_defs = {"gvisor.dev/gvisor/runsc/version.version": "{STABLE_VERSION}"},
++    x_defs = {"gvisor.dev/gvisor/runsc/version.version": "{BUILD_EMBED_LABEL}"},
+     deps = [
+         "//pkg/log",
+         "//runsc/cmd/metricserver/metricservercmd",
+--- a/runsc/cmd/sentry/BUILD
++++ b/runsc/cmd/sentry/BUILD
+@@ -12,7 +12,7 @@ go_binary(
+     noasan = True,
+     pure = True,
+     visibility = ["//visibility:public"],
+-    x_defs = {"gvisor.dev/gvisor/runsc/version.version": "{STABLE_VERSION}"},
++    x_defs = {"gvisor.dev/gvisor/runsc/version.version": "{BUILD_EMBED_LABEL}"},
+     deps = [
+         "//runsc/cli",
+         "//runsc/cmd/sentry/sentrycmd",
+@@ -30,7 +30,7 @@ go_binary(
+     static = True,
+     tags = ["network_plugins"],
+     visibility = ["//visibility:public"],
+-    x_defs = {"gvisor.dev/gvisor/runsc/version.version": "{STABLE_VERSION}"},
++    x_defs = {"gvisor.dev/gvisor/runsc/version.version": "{BUILD_EMBED_LABEL}"},
+     deps = [
+         "//pkg/sentry/socket/plugin/stack",
+         "//runsc/cli",
+--- a/tools/bazeldefs/BUILD
++++ b/tools/bazeldefs/BUILD
+@@ -48,7 +48,7 @@ config_setting(
+ genrule(
+     name = "version",
+     outs = ["version.txt"],
+-    cmd = "cat bazel-out/stable-status.txt | grep STABLE_VERSION | cut -d' ' -f2- | sed 's/^[^[:digit:]]*//g' >$@",
++    cmd = "cat bazel-out/stable-status.txt | grep BUILD_EMBED_LABEL | cut -d' ' -f2- | sed 's/^[^[:digit:]]*//g' >$@",
+     stamp = 1,
+     tags = [
+         "manual",
+--- a/tools/parsers/BUILD
++++ b/tools/parsers/BUILD
+@@ -39,7 +39,7 @@ go_binary(
+         "version.go",
+     ],
+     nogo = False,
+-    x_defs = {"main.version": "{STABLE_VERSION}"},
++    x_defs = {"main.version": "{BUILD_EMBED_LABEL}"},
+     deps = [
+         ":parsers",
+         "//runsc/flag",

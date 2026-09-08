@@ -1,0 +1,184 @@
+From: wilkbook packaging
+Subject: build: parameterize Coral crosstool for Guix store toolchains
+
+This patch is applied to a prepared override_repository copy after the two
+upstream gVisor Coral patches. It removes /bin/bash probes, /usr paths, and
+supplies only the native and AArch64 toolchain roots declared by Guix.
+Other Coral targets remain visibly unsupported.
+
+--- a/configure.bzl
++++ b/configure.bzl
+@@ -13,6 +13,15 @@
+ # limitations under the License.
+ """Rules for configuring the C++ cross-toolchain."""
+ 
++def _required_env(repository_ctx, name):
++    value = repository_ctx.os.environ.get(name)
++    if not value:
++        fail("the Guix gVisor package did not declare %s" % name)
++    return value
++
++def _quoted_paths(value):
++    return ", ".join(['"%s"' % path for path in value.split(":") if path])
++
+ def _impl(repository_ctx):
+     dir_labels = repository_ctx.attr.additional_system_include_directories
+     additional_include_dirs = ", ".join([
+@@ -20,16 +29,20 @@
+         for dir_label in dir_labels
+     ])
+ 
+-    gcc_version = repository_ctx.execute(["/bin/bash", "-c", "gcc -dumpversion | cut -f1 -d."]).stdout or "0"
+-    bcm2708_toolchain_root = repository_ctx.os.environ.get("BCM2708_TOOLCHAIN_ROOT", "/tools/arm-bcm2708")
++    native_prefix = _required_env(repository_ctx, "GVISOR_GUIX_NATIVE_TOOL_PREFIX")
++    aarch64_prefix = _required_env(repository_ctx, "GVISOR_GUIX_AARCH64_TOOL_PREFIX")
++    native_includes = _required_env(repository_ctx, "GVISOR_GUIX_NATIVE_INCLUDE_ROOTS")
++    aarch64_includes = _required_env(repository_ctx, "GVISOR_GUIX_AARCH64_INCLUDE_ROOTS")
+     repository_ctx.template(
+         "cc_toolchain_config.bzl",
+         Label("//:cc_toolchain_config.bzl.tpl"),
+         {
+-            "%{gcc_version}%": gcc_version,
++            "%{aarch64_include_directories}%": _quoted_paths(aarch64_includes),
++            "%{aarch64_tool_prefix}%": aarch64_prefix,
++            "%{native_include_directories}%": _quoted_paths(native_includes),
++            "%{native_tool_prefix}%": native_prefix,
+             "%{c_version}%": repository_ctx.attr.c_version,
+             "%{cpp_version}%": repository_ctx.attr.cpp_version,
+-            "%{bcm2708_toolchain_root}%": bcm2708_toolchain_root,
+             "%{additional_system_include_directories}%": additional_include_dirs,
+         },
+     )
+@@ -40,7 +53,10 @@
+ 
+ cc_crosstool = repository_rule(
+     environ = [
+-        "BCM2708_TOOLCHAIN_ROOT",
++        "GVISOR_GUIX_AARCH64_INCLUDE_ROOTS",
++        "GVISOR_GUIX_AARCH64_TOOL_PREFIX",
++        "GVISOR_GUIX_NATIVE_INCLUDE_ROOTS",
++        "GVISOR_GUIX_NATIVE_TOOL_PREFIX",
+     ],
+     attrs = {
+         # Consult https://gcc.gnu.org/onlinedocs/gcc/C-Dialect-Options.html for
+--- a/cc_toolchain_config.bzl.tpl
++++ b/cc_toolchain_config.bzl.tpl
+@@ -62,73 +62,29 @@
+ C_VERSION = "%{c_version}%"
+ CPP_VERSION = "%{cpp_version}%"
+ 
+-# gcc -dumpversion | cut -f1 -d.
+-GCC_VERSION = %{gcc_version}%
+-
+-# gcc -E -xc++ - -v
++# The Guix package supplies explicit compiler and libc roots.
+ CXX_BUILTIN_INCLUDE_DIRECTORIES = {
+-    "k8": [
+-        "/usr/include/c++/%d" % GCC_VERSION,
+-        "/usr/include/x86_64-linux-gnu/c++/%d" % GCC_VERSION,
+-        "/usr/include/c++/%d/backward" % GCC_VERSION,
+-        "/usr/lib/gcc/x86_64-linux-gnu/%d/include" % GCC_VERSION,
+-        "/usr/local/include",
+-        "/usr/lib/gcc/x86_64-linux-gnu/%d/include-fixed" % GCC_VERSION,
+-        "/usr/include/x86_64-linux-gnu",
+-        "/usr/include",
+-        "/usr/x86_64-linux-gnu/include/",
+-        "/usr/lib/gcc-cross/x86_64-linux-gnu/%d/include/" % GCC_VERSION,
+-    ],
+-    "armv7a": [
+-        "/usr/arm-linux-gnueabihf/include/c++/%d" % GCC_VERSION,
+-        "/usr/arm-linux-gnueabihf/include/c++/%d/arm-linux-gnueabihf" % GCC_VERSION,
+-        "/usr/arm-linux-gnueabihf/include/c++/%d/backward" % GCC_VERSION,
+-        "/usr/lib/gcc-cross/arm-linux-gnueabihf/%d/include" % GCC_VERSION,
+-        "/usr/lib/gcc-cross/arm-linux-gnueabihf/%d/include-fixed" % GCC_VERSION,
+-        "/usr/arm-linux-gnueabihf/include",
+-        "/usr/include/arm-linux-gnueabihf",
+-        "/usr/include"
+-    ],
+-    "armv6": [
+-        "%{bcm2708_toolchain_root}%/arm-linux-gnueabihf/arm-linux-gnueabihf/include/c++/4.9.3",
+-        "%{bcm2708_toolchain_root}%/arm-linux-gnueabihf/arm-linux-gnueabihf/include/c++/4.9.3/arm-linux-gnueabihf",
+-        "%{bcm2708_toolchain_root}%/arm-linux-gnueabihf/arm-linux-gnueabihf/include/c++/4.9.3/backward",
+-        "%{bcm2708_toolchain_root}%/arm-linux-gnueabihf/lib/gcc/arm-linux-gnueabihf/4.9.3/include",
+-        "%{bcm2708_toolchain_root}%/arm-linux-gnueabihf/lib/gcc/arm-linux-gnueabihf/4.9.3/include-fixed",
+-        "%{bcm2708_toolchain_root}%/arm-linux-gnueabihf/arm-linux-gnueabihf/include",
+-        "%{bcm2708_toolchain_root}%/arm-linux-gnueabihf/arm-linux-gnueabihf/sysroot/usr/include",
+-    ],
+-    "aarch64": [
+-        "/usr/aarch64-linux-gnu/include/c++/%d" % GCC_VERSION,
+-        "/usr/aarch64-linux-gnu/include/c++/%d/aarch64-linux-gnu" % GCC_VERSION,
+-        "/usr/aarch64-linux-gnu/include/c++/%d/backward" % GCC_VERSION,
+-        "/usr/lib/gcc/aarch64-linux-gnu/%d/include" % GCC_VERSION,
+-        "/usr/lib/gcc-cross/aarch64-linux-gnu/%d/include" % GCC_VERSION,
+-        "/usr/lib/gcc-cross/aarch64-linux-gnu/%d/include-fixed" % GCC_VERSION,
+-        "/usr/aarch64-linux-gnu/include",
+-        "/usr/include/aarch64-linux-gnu",
+-        "/usr/include",
+-    ],
+-    "riscv64": [
+-        "/usr/riscv64-linux-gnu/include/c++/%d" % GCC_VERSION,
+-        "/usr/riscv64-linux-gnu/include/c++/%d/riscv64-linux-gnu" % GCC_VERSION,
+-        "/usr/riscv64-linux-gnu/include/c++/%d/backward" % GCC_VERSION,
+-        "/usr/lib/gcc-cross/riscv64-linux-gnu/%d/include" % GCC_VERSION,
+-        "/usr/lib/gcc-cross/riscv64-linux-gnu/%d/include-fixed" % GCC_VERSION,
+-        "/usr/riscv64-linux-gnu/include",
+-        "/usr/include/riscv64-linux-gnu",
+-        "/usr/include",
+-    ]
++    "k8": [%{native_include_directories}%],
++    "armv7a": [],
++    "armv6": [],
++    "aarch64": [%{aarch64_include_directories}%],
++    "riscv64": [],
+ }
+ 
+-ADDITIONAL_SYSTEM_INCLUDE_DIRECTORIES = [%{additional_system_include_directories}%]
++SYSTEM_INCLUDE_DIRECTORIES = {
++    "k8": [%{native_system_include_directory}%],
++    "armv7a": [],
++    "armv6": [],
++    "aarch64": [%{aarch64_system_include_directory}%],
++    "riscv64": [],
++}
+ 
+ TOOL_PATH_PREFIX = {
+-    "k8":      "/usr/bin/x86_64-linux-gnu-",
+-    "armv7a":  "/usr/bin/arm-linux-gnueabihf-",
+-    "armv6":   "%{bcm2708_toolchain_root}%/arm-linux-gnueabihf/bin/arm-linux-gnueabihf-",
+-    "aarch64": "/usr/bin/aarch64-linux-gnu-",
+-    "riscv64": "/usr/bin/riscv64-linux-gnu-",
++    "k8":      "%{native_tool_prefix}%",
++    "armv7a":  "/unsupported/gvisor-armv7a-",
++    "armv6":   "/unsupported/gvisor-armv6-",
++    "aarch64": "%{aarch64_tool_prefix}%",
++    "riscv64": "/unsupported/gvisor-riscv64-",
+ }
+ 
+ HOST_SYSTEM_NAME = "x86_64-linux-gnu"
+@@ -265,7 +221,7 @@ def _impl(ctx):
+                     flag_group(
+                         flags = [
+                             "-std=" + CPP_VERSION,
+-                        ] + [f for d in ADDITIONAL_SYSTEM_INCLUDE_DIRECTORIES for f in  ('-isystem', d)],
++                        ] + [f for d in SYSTEM_INCLUDE_DIRECTORIES[ctx.attr.cpu] for f in  ('-isystem', d)],
+                     ),
+                 ],
+             ),
+@@ -277,7 +233,7 @@ def _impl(ctx):
+                     flag_group(
+                         flags = [
+                             "-std=" + C_VERSION,
+-                        ] + [f for d in ADDITIONAL_SYSTEM_INCLUDE_DIRECTORIES for f in  ('-isystem', d)],
++                        ] + [f for d in SYSTEM_INCLUDE_DIRECTORIES[ctx.attr.cpu] for f in  ('-isystem', d)],
+                     ),
+                 ],
+             ),
+@@ -364,7 +320,7 @@ def _impl(ctx):
+             action_configs = [],
+             artifact_name_patterns = [],
+             cxx_builtin_include_directories = (
+-                ADDITIONAL_SYSTEM_INCLUDE_DIRECTORIES +
++                SYSTEM_INCLUDE_DIRECTORIES[ctx.attr.cpu] +
+                 CXX_BUILTIN_INCLUDE_DIRECTORIES[ctx.attr.cpu]
+             ),
+             toolchain_identifier = ctx.attr.cpu + '-toolchain',

@@ -1,0 +1,17 @@
+The final derivation and requisite query used bubblewrap with an unprivileged
+user namespace (`--unshare-user --uid 1000 --gid 1000`) and a new mount
+namespace. The namespace mounted a fresh tmpfs over `/tmp`, then exposed only
+this packet's already read-only `capsule/` as `/tmp/capsule` and a private
+evidence directory as `/tmp/run`. Thus the original checkout, historical
+`/tmp/opencode` evidence, old packets, and caller project load paths were not
+visible. `/gnu/store` and `/var/guix` retained their host mounts solely for the
+pinned Guix daemon protocol and derivation records.
+
+Both operations invoked `pinned-guix.sh`, which established private HOME/XDG
+directories before the first Guix/Guile process, used only the positive module
+view for project modules, and supplied the separate zero-Scheme package view as
+`-L` to both outer time-machine and nested repl. The query used the Guix store
+API in `query-requisites.scm`; no direct ambient `guix gc` process ran.
+
+No derivation was realized. No image, kernel, gVisor, QEMU, runsc, ARM,
+network, mount, SSH, device, or hardware operation ran.

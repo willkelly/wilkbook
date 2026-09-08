@@ -1,0 +1,47 @@
+From: wilkbook packaging
+Subject: build: match nogo's stdlib set to rules_go's Go 1.26 source set
+
+rules_go intentionally excludes seven test-only or test-support packages from
+its go_sdk source filegroup.  Go 1.26.3 nevertheless installs their archives in
+the SDK package set.  Omit exactly those declared exclusions before gVisor
+checks that every other compiled standard-library package has source.  Go
+1.26's src/go.mod also starts with a module directive, so make the existing go
+line expression multiline-aware.  Do not weaken the general mismatch failure
+or disable nogo.
+
+--- a/tools/nogo/check/build.go
++++ b/tools/nogo/check/build.go
+@@ -101,6 +101,22 @@ func FilterStdPackages(srcPkgs map[string][]string) (map[string][]string, error)
+ 		return nil, fmt.Errorf("error walking GOROOT: %v", err)
+ 	}
+ 
++	// rules_go intentionally excludes these test-only and test-support
++	// packages from go_sdk.srcs, but Go 1.26 includes their archives in the
++	// installed standard-library set. Keep the source/package mismatch check
++	// strict for every other package.
++	for _, path := range []string{
++		"crypto/internal/sysrand/internal/seccomp",
++		"internal/obscuretestdata",
++		"internal/testpty",
++		"log/slog/internal/benchmarks",
++		"net/internal/socktest",
++		"reflect/internal/example1",
++		"reflect/internal/example2",
++	} {
++		delete(pkgNames, path)
++	}
++
+	pkgs := make(map[string][]string)
+	for path := range pkgNames {
+		pkg, ok := srcPkgs[path]
+--- a/tools/nogo/cli/cli.go
++++ b/tools/nogo/cli/cli.go
+@@ -514,7 +514,7 @@ func (r *Render) Execute(ctx context.Context, fs *flag.FlagSet, args ...any) sub
+ }
+ 
+ // goVersionRe matches a `go VERSION` line in go.mod, capturing VERSION.
+-var goVersionRe = regexp.MustCompile(`^go\s+(\S+)`)
++var goVersionRe = regexp.MustCompile(`(?m)^go\s+(\S+)`)
+ 
+ // resolveGOVERSION sets flags.GOVERSION from flags.GOVERSIONModFile, if necessary.
+ func resolveGOVERSION() error {

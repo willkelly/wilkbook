@@ -484,7 +484,7 @@
 (define (pump-owned-captures! child microseconds)
   (pump-captures! (owned-runsc-captures child) microseconds))
 
-(define (wait-after-signal! child seconds)
+(define (wait-for-owned-runsc! child seconds)
   (let ((deadline (+ (now-seconds) seconds)))
     (let loop ()
       (reap-owned-runsc! child)
@@ -499,12 +499,18 @@
   (when (and child (not (owned-runsc-finalized? child)))
     (reap-owned-runsc! child)
     (when (process-group-exists? (owned-runsc-process-group child))
-      (signal-group! child SIGTERM)
-      (unless (wait-after-signal! child term-grace-seconds)
-        (signal-group! child SIGKILL)
-        (unless (wait-after-signal! child term-grace-seconds)
-          (fail "owned runsc group survived SIGKILL: ~a"
-                (owned-runsc-name child)))))
+      ;; An attached `runsc run` remains alive briefly after the book exits
+      ;; while its deferred Container.Destroy removes the sandbox, gofer,
+      ;; cgroup, and runtime state.  Drain and reap during one bounded natural
+      ;; grace before escalating; signalling immediately interrupts that owned
+      ;; teardown and turns a successful book into status 143 with stale state.
+      (unless (wait-for-owned-runsc! child term-grace-seconds)
+        (signal-group! child SIGTERM)
+        (unless (wait-for-owned-runsc! child term-grace-seconds)
+          (signal-group! child SIGKILL)
+          (unless (wait-for-owned-runsc! child term-grace-seconds)
+            (fail "owned runsc group survived SIGKILL: ~a"
+                  (owned-runsc-name child))))))
     (unless (owned-runsc-status child)
       (let ((waited
              (catch 'system-error

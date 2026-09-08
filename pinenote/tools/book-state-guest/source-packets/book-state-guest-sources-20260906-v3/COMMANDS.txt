@@ -1,0 +1,32 @@
+# Verify this frozen packet from its own directory.
+sha256sum --check --strict SOURCE-SNAPSHOT.sha256
+sha256sum --check --strict EVIDENCE.sha256
+
+# Replay the complete source/native/host/static gate from the frozen source view.
+cd source/pinenote/tools/book-state-guest
+python3 -I -S test_source.py
+./run-tests.sh
+
+# Replay the one permitted derivation-only lowering from the frozen source root.
+# This computes a .drv; it does not realize a system, kernel, image, or gVisor.
+cd ../../..
+env -u GUIX_PACKAGE_PATH -u GUIX_BUILD_OPTIONS -u GUIX_ENVIRONMENT \
+  -u GUILE_LOAD_PATH -u GUILE_LOAD_COMPILED_PATH -u GUIX_LOCPATH \
+  -u GUIX_PROFILE \
+  guix time-machine -C channels.scm --no-substitutes -- \
+  repl -q -L . -- pinenote/tools/book-state-guest/derive-system.scm
+
+# Inspect the already-computed graph without realizing it.
+guix gc --requisites \
+  /gnu/store/nfd0492jbf77bxyp9il9hfv9ck74icgd-system.drv
+
+# Recreate only the explicit canonical source view from a fresh checkout.
+# DEST must exist, be empty, and be outside REPOSITORY_ROOT.
+python3 -I -S \
+  pinenote/tools/book-state-guest/source-packets/book-state-guest-sources-20260906-v3/SOURCE-VIEW-RECIPE.py \
+  REPOSITORY_ROOT DEST
+
+# There is deliberately no image-build or QEMU command in this packet.
+# An actual boot remains unsupported until an independently reviewed two-boot
+# runner proves the explicit 360-second timeout and 5-second TERM grace from
+# outer-qemu-handoff-v1.txt on each exact QEMU process group.

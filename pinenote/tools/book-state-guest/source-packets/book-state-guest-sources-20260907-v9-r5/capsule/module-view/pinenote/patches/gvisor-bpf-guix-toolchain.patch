@@ -1,0 +1,21 @@
+From: wilkbook packaging
+Subject: build: make BPF compiler and headers explicit
+
+This is a build-environment adaptation, not a gVisor runtime fix.  Bazel's
+genrule otherwise invokes a PATH-selected clang and an Ubuntu multiarch
+/usr/include directory.  The Guix package supplies both values through the
+strict action environment.  Clang's BPF target intentionally has no host CPU
+predefine; identify the declared x86-64 libc headers explicitly so glibc does
+not select an unavailable 32-bit ABI stub.
+
+--- a/tools/bazeldefs/defs.bzl
++++ b/tools/bazeldefs/defs.bzl
+@@ -102,7 +102,7 @@ def bpf_program(name, src, bpf_object, visibility, hdrs):
+     native.genrule(
+         name = name,
+         srcs = [src],
+         visibility = visibility,
+         outs = [bpf_object],
+-        cmd = "clang -O2 -Wall -Werror -target bpf -c $< -o $@ -I/usr/include/$$(uname -m)-linux-gnu",
++        cmd = "\"$$GVISOR_BPF_CLANG\" -O2 -Wall -Werror -target bpf -D__x86_64__ -c $< -o $@ $$GVISOR_BPF_INCLUDE_FLAGS",
+     )

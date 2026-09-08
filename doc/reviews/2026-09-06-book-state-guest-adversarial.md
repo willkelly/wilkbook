@@ -728,3 +728,605 @@ termination, and power loss are not treated as SQLite close, `sync`, unmount,
 halt, completion, persistence, or PASS evidence.
 
 This append is the only repository edit made by the v4 continuation.
+
+## V5 continuation — clarified BSG-4 boundary; frozen-capsule mode gate fails
+
+### Verdict
+
+**Do not accept the exact v5 packet for image construction or QEMU.**  The
+clarified security requirement is accepted: SQLite software may remain in the
+book language closure; the book must instead lack direct capability to the
+authority database/state volume and private UI channel.  Thus the historical
+v4 BSG-4 finding remains an accurate record of the old SQLite-absence
+requirement, but SQLite 3.39.3's acknowledged presence is not itself a v5
+blocker and no minimal-Python/profile rebuild is required.
+
+The first independent frozen-capsule gate nevertheless fails.  The
+authenticated capsule roster requires nine files in `capsule/module-view` to be
+mode `0555`; every one is actually mode `0444`.  The packet's own exact checker
+stops at the first such file:
+
+```text
+FAIL: module-view source mode/type is wrong: pinenote/tools/gvisor-package/check.sh
+```
+
+This is finding **BSG-5**.  It is a frozen-packet/replay failure, not a finding
+against the clarified SQLite capability boundary, the two new probe algorithms,
+Book Session, the accepted FD adapter, the external deadline result, the
+reader-join, the kernel, or gVisor runtime behavior.  Per rung order I did not
+run the frozen replay, independently lower/query the v5 derivation, compute the
+image derivation, repeat the 34-derivation image dry run, or build anything.
+The authenticated author logs for those later gates cannot waive the earlier
+failure of the exact packet presented for review.
+
+### Authenticated v5 content and shape
+
+Strict byte verification passed all 19 members of `EVIDENCE.sha256` and all 246
+members of `SOURCE-SNAPSHOT.sha256`.  The principal identities match the review
+request:
+
+```text
+5fd333cf57c00fea80b28a519081ce4ccc8d13b94200d07db73c5481230fcc69  EVIDENCE.sha256
+2b99fcca343823eca6f5f665bfb7a5e053fed7eede1ce99501c99a9747d7a7e8  SOURCE-SNAPSHOT.sha256
+8a86fa2a1e7b8b388ab2858580d279fae9afc42dcd166f64fce4c1030f52d221  canonical SOURCE-MANIFEST.sha256
+9e5f4edc0b2c6babea1a576aa8f7c270136a2ceda6f650d64bde18a0d4308f3d  canonical capsule roster
+```
+
+The canonical manifest has 131 unique entries.  The roster has 132 entries:
+19 project modules, 91 relative local-file assets, 22 check-only files, and the
+manifest binding.  The complete packet has 266 regular files and 57 directories
+(counting its root), with no links or special files.  All 266 regular files are
+mode `0444`.
+
+That last fact is the contradiction.  The roster explicitly assigns `0555` to
+these nine module-view assets:
+
+```text
+pinenote/tools/gvisor-package/check.sh
+pinenote/tools/gvisor-package/emit_guix_inputs.py
+pinenote/tools/gvisor-package/inventory.py
+pinenote/tools/gvisor-package/offline-check.sh
+pinenote/tools/gvisor-package/test_inventory.py
+pinenote/tools/gvisor-package/test_vendor.py
+pinenote/tools/gvisor-package/vendor-discover.sh
+pinenote/tools/gvisor-package/vendor_inputs.py
+pinenote/tools/gvisor-package/vendor_manifest.py
+```
+
+An independent complete mode comparison found exactly those nine mismatches and
+no repo-view mismatch.  Their bytes still match the roster; for example both
+copies of `check.sh` hash to `b146c80e…`.  That does not repair their modes.
+`gvisor-source.scm` consumes the tools directory through a recursive
+`local-file`, and the capsule design itself says executable modes must survive
+for such directory inputs.  More fundamentally, the exact checker is part of
+the declared frozen boundary and correctly refuses this capsule.
+
+The supplied hash manifests did not detect the post-capture mode discrepancy
+because they authenticate file bytes, while `CAPSULE-ROSTER.tsv` separately
+declares the required modes and `check-source-capsule.py` enforces them.  The
+authenticated supplied `capsule-check.log` and `frozen-replay.log` report a
+different earlier state in which this check passed; they are author evidence,
+not a successful replay against the current frozen directory.  For comparison,
+the preserved v4 packet still has these module-view files at `0555` and its
+repo-view copies at `0444`.
+
+### Focused BSG-4 source inspection before the stop
+
+The v4-to-v5 semantic design is otherwise narrow and consistent with the newly
+clarified requirement, but these observations are not an acceptance after
+BSG-5:
+
+- The authority differs from accepted hash `688b2a9d…` only by the two declared
+  boundary-probe arguments.  The accepted FD adapter remains exactly
+  `15f8ec5c…`, and the 45-path language closure remains exactly `48728ed9…`.
+- The system now truthfully records both SQLite 3.39.3 book-visible outputs and
+  separately pins the trusted `guile-sqlite3`/SQLite 3.53.1 backend.  It creates
+  and verifies a root-owned mode-`0600` non-secret sentinel on the mandatory
+  state volume before authority startup.
+- The fixed Guile argv loads `/book/storage-boundary.scm` immediately before
+  `/book/entry.scm`.  The fixed Python `-I -S -B -c` program runs
+  `/book/storage_boundary.py` and then `/book/entry.py` in the same interpreter.
+  Both probe sources are separately mounted read-only, are included in runtime
+  provenance, and are passed through the real authority bundle path; there is
+  no native fallback or separate, more-isolated probe process.
+- Each probe uses direct `stat`/`open` operations.  It requires denial of the
+  state root and sentinel visibility; read and non-truncating write opens of the
+  existing sentinel and database; read/write opens of the private UI path;
+  literal absence from mountinfo; FD 3 as the sole non-CLOEXEC socket; and no
+  higher non-CLOEXEC, socket, character-device, or authority-path descriptor.
+  Only explicitly enumerated not-found/permission errnos are accepted; import
+  failure, timeout, and unknown exceptions cannot produce its PASS line.
+- Trusted UI readiness is established before either sandbox runs, and normal
+  guest success still requires the unchanged book's real typed state read and
+  boot-appropriate state commit plus UI interactions.  Therefore a future
+  runtime result must authenticate each actual child probe completion together
+  with those positive events, not accept the child-written marker alone.
+
+The boundary markers are written to the bounded per-child `runsc.stdout`
+captures.  This source review does not establish that a future two-boot evidence
+owner actually harvests and authenticates them.  That exact binding, including
+both `360/5` QEMU lifetimes and the accepted image identity, belongs to the
+separate two-boot review; it must pass before QEMU authority exists.
+
+### Reviewer-only probe model and rung-order correction
+
+Before invoking the independent capsule checker, I ran the two exact frozen
+probe files in a private unprivileged bubblewrap namespace with private
+HOME/XDG/compiled/extension paths and a reviewer-created connected socket at FD
+3.  This was a reviewer rung-order error: packet shape had already exposed the
+all-`0444` anomaly, so the capsule checker should have run and stopped first.
+The result is retained only as a probe-code negative control and cannot waive
+BSG-5.
+
+For both Guile and Python, the absent-path model emitted the exact boundary PASS
+line.  Three intentional exposures then failed nonzero without a PASS marker:
+
+1. binding a reviewer-owned mode-`0700` state directory, existing sentinel, and
+   harmless dummy database at the fixed state path failed at root visibility;
+2. binding a harmless reviewer file at the fixed private UI path failed at the
+   read open; and
+3. retaining another socket at FD 4 failed the extra-capability check.
+
+No real database was opened or modified.  This host model is not runsc, Sentry,
+ARM, the accepted book, Book State, the private UI, persistence, QEMU, or
+shipping evidence.  In particular, it does not replace the required in-sandbox
+ARM denial result.
+
+### Required successor and stop point
+
+A reviewable successor must preserve the nine rostered `0555` module-view modes
+(or deliberately change the roster/source semantics and explain that new
+derivation), freeze the packet in a transport that retains those modes, and
+rerun its own checker against the exact frozen directory.  Because the packet
+and evidence state changes, it needs fresh packet/evidence identities and a
+fresh focused review.  It does **not** need to remove SQLite from the language
+closure.
+
+Only after that early gate passes should review resume with the hostile-cache
+frozen replay, exact system lowering/requisite query, image `-d`, and the
+no-realization 34-derivation dry run.  Image construction remains unauthorized
+by this exact review.  Actual ARM/gVisor denial, typed Book State persistence,
+the child marker/positive-event join, both hard-guardian bindings, shutdown,
+and two-boot recovery remain later runtime evidence, not source facts.
+
+The sealed independent evidence is:
+
+```text
+/tmp/opencode/book-state-guest-v5-independent-review-20260906/review-evidence/
+220017078323c1cae54c4ee3dd5845d65ddb7cad827138dd40f74b650da0903d  EVIDENCE.sha256
+```
+
+It includes strict packet checks, the packet shape, the exact checker failure,
+the complete nine-file mode audit, and the explicitly non-authoritative host
+probe model.  All listed files are mode `0400`; the evidence directory is mode
+`0500`.
+
+Two reviewer setup failures are preserved there.  The first probe-model draft
+used a bubblewrap option unavailable on this host.  A separate command
+mistakenly named the cached AArch64 Python executable; the x86 host could not
+execute it, and shell fallback exited status 2 on binary bytes before any
+harness code ran.  No ARM instructions or candidate runtime ran.  The first
+mode-audit snippet also had a reviewer-only Python syntax error; its corrected
+successor produced the complete mode result above.
+
+No frozen packet, implementation, observer, protocol, UI, system, package,
+kernel, patch, image, or two-boot source was edited.  No Guix lowering,
+requisite replay, image derivation, image dry run, output realization,
+image/system/kernel/gVisor/Bazel build, runsc, QEMU, successful ARM execution,
+KOReader, device, SSH, network investigation, privileged mount, staging,
+commit, push, fetch, merge, or rebase occurred.  This append is the only
+repository-path edit made by the v5 continuation.
+
+## V6 continuation — BSG-5 closed; guest source accepted for image construction
+
+### Verdict
+
+**Accept the exact v6 guest/system source for one exact bounded raw-image
+construction.**  V6 changes no capsule byte and no functional source from v5.
+It restores only the nine authenticated module-view execute bits whose loss
+caused BSG-5, then passes the exact frozen-capsule checker, the required
+private-clone negative, the complete private source/native/static replay,
+system lowering and graph query, image lowering and graph query, and the
+no-realization image dry run.  No new counterexample was found in the completed
+v5 source/probe review.
+
+This acceptance permits the parent to run the no-argument `image_guix` build
+defined by the reviewed `COMMANDS.txt`: private `env -i` HOME/XDG/load/
+compiled/extension paths, `--no-grafts`, `--no-substitutes`,
+`--max-jobs=1`, and `--cores=2`, targeting the exact raw image below.  Image
+construction need not wait for the separate two-boot owner review because it
+does not execute the guest.
+
+It does **not** accept ARM/gVisor runtime isolation, execute either boundary
+probe in Sentry, prove persistence, authorize QEMU, or accept a two-boot owner.
+Those remain later rungs.  In particular, source-built gVisor remains an
+accepted package output but not a currently accepted runtime merely because its
+identity is unchanged.
+
+### Frozen v6 identity and mode-only delta
+
+The reviewed packet and its post-freeze sibling evidence are:
+
+```text
+pinenote/tools/book-state-guest/source-packets/book-state-guest-sources-20260906-v6/
+5b801df014ccae882f410bf9deeefdbf8973c77f6c7932955108a9b2007e360b  PACKET-CONTENTS.sha256
+
+pinenote/tools/book-state-guest/source-packets/book-state-guest-sources-20260906-v6-evidence/
+c550804a12701d511f2a66afebe3415d67d8f918697ac04b8db38d42f4f2b91a  EVIDENCE.sha256
+```
+
+Strict checking passed all five packet-manifest members, all 246 capsule
+snapshot members, and all 36 author-evidence members.  The unchanged inner
+identities are:
+
+```text
+8a86fa2a1e7b8b388ab2858580d279fae9afc42dcd166f64fce4c1030f52d221  canonical SOURCE-MANIFEST.sha256
+9e5f4edc0b2c6babea1a576aa8f7c270136a2ceda6f650d64bde18a0d4308f3d  canonical capsule roster
+2b99fcca343823eca6f5f665bfb7a5e053fed7eede1ce99501c99a9747d7a7e8  SOURCE-SNAPSHOT.sha256
+e1bc1c871b0502d17ccdc7056564989cd455fae943133300df88e60e11dbdf3c  authority
+2585371b7f961b7222a92e34818bde8fff0817c42a36b6f87c8c9839432e33b3  OCI successor
+0ff742d707955a6c1db5d1eb93f1cddd277fa7c113eeaacc16f3eb785744079e  Guile boundary probe
+2381b92d3192375160909c60124e3dcb6004c20a581df18ac04dac4665137a5c  Python boundary probe
+696a19a52244ac3803a62db3f7a7adfd03aec952fcec6ba768a06e1309f846f8  system
+15f8ec5c2eae9e99595e26e492b77a11a18ac10e4da6da9aa4f69a515b10bbeb  FD-3 adapter
+```
+
+An independent pre-execution walk found exactly 252 regular packet files: 243
+mode `0444` and the nine required module-view assets mode `0555`.  All 56
+directories, including the packet root, are mode `0555`; there are no links or
+special entries.  The roster remains 19 modules, 91 local-file assets, and 22
+check-only files plus its source-manifest binding.
+
+All 246 v6 capsule files are byte-identical to v5.  The only metadata changes
+are the nine previously listed `capsule/module-view/pinenote/tools/gvisor-package/*`
+files from `0444` to their rostered `0555`; no other mode changed.  The exact
+capsule checker now passes.  In a private clone, changing only
+`check.sh` back to `0444` returns status 1 with the exact BSG-5 rejection.  This
+is a behavioral negative, not merely a comparison of mode strings.
+
+The mode record before and after the complete replay is byte-identical and
+hashes to
+`443e460e7919d058ccc053505dfb4c75bfaf9dba7dc05c324506f5b3bb7b30d3`.
+The v5 packet remains unchanged and read-only.  Its failed final-directory
+history and the v5 review at pre-append hash `c9e38c87…` remain preserved; v6
+does not retroactively turn that packet green.
+
+### Complete private replay
+
+The exact v6 command ran independently as uid/gid 1000 in fresh user, mount,
+PID, and network namespaces.  A tmpfs hid the checkout and all other `/tmp`
+content; only the read-only v6 packet, read-only v5 packet, prior review roots,
+one fresh evidence directory, `/gnu/store`, and `/var/guix` were exposed.
+`/home`, `/proc`, and `/dev` were private, and the process began through
+`env -i`.  Every Guix/Guile/Guild entry then used the frozen private launcher or
+the image command's explicit private HOME/XDG/load/compiled/extension boundary.
+
+The replay passed:
+
+- all capsule missing-input, manifest-tamper, symlink, special-file,
+  changing-input, and unlisted-Scheme controls;
+- live malicious default-HOME and explicit-XDG bytecode controls, followed by
+  all 19 exact module-origin assertions;
+- all nine native FD-adapter cases, including FD 3 free/occupied, endpoint
+  aliases, closed standard descriptors, and bidirectional FD-3-only traffic;
+- all 18 cooperative/external liveness assertions;
+- all 23 real backend/bridge/inspector assertions; and
+- the static system object comparison with the exact 45-path language profile.
+
+This reuses BSG-1, BSG-2, and BSG-3 only because their accepted adapter,
+external guardian, and complete capsule inputs are hash-identical.  BSG-2 still
+means external containment only: 300 seconds is the cooperative in-guest budget;
+360 seconds plus a 5-second TERM grace belongs to each outer QEMU lifetime.  No
+interruptible SQLite cleanup or standalone image deadline is inferred.
+
+### Completed BSG-4 source/probe review
+
+The clarified BSG-4 rule remains exactly as accepted in the v5 continuation:
+SQLite 3.39.3 software may exist in the 45-path book closure.  Persistent Book
+State authority remains the trusted Guile backend using `guile-sqlite3` and
+SQLite 3.53.1.  The requirement is that each fixed book receive no direct
+state-volume/database capability and no private UI channel.
+
+The exact source meets the pre-image contract:
+
+1. The authority inverse check removes exactly the two new probe-wiring lines
+   and reproduces accepted authority hash `688b2a9d…`.
+2. The Guile OCI argv loads `/book/storage-boundary.scm` immediately before the
+   unchanged `/book/entry.scm`.  The Python `-I -S -B` argv runs
+   `/book/storage_boundary.py` and then `/book/entry.py` in the same interpreter.
+   These are the real fixed runsc/Sentry process vectors, not native fallback or
+   separately isolated probe bundles.
+3. Both probes are immutable separately declared source mounts and appear in
+   both the 2,786-node system graph and 4,855-node image graph.  The OCI policy
+   remains strict Systrap, no network/host UDS/directfs, nonroot UID/GID, empty
+   capabilities, `noNewPrivileges`, read-only root, and exactly
+   `--pass-fd=3:3`; neither authority storage nor private UI is mounted.
+4. Before either book, the trusted volume service has created and verified the
+   non-secret sentinel, the authority has established real private-UI
+   readiness, and the state runtime has opened the sole database authority.
+   Private-UI denial therefore cannot pass merely because trusted UI was never
+   functional.
+5. Each probe performs direct OS `stat`/`open` checks for the root, existing
+   sentinel, existing database, and UI path; scans mountinfo; and audits live
+   descriptors.  Writeability probes use `O_WRONLY` without `O_CREAT` or
+   `O_TRUNC`, so unexpected access closes the descriptor and fails without
+   writing or truncating the database/sentinel.  Only explicit
+   `ENOENT`/`EACCES`/`EPERM` denial is accepted.  An import failure, timeout,
+   unknown exception, visible path, forbidden mount, or extra capability FD
+   exits before the unchanged book and cannot emit the probe PASS marker.
+6. FD 3 is checked as the sole inherited non-CLOEXEC socket; any interpreter
+   FD above 3 must be CLOEXEC, non-socket, non-character-device, and unrelated
+   to the authority paths.  The accepted pre-exec adapter separately proves
+   exact `(0 1 2 3)` ownership.  The unchanged book then has to complete its
+   real hello/initialize, typed `state-read`, and boot-required typed
+   `state-commit` through FD 3.  That positive path proves the same process
+   continued beyond its probe.
+
+The exact per-language `BOOK_STATE_SANDBOX_BOUNDARY` text occurs only in the
+two authenticated probes, not in either unchanged book.  It is written to the
+owned bounded child capture before book startup.  Runtime acceptance must
+authenticate that actual child marker together with the real book hello/read/
+commit evidence; a self-asserted marker alone is never proof.  This is a fixed
+trusted-fixture conclusion, not qualification of arbitrary hostile books.
+
+The reviewer-only v5 intentional-exposure model remains useful only as a native
+negative control because v6 changed no probe byte: absent paths passed, while
+state, UI, and extra-socket exposures failed.  It was run out of order in the v5
+review and is not transferred to ARM.  Real denial under the exact source-built
+gVisor/Sentry process must still be demonstrated after the image exists.
+
+### Derivation and bounded image-build boundary
+
+Pinned derivation-only lowering independently reproduced:
+
+```text
+/gnu/store/kjiz9wzqbdr9p1y3w0ni6qh8hzhqrkp0-system.drv
+/gnu/store/p6iwha5axl4s5yi2qb9l76x00cw9vqzg-disk-image.drv
+```
+
+The sorted system graph contains 2,786 unique paths and hashes to
+`997d072610a9bfe6ee120b8e4ca1bba57c2c327abd8605eeb364bcf0111093cb`.
+The sorted image graph contains 4,855 unique paths and hashes to
+`51441e314d451c7dcbadb023bd871576c84033822c28a802dd4de503ada73608`.
+It includes internal system derivation `bci0wwk…`, both probe store files, the
+accepted USER_NS kernel derivation, and exactly the source-built gVisor
+derivation.  The kernel Image still hashes to `5435c84e…`; the cached outputs
+remain `334ljs8…` and `djgy782…`.
+
+The exact no-substitute image dry run reports 34 derivations, including the
+image root, and does not list the already-cached kernel or gVisor derivations.
+Neither system output `l1f4jxp…` nor expected image output
+`/gnu/store/9yx1xmhf2hnsp6vdwnvvxzqv3i9i9fkz-disk-image` exists.  Therefore
+this review lowered derivations but realized no target output.  The permission
+granted here is narrowly to construct that exact expected image with the
+reviewed command; any source, mode, protocol, package, graph, derivation, or
+output identity change requires fresh review.
+
+An image produced under this acceptance still has no execution authority.
+Before either boot, the separate outer review must bind that exact image to two
+sequential QEMU lifetimes, each with the accepted `360/5` guardian.  QEMU must
+then separately prove the actual ARM/Sentry denial probes, positive Book State
+events, persistence A→B, cleanup, and its own termination result.  None of
+those are inferred from image construction.
+
+### Independent evidence and conduct
+
+The sealed independent continuation evidence is:
+
+```text
+/tmp/opencode/book-state-guest-v6-independent-review-20260906/review-evidence/
+f3b15f1289dbe490df32020daa8935644c6b44eb95a28744db4fc4be2c1ecd5d  EVIDENCE.sha256
+```
+
+It contains the independent pre-execution mode/byte gate, strict packet and
+author-evidence checks, positive and negative capsule checks, complete private
+replay, both derivation/requisite graphs, image dry run, and the focused probe
+source audit.  Every listed file is mode `0400`; the evidence directory is mode
+`0500`.
+
+The author's two namespace setup failures remain authenticated in the sibling
+evidence and are not rewritten as zero failures.  This independent continuation
+had one harmless checksum-path mistake before candidate execution: it asked for
+`EVIDENCE.sha256` inside v6 after hashing `PACKET-CONTENTS.sha256`, although the
+evidence is the documented sibling.  Two reviewer-only source-audit drafts then
+used an overly literal multiline-string assertion and stopped; the corrected
+ordered-argv audit passed.  These setup errors altered no packet and supply no
+candidate evidence.  The exact namespace replay itself passed on its first
+invocation.
+
+No frozen packet, implementation, observer, UI, protocol, system, package,
+kernel, patch, image, or two-boot source was edited.  No output was realized;
+no image/system/kernel/gVisor/Bazel build, runsc, QEMU, ARM, KOReader, device,
+SSH, network investigation, host mount outside the private unprivileged
+namespace, staging, commit, push, fetch, merge, or rebase occurred.  This append
+is the only repository-path edit made by the v6 continuation.
+
+## 2026-09-07 continuation: v7 finalized-capture observability delta
+
+### Verdict
+
+**Accepted as the finite v6→v7 source successor, and accepted for one exact
+bounded raw-image build.  Not runtime-accepted.**  V7 fixes the observability
+gap found before v6's retained image was ever executed: a successful boundary
+probe wrote its record to the owned `runsc.stdout`, but the authority discarded
+that capture on success.  The new authority validates the actual finalized
+capture and publishes its exact record to the trusted console before cleanup and
+before eventual guest success.
+
+This continuation does not reopen BSG-1 through BSG-5.  Their accepted adapter,
+external guardian, complete capsule, capability-denial probes, and mode boundary
+are unchanged.  It also does not re-review the protocol, backend, reader join,
+private UI, kernel, gVisor package, or retained v6 image.  The v6 image remains
+an accepted unexecuted artifact under review `02a4d7ad…`; it is simply
+insufficient for the new runtime denial claim because it cannot expose a
+successful probe record.
+
+The accepted v7 identities are:
+
+```text
+8d9eb000cdd51754a6983ea69d5d561eedf9f039473d41779725c9d43dfbb206  PACKET-CONTENTS.sha256
+cb86ceec72ed59353e4ec75f88c292594b210de26074a98a35293c9ccef5e7ce  SOURCE-MANIFEST.sha256
+c26f69012d1069bfbb9f5df8dbd610aa63a288e74fabfd325c9842b3d532de07  CAPSULE-ROSTER.tsv
+dc068b4c04a9168c9d6f34f9dc1486ad2b0788f53d4906602de6dc9a99aa8c4e  SOURCE-SNAPSHOT.sha256
+473142078efb0ec678edbec8b308ca95a75603d5e905ff50b754b1b49b6dd86f  V6-V7-DELTA.tsv
+35d0fdfcae67b80b5a02e673cd930b62e5fff45c98ccd96548f2de05d69dae7d  author EVIDENCE.sha256
+d852a183608dacf5758e0424f1494522f93c57646b7b396ba80902ffbb240fdd  book-state-guest-authority.scm
+ebcf06a909398a120c3be50f4f4c0040e91a181ad3e6ff665a0185a08e8e33b7  pinenote-book-state-reader.scm
+```
+
+The preceding 1,142-line v6 review prefix was authenticated before this append
+as `4c1df07a0dd1db655f5668975636bdf7aecc8fee3b755d26823be7b4c89cc4e5`.
+
+### Complete finite delta
+
+Independent whole-tree comparison found exactly the declared 16 changed
+capsule records: two added host-check files and 14 byte-only changes covering
+the authority/system copies and their test/capsule metadata.  The capsule grew
+from 246 to 248 regular files.  There are no inherited mode changes, links,
+special files, multi-link regular files, or write bits.  All directories are
+mode `0555`; repo/metadata/package-view files are `0444`; and the same nine
+rostered gVisor module-view wrappers remain `0555` while every other
+module-view file is `0444`.
+
+The probes, OCI generator and process vectors, accepted Guile/Python books,
+Book Protocol sources, FD-3 adapter, capture/process-group owner, kernel
+definition and patches, and source-built gVisor definition are byte-identical
+to accepted v6.  Removing only the relay import, accessor bindings, delimited
+relay block, and production call from v7 reproduces the exact v6 authority byte
+stream and SHA-256 `e1bc1c871b05…`.  The system's functional change is limited
+to the new authority hash and truthful observability provenance.
+
+### Actual finalized-capture path
+
+The production path is connected in the required order:
+
+1. The fixed language Book completes its typed interaction, then endpoint
+   release closes/revokes and joins the state delegate.
+2. The accepted owner reaps the complete runsc process group, drains both
+   bounded pipes to EOF, flushes and closes both capture outputs, and only then
+   marks the child finalized.
+3. `capture-result` refuses an unfinalized child.  V7 requires both child and
+   result status zero and rejects either stdout or stderr overflow.
+4. The relay opens that bundle's owned `runsc.stdout` with
+   `O_RDONLY|O_CLOEXEC|O_NOFOLLOW`.  It requires a single-link, authority-owned
+   mode-`0600` regular file whose size equals the capture owner's observed byte
+   count.  Device, inode, mode, link count, UID, GID, size, mtime, and ctime must
+   remain identical across path-before, FD-before, FD-after, and path-after
+   observations, and the FD read must return exactly the bounded byte count.
+5. The whole capture must be valid UTF-8 and contain exactly one occurrence of
+   the reserved stem.  It must be a complete line, have the compile-fixed
+   matching language, equal the closed pass grammar byte-for-byte, and end in a
+   newline.  Missing, wrong-language, duplicate, quoted/injected, failure,
+   malformed, truncated, non-UTF-8, changed, or overflowed input fails.
+6. The authority hashes the actual stable-FD capture and the substring extracted
+   from it.  It first emits a source-attribution line containing fixed
+   language/container identity plus actual byte counts and SHA-256 values; that
+   line contains neither the reserved stem nor `result=pass`.  It then emits the
+   extracted capture substring, not the expected comparison constant.
+
+The attribution record alone is not pass evidence.  Serial order also does not
+pretend to be probe execution order: `publication=next-line-after-child-drain`
+states that the probe ran before the fixed book but its trusted relay occurs
+after the same process and its pipes have finished.  Any source- or marker-write
+or flush error propagates out of the helper, produces authority status 1, and
+cannot reach the sole final guest `result=pass`.  A boundary-looking line without
+that later final success and the rest of the sealed runtime joins must never be
+accepted.
+
+The source binds the two marker grammars to compile-fixed Guile/Python profiles,
+container IDs, probe hashes, and unchanged book hashes.  The real OCI vectors
+still load each probe immediately before its book in one process, FD, and
+namespace context.  Neither accepted book nor its Book Protocol source contains
+the reserved marker stem, and the OCI mount/FD policy remains unchanged.  This
+is sufficient provenance for these fixed authenticated fixtures, not a general
+claim about arbitrary hostile books able to print chosen stdout.
+
+### Independent focused execution
+
+Two networkless unprivileged host matrices drove the exact v7 authority helper
+through the accepted process-group and bounded-capture owner.  They used a
+pre-existing immutable Guile 3.0.9 test profile directly, private HOME/XDG/TMP
+and explicit source/compiled/extension/system module paths.  No Guix process or
+output realization was needed.  The child was a reviewer-owned fixed Python
+writer, not runsc or either real probe, so these runs establish relay mechanics
+only—not gVisor/Sentry/ARM containment.
+
+Both matrices passed all 77 connected assertions.  Guile and Python positive
+cases emitted the non-pass attribution followed by the exact captured marker,
+with independently changed capture lengths/digests.  Negative cases covered
+missing, wrong-language/container, duplicate, quoted-extra, failure, malformed,
+truncated, invalid-UTF-8, nonzero, stdout/stderr overflow, deleted capture,
+post-finalization mutation, and both source- and marker-publication failure.
+The second matrix sharpened two cases to a single quoted-only stem occurrence
+and a complete exact marker with no closing newline; both failed before any
+trusted pass publication.  Thus status zero is not treated as probe success,
+and publication exceptions are not caught and converted back into success.
+
+### Exact one-build boundary
+
+The authenticated author replay lowered, but did not realize:
+
+```text
+/gnu/store/3s4gz8f6i8dkclwbknp2x4ww786wv19p-system.drv
+  -> /gnu/store/i1ws95jfmvmkjcli5731i1h0ql0k1qn7-system
+/gnu/store/z714ddhf80rndbx4iz3qs1ys3wwryy5i-disk-image.drv
+  -> /gnu/store/lsk489hgzszvym56m5pnsbrvf5malhiy-disk-image
+```
+
+The sorted system graph has 2,786 unique records and SHA-256 `8c3a8277…`;
+the sorted image graph has 4,855 and SHA-256 `d5336e73…`.  The exact existing
+derivations independently expose the expected output names.  Both outputs
+remain absent.  The no-substitute dry run lists 15 missing derivations ending
+at the exact image root; the accepted cached kernel `334ljs8…` and source-built
+gVisor `djgy782…` are not in that build list.
+
+This verdict authorizes **one** realization of that exact v7 raw-with-offset
+image using the frozen packet's private command and exactly
+`--target=aarch64-linux-gnu --no-grafts --no-substitutes --max-jobs=1
+--cores=2`.  The sole expected output is `lsk489hg…-disk-image`.  Any changed
+source, mode, channel, option, derivation, graph, dependency choice, or output
+identity is outside this acceptance and must stop before execution.
+
+Image construction is not QEMU authority and will not prove the actual probes.
+Before a runtime verdict, the realized bytes and boot payload still require
+authentication and the separately reviewed outer binding/checker must require,
+for **each** fresh boot, both language-specific source-attribution and exact
+boundary-marker lines joined to final guest success, real typed reads/commits,
+trusted UI evidence, cleanup, QEMU termination, and the sealed two-boot oracle.
+The binding must use the payload-manifest identity, not a status-file identity.
+Once those finite prerequisites are bound, the next substantive gate is the
+actual two-fresh-boot ARM/gVisor run—or a concrete recapture defect found before
+it.  No marker, host model, image hash, or self-asserted console text alone is
+runtime acceptance.
+
+### Evidence and conduct
+
+The sealed independent evidence is:
+
+```text
+/tmp/opencode/book-state-guest-v7-independent-review-20260907/review-evidence/
+49bf1e84aeda168c97395a64cd754e796d1fc32eee1199957ee90f7da9af31cc  EVIDENCE.sha256
+```
+
+It contains strict packet/snapshot/author-evidence checks, the complete
+mode/byte delta audit, both full SRFI-64 relay logs and reviewer writers, the
+production-wiring audit, derivation-boundary audit, environment pins, and all
+setup-failure records.  Every file is mode `0400`, the directory is `0500`, and
+there are no links or special entries.
+
+One procedure violation is retained explicitly: during environment discovery,
+before candidate execution, the reviewer ran ambient `guile --version` once
+without the required private HOME/XDG boundary.  It loaded no project source
+and is excluded from all evidence and conclusions; every subsequent Guile
+execution used the private networkless boundary.  Setup also included one
+pre-Guile Bubblewrap mountpoint failure and two reviewer-Python audit drafts
+that stopped on a quoting error and an overly literal split-string assertion.
+The corrected runs passed; none of the three failed attempts is candidate
+evidence.
+
+No image, system, kernel, gVisor, Guix, or Bazel output was built or realized.
+No runsc, QEMU, ARM, KOReader, device, SSH, networking investigation,
+privileged mount, staging, commit, push, fetch, merge, or rebase occurred.  No
+frozen packet, guest implementation, protocol, observer, UI, system, kernel,
+image, outer checker, or binding source was edited.  This documentation append
+is the only repository-path edit made by the v7 review.

@@ -1,0 +1,21 @@
+# Exact successful outer invocation, run from repository baseline
+# /tmp/opencode/wilkbook-book-computer. The evidence directory was empty.
+bwrap \
+  --unshare-user --uid 1000 --gid 1000 --unshare-pid --unshare-net \
+  --die-with-parent --ro-bind / / \
+  --bind /gnu/store /gnu/store --bind /var/guix /var/guix \
+  --tmpfs /tmp --dir /tmp/opencode --tmpfs /home --proc /proc --dev /dev \
+  --ro-bind /tmp/opencode/wilkbook-book-computer/pinenote/tools/book-state-guest/source-packets/book-state-guest-sources-20260906-v6 /tmp/packet \
+  --ro-bind /tmp/opencode/wilkbook-book-computer/pinenote/tools/book-state-guest/source-packets/book-state-guest-sources-20260906-v5 /tmp/v5 \
+  --bind /tmp/opencode/wilkbook-book-computer/pinenote/tools/book-state-guest/source-packets/book-state-guest-sources-20260906-v6-evidence /tmp/evidence \
+  --ro-bind /tmp/opencode/wilkbook-book-computer/doc/reviews/2026-09-06-book-state-guest-adversarial.md /tmp/review.md \
+  --ro-bind /tmp/opencode/book-state-guest-v5-independent-review-20260906/review-evidence/EVIDENCE.sha256 /tmp/review-evidence-manifest \
+  --chdir / /usr/bin/env -i \
+  FROZEN_PACKET=/tmp/packet V5_PACKET=/tmp/v5 EVIDENCE=/tmp/evidence \
+  BOOTSTRAP_GUIX=/gnu/store/07imsdnmnf8yjid83rsccmlbs2h30wqa-guix-command \
+  PYTHON_BIN=/gnu/store/c9ga6sl21sy1cbxdllvxkj6qlnk4yzbh-python-3.11.14/bin \
+  REVIEW_DOCUMENT=/tmp/review.md \
+  REVIEW_EVIDENCE_MANIFEST=/tmp/review-evidence-manifest \
+  PATH=/usr/bin:/bin LANG=C LC_ALL=C \
+  /bin/sh /tmp/packet/COMMANDS.txt \
+  > /tmp/opencode/book-state-guest-v6-final-driver-3.log 2>&1

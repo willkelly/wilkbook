@@ -1,0 +1,38 @@
+/tmp/packet/capsule/repo/channels.scm:1:6: warning: channel 'nonguix' is not trusted
+/tmp/packet/capsule/repo/channels.scm:11:6: warning: channel 'saayix' is not trusted
+The following derivations would be built:
+  /gnu/store/1p63qll9bqbwcdc58jhgc7gkbi6xsz8n-wilkbook-book-state-supervisor.drv
+  /gnu/store/6wcginvrkan1zhszpqraxp48rdzz42f6-wilkbook-book-state-guest-source-manifest.drv
+  /gnu/store/rbw1kkl2r602w9cg3ksfqj6yd88vyivr-wilkbook-book-state-reader-build-manifest.drv
+  /gnu/store/5kws1q86hgd7s43drx1d6j14zvds50yw-etc.drv
+  /gnu/store/r0p46qcv09qh6wywh1adlwacysadibbd-activate-service.scm.drv
+  /gnu/store/jnmc8vncd9d07c5misky30jqrrcmy3ql-activate.scm.drv
+  /gnu/store/ln4xn8q56ylf8sq4qn2dlgg588dmg3n5-profile.drv
+  /gnu/store/82dwf460qjcjw0v5sayyd2krm71jgkns-linux-modules.drv
+  /gnu/store/fni815i96yhs0qbzdz6qpp4f8k3mifh6-linux-modules.drv
+  /gnu/store/6ky2138vn8xvzic0fb9rfs4i6spfrfxc-init.drv
+  /gnu/store/mvvx99alj64h66afpgwqczgj8hc67izl-raw-initrd.drv
+  /gnu/store/2xnvzx98np3p5r3l987sfwl82chrqgkl-wilkbook-book-state-guest-trusted-modules.drv
+  /gnu/store/x81r8l8370rv16h3rn92vm1m4nncq2wn-wilkbook-book-state-guest.drv
+  /gnu/store/qh24xp4yphlxlq1n0ms4mwvak43g10ky-shepherd-book-state-guest-gate.scm.drv
+  /gnu/store/1xs9ccf3ciagj21ny9hx2xypxjswmklw-shepherd-book-state-guest-gate.go.drv
+  /gnu/store/dvm95mqiyxsmh72h0l4yg8yq3l6d6nv7-shepherd-host-name.scm.drv
+  /gnu/store/2g1nm925rxhl9ymn6fmcx5yng37svngy-shepherd-host-name.go.drv
+  /gnu/store/yg7q7bh24sxldbychl8smdhiacsd07x9-shepherd-user-file-systems.scm.drv
+  /gnu/store/48v298l4np2apj2nfdqac4x9xkcnwlk3-shepherd-user-file-systems.go.drv
+  /gnu/store/9y042qvqxrxh7b3r7844avfnbcajpc17-shepherd-file-systems.scm.drv
+  /gnu/store/ih8dhj6v22dh6qxc67pfpl3i7k4k72qs-shepherd-file-systems.go.drv
+  /gnu/store/wy3ipndlrgrklniap2cqzjgqn9frgk04-shepherd-book-state-volume-ready.scm.drv
+  /gnu/store/qxnd2rknn7f1j1hz5jnncf3ziid7b3yf-shepherd-book-state-volume-ready.go.drv
+  /gnu/store/rynihjsilad6cj55ly8jw4lzg1pkpszm-shepherd-file-system--var-lib-wilkbook-book-state-demo.scm.drv
+  /gnu/store/s5fmyfqg12xh3mcwh0yffz4ipgnz7f14-shepherd-file-system--var-lib-wilkbook-book-state-demo.go.drv
+  /gnu/store/3ksxfy1yrzy4xf9wjv1qd93qaw04y071-shepherd.conf.drv
+  /gnu/store/phfgm88jjwv76z3y75m1cv6ph21dl9gc-boot.drv
+  /gnu/store/qcv8wl9razxghj0iwwgzb22h2l56phrr-parameters.drv
+  /gnu/store/zp68xaxg24hb9vpvy21k8vz8ykq2lmyn-profile.drv
+  /gnu/store/bci0wwk51f6b3ib02l4fbal3bbkhvf9j-system.drv
+  /gnu/store/8q44af7f7y1fb7z4r0qj244kajci17mz-extlinux.conf.drv
+  /gnu/store/zps8cg5808d2jmgq94fz6n5dp1hasgc6-partition.img.drv
+  /gnu/store/jrc6a9cpia803l723y3n3sx6hpzgkn5i-genimage.cfg.drv
+  /gnu/store/p6iwha5axl4s5yi2qb9l76x00cw9vqzg-disk-image.drv
+
