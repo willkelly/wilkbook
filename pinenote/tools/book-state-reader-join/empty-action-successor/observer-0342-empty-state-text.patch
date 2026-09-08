@@ -1,0 +1,134 @@
+--- accepted-observer-0342/book-session.scm
++++ empty-action-successor/book-session.scm
+@@ -30,6 +30,7 @@
+              make-book-session-host
+              make-book-session-host-with-state
+              make-book-session-host-with-state-observer
++             make-book-session-host-with-state-text-observer
+              book-session-host?
+             open-session-endpoint!
+             session-endpoint?
+@@ -318,26 +319,37 @@
+ 
+ (define-record-type <book-session-host>
+   (%make-book-session-host endpoints mutex state-delegate-factory
+-                           state-completion-observer?)
++                            state-completion-observer? state-text-actions?)
+   book-session-host?
+   (endpoints host-endpoints set-host-endpoints!)
+   (mutex host-mutex)
+   (state-delegate-factory host-state-delegate-factory)
+-  (state-completion-observer? host-state-completion-observer?))
++  (state-completion-observer? host-state-completion-observer?)
++  ;; This policy is selected by trusted construction.  No peer field or action
++  ;; name can enable it for an ordinary endpoint.
++  (state-text-actions? host-state-text-actions?))
+ 
+ (define (make-book-session-host)
+-  (%make-book-session-host '() (make-mutex) #f #f))
++  (%make-book-session-host '() (make-mutex) #f #f #f))
+ 
+ (define (make-book-session-host-with-state factory)
+   (unless (book-state-delegate-factory? factory)
+     (session-error 'state "typed Book State delegate factory required"))
+-  (%make-book-session-host '() (make-mutex) factory #f))
++  (%make-book-session-host '() (make-mutex) factory #f #f))
+ 
+ (define (make-book-session-host-with-state-observer factory)
+   "Create a state-enabled host with one trusted completion slot per endpoint."
+   (unless (book-state-delegate-factory? factory)
+     (session-error 'state "typed Book State delegate factory required"))
+-  (%make-book-session-host '() (make-mutex) factory #t))
++  (%make-book-session-host '() (make-mutex) factory #t #f))
++
++(define (make-book-session-host-with-state-text-observer factory)
++  "Create a completion-observing state host whose trusted actions carry the
++full state-text range.  Unlike ordinary Book Session actions, these endpoint
++actions permit empty text and up to max-state-text-bytes UTF-8 bytes."
++  (unless (book-state-delegate-factory? factory)
++    (session-error 'state "typed Book State delegate factory required"))
++  (%make-book-session-host '() (make-mutex) factory #t #t))
+ 
+ ;; The endpoint records and cleanup shape follow the small conventions in the
+ ;; pinned Shepherd 1.0.9 'endpoints.scm' and Guix e343ff0 'inferior.scm': make
+@@ -504,6 +516,19 @@
+     (session-error 'schema (string-append name " exceeds its byte limit")))
+   value)
+ 
++(define (bounded-endpoint-text! host name value maximum-bytes)
++  ;; Empty text is a semantic capability of the trusted endpoint, not a wire
++  ;; option.  Keep the accepted default validator and its limits unchanged.
++  (unless (string? value)
++    (session-error 'schema (string-append name " must be a string")))
++  (when (and (zero? (string-length value))
++             (not (host-state-text-actions? host)))
++    (session-error 'schema (string-append name " must not be empty")))
++  (when (or (> (string-length value) maximum-bytes)
++            (> (bytevector-length (string->utf8 value)) maximum-bytes))
++    (session-error 'schema (string-append name " exceeds its byte limit")))
++  value)
++
+ (define (integer-shape! name value)
+   (unless (and (number? value) (exact? value) (integer? value))
+     (session-error 'schema
+@@ -525,7 +550,7 @@
+   '("type" "request_id" "action_id" "surface_handle"
+     "surface_generation" "sequence" "count" "text"))
+ 
+-(define (schema-shape! message)
++(define (schema-shape! host message)
+   (bounded-object-size message)
+   (let ((type-entry (assoc "type" message)))
+     (unless type-entry
+@@ -544,7 +569,8 @@
+         (for-each
+          (lambda (name) (integer-shape! name (field message name)))
+          '("surface_generation" "sequence" "count"))
+-        (bounded-string! "text" (field message "text") max-present-text-bytes))
++         (bounded-endpoint-text!
++          host "text" (field message "text") max-present-text-bytes))
+        (else
+         (session-error 'schema "peer cannot send this message type"))))))
+ 
+@@ -571,7 +597,7 @@
+            (string=? value "state-conflict")
+            (string=? value "state-commit-failed"))))
+ 
+-(define (decode-peer-payload payload)
++(define (decode-peer-payload host payload)
+   (let* ((message (decode-payload payload))
+          (type-entry (and (pair? message) (assoc "type" message)))
+          (type (and type-entry (cdr type-entry))))
+@@ -582,7 +608,7 @@
+         (%make-peer-message
+          'state (decode-book-state-session-payload payload))
+         (let ((text (utf8->string payload)))
+-          (schema-shape! message)
++      (schema-shape! host message)
+           (let ((evidence (scalar-token-evidence text message)))
+             (validate-message! message evidence)
+             (%make-peer-message 'surface message))))))
+@@ -1307,7 +1333,9 @@
+                        ((take-complete-payload! endpoint)
+                         =>
+                         (lambda (payload)
+-                          (let ((message (decode-peer-payload payload)))
++                          (let ((message
++                                 (decode-peer-payload
++                                  (session-endpoint-host endpoint) payload)))
+                             ((decoded-message-hook) endpoint message)
+                             (let ((committed
+                                    (dispatch-if-current!
+@@ -1622,7 +1650,11 @@
+      (let ((session (session-endpoint-session endpoint)))
+        (require-active! session)
+        (bounded-string! "action_id" action-id max-opaque-id-bytes)
+-       (bounded-string! "text" text max-action-text-bytes)
++       (bounded-endpoint-text!
++        (session-endpoint-host endpoint) "text" text
++        (if (host-state-text-actions? (session-endpoint-host endpoint))
++            max-state-text-bytes
++            max-action-text-bytes))
+        (when (>= (length (session-pending session)) max-pending-requests)
+          (session-error 'state "pending request limit reached"))
+        (when (>= (session-sequence session) max-sequence)

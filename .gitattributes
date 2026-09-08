@@ -1,2 +1,11 @@
-# Unified-diff context prefixes source tabs with a mandatory space.
-pinenote/patches/*.patch whitespace=-space-before-tab,-blank-at-eol
+# Unified-diff context prefixes tabs and empty lines with a mandatory space;
+# an empty context line may also be the patch's final line.
+pinenote/patches/*.patch whitespace=-space-before-tab,-blank-at-eol,-blank-at-eof
+pinenote/tools/**/*.patch whitespace=-space-before-tab,-blank-at-eol,-blank-at-eof
+
+# Authenticated command logs retain the command's trailing blank lines.
+pinenote/tools/book-state-guest/source-packets/**/*.log whitespace=-blank-at-eof
+
+# Frozen evidence uses '=' section underlines of up to 44 characters.
+pinenote/tools/book-source-check/frozen-source-metadata/native-v2/SNAPSHOT.txt conflict-marker-size=64
+pinenote/tools/book-state-reader-join/accepted-provenance/native-v2-review-packet.txt conflict-marker-size=64

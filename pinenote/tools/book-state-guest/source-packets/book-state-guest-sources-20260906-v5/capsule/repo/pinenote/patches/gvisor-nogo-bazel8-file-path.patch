@@ -1,0 +1,18 @@
+From: wilkbook packaging
+Subject: build: pass the stdlib go.mod path to nogo
+
+Bazel 8's string representation of a File is diagnostic text such as
+"<source file src/go.mod>", not an executable-relative path.  Pass the File's
+path property to the existing, still-enabled standard-library analysis.
+
+--- a/tools/nogo/defs.bzl
++++ b/tools/nogo/defs.bzl
+@@ -70,7 +70,7 @@ def _nogo_stdlib_impl(ctx):
+     go_ctx, args, inputs, raw_findings = _nogo_config(ctx, deps = [])
+ 
+     # GOVERSION of std is set by the std go.mod.
+-    args.append("-GOVERSION-mod-file=%s" % go_ctx.stdlib_mod)
++    args.append("-GOVERSION-mod-file=%s" % go_ctx.stdlib_mod.path)
+ 
+     # Build the analyzer command.
+     facts_file = ctx.actions.declare_file(ctx.label.name + ".facts")

@@ -1,0 +1,219 @@
+BOOK STATE NATIVE INTEGRATION — NI-1/NI-2 CORRECTION PACKET V2
+Date: 2026-09-06
+Disposition requested: focused source-exact/native lost-ack re-review
+
+OUTCOME
+=======
+
+V2 closes the two finite blockers in the 2026-09-06 adversarial review without
+changing the accepted backend, protocol, adapter, Book Session, state delegate,
+book execution guest, reader/UI fixture, or completion observer.
+
+NI-1: the gate now executes a private read-only copy of one fixed snapshot only
+after authenticating its exact roster, complete project-source closure, packet
+manifest, and hard-coded accepted cores.  The previously omitted Python codec
+and Scheme blocking-I/O helper are included.  Source/hash paths are not caller
+choices.  Python uses an exact-path codec loader under -I -S; project Scheme
+compiled origins are checked.
+
+NI-2: v1's two-language scenario is correctly retained as acknowledged
+persisted-receipt replay.  A separate joined scenario now commits through the
+real adapter, drops the connection before the worker can publish its result,
+observes EOF/process death plus durable SQLite value/receipt, and retries the
+same operation through a fresh authority and book without another commit.
+
+REVIEW PROVENANCE — NOT A MACHINE-GATE INPUT
+============================================
+
+Adversarial review:
+  doc/reviews/2026-09-06-book-state-native-integration-adversarial.md
+  16469cd08f246743caa4b0e3524cba3080cd75603fc84512f7f7a678f0998877
+
+The mutable review path is provenance only.  No test or runner loads it.
+
+Historical v1 remains byte-for-byte unchanged:
+  review packet
+    02bd736c7dd6954837ab1053b2d91692d60a723a4ede5fb80499ce2d06bac777
+  source snapshot MANIFEST.sha256
+    42053ee2907648aac4334b75bf26cc19c63f11984128705963aeae43bcdd9ffe
+  raw host log
+    23392544b6a1339b3548a19247ad1d74eec63fb7fb8c975cc1e0f96b97a2724d
+
+FIXED ACCEPTED EXECUTABLE INPUTS
+================================
+
+  backend
+    7c3a507d8f10bef6dc81683a5459464aa99378a762fe1d407fa44b749f28dab9
+  schema-v1.sql
+    70db8c3c6782a0b8d383f33c37fed06b2b67bd9f6915e21a9d7dacf042c97bdb
+  Scheme Book Protocol codec
+    91f121adea358e198fac68aa399dec0b5d1f35df32d1f9f0dca42ccda8cefd44
+  Scheme Book Protocol blocking I/O
+    543570769d1f1cb3818c6c1bbdbca0025e1f865807f211ace043db42a30baccd
+  Python Book Protocol codec
+    4e2423e09291d29758a6441d460ee2abfb82f24ed589f477ad62021c95ebe735
+  operation-ID helper
+    dab6c72bd6f22fab7ae15b25ed415bb3564eb7f974740e9cf27352a7525870ee
+  state protocol
+    425ccc468b49f126c561d029d5c4aa61e73d6cc807cfb15e464067f31d7f7257
+  backend adapter
+    349c960b63981b1ed39d8fc99b95dafaba2040623463a11a04878c8ac933f769
+  Book Session
+    f0e2a0432ed6391806099ca791fa66b65cc3beb36df7a5f31d9cb959ab65a301
+  state delegate
+    eca58675dfd91615ae8695ca676d81ec7565311b076aebc1b79e3c6a665b2ca6
+  channels.scm
+    661e28e46437fd1e09d7f2482d15b4c6797edf1e157982cbdd1f3516d296b2f1
+
+V2 SOURCE-EXACT SNAPSHOT
+========================
+
+Path:
+  pinenote/tools/book-state-integration/build/artifacts/
+    book-state-native-integration-sources-20260906-v2/
+
+Snapshot MANIFEST.sha256 identity:
+  261b5f018af7c00afe8b3b8db81c42e14bd4efde85ac85a465a459f2ce89013f
+Executable SOURCE-IDENTITIES.sha256 identity:
+  45f37e2fa154fb8593c7d0fc178c5d1b4a443dd7b2316dcddae1680ed86759f2
+Exact PACKET-ROSTER.txt identity:
+  7594bb800f5dba727ecfdd6a555cd779520bc0ca53efed0db42596de6c98bc66
+
+The roster has 29 regular files and no symlink/special-file allowance.  The
+source manifest includes all 25 executable project inputs: accepted Scheme and
+Python codecs/helpers, backend/schema, protocol/adapter, Book Session/delegate,
+channels, integration module, authorities, books, test factories/oracles,
+manifest, inner runner, source gate, exact Python loader, and Scheme origin
+checker.  MANIFEST.sha256 binds those plus SNAPSHOT.txt, PACKET-ROSTER.txt, and
+SOURCE-IDENTITIES.sha256; its own identity is hard-coded by the outer runner.
+
+Live candidate source register:
+  SOURCE-IDENTITIES.sha256
+    69df121f48e203a9577d29dc61c3a4b64bec934acd104cc74298c6541957056c
+Outer runner:
+  run-host-tests.sh
+    3221517730e58671046e5cdbae01aa0491a5bca1c4fb808bf1ea328d728c1bcd
+Inner snapshot runner:
+  run-host-tests-inner.sh
+    3c364301afb5d50aa57a3449e133fdb765ed9ea5fe27b238f3375ecfe77c36c1
+Source verifier:
+  verify-source-snapshot.sh
+    3d27101a9c0e5418b49bbe3d1005a7e18b405771ab98ad6166640f03ef7553c7
+Exact Python loader:
+  python-fixture-launcher.py
+    f791c8c1a6d8d9794bf8114a41a89b3b08102e9168bf6a321bce6235b13cb16f
+
+The outer runner accepts no arguments.  It hard-codes the snapshot location and
+three snapshot identities, verifies every repository snapshot file, copies it
+to a private run root, sets directories/files to 0500/0400, and invokes the
+copied authenticated verifier.  Only that copy is compiled/executed.  Legacy
+BOOK_SESSION_STATE_* selectors are explicitly removed before the inner runner.
+The verifier's sole argument is the snapshot root; accepted hashes are literals.
+
+The pinned Guix shell clears GUILE_LOAD_PATH, GUILE_LOAD_COMPILED_PATH,
+PYTHONPATH, PYTHONHOME, PYTHONSTARTUP, PYTHONUSERBASE, Guix package/build/
+environment overrides, and auto-compilation.  Project Scheme modules compile
+from exact snapshot paths into a private cache.  The runtime origin check names
+the authenticated source and exact private compiled path for all nine project
+modules.  Python fixtures run with -I -S through the exact loader; each native
+phase checks the one exact codec-origin marker in the child log.  No ambient
+site, user .pth, custom cache, or shadow module can select project code.
+
+EXECUTED NI-1 COUNTEREXAMPLES
+=============================
+
+Before any project compile/test, private source copies performed and rejected:
+
+  1. changed accepted book_protocol.py;
+  2. changed accepted (book-protocol blocking-io);
+  3. changed codec plus SOURCE-IDENTITIES entry blessing the changed codec;
+  4. unlisted integration/book_protocol.py shadow module;
+  5. changed Book Session plus legacy caller source/hash environment overrides;
+  6. caller-supplied expected-hash argument.
+
+Every attempt invokes the real source verifier and must fail before creating its
+execution canary.  The ordinary suite is run only after all six counterexamples
+pass.  This is a finite project-source closure gate, not a generic NAR framework.
+
+ACTUAL LOST-ACK EXECUTION
+=========================
+
+The loss book receives its generated Unicode edit only as an ordinary trusted
+host action and submits the ordinary typed state-commit over its Book Session
+socket.  The test-only factory's RUN-OPERATION wrapper calls the exact accepted
+run-state-backend-operation.  After it returns a real receipt, the wrapper holds
+a condition-variable baton before returning to the delegate worker.
+
+While held, an asynchronous accepted close-session! call invalidates/detaches
+under the endpoint mutex, shuts down the socket, revokes without that mutex, and
+waits to join the worker.  Before releasing the baton, the test proves:
+
+  adapter returned a real result:             yes
+  endpoint state:                             closed
+  queued outbound frames:                     0
+  book read after commit:                     EOF
+  book parsed state-committed:                 no
+  exact book process group alive:             no
+  independent read-only SQLite state:         version 1, exact generated text
+  independent SQLite receipt:                 one, expected 0 -> resulting 1
+
+Only after that evidence is published does the Python oracle release the baton;
+close joins the worker and the already-closed endpoint is removed from the host.
+
+A fresh authority and fresh Guile book then receive only the operation ID.  The
+book loads the exact text via state-value and submits that text, operation ID,
+and expected version 0 through Book Session.  It consumes the original
+state-committed (version 1 and exact UTF-8 byte count), rereads current version
+1, and presents the exact receipt summary.  A second SQLite comparison proves
+value/version/one-receipt count unchanged.  Recovery text is absent from retry
+argv/environment.
+
+A third fresh authority/book executes the semantic counterexample: it consumes
+the real state-committed and prints a pretend-loss marker.  Storage/protocol
+replay succeeds, but validate_lost_ack_evidence rejects the loss claim because
+the receipt was consumed.  SQLite remains unchanged.
+
+V2 RAW EXECUTION EVIDENCE
+=========================
+
+Exact command:
+  make -C pinenote/tools/book-state-integration check
+
+Raw bounded log:
+  build/book-state-native-integration-host-check-v2.log
+  2f1dedbf08c3020869005b9b162b9188f63befde1a729bc4f376df0cc5c5c385
+  15,906 bytes, 169 lines, status 0
+
+Observed, with counts increased rather than inherited from v1:
+
+  retained focused real factory/locking assertions:       13 pass, 0 fail
+  retained normal/boundary authority phases:               6
+  retained native Guile/Python books:                       12
+  added loss/retry/semantic-counterexample authorities:     3
+  added native Guile books:                                 3
+  combined fresh authority identities:                      9
+  combined fresh book/session/surface/state-grant identities: 15 each
+  executed source mutation counterexamples:                 6
+  checked Scheme project module origins:                    9
+  actual lost commit SQLite state version/receipt count:     1 / 1
+  retry state version/receipt count after fresh process:     1 / 1
+  acknowledged counterexample rejected as loss:             yes
+  retained 4,096-byte NUL save/reopen/second commit:         pass
+  compiler arity/format warnings:                            0
+  accepted sandbox language closure:                        45, unchanged
+
+The 45-path result does not make this native execution sandboxed.  Native Guile
+is the sole storage authority; Python only launches/checks authorities and reads
+SQLite as an external oracle.  Fixture books see only Book Protocol transports.
+
+EXCLUDED WORK AND CLAIMS
+========================
+
+No accepted backend, protocol, adapter, live Book Session, state delegate,
+accepted book-interaction fixture, backend integration, reader UI, guest, or
+completion-observer source was changed.  No observer was used or duplicated.
+No generic production Python broker was introduced.
+
+No QEMU, runsc, ARM, KOReader, image, kernel, mount, device, deployment,
+staging, commit, push, merge, fetch, or rebase occurred.  Durability remains a
+host-filesystem process restart claim, not physical-power-loss qualification.

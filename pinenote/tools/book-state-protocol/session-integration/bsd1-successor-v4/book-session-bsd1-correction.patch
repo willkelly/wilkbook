@@ -1,0 +1,154 @@
+--- book-session.scm
++++ book-session.scm
+@@ -86,12 +86,28 @@
+ (define max-outbound-frames 8)
+ (define max-outbound-bytes (* max-outbound-frames (+ max-frame-size 4)))
+ (define max-inbound-bytes (+ max-frame-size 4 max-input-bytes-per-pump))
+-(define max-state-outbound-frame-bytes (+ max-state-text-bytes 1024))
++;; guile-json's pinned Unicode mode emits a C0 byte such as NUL as six ASCII
++;; bytes ("\\u0000").  A protocol-valid 4096-byte text can therefore expand
++;; by 6x.  The largest worker response is STATE-VALUE with PRESENT=true and the
++;; largest safe state version.  Its compact JSON has 101 fixed payload bytes,
++;; including the empty quotes around TEXT; framing adds four more bytes.
++(define max-json-bytes-per-state-text-byte 6)
++(define max-state-value-fixed-payload-bytes 101)
++(define max-state-outbound-frame-bytes
++  (+ 4 max-state-value-fixed-payload-bytes
++     (* max-json-bytes-per-state-text-byte max-state-text-bytes)))
+ (define linux-msg-nosignal #x4000)
+ 
+ (define (session-error kind message)
+   (throw 'book-session-error kind message))
+ 
++;; Keep the local reservation honest if either the state schema or the generic
++;; codec bound changes.  One response must fit one codec frame and the complete
++;; bounded output queue; reserving more would reject every valid state request.
++(unless (and (<= max-state-outbound-frame-bytes (+ max-frame-size 4))
++             (<= max-state-outbound-frame-bytes max-outbound-bytes))
++  (session-error 'state "state response reservation exceeds output bounds"))
++
+ ;; Private and parameterized only so tests can inject allocation failure and a
+ ;; cooperative callback.  Normal authority always uses libgcrypt strong random.
+ (define random-token-source
+@@ -1102,48 +1118,85 @@
+               (announce-book-state-session-delegate! delegate message)))
+           (append-outbound-frame-under-owner! endpoint frame))))))
+ 
++(define (invalidate-state-completion-under-owner! endpoint identity delegate
++                                                   reason)
++  ;; This runs while the endpoint mutex is held.  A failed completion therefore
++  ;; closes and detaches this exact lifetime before another input pump can
++  ;; publish a task.  Transport shutdown and trusted revocation remain outside
++  ;; that authority mutex.
++  (and (endpoint-current? endpoint identity)
++       (eq? delegate (endpoint-state-delegate endpoint))
++       (list (close-one-session-transition! endpoint)
++             (detach-state-delegate-under-owner! endpoint reason))))
++
++(define (finish-failed-state-completion! endpoint transition)
++  ;; The local transition is already complete.  Completion is exception-total:
++  ;; even an unexpected transport/revocation failure cannot resurrect the
++  ;; endpoint or escape the sole worker.  The supported trusted callbacks are
++  ;; required to be bounded and total; this catch is containment, not
++  ;; cancellation of a callback that may still commit.
++  (when transition
++    (catch #t
++      (lambda ()
++        (when (car transition)
++          (shutdown-and-close-transport! endpoint))
++        (when (cadr transition)
++          (finish-book-state-session-delegate-close! (cadr transition))))
++      (lambda arguments #f))))
++
+ (define (complete-state-backend-task! endpoint identity delegate operation
+                                       outcome value)
+   ;; The delegate worker calls this after RUN-OPERATION has returned with no
+   ;; authority mutex held.  Reenter once, recheck exact endpoint/delegate
+   ;; lifetime, apply the exact typed result, and queue at most one response.
+-  (let ((close? #f))
+-    (if (eq? outcome 'error)
+-        (set! close? #t)
+-        (catch 'book-state-protocol-error
+-          (lambda ()
+-            (with-endpoint-owner
+-             endpoint
++  (let ((transition #f))
++    (define (invalidate! reason)
++      (set! transition
++            (invalidate-state-completion-under-owner!
++             endpoint identity delegate reason))
++      'closing)
++    (let ((status
++           (catch #t
+              (lambda ()
+-               (cond
+-                ((or (not (endpoint-current? endpoint identity))
+-                     (not (eq? delegate
+-                               (endpoint-state-delegate endpoint))))
+-                 'stale)
+-                ((not (state-output-reservation-available? endpoint))
+-                 (close-book-state-session-delegate-local!
+-                  delegate 'state-output-backpressure)
+-                 (set! close? #t)
+-                 'closing)
+-                (else
+-                 (let ((response
+-                        (apply-book-state-session-backend-result!
+-                         delegate value)))
+-                   (if (book-state-session-delegate-closing? delegate)
+-                       (begin (set! close? #t) 'closing)
+-                       (begin
+-                         (queue-state-response-under-owner!
+-                          endpoint delegate response)
+-                         'queued))))))))
+-          (lambda arguments
+-            ;; Protocol V2 has already invalidated its binding for an
+-            ;; impossible backend result.  Pair that with outer close after
+-            ;; leaving the endpoint authority mutex.
+-            (set! close? #t)
+-            'closing)))
+-    (when close?
+-      (close-session! endpoint))
+-    (if close? 'closed 'complete)))
++               (with-endpoint-owner
++                endpoint
++                (lambda ()
++                  ;; Catch every result/FSM/encoder/queue/invariant failure
++                  ;; while still owning the endpoint.  Local invalidation is
++                  ;; atomic with respect to the next input dispatch.
++                  (catch #t
++                    (lambda ()
++                      (cond
++                       ((or (not (endpoint-current? endpoint identity))
++                            (not (eq? delegate
++                                      (endpoint-state-delegate endpoint))))
++                        'stale)
++                       ((eq? outcome 'error)
++                        (invalidate! 'state-backend-callback-failed))
++                       ((not (state-output-reservation-available? endpoint))
++                        (invalidate! 'state-output-backpressure))
++                       (else
++                        (let ((response
++                               (apply-book-state-session-backend-result!
++                                delegate value)))
++                          (if (book-state-session-delegate-closing? delegate)
++                              (invalidate! 'state-backend-result-closed)
++                              (begin
++                                (queue-state-response-under-owner!
++                                 endpoint delegate response)
++                                'queued))))))
++                    (lambda arguments
++                      (invalidate! 'state-completion-failed))))))
++             (lambda arguments
++               ;; Lock/runtime failures are not expected, but this final
++               ;; containment path still attempts the ordinary total close and
++               ;; never lets an exception escape the worker.
++               (catch #t
++                 (lambda () (close-session! endpoint))
++                 (lambda ignored #f))
++               'closing))))
++      (finish-failed-state-completion! endpoint transition)
++      (if (or transition (eq? status 'closing)) 'closed 'complete))))
+ 
+ (define (output-head-snapshot endpoint identity)
+   (with-endpoint-owner

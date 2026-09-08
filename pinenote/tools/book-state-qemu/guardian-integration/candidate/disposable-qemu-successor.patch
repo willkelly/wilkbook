@@ -1,0 +1,104 @@
+--- a/pinenote/tools/book-execution-spike/disposable-qemu.scm
++++ b/pinenote/tools/book-execution-spike/disposable-qemu.scm
+@@ -1,4 +1,7 @@
+-;;; Trusted Guile outer-QEMU supervisor for the non-shipping execution spike.
++;;; Private successor candidate derived from the accepted disposable-QEMU outer.
++;;; The lifecycle implementation is unchanged.  Three optional integration hooks
++;;; let the Book State seam validate one inherited FD immediately before exec and
++;;; record the exact guardian/direct-child identities without PID/name scans.
+ ;;; Process style follows pinned Guix f250e74dd (direct command vectors,
+ ;;; explicit waitpid, child primitive-exit) and GNU Shepherd 1.0.9 (constructed
+ ;;; environments, CLOEXEC inheritance discipline, process-group TERM/KILL).
+@@ -378,7 +381,7 @@
+   (open-fdes path (logior O_WRONLY O_CREAT O_EXCL O_CLOEXEC) #o600))
+ 
+ (define (exec-owned-child argv environment cwd stdout-path stderr-path
+-                          inherited-ports)
++                          inherited-ports exec-extension)
+   (unless (and (every string? argv) (every string? environment))
+     (runner-error "process argv and environment must be lists of strings"))
+   (let ((stdout-fd (open-output stdout-path))
+@@ -402,6 +405,10 @@
+         (close-fdes stdout-fd)
+         (close-fdes stderr-fd)
+         (mark-inherited-fds-close-on-exec)
++        ;; The default remains "no inherited protocol FD".  A successor caller
++        ;; may provide one child-side validator which runs after the deny-all
++        ;; sweep and must itself clear only its exact reviewed descriptor.
++        (when exec-extension (exec-extension))
+         (environ environment)
+         (apply execl (car argv) argv))
+       (lambda arguments
+@@ -485,7 +492,7 @@
+ 
+ (define (process-guardian-main argv environment cwd stdout-path stderr-path
+                                timeout grace owner-liveness report
+-                               root-liveness-port)
++                               root-liveness-port exec-extension)
+   ;; This process is both the exec child's parent and a Linux child subreaper.
+   ;; Thus TERM/KILL of its exact owned PGID can be followed by bounded reaping
+   ;; of a TERM-resistant descendant rather than leaving that work to PID 1.
+@@ -523,9 +530,9 @@
+                     (close-port-if-open release-read)
+                     (unless (and (char? release) (char=? release #\R))
+                       (primitive-exit 126)))
+-                  (exec-owned-child
+-                   argv environment cwd stdout-path stderr-path
+-                   (list owner-liveness report)))
++                   (exec-owned-child
++                    argv environment cwd stdout-path stderr-path
++                    (list owner-liveness report) exec-extension))
+                 (lambda arguments
+                   (format (current-error-port)
+                           "child process-group setup failed: ~s~%" arguments)
+@@ -608,8 +615,16 @@
+          ((>= (monotonic-seconds) deadline) #f)
+          (else (usleep 20000) (loop)))))))
+ 
+-(define (run-owned-process argv environment cwd stdout-path stderr-path
+-                           timeout grace root-liveness-port)
++(define* (run-owned-process argv environment cwd stdout-path stderr-path
++                            timeout grace root-liveness-port
++                            #:key
++                            (exec-extension #f)
++                            (guardian-observer (lambda (_pid) #t))
++                            (child-observer (lambda (_pid) #t)))
++  (unless (and (or (not exec-extension) (procedure? exec-extension))
++               (procedure? guardian-observer)
++               (procedure? child-observer))
++    (runner-error "invalid process-guardian integration hook"))
+   (let* ((liveness-pipe (cloexec-pipe))
+          (liveness-read (car liveness-pipe))
+          (liveness-write (cdr liveness-pipe))
+@@ -624,9 +639,9 @@
+           (close-port-if-open report-read)
+           (catch #t
+             (lambda ()
+-              (process-guardian-main
+-               argv environment cwd stdout-path stderr-path timeout grace
+-               liveness-read report-write root-liveness-port)
++               (process-guardian-main
++                argv environment cwd stdout-path stderr-path timeout grace
++                liveness-read report-write root-liveness-port exec-extension)
+               (primitive-exit 0))
+             (lambda (key . arguments)
+               (catch #t
+@@ -642,13 +657,16 @@
+           (dynamic-wind
+             (lambda () #t)
+             (lambda ()
++              (guardian-observer guardian)
+               (let ((ready
+                      (wait-guardian-message
+                       report-read
+                       (+ (monotonic-seconds)
+                          guardian-setup-timeout-seconds))))
+-                (match ready
+-                  (('ready pid) (set! owned-group pid))
++                 (match ready
++                   (('ready pid)
++                    (set! owned-group pid)
++                    (child-observer pid))
+                   (('error message) (runner-error message))
+                   (_ (runner-error
+                       (format #f "invalid process guardian setup message: ~s"

@@ -1,0 +1,3 @@
+/tmp/packet/capsule/repo/channels.scm:1:6: warning: channel 'nonguix' is not trusted
+/tmp/packet/capsule/repo/channels.scm:11:6: warning: channel 'saayix' is not trusted
+OUTPUT out /gnu/store/i1ws95jfmvmkjcli5731i1h0ql0k1qn7-system

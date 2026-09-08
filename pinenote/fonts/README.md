@@ -6,6 +6,10 @@ ships**. Everything under `local/` is gitignored.
 
 ## How it works
 
+- On an installed reader, put personal `.otf`/`.ttf` files in `/data/fonts/`.
+  Subdirectories work. Restart KOReader to refresh the font list. The reader
+  searches this persistent directory whether or not the build checkout has
+  locally staged fonts; font files remain private device data.
 - Put font files (`.otf`/`.ttf`) in `pinenote/fonts/local/`. Flat is
   fine; subdirectories work too.
 - If the directory exists and is non-empty at build time,
@@ -14,8 +18,8 @@ ships**. Everything under `local/` is gitignored.
   `reader-session` service points KOReader at it via `EXT_FONT_DIR`
   (KOReader's supported external-font mechanism — the fonts appear in
   its font menu automatically).
-- If the directory is absent or empty, the build proceeds without it —
-  a fresh clone builds fine.
+- If the build-time directory is absent or empty, the build proceeds without
+  the font package; `/data/fonts/` is still searched. A fresh clone builds fine.
 
 The reader-session service also seeds the font defaults on first boot
 (only when no KOReader settings exist yet; it never overwrites choices

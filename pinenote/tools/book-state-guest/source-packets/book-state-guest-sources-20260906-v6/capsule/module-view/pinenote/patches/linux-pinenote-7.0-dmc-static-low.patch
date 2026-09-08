@@ -1,0 +1,685 @@
+devfreq: wilkbook_dmc — static-low DDR frequency for the PineNote (rk3566)
+
+A minimal devfreq driver around the Rockchip DRAM SIP (SMC 0x82000008),
+holding DDR at the firmware table's lowest rate for the life of the boot.
+The SMC sequences are transplanted verbatim from the hardware-proven test
+module (pinenote/tools/ddr-dvfs-test/src/ddr-dvfs-test.c; BSP citations in
+pinenote/tools/ddr-dvfs-test/protocol.md): share-mem 2 pages -> zero ->
+DRAM_INIT -> GET_FREQ_INFO at probe; SET_RATE with the MCU deferral path
+(a1 == -6 -> MCU_START -> 100 ms sleep -> POST_SET_RATE) and a GET_RATE
+verify for every switch.
+
+MEASURED, on this device (doc/artifacts/pinenote-awake-levers-20260806):
+  - DDR ATF version 0x101; firmware table 324/528/780/1056 MHz (the TPL
+    trained all four setpoints);
+  - 324 vs 1056 MHz saves ~24.8 mA in the quiesced bracketed pair
+    (174.4 vs 199.2 mA battery drain, same boot, unplugged);
+  - a switch costs ~107 ms wall on the MCU path, sub-ms actual DRAM
+    stall; memory intact (first switch in this board's history,
+    2026-08-06);
+  - bl31 PRESERVES a non-boot rate across deep suspend/resume, proven on
+    both resumes of the addendum-2 audit -- ddr_after=324 following D1
+    and D2.
+
+ASSUMED (bounded, not measured):
+  - the firmware behaves for any table entry <= the boot rate, not just
+    324 (targets are restricted to exact GET_FREQ_INFO entries via the
+    OPP set, the BSP's own discipline; under powersave only 324 is ever
+    requested);
+  - the share-page re-request on re-probe returns the boot-time region
+    (BSP-documented behavior, protocol.md par.1, exercised by the test
+    module's insmod/rmmod cycles).
+
+Design decisions carried into code:
+  - NO dev_pm_ops, NO opp-suspend, zero switches around suspend.  This
+    explicitly OVERRIDES the earlier design doc's conservative
+    restore-before-suspend rule: the addendum-2 audit measured bl31
+    carrying a non-boot rate through suspend/resume twice, so suspend
+    hooks would only add switches (and EBC exposure) for nothing.
+  - Firmware is the single source of truth for rates: dynamic OPPs from
+    GET_FREQ_INFO, no DT OPP table.  Nothing above the boot rate is
+    registered (no OPP voltage scaling on this rail; boot voltage was
+    chosen for 1056 MHz), and target() refuses it besides.
+  - Built =m with the powersave governor: the ONLY runtime switch is the
+    probe-time drop to 324 MHz, so the pinenote-dmc loader service owns
+    switch timing and quiesces fbcon around modprobe (a switch stalls
+    every AXI master; a stall inside an active EBC frame risks the 25 ms
+    EBC_FRAME_TIMEOUT and terminal poison -- protocol.md par.4).  rmmod
+    restores the boot rate; the operator quiesces the display first.
+  - probe refuses politely (-ENODEV, no devfreq) if the firmware version
+    is below 0x101 or the table is empty, so a foreign or downgraded
+    bl31 costs a log line, not a broken boot.
+
+The dmc DT node carries only the compatible and status: the driver's one
+conduit is the SMC, and policy lives in the firmware table.
+
+Acceptance (next boot): /sys/class/devfreq/*/cur_freq == 324000000 with
+governor powersave, clk_scmi_ddr == 324000000 in clk_summary with the
+reader running, rate still 324 after one deep cycle, dmesg free of
+wilkbook_dmc errors.
+
+Applies on top of (in kernel.scm order): linux-pinenote-7.0-forward-port,
+-bsp-sip-probe, -st-accel-pm, -cpuidle-psci, -vdd-cpu-auto-pfm.
+
+diff --git a/arch/arm64/boot/dts/rockchip/rk3566-pinenote.dtsi b/arch/arm64/boot/dts/rockchip/rk3566-pinenote.dtsi
+index 57384aeef..8750f25b4 100644
+--- a/arch/arm64/boot/dts/rockchip/rk3566-pinenote.dtsi
++++ b/arch/arm64/boot/dts/rockchip/rk3566-pinenote.dtsi
+@@ -28,6 +28,17 @@ rockchip-suspend {
+ 		rockchip,sleep-debug-en = <0x00>;
+ 	};
+ 
++	/*
++	 * Static-low DDR frequency via the DRAM SIP (wilkbook_dmc, built =m
++	 * so the pinenote-dmc loader service controls switch timing around
++	 * an idle EBC).  No resources: the driver's only conduit is the SMC,
++	 * and the firmware's own table is the OPP source.
++	 */
++	dmc: memory-controller {
++		compatible = "wilkbook,rk356x-dmc-sip";
++		status = "okay";
++	};
++
+ 	cpus {
+ 		idle-states {
+ 			entry-method = "psci";
+diff --git a/arch/arm64/configs/pinenote_defconfig b/arch/arm64/configs/pinenote_defconfig
+index 90af4b1f0..2cf5001c1 100755
+--- a/arch/arm64/configs/pinenote_defconfig
++++ b/arch/arm64/configs/pinenote_defconfig
+@@ -460,8 +460,10 @@ CONFIG_CRYPTO_DEV_ROCKCHIP=m
+ ##
+ CONFIG_PM_DEVFREQ=y
+ CONFIG_DEVFREQ_GOV_SIMPLE_ONDEMAND=y
++CONFIG_DEVFREQ_GOV_POWERSAVE=y
+ CONFIG_DEVFREQ_GOV_USERSPACE=m
+ CONFIG_DEVFREQ_GOV_PASSIVE=m
++CONFIG_ARM_WILKBOOK_DMC=m
+ 
+ ##
+ ## file: drivers/devfreq/event/Kconfig
+diff --git a/drivers/devfreq/Kconfig b/drivers/devfreq/Kconfig
+index c999c4a1e..7aeaadf6e 100644
+--- a/drivers/devfreq/Kconfig
++++ b/drivers/devfreq/Kconfig
+@@ -152,6 +152,20 @@ config ARM_RK3399_DMC_DEVFREQ
+ 	  It sets the frequency for the memory controller and reads the usage counts
+ 	  from hardware.
+ 
++config ARM_WILKBOOK_DMC
++	tristate "wilkbook PineNote (rk3566) static-low DMC driver"
++	depends on (ARCH_ROCKCHIP && HAVE_ARM_SMCCC) || \
++		(COMPILE_TEST && HAVE_ARM_SMCCC)
++	select DEVFREQ_GOV_POWERSAVE
++	help
++	  This adds a minimal DEVFREQ driver for the DDR memory controller
++	  of the Pine64 PineNote (rk3566) running the downstream BSP bl31,
++	  driven entirely through the Rockchip DRAM SIP firmware interface.
++	  The firmware's own frequency table provides the OPPs (no DT OPP
++	  table, no voltage scaling, never above the boot rate), and the
++	  powersave governor pins the lowest rate at probe.  Measured on the
++	  wilkbook: ~25 mA saved at 324 vs 1056 MHz.
++
+ config ARM_SUN8I_A33_MBUS_DEVFREQ
+ 	tristate "sun8i/sun50i MBUS DEVFREQ Driver"
+ 	depends on ARCH_SUNXI || COMPILE_TEST
+diff --git a/drivers/devfreq/Makefile b/drivers/devfreq/Makefile
+index 404179d79..2b14ca3f6 100644
+--- a/drivers/devfreq/Makefile
++++ b/drivers/devfreq/Makefile
+@@ -16,6 +16,7 @@ obj-$(CONFIG_ARM_MEDIATEK_CCI_DEVFREQ)	+= mtk-cci-devfreq.o
+ obj-$(CONFIG_ARM_RK3399_DMC_DEVFREQ)	+= rk3399_dmc.o
+ obj-$(CONFIG_ARM_SUN8I_A33_MBUS_DEVFREQ)	+= sun8i-a33-mbus.o
+ obj-$(CONFIG_ARM_TEGRA_DEVFREQ)		+= tegra30-devfreq.o
++obj-$(CONFIG_ARM_WILKBOOK_DMC)		+= wilkbook_dmc.o
+ 
+ # DEVFREQ Event Drivers
+ obj-$(CONFIG_PM_DEVFREQ_EVENT)		+= event/
+diff --git a/drivers/devfreq/wilkbook_dmc.c b/drivers/devfreq/wilkbook_dmc.c
+new file mode 100644
+index 000000000..54b1dcb52
+--- /dev/null
++++ b/drivers/devfreq/wilkbook_dmc.c
+@@ -0,0 +1,542 @@
++// SPDX-License-Identifier: GPL-2.0
++/*
++ * wilkbook_dmc — static-low DDR frequency driver for the Pine64 PineNote
++ * (rk3566, BSP bl31, DDR ATF version 0x101).
++ *
++ * A deliberately minimal devfreq driver around the Rockchip DRAM SIP
++ * (SMC 0x82000008).  The firmware is the single source of truth for the
++ * supported rates: probe reads its table (GET_FREQ_INFO) and registers one
++ * dynamic OPP per entry at or below the boot rate — no DT OPP table, no
++ * regulators, no load monitoring.  Under the powersave governor the ONE
++ * runtime switch is the probe-time drop to the lowest table entry; rmmod
++ * restores the boot rate.  Every SMC call shape is transplanted verbatim
++ * from the hardware-proven test module
++ * (pinenote/tools/ddr-dvfs-test/src/ddr-dvfs-test.c, campaign of
++ * 2026-08-06) whose citations into the Rockchip BSP develop-6.1 tree live
++ * in pinenote/tools/ddr-dvfs-test/protocol.md.
++ *
++ * MEASURED (doc/artifacts/pinenote-awake-levers-20260806, addenda):
++ *  - firmware table 324/528/780/1056 MHz (TPL trained all four);
++ *  - 324 vs 1056 MHz saves ~24.8 mA in the quiesced bracketed pair
++ *    (174.4 vs 199.2 mA battery drain, same boot, unplugged);
++ *  - one switch takes ~107 ms wall time on the MCU deferral path, with a
++ *    sub-millisecond actual DRAM stall;
++ *  - bl31 PRESERVES a non-boot rate across deep suspend/resume (proven on
++ *    both D1 and D2 resumes, addendum 2).
++ *
++ * NO dev_pm_ops, NO opp-suspend, ZERO switches around suspend — an
++ * explicit OVERRIDE of the earlier design doc's conservative
++ * restore-before-suspend rule.  The rule guarded against firmware state
++ * loss that the addendum-2 audit measured out: bl31 carries the rate
++ * through suspend/resume by itself, so any suspend hook would only add
++ * switches (and EBC exposure) for nothing.
++ *
++ * EBC CONSTRAINT: a rate switch stalls every AXI master, and a stall
++ * landing inside an active EBC frame can corrupt the frame or, worst
++ * case, trip the 25 ms EBC_FRAME_TIMEOUT and terminally poison the
++ * display until reboot (protocol.md §4).  The firmware has no display
++ * integration for the EBC (lcdc_type = SCREEN_NULL switches immediately).
++ * This driver therefore performs no switch on its own initiative beyond
++ * the probe-time drop, and the pinenote-dmc loader service quiesces fbcon
++ * (unbind vtcon1, blank fb0) around modprobe so that switch runs against
++ * an idle EBC.  Before rmmod the OPERATOR quiesces the display the same
++ * way — the driver cannot detect display state and does not try.
++ *
++ * NEVER ABOVE THE BOOT RATE: there is no OPP voltage scaling on this
++ * rail; the boot voltage was chosen for the boot rate (1056 MHz), so
++ * every lower setpoint needs less, not more.  Probe registers no OPP
++ * above the boot rate and target() additionally refuses one.
++ */
++
++#include <linux/arm-smccc.h>
++#include <linux/delay.h>
++#include <linux/devfreq.h>
++#include <linux/io.h>
++#include <linux/ktime.h>
++#include <linux/math64.h>
++#include <linux/mm.h>
++#include <linux/module.h>
++#include <linux/mutex.h>
++#include <linux/of.h>
++#include <linux/platform_device.h>
++#include <linux/pm_opp.h>
++#include <linux/slab.h>
++#include <linux/vmalloc.h>
++
++/* include/linux/rockchip/rockchip_sip.h:29-31 (BSP) */
++#define SIP_DRAM_CONFIG			0x82000008
++#define SIP_SHARE_MEM			0x82000009
++
++/* include/linux/rockchip/rockchip_sip.h:86-92 (BSP) */
++#define SIP_RET_SET_RATE_TIMEOUT	-6
++
++/* include/linux/rockchip/rockchip_sip.h:194-206 (BSP, share_page_type_t) */
++#define SHARE_PAGE_TYPE_DDR		2
++
++/* include/soc/rockchip/rockchip_sip.h:10-24 (BSP) */
++#define DRAM_INIT			0x00
++#define DRAM_SET_RATE			0x01
++#define DRAM_ROUND_RATE			0x02
++#define DRAM_GET_RATE			0x05
++#define DRAM_GET_VERSION		0x08
++#define DRAM_POST_SET_RATE		0x09
++#define DRAM_MCU_START			0x0c
++#define DRAM_GET_FREQ_INFO		0x0e
++
++/* rk3568 BSP floor: rockchip_dmc.c:1874; this device reports exactly it */
++#define WILKBOOK_DMC_FW_FLOOR		0x101
++
++/* drivers/devfreq/rockchip_dmc.c:65 (BSP) */
++#define MAX_FREQ_COUNT			6
++/* rk3568 requests 2 pages: rockchip_dmc.c:1884 (BSP) */
++#define DDR_PAGE_NUM			2
++#define DDR_SHARE_SIZE			(DDR_PAGE_NUM * 4096)
++
++/* SCREEN_NULL: include/soc/rockchip/rockchip_dmc.h:19 (BSP) */
++#define SCREEN_NULL			0
++
++/*
++ * Interface-parameter block at offset 0 of the DDR share page —
++ * drivers/devfreq/rockchip_dmc.c:72-98 (BSP), verbatim.
++ */
++struct share_params {
++	u32 hz;
++	u32 lcdc_type;
++	u32 vop;
++	u32 vop_dclk_mode;
++	u32 sr_idle_en;
++	u32 addr_mcu_el3;
++	u32 wait_flag1;
++	u32 wait_flag0;
++	u32 complt_hwirq;
++	u32 update_drv_odt_cfg;
++	u32 update_deskew_cfg;
++	u32 freq_count;
++	u32 freq_info_mhz[MAX_FREQ_COUNT];
++	u32 wait_mode;
++	u32 vop_scan_line_time_ns;
++};
++
++struct wilkbook_dmc {
++	struct device *dev;
++	struct mutex lock;		/* serializes all firmware calls */
++
++	volatile struct share_params *params;	/* mapped share page */
++	void *map_base;			/* base vaddr actually mapped */
++	phys_addr_t share_phys;
++	bool map_is_vmap;		/* vmap() vs ioremap() teardown */
++
++	unsigned long fw_version;	/* DDR ATF version (expect 0x101) */
++	u32 freq_count;
++	u32 freq_mhz[MAX_FREQ_COUNT];
++
++	unsigned long boot_rate;	/* Hz, from GET_RATE at probe */
++	unsigned long cur_rate;		/* Hz, last GET_RATE-verified rate */
++
++	struct devfreq_dev_profile profile;
++	struct devfreq *devfreq;
++};
++
++static struct arm_smccc_res dram_smc(unsigned long a1, unsigned long a2,
++				     unsigned long a3)
++{
++	struct arm_smccc_res res;
++
++	/* sip_smc_dram(): rockchip_sip.c:49-53 via __invoke_sip_fn_smc:38-47 */
++	arm_smccc_smc(SIP_DRAM_CONFIG, a1, a2, a3, 0, 0, 0, 0, &res);
++	return res;
++}
++
++/*
++ * Map the physical share page the firmware handed us.  Logic copied from
++ * the BSP's sip_map() (rockchip_sip.c:130-166): if the page lives inside
++ * the kernel's memory map use a non-cached vmap, otherwise ioremap.  On
++ * the PineNote the bl31 carve-out is outside kernel RAM, so ioremap is
++ * the expected path; both are kept, verbatim from the test module.
++ */
++static void *wilkbook_dmc_map(phys_addr_t start, size_t size, bool *is_vmap)
++{
++	struct page **pages;
++	phys_addr_t page_start;
++	unsigned int page_count;
++	unsigned int i;
++	void *vaddr;
++
++	if (!pfn_valid(__phys_to_pfn(start))) {
++		*is_vmap = false;
++		return ioremap(start, size);
++	}
++
++	page_start = start - offset_in_page(start);
++	page_count = DIV_ROUND_UP(size + offset_in_page(start), PAGE_SIZE);
++
++	pages = kmalloc_array(page_count, sizeof(struct page *), GFP_KERNEL);
++	if (!pages)
++		return NULL;
++	for (i = 0; i < page_count; i++)
++		pages[i] = phys_to_page(page_start + i * PAGE_SIZE);
++
++	vaddr = vmap(pages, page_count, VM_MAP, pgprot_noncached(PAGE_KERNEL));
++	kfree(pages);
++	*is_vmap = true;
++
++	return vaddr ? vaddr + offset_in_page(start) : NULL;
++}
++
++/* v2 GET_RATE: error in a0, rate (Hz) in a1 — clk-ddr.c:140-151 (BSP) */
++static int wilkbook_dmc_read_rate(struct wilkbook_dmc *dmc, u64 *hz)
++{
++	struct arm_smccc_res res;
++
++	res = dram_smc(SHARE_PAGE_TYPE_DDR, 0, DRAM_GET_RATE);
++	if ((long)res.a0) {
++		dev_warn(dmc->dev, "GET_RATE failed a0=%ld a1=0x%lx\n",
++			 (long)res.a0, res.a1);
++		return -EIO;
++	}
++	*hz = res.a1;
++	return 0;
++}
++
++/*
++ * Perform one SET_RATE, BSP-faithfully (rockchip_ddr_set_rate():340-357 +
++ * the dcf_en==2 completion path of rockchip_dmcfreq_wait_complete():
++ * 1140-1186).  Caller holds dmc->lock and has validated the target
++ * against the firmware table (via the OPP set) and the boot-rate ceiling.
++ *
++ * Deliberate differences from the BSP, unchanged from the proven test
++ * module (protocol.md §4):
++ *  - lcdc_type = SCREEN_NULL (no VOP display on this board),
++ *    vop_scan_line_time_ns left 0;
++ *  - the DDR-MCU completion is awaited with a fixed sleep longer than
++ *    the BSP's 85 ms IRQ budget instead of the "complete" IRQ, then
++ *    POST_SET_RATE exactly as both BSP completion paths do.  No SMC is
++ *    made while the MCU sequence may be running.
++ */
++static int wilkbook_dmc_set_rate_locked(struct wilkbook_dmc *dmc,
++					u64 target_hz)
++{
++	struct arm_smccc_res res;
++	ktime_t t0, t1;
++	u64 verify_hz = 0;
++	int ret;
++
++	dmc->params->hz = (u32)target_hz;
++	dmc->params->lcdc_type = SCREEN_NULL;
++	dmc->params->wait_flag1 = 1;
++	dmc->params->wait_flag0 = 1;
++
++	t0 = ktime_get();
++	res = dram_smc(SHARE_PAGE_TYPE_DDR, 0, DRAM_SET_RATE);
++
++	if ((long)res.a0) {
++		dev_err(dmc->dev, "SET_RATE %llu Hz rejected by firmware (a0=%ld)\n",
++			target_hz, (long)res.a0);
++		return -EIO;
++	}
++
++	if ((int)res.a1 == SIP_RET_SET_RATE_TIMEOUT) {
++		/* Asynchronous path: change is executed by the DDR MCU.
++		 * BSP: MCU_START, wait complete IRQ <=85 ms, POST_SET_RATE
++		 * (rockchip_dmc.c:1157-1180).  The only path seen on this
++		 * device (2026-08-06, first switch: MCU, 106.8 ms). */
++		res = dram_smc(0, 0, DRAM_MCU_START);
++		if ((long)res.a0) {
++			dev_err(dmc->dev, "MCU_START failed a0=%ld; issuing POST_SET_RATE to stop MCU\n",
++				(long)res.a0);
++			res = dram_smc(SHARE_PAGE_TYPE_DDR, 0,
++				       DRAM_POST_SET_RATE);
++			if ((long)res.a0)
++				dev_err(dmc->dev, "POST_SET_RATE after failed MCU_START: a0=%ld\n",
++					(long)res.a0);
++			return -EIO;
++		}
++		/* > BSP's wait_time_out_ms = 17*5 = 85 ms (rockchip_dmc.c:1898) */
++		msleep(100);
++		res = dram_smc(SHARE_PAGE_TYPE_DDR, 0, DRAM_POST_SET_RATE);
++		if ((long)res.a0)
++			dev_err(dmc->dev, "POST_SET_RATE error a0=%ld (BSP logs and continues here)\n",
++				(long)res.a0);
++	}
++
++	ret = wilkbook_dmc_read_rate(dmc, &verify_hz);
++	t1 = ktime_get();
++	if (ret) {
++		dev_err(dmc->dev, "GET_RATE verify failed after SET_RATE\n");
++		return ret;
++	}
++
++	if (verify_hz != target_hz) {
++		dev_err(dmc->dev,
++			"VERIFY MISMATCH: wanted %llu Hz, firmware reports %llu Hz\n",
++			target_hz, verify_hz);
++		/* the rate may still have changed — track reality */
++		dmc->cur_rate = verify_hz;
++		return -EREMOTEIO;
++	}
++
++	dmc->cur_rate = verify_hz;
++	dev_info(dmc->dev, "DDR now %llu MHz (%lld us wall)\n",
++		 div_u64(verify_hz, 1000000), ktime_us_delta(t1, t0));
++	return 0;
++}
++
++/* ----------------------------- devfreq --------------------------------- */
++
++static int wilkbook_dmc_target(struct device *dev, unsigned long *freq,
++			       u32 flags)
++{
++	struct wilkbook_dmc *dmc = dev_get_drvdata(dev);
++	struct dev_pm_opp *opp;
++	unsigned long target;
++	int ret = 0;
++
++	opp = devfreq_recommended_opp(dev, freq, flags);
++	if (IS_ERR(opp))
++		return PTR_ERR(opp);
++	target = dev_pm_opp_get_freq(opp);
++	dev_pm_opp_put(opp);
++
++	/* Belt and braces: the OPP set already excludes anything above the
++	 * boot rate (no voltage scaling on this rail — see header). */
++	if (target > dmc->boot_rate)
++		return -EINVAL;
++
++	mutex_lock(&dmc->lock);
++	if (target == dmc->cur_rate) {
++		/* already there — a genuine no-op, no SMC */
++		*freq = target;
++		goto out;
++	}
++	ret = wilkbook_dmc_set_rate_locked(dmc, target);
++	if (!ret)
++		*freq = target;
++out:
++	mutex_unlock(&dmc->lock);
++	return ret;
++}
++
++static int wilkbook_dmc_get_cur_freq(struct device *dev, unsigned long *freq)
++{
++	struct wilkbook_dmc *dmc = dev_get_drvdata(dev);
++	u64 hz;
++	int ret;
++
++	mutex_lock(&dmc->lock);
++	ret = wilkbook_dmc_read_rate(dmc, &hz);
++	if (!ret) {
++		dmc->cur_rate = hz;
++		*freq = hz;
++	}
++	mutex_unlock(&dmc->lock);
++	return ret;
++}
++
++/* ------------------------------ probe ---------------------------------- */
++
++static int wilkbook_dmc_probe(struct platform_device *pdev)
++{
++	struct device *dev = &pdev->dev;
++	struct wilkbook_dmc *dmc;
++	struct arm_smccc_res res;
++	unsigned long added = 0;
++	u64 hz;
++	u32 i;
++	int ret;
++
++	dmc = devm_kzalloc(dev, sizeof(*dmc), GFP_KERNEL);
++	if (!dmc)
++		return -ENOMEM;
++	dmc->dev = dev;
++	mutex_init(&dmc->lock);
++	platform_set_drvdata(pdev, dmc);
++
++	/* 1. DRAM_GET_VERSION — this device reports 0x101 (probe module,
++	 * 2026-08-06); refuse politely below the rk3568 BSP floor. */
++	res = dram_smc(0, 0, DRAM_GET_VERSION);
++	if ((long)res.a0) {
++		dev_info(dev, "no DRAM SIP (GET_VERSION a0=%ld); not binding\n",
++			 (long)res.a0);
++		return -ENODEV;
++	}
++	dmc->fw_version = res.a1;
++	if (dmc->fw_version < WILKBOOK_DMC_FW_FLOOR) {
++		dev_info(dev, "DDR ATF version 0x%lx below floor 0x%x; not binding\n",
++			 dmc->fw_version, WILKBOOK_DMC_FW_FLOOR);
++		return -ENODEV;
++	}
++
++	/* 2. share memory: SIP_SHARE_MEM, 2 pages, type DDR
++	 * (sip_smc_request_share_mem():168-184; rk3568_dmc_init():1884-1891).
++	 * The firmware keeps a static per-type region; re-requesting after a
++	 * previous insmod returns the same region (protocol.md §1). */
++	arm_smccc_smc(SIP_SHARE_MEM, DDR_PAGE_NUM, SHARE_PAGE_TYPE_DDR, 0,
++		      0, 0, 0, 0, &res);
++	if ((long)res.a0) {
++		dev_err(dev, "SHARE_MEM failed a0=%ld\n", (long)res.a0);
++		return -ENODEV;
++	}
++	dmc->share_phys = res.a1;
++	dmc->map_base = wilkbook_dmc_map(dmc->share_phys, DDR_SHARE_SIZE,
++					 &dmc->map_is_vmap);
++	if (!dmc->map_base) {
++		dev_err(dev, "share page map failed (phys 0x%llx)\n",
++			(u64)dmc->share_phys);
++		return -ENOMEM;
++	}
++	dmc->params = (volatile struct share_params *)dmc->map_base;
++	/* BSP zeroes the whole region before DRAM_INIT (rockchip_dmc.c:1891) */
++	memset_io((void __iomem *)dmc->map_base, 0, DDR_SHARE_SIZE);
++
++	/* 3. DRAM_INIT with a zeroed page, exactly as rk3568_dmc_init():1916
++	 * does (rk3568 passes no DT timing — protocol.md §5). */
++	res = dram_smc(SHARE_PAGE_TYPE_DDR, 0, DRAM_INIT);
++	if ((long)res.a0) {
++		dev_err(dev, "DRAM_INIT failed a0=%ld\n", (long)res.a0);
++		ret = -ENODEV;
++		goto err_unmap;
++	}
++
++	/* 4. GET_FREQ_INFO (rockchip_get_freq_info():1196-1211); results in
++	 * the share page, MHz units.  An empty/invalid table is a polite
++	 * refusal: this hardware cannot switch, so don't register devfreq. */
++	res = dram_smc(SHARE_PAGE_TYPE_DDR, 0, DRAM_GET_FREQ_INFO);
++	if ((long)res.a0) {
++		dev_info(dev, "GET_FREQ_INFO failed a0=%ld; not binding\n",
++			 (long)res.a0);
++		ret = -ENODEV;
++		goto err_unmap;
++	}
++	dmc->freq_count = dmc->params->freq_count;
++	if (dmc->freq_count == 0 || dmc->freq_count > MAX_FREQ_COUNT) {
++		dev_info(dev, "firmware freq table empty/invalid (count=%u); not binding\n",
++			 dmc->freq_count);
++		ret = -ENODEV;
++		goto err_unmap;
++	}
++	for (i = 0; i < dmc->freq_count; i++)
++		dmc->freq_mhz[i] = dmc->params->freq_info_mhz[i];
++
++	/* 5. record the boot rate — the restore target and the OPP ceiling */
++	ret = wilkbook_dmc_read_rate(dmc, &hz);
++	if (ret) {
++		dev_err(dev, "cannot read boot rate\n");
++		goto err_unmap;
++	}
++	dmc->boot_rate = hz;
++	dmc->cur_rate = hz;
++
++	/* 6. dynamic OPPs from the firmware table, boot rate as ceiling
++	 * (never above: no voltage scaling on this rail).  u_volt 0: no
++	 * supply is managed. */
++	for (i = 0; i < dmc->freq_count; i++) {
++		unsigned long rate = (unsigned long)dmc->freq_mhz[i] * 1000000;
++
++		if (rate > dmc->boot_rate) {
++			dev_info(dev, "skipping %u MHz (above boot rate)\n",
++				 dmc->freq_mhz[i]);
++			continue;
++		}
++		ret = dev_pm_opp_add(dev, rate, 0);
++		if (ret) {
++			dev_err(dev, "dev_pm_opp_add(%lu) failed: %d\n",
++				rate, ret);
++			goto err_opp;
++		}
++		added++;
++	}
++	if (!added) {
++		/* boot rate below every table entry — should be impossible
++		 * (the boot rate is itself a table entry) */
++		dev_err(dev, "no usable OPP at or below boot rate %lu Hz\n",
++			dmc->boot_rate);
++		ret = -ENODEV;
++		goto err_opp;
++	}
++
++	/* 7. devfreq under the powersave governor: polling_ms 0 (no load
++	 * monitoring — the policy is static), and GOV_START performs the
++	 * single runtime switch down to the lowest OPP right here, inside
++	 * the loader service's fbcon-quiesced window. */
++	dmc->profile.initial_freq = dmc->boot_rate;
++	dmc->profile.polling_ms = 0;
++	dmc->profile.target = wilkbook_dmc_target;
++	dmc->profile.get_cur_freq = wilkbook_dmc_get_cur_freq;
++	dmc->devfreq = devfreq_add_device(dev, &dmc->profile,
++					  DEVFREQ_GOV_POWERSAVE, NULL);
++	if (IS_ERR(dmc->devfreq)) {
++		ret = PTR_ERR(dmc->devfreq);
++		dev_err(dev, "devfreq_add_device failed: %d\n", ret);
++		goto err_opp;
++	}
++
++	dev_info(dev, "DDR ATF 0x%lx, %u rates, boot %lu MHz, now %lu MHz (expect ~25 mA saved at 324 vs 1056)\n",
++		 dmc->fw_version, dmc->freq_count,
++		 dmc->boot_rate / 1000000, dmc->cur_rate / 1000000);
++	return 0;
++
++err_opp:
++	dev_pm_opp_remove_all_dynamic(dev);
++err_unmap:
++	if (dmc->map_is_vmap)
++		vunmap(dmc->map_base - offset_in_page(dmc->share_phys));
++	else
++		iounmap((void __iomem *)dmc->map_base);
++	return ret;
++}
++
++/*
++ * rmmod restores the boot rate.  The switch back is a firmware call like
++ * any other: the OPERATOR must have quiesced the EBC first (reader
++ * stopped, fbcon unbound, EBC idle — the standing campaign discipline);
++ * the driver cannot verify that and does not try.
++ */
++static void wilkbook_dmc_remove(struct platform_device *pdev)
++{
++	struct wilkbook_dmc *dmc = platform_get_drvdata(pdev);
++
++	devfreq_remove_device(dmc->devfreq);
++
++	mutex_lock(&dmc->lock);
++	if (dmc->cur_rate != dmc->boot_rate) {
++		dev_info(dmc->dev, "restoring boot rate %lu MHz (operator has quiesced the EBC)\n",
++			 dmc->boot_rate / 1000000);
++		if (wilkbook_dmc_set_rate_locked(dmc, dmc->boot_rate))
++			dev_err(dmc->dev, "BOOT RATE RESTORE FAILED — DDR is NOT at the boot rate; do not suspend, reboot when convenient\n");
++		else
++			dev_info(dmc->dev, "boot rate restored\n");
++	} else {
++		dev_info(dmc->dev, "already at boot rate %lu MHz\n",
++			 dmc->boot_rate / 1000000);
++	}
++	mutex_unlock(&dmc->lock);
++
++	dev_pm_opp_remove_all_dynamic(dmc->dev);
++
++	if (dmc->map_is_vmap)
++		vunmap(dmc->map_base - offset_in_page(dmc->share_phys));
++	else
++		iounmap((void __iomem *)dmc->map_base);
++	/* the firmware's share-page registration persists until reboot;
++	 * a re-probe reuses it (protocol.md §1) */
++}
++
++static const struct of_device_id wilkbook_dmc_of_match[] = {
++	{ .compatible = "wilkbook,rk356x-dmc-sip" },
++	{ },
++};
++MODULE_DEVICE_TABLE(of, wilkbook_dmc_of_match);
++
++static struct platform_driver wilkbook_dmc_driver = {
++	.probe	= wilkbook_dmc_probe,
++	.remove	= wilkbook_dmc_remove,
++	.driver	= {
++		.name = "wilkbook-dmc",
++		.of_match_table = wilkbook_dmc_of_match,
++	},
++};
++module_platform_driver(wilkbook_dmc_driver);
++
++MODULE_LICENSE("GPL");
++MODULE_AUTHOR("wilkbook");
++MODULE_DESCRIPTION("PineNote rk3566 static-low DDR frequency driver (DRAM SIP)");

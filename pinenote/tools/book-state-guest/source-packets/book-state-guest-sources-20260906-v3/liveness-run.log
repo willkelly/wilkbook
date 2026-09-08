@@ -1,0 +1,10 @@
+%%%% Starting test book-state-guest-liveness-boundary  (Writing full log to "book-state-guest-liveness-boundary.log")
+LIVENESS-TEST stage=cooperative-child-start
+LIVENESS-TEST stage=cooperative-child-complete
+LIVENESS-TEST stage=blocking-waitpid-start
+LIVENESS-TEST stage=blocking-waitpid-complete
+LIVENESS-TEST stage=blocked-revoke-start
+LIVENESS-TEST stage=blocked-revoke-complete
+LIVENESS-TEST stage=blocked-join-start
+LIVENESS-TEST stage=blocked-join-complete
+# of expected passes      18

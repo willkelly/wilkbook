@@ -1,0 +1,41 @@
+Book State completion observer private source packet v1
+Date: 2026-09-06
+Repository base: 50572d7796abdb0928969f4db8836fc5e30aeb58
+Status: review-ready; not independently accepted, installed, live, or UI-joined
+
+Accepted base Book Session:
+f0e2a0432ed6391806099ca791fa66b65cc3beb36df7a5f31d9cb959ab65a301
+
+Candidate Book Session:
+0342e87c665626b01c5318d125d7f96a152e16ebe25cc310499ca92698002c8f
+
+Exact base-to-candidate patch:
+bf93bafc254eafa5ed05b3fad7b86b442f9cc88f6a9254aaf3b2b6cc53726f49
+
+Active source identity manifest:
+dfbd19cbfc3f988992d1042f4f8e3faf30ca8feb15e1638e3073ec1a6a80da9b
+
+Bounded host execution log (outside this packet):
+247895fe7cfe6d8202d03e9498a0c097460f3c3963b68133f4a44dea004d8a76
+
+Successful exact-source gate:
+- compile warnings: 0
+- accepted Book Session: 227/227
+- accepted BSD-1 delegate integration: 61/61
+- focused completion observer: 37/37
+- accepted adapter/backend/SQLite plus one native book process: 37/37
+- exact patch forward reproduction and inverse proof: pass
+- 4,096-NUL delivery and 24,681-byte reservation: pass
+- native book load view excludes guile-sqlite3: pass
+
+The active runner authenticated accepted component copies from the immutable
+native-v1 source snapshot.  Native-v1's own execution evidence remains
+provisional after its independent review identified NI1/NI2 evidence gaps; this
+packet neither repairs nor relies on those execution claims.
+
+The copied runner records the exact tested source but retains its repository-
+relative path assumptions.  Replay it from the active source path named in the
+packet README, not by relocating this artifact directory.
+
+No QEMU, runsc, AArch64 execution, KOReader execution, image work, hardware,
+deployment, staging, commit, push, merge, fetch, or rebase was performed.

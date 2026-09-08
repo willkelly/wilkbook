@@ -1,0 +1,84 @@
+PASS: public channel pin is exact
+PASS: public source-built gVisor package definition is exact
+PASS: OCI successor changes executable policy only by restoring Python -S
+PASS: OCI successor retains "--platform=systrap"
+PASS: OCI successor retains "--network=none"
+PASS: OCI successor retains "--sidecar-usage-policy=strict"
+PASS: OCI successor retains "--sidecar-release-enforcement-policy=always"
+PASS: OCI successor retains "--host-uds=none"
+PASS: OCI successor retains "--directfs=false"
+PASS: OCI successor retains "--pass-fd=3:3"
+PASS: threaded state authority never primitive-forks
+PASS: post-worker runsc launch uses spawn plus the fixed stopped FD adapter
+PASS: adapter reserves FD 3 before integer-owned /dev/null temporaries
+PASS: native exec matrix covers the BSG-1 identity counterexamples
+PASS: non-stopping pre-exec child returns to cooperative cleanup
+PASS: authority has no phase, expected-value, replay, or state-root environment input
+PASS: recovery and save success require typed book-issued completions
+PASS: source order preserves typed receipt before commit-ok before presentation
+PASS: operation and guest clocks are accurately limited to cooperative polling
+PASS: guest success follows writer cleanup, database close/inspection, and sync
+PASS: authority and system share the exact persistent-volume contract
+PASS: ext4 lost+found and private-root mode are explicit
+PASS: system binds the accepted rebased kernel and excludes historical 4d614
+PASS: system selects the public source-built gVisor package, not historical CONTROL
+PASS: fresh-checkout system import graph excludes local-wrapper-dependent systems
+PASS: system manifest makes the cooperative/outer/standalone boundary explicit
+PASS: trusted profile records exact AArch64 guile-sqlite3 and SQLite outputs
+PASS: authority opens only the accepted dedicated private UI adapter
+PASS: system consumes no generated snapshot, live review, or recursive source tree
+PASS: accepted outer guardian and its imported console module are exact
+PASS: accepted outer exposes bounded TERM/KILL/reap and explicit timeout CLI
+PASS: machine handoff requires the hard outer boundary without claiming integration
+PASS: host liveness tests exercise real cooperative and hard-owner boundaries
+PASS: human contract states the same non-fictional deadline boundary
+PASS: candidate roster contains only canonical public and guest source paths
+PASS: accepted reader-join source is exact: joined-note-book.scm
+PASS: accepted reader-join source is exact: joined_note_book.py
+PASS: accepted reader-join source is exact: empty-action-successor/book-session.scm
+PASS: explicit candidate/dependency source manifest passes
+PASS: production-direct-helper: stopped=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9] exec=[0, 1, 2, 3] fd0=/dev/null fd3=socket:[55908343]
+PASS: BSG-1-reviewer-fd3-free-negative: stopped=[0, 1, 2] exec=[0, 1, 2, 3] fd0=/dev/null fd3=socket:[55908348]
+PASS: fd3-initially-occupied: stopped=[0, 1, 2, 3] exec=[0, 1, 2, 3] fd0=/dev/null fd3=socket:[55926663]
+PASS: book-source-already-fd3-stdin-open: stopped=[0, 1, 2, 3] exec=[0, 1, 2, 3] fd0=/dev/null fd3=socket:[55950436]
+PASS: book-source-already-fd3-stdin-closed: stopped=[1, 2, 3] exec=[0, 1, 2, 3] fd0=/dev/null fd3=socket:[55949445]
+PASS: duplicate-book-aliases-closed: stopped=[0, 1, 2, 3, 4] exec=[0, 1, 2, 3] fd0=/dev/null fd3=socket:[55950447]
+PASS: closed-stdout-normalized-without-stderr-overwrite: stopped=[0, 2] exec=[0, 1, 2, 3] fd0=/dev/null fd3=socket:[55950452]
+PASS: closed-stderr-normalized-without-stdout-overwrite: stopped=[0, 1] exec=[0, 1, 2, 3] fd0=/dev/null fd3=socket:[55950457]
+PASS: FD 3 is the sole Book Session capability across native exec
+wrote `/tmp/opencode/book-state-guest-host.BDkKxN/ccache/book-state-guest-authority.go'
+wrote `/tmp/opencode/book-state-guest-host.BDkKxN/ccache/runsc-fd3-exec.go'
+wrote `/tmp/opencode/book-state-guest-host.BDkKxN/ccache/oci-book-bundle.go'
+%%%% Starting test book-state-guest-liveness-boundary  (Writing full log to "book-state-guest-liveness-boundary.log")
+LIVENESS-TEST stage=cooperative-child-start
+LIVENESS-TEST stage=cooperative-child-complete
+LIVENESS-TEST stage=blocking-waitpid-start
+LIVENESS-TEST stage=blocking-waitpid-complete
+LIVENESS-TEST stage=blocked-revoke-start
+LIVENESS-TEST stage=blocked-revoke-complete
+LIVENESS-TEST stage=blocked-join-start
+LIVENESS-TEST stage=blocked-join-complete
+# of expected passes      18
+%%%% Starting test book-state-guest-modules  (Writing full log to "book-state-guest-modules.log")
+# of expected passes      23
+;;; note: source file /tmp/opencode/wilkbook-book-computer/pinenote/systems/pinenote-book-state-reader.scm
+;;;       newer than compiled /home/wkelly/.cache/guile/ccache/3.0-LE-8-4.7/tmp/opencode/wilkbook-book-computer/pinenote/systems/pinenote-book-state-reader.scm.go
+PASS: exact accepted USER_NS kernel object is inherited
+PASS: public official-binary gVisor package is replaced exactly once
+PASS: source-built gVisor package has the intended public identity
+PASS: kernel arguments are inherited
+PASS: initrd constructor is inherited
+PASS: one filesystem is prepended to the accepted root/cgroup graph
+PASS: persistent filesystem has exact mount point/type/options
+PASS: persistent filesystem uses exact label
+PASS: public spike gate is replaced and one volume-preparation service is added
+PASS: accepted 45-path sandbox profile object remains exact
+PASS: only trusted profile and source/build manifests are replaced
+PASS: trusted profile adds only accepted SQLite binding
+PASS: volume preparation waits for the exact file-system service
+PASS: authority waits for volume, udev, and user processes
+PASS: system source boundary is file-by-file and computed
+PASS: finite guest source/provenance checks
+PASS: cooperative guest poll plus hard outer wait/revoke/join containment
+PASS: actual accepted Guile backend/bridge modules and mocked UI transport
+PASS: static Guix system graph (no realization, image, QEMU, runsc, or ARM)

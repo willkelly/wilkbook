@@ -1,0 +1,15 @@
+PASS: all 246 capsule file bytes equal v5
+PASS: all finished-packet directories are mode 0555
+PASS: all finished-packet top-level records are mode 0444
+PASS: repo, metadata, and package-view regular files have exact modes
+PASS: every module-view file has its authenticated roster mode and hash
+PASS: v5-to-v6 capsule delta is exactly nine 0444-to-0555 mode repairs
+MODE-ONLY 0444->0555 module-view/pinenote/tools/gvisor-package/check.sh
+MODE-ONLY 0444->0555 module-view/pinenote/tools/gvisor-package/emit_guix_inputs.py
+MODE-ONLY 0444->0555 module-view/pinenote/tools/gvisor-package/inventory.py
+MODE-ONLY 0444->0555 module-view/pinenote/tools/gvisor-package/offline-check.sh
+MODE-ONLY 0444->0555 module-view/pinenote/tools/gvisor-package/test_inventory.py
+MODE-ONLY 0444->0555 module-view/pinenote/tools/gvisor-package/test_vendor.py
+MODE-ONLY 0444->0555 module-view/pinenote/tools/gvisor-package/vendor-discover.sh
+MODE-ONLY 0444->0555 module-view/pinenote/tools/gvisor-package/vendor_inputs.py
+MODE-ONLY 0444->0555 module-view/pinenote/tools/gvisor-package/vendor_manifest.py

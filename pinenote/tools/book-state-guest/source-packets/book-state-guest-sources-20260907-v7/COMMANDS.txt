@@ -1,0 +1,359 @@
+#!/bin/sh
+# Exact post-freeze v7 replay. Invoke only inside the documented unprivileged
+# networkless namespace with /tmp hiding the ambient checkout and caches. The
+# packet and accepted v6 inputs are read-only; EVIDENCE is the only writable
+# retained bind. This lowers derivations and dry-runs the image but realizes no
+# system, image, kernel, gVisor, QEMU, runsc, ARM, or device output.
+set -eu
+umask 077
+
+: "${FROZEN_PACKET:?}"
+: "${V6_PACKET:?}"
+: "${V6_EVIDENCE:?}"
+: "${EVIDENCE:?}"
+: "${BOOTSTRAP_GUIX:?}"
+: "${PYTHON_BIN:?}"
+: "${V6_REVIEW_DOCUMENT:?}"
+: "${V6_IMAGE_REVIEW_DOCUMENT:?}"
+case "$FROZEN_PACKET:$V6_PACKET:$V6_EVIDENCE:$EVIDENCE:$BOOTSTRAP_GUIX:$PYTHON_BIN:$V6_REVIEW_DOCUMENT:$V6_IMAGE_REVIEW_DOCUMENT" in
+    /*:/*:/*:/*:/gnu/store/*-guix-command:/gnu/store/*-python-*/bin:/*:/*) ;;
+    *) exit 2 ;;
+esac
+[ "$(CDPATH= cd -- "$FROZEN_PACKET" && pwd -P)" = "$FROZEN_PACKET" ]
+[ "$(CDPATH= cd -- "$V6_PACKET" && pwd -P)" = "$V6_PACKET" ]
+[ "$(CDPATH= cd -- "$V6_EVIDENCE" && pwd -P)" = "$V6_EVIDENCE" ]
+[ "$(CDPATH= cd -- "$EVIDENCE" && pwd -P)" = "$EVIDENCE" ]
+[ -z "$(find "$EVIDENCE" -mindepth 1 -print -quit)" ]
+export PATH="$PYTHON_BIN:/usr/bin:/bin"
+
+# Authenticate the finished packet, every mode, and the complete finite v6→v7
+# capsule delta before executing a packet-owned check.
+find "$FROZEN_PACKET" -printf '%P\t%y\t%m\t%n\n' \
+    | LC_ALL=C sort > "$EVIDENCE/final-packet-modes-before.tsv"
+python3 -I -S -B - "$FROZEN_PACKET" "$V6_PACKET" \
+    > "$EVIDENCE/capsule-mode-byte-delta-audit.log" <<'PY'
+from __future__ import annotations
+import hashlib
+from pathlib import Path
+import stat
+import sys
+
+packet = Path(sys.argv[1])
+v6_packet = Path(sys.argv[2])
+capsule = packet / "capsule"
+v6_capsule = v6_packet / "capsule"
+
+def files(root: Path) -> dict[str, Path]:
+    return {
+        path.relative_to(root).as_posix(): path
+        for path in root.rglob("*") if path.is_file()
+    }
+
+def directories(root: Path) -> list[Path]:
+    return [root, *(path for path in root.rglob("*") if path.is_dir())]
+
+def digest(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+new_files = files(capsule)
+old_files = files(v6_capsule)
+assert len(new_files) == 248
+assert len(old_files) == 246
+assert not (set(old_files) - set(new_files))
+
+for directory in directories(packet):
+    info = directory.lstat()
+    assert stat.S_ISDIR(info.st_mode)
+    assert stat.S_IMODE(info.st_mode) == 0o555
+for path in packet.iterdir():
+    if path.is_file():
+        info = path.lstat()
+        assert stat.S_ISREG(info.st_mode) and info.st_nlink == 1
+        assert stat.S_IMODE(info.st_mode) == 0o444
+for path in packet.rglob("*"):
+    info = path.lstat()
+    assert stat.S_ISREG(info.st_mode) or stat.S_ISDIR(info.st_mode)
+    if stat.S_ISREG(info.st_mode):
+        assert info.st_nlink == 1
+
+roster_path = capsule / "metadata/CAPSULE-ROSTER.tsv"
+lines = roster_path.read_text(encoding="utf-8").splitlines()
+assert lines[0] == "path\tsha256\tmode\trole"
+roster: dict[str, tuple[str, int, str]] = {}
+for line in lines[1:]:
+    relative, expected_hash, raw_mode, role = line.split("\t")
+    roster[relative] = (expected_hash, int(raw_mode, 8), role)
+assert len(roster) == 134
+assert list(roster) == sorted(roster)
+for relative, (expected_hash, expected_mode, role) in roster.items():
+    repo_path = capsule / "repo" / relative
+    repo_info = repo_path.lstat()
+    assert stat.S_ISREG(repo_info.st_mode) and repo_info.st_nlink == 1
+    assert stat.S_IMODE(repo_info.st_mode) == 0o444
+    assert digest(repo_path) == expected_hash
+    if role in {"module", "asset"}:
+        view_path = capsule / "module-view" / relative
+        view_info = view_path.lstat()
+        assert stat.S_ISREG(view_info.st_mode) and view_info.st_nlink == 1
+        assert stat.S_IMODE(view_info.st_mode) == expected_mode
+        assert digest(view_path) == expected_hash
+
+expected_changes = {
+    "metadata/CAPSULE-ROSTER.tsv",
+    "metadata/PREPARED.txt",
+    "module-view/pinenote/systems/pinenote-book-state-reader.scm",
+    "module-view/pinenote/tools/book-state-guest/SOURCE-MANIFEST.sha256",
+    "module-view/pinenote/tools/book-state-guest/book-state-guest-authority.scm",
+    "repo/pinenote/systems/pinenote-book-state-reader.scm",
+    "repo/pinenote/tools/book-state-guest/CAPSULE-ROSTER.tsv",
+    "repo/pinenote/tools/book-state-guest/CONTRACT.md",
+    "repo/pinenote/tools/book-state-guest/SOURCE-MANIFEST.sha256",
+    "repo/pinenote/tools/book-state-guest/book-state-guest-authority.scm",
+    "repo/pinenote/tools/book-state-guest/prepare-source-capsule.py",
+    "repo/pinenote/tools/book-state-guest/query-derivation-outputs.scm",
+    "repo/pinenote/tools/book-state-guest/run-prepared.sh",
+    "repo/pinenote/tools/book-state-guest/test-capture-relay-fixture.scm",
+    "repo/pinenote/tools/book-state-guest/test-guest-modules.scm",
+    "repo/pinenote/tools/book-state-guest/test_source.py",
+}
+actual_changes: set[str] = set()
+generated = ["path\tv6-mode\tv7-mode\tv6-sha256\tv7-sha256\tdelta\n"]
+for relative in sorted(set(old_files) | set(new_files)):
+    old_path = old_files.get(relative)
+    new_path = new_files.get(relative)
+    old_hash = digest(old_path) if old_path else "-"
+    new_hash = digest(new_path) if new_path else "-"
+    old_mode = f"{stat.S_IMODE(old_path.lstat().st_mode):04o}" if old_path else "-"
+    new_mode = f"{stat.S_IMODE(new_path.lstat().st_mode):04o}" if new_path else "-"
+    if (old_hash, old_mode) != (new_hash, new_mode):
+        actual_changes.add(relative)
+        delta = "added" if old_path is None else (
+            "bytes-only" if old_mode == new_mode else "bytes-and-mode"
+        )
+        generated.append(
+            f"{relative}\t{old_mode}\t{new_mode}\t{old_hash}\t{new_hash}\t{delta}\n"
+        )
+        if old_path is not None:
+            assert old_mode == new_mode
+        else:
+            assert new_mode == "0444"
+assert actual_changes == expected_changes
+assert "".join(generated).encode() == (packet / "V6-V7-DELTA.tsv").read_bytes()
+
+executables = {
+    relative for relative, (_hash, mode, _role) in roster.items() if mode == 0o555
+}
+assert executables == {
+    "pinenote/tools/gvisor-package/check.sh",
+    "pinenote/tools/gvisor-package/emit_guix_inputs.py",
+    "pinenote/tools/gvisor-package/inventory.py",
+    "pinenote/tools/gvisor-package/offline-check.sh",
+    "pinenote/tools/gvisor-package/test_inventory.py",
+    "pinenote/tools/gvisor-package/test_vendor.py",
+    "pinenote/tools/gvisor-package/vendor-discover.sh",
+    "pinenote/tools/gvisor-package/vendor_inputs.py",
+    "pinenote/tools/gvisor-package/vendor_manifest.py",
+}
+print("PASS: all finished v7 packet directories are mode 0555")
+print("PASS: all finished v7 packet records have authenticated read-only modes")
+print("PASS: all 246 inherited capsule files are mode-stable against v6")
+print("PASS: v6-to-v7 capsule delta is exactly 16 records and two added host checks")
+print("PASS: all nine module-view wrappers retain authenticated mode 0555")
+PY
+python3 -I -S -B \
+    "$FROZEN_PACKET/capsule/repo/pinenote/tools/book-state-guest/check-source-capsule.py" \
+    "$FROZEN_PACKET/capsule" > "$EVIDENCE/capsule-check-positive.log" 2>&1
+(cd "$FROZEN_PACKET" && sha256sum --check --strict PACKET-CONTENTS.sha256) \
+    > "$EVIDENCE/packet-contents-check.log" 2>&1
+(cd "$FROZEN_PACKET" && sha256sum --check --strict SOURCE-SNAPSHOT.sha256) \
+    > "$EVIDENCE/source-snapshot-check.log" 2>&1
+
+# Re-authenticate the accepted v6 packet, its replay, both accepted reviews, and
+# the exact unexecuted image artifact before treating v7 as its successor.
+(cd "$V6_PACKET" && sha256sum --check --strict PACKET-CONTENTS.sha256) \
+    > "$EVIDENCE/v6-packet-preservation.log" 2>&1
+(cd "$V6_PACKET" && sha256sum --check --strict SOURCE-SNAPSHOT.sha256) \
+    >> "$EVIDENCE/v6-packet-preservation.log" 2>&1
+(cd "$V6_EVIDENCE" && sha256sum --check --strict EVIDENCE.sha256) \
+    > "$EVIDENCE/v6-evidence-preservation.log" 2>&1
+[ "$(sha256sum "$V6_PACKET/PACKET-CONTENTS.sha256" | cut -d' ' -f1)" = \
+  5b801df014ccae882f410bf9deeefdbf8973c77f6c7932955108a9b2007e360b ]
+[ "$(sha256sum "$V6_EVIDENCE/EVIDENCE.sha256" | cut -d' ' -f1)" = \
+  c550804a12701d511f2a66afebe3415d67d8f918697ac04b8db38d42f4f2b91a ]
+[ "$(sha256sum "$V6_REVIEW_DOCUMENT" | cut -d' ' -f1)" = \
+  4c1df07a0dd1db655f5668975636bdf7aecc8fee3b755d26823be7b4c89cc4e5 ]
+[ "$(sha256sum "$V6_IMAGE_REVIEW_DOCUMENT" | cut -d' ' -f1)" = \
+  02a4d7adecf9dc36dbd696ea488d00500999cd95d8304a6e76472403281ffa4b ]
+printf '%s  %s\n' \
+  53bee9f09d7b3a12ad5e9bf77f1dd91a1e2416be8ba205f06889becfd00de9d4 \
+  /gnu/store/9yx1xmhf2hnsp6vdwnvvxzqv3i9i9fkz-disk-image \
+  | sha256sum --check --strict > "$EVIDENCE/v6-image-preservation.log" 2>&1
+
+# Pin the BSG-5 repair by removing one executable bit only in a private tmpfs
+# clone. The exact checker must reject it before the full replay.
+cp -a "$FROZEN_PACKET/capsule" /tmp/v7-mode-negative-capsule
+chmod 0444 \
+    /tmp/v7-mode-negative-capsule/module-view/pinenote/tools/gvisor-package/check.sh
+set +e
+python3 -I -S -B \
+    "$FROZEN_PACKET/capsule/repo/pinenote/tools/book-state-guest/check-source-capsule.py" \
+    /tmp/v7-mode-negative-capsule \
+    > "$EVIDENCE/bsg5-negative-combined.log" 2>&1
+negative_status=$?
+set -e
+[ "$negative_status" -eq 1 ]
+grep -Fx \
+    'FAIL: module-view source mode/type is wrong: pinenote/tools/gvisor-package/check.sh' \
+    "$EVIDENCE/bsg5-negative-combined.log" >/dev/null
+printf 'PASS: private execute-bit removal reproduced BSG5 status=1\n' \
+    > "$EVIDENCE/bsg5-negative-status.log"
+
+# Execute source, native FD/liveness/relay, probe syntax, hostile-cache,
+# module-origin, and static-system checks only from this frozen packet.
+sh "$FROZEN_PACKET/capsule/repo/pinenote/tools/book-state-guest/run-prepared.sh" \
+    "$FROZEN_PACKET/capsule" "$BOOTSTRAP_GUIX" \
+    > "$EVIDENCE/frozen-source-native-static.log" 2>&1
+
+# Lower and query the exact v7 system. No output is realized.
+sh "$FROZEN_PACKET/capsule/repo/pinenote/tools/book-state-guest/pinned-guix.sh" \
+    /tmp/system-derive-private "$FROZEN_PACKET/capsule/module-view" \
+    "$FROZEN_PACKET/capsule/package-view" \
+    "$FROZEN_PACKET/capsule/repo/channels.scm" "$BOOTSTRAP_GUIX" repl -q -- \
+    "$FROZEN_PACKET/capsule/repo/pinenote/tools/book-state-guest/derive-system.scm" \
+    > "$EVIDENCE/system-derive.log" 2>&1
+system_drv=$(sed -n 's/^SYSTEM-DERIVATION //p' "$EVIDENCE/system-derive.log")
+[ "$(printf '%s\n' "$system_drv" | grep -c '^/gnu/store/.*-system\.drv$')" -eq 1 ]
+[ "$system_drv" != /gnu/store/kjiz9wzqbdr9p1y3w0ni6qh8hzhqrkp0-system.drv ]
+sh "$FROZEN_PACKET/capsule/repo/pinenote/tools/book-state-guest/pinned-guix.sh" \
+    /tmp/system-output-query-private "$FROZEN_PACKET/capsule/module-view" \
+    "$FROZEN_PACKET/capsule/package-view" \
+    "$FROZEN_PACKET/capsule/repo/channels.scm" "$BOOTSTRAP_GUIX" repl -q -- \
+    "$FROZEN_PACKET/capsule/repo/pinenote/tools/book-state-guest/query-derivation-outputs.scm" \
+    "$system_drv" > "$EVIDENCE/system-output.log" 2>&1
+system_output=$(sed -n 's/^OUTPUT out //p' "$EVIDENCE/system-output.log")
+[ "$(printf '%s\n' "$system_output" | grep -c '^/gnu/store/.*-system$')" -eq 1 ]
+[ "$system_output" != /gnu/store/l1f4jxp3vvr253gdfrq0fy5h6xyb52j1-system ]
+[ ! -e "$system_output" ]
+sh "$FROZEN_PACKET/capsule/repo/pinenote/tools/book-state-guest/pinned-guix.sh" \
+    /tmp/system-query-private "$FROZEN_PACKET/capsule/module-view" \
+    "$FROZEN_PACKET/capsule/package-view" \
+    "$FROZEN_PACKET/capsule/repo/channels.scm" "$BOOTSTRAP_GUIX" repl -q -- \
+    "$FROZEN_PACKET/capsule/repo/pinenote/tools/book-state-guest/query-requisites.scm" \
+    "$system_drv" > "$EVIDENCE/system-requisites.txt" \
+    2> "$EVIDENCE/system-requisites-query.log"
+python3 -I -S -B \
+    "$FROZEN_PACKET/capsule/repo/pinenote/tools/book-state-guest/check-requisites.py" \
+    "$system_drv" "$EVIDENCE/system-requisites.txt" \
+    > "$EVIDENCE/system-requisites-check.log"
+system_requisites=$(wc -l < "$EVIDENCE/system-requisites.txt")
+system_requisites_sha256=$(sha256sum "$EVIDENCE/system-requisites.txt" | cut -d' ' -f1)
+
+# Compute the raw-image derivation/output identity and graph, then perform only
+# a no-substitute dry run. There is deliberately no realization command.
+mkdir -m 700 /tmp/image-private
+for name in home cache config data state tmp empty-path compiled; do
+    mkdir -m 700 "/tmp/image-private/$name"
+done
+image_guix () {
+    /usr/bin/env -i \
+        HOME=/tmp/image-private/home \
+        XDG_CACHE_HOME=/tmp/image-private/cache \
+        XDG_CONFIG_HOME=/tmp/image-private/config \
+        XDG_DATA_HOME=/tmp/image-private/data \
+        XDG_STATE_HOME=/tmp/image-private/state \
+        TMPDIR=/tmp/image-private/tmp PATH=/tmp/image-private/empty-path \
+        LANG=C LC_ALL=C GUILE_AUTO_COMPILE=0 \
+        GUILE_LOAD_PATH="$FROZEN_PACKET/capsule/module-view" \
+        GUILE_LOAD_COMPILED_PATH=/tmp/image-private/compiled \
+        GUILE_EXTENSIONS_PATH= \
+        BOOK_STATE_MODULE_VIEW="$FROZEN_PACKET/capsule/module-view" \
+        BOOK_STATE_PACKAGE_VIEW="$FROZEN_PACKET/capsule/package-view" \
+        "$BOOTSTRAP_GUIX" time-machine \
+          -L "$FROZEN_PACKET/capsule/package-view" \
+          -C "$FROZEN_PACKET/capsule/repo/channels.scm" \
+          --no-substitutes -- system \
+          -L "$FROZEN_PACKET/capsule/package-view" image \
+          --no-grafts --no-substitutes --max-jobs=1 --cores=2 \
+          --target=aarch64-linux-gnu -t raw-with-offset "$@" \
+          "$FROZEN_PACKET/capsule/module-view/pinenote/systems/pinenote-book-state-reader.scm"
+}
+image_guix -d > "$EVIDENCE/image-derive-stdout.log" \
+    2> "$EVIDENCE/image-derive-stderr.log"
+image_drv=$(cat "$EVIDENCE/image-derive-stdout.log")
+[ "$(printf '%s\n' "$image_drv" | grep -c '^/gnu/store/.*-disk-image\.drv$')" -eq 1 ]
+[ "$image_drv" != /gnu/store/p6iwha5axl4s5yi2qb9l76x00cw9vqzg-disk-image.drv ]
+sh "$FROZEN_PACKET/capsule/repo/pinenote/tools/book-state-guest/pinned-guix.sh" \
+    /tmp/image-output-query-private "$FROZEN_PACKET/capsule/module-view" \
+    "$FROZEN_PACKET/capsule/package-view" \
+    "$FROZEN_PACKET/capsule/repo/channels.scm" "$BOOTSTRAP_GUIX" repl -q -- \
+    "$FROZEN_PACKET/capsule/repo/pinenote/tools/book-state-guest/query-derivation-outputs.scm" \
+    "$image_drv" > "$EVIDENCE/image-output.log" 2>&1
+image_output=$(sed -n 's/^OUTPUT out //p' "$EVIDENCE/image-output.log")
+[ "$(printf '%s\n' "$image_output" | grep -c '^/gnu/store/.*-disk-image$')" -eq 1 ]
+[ "$image_output" != /gnu/store/9yx1xmhf2hnsp6vdwnvvxzqv3i9i9fkz-disk-image ]
+[ ! -e "$image_output" ]
+sh "$FROZEN_PACKET/capsule/repo/pinenote/tools/book-state-guest/pinned-guix.sh" \
+    /tmp/image-query-private "$FROZEN_PACKET/capsule/module-view" \
+    "$FROZEN_PACKET/capsule/package-view" \
+    "$FROZEN_PACKET/capsule/repo/channels.scm" "$BOOTSTRAP_GUIX" repl -q -- \
+    "$FROZEN_PACKET/capsule/repo/pinenote/tools/book-state-guest/query-requisites.scm" \
+    "$image_drv" > "$EVIDENCE/image-requisites.txt" \
+    2> "$EVIDENCE/image-requisites-query.log"
+grep -Fx \
+    /gnu/store/61ls988abhyi7lzvm19plffyv580nxc1-linux-pinenote-book-execution-test-7.1.8-pinenote.drv \
+    "$EVIDENCE/image-requisites.txt" >/dev/null
+grep -Fx \
+    /gnu/store/il8gj1gxb3ssqx9iwwyjm7mmz85izzla-gvisor-source-built-20260831.0.drv \
+    "$EVIDENCE/image-requisites.txt" >/dev/null
+grep -F -- '-wilkbook-sandbox-storage-boundary-guile.scm' \
+    "$EVIDENCE/image-requisites.txt" >/dev/null
+grep -F -- '-wilkbook-sandbox-storage-boundary-python.py' \
+    "$EVIDENCE/image-requisites.txt" >/dev/null
+grep -F -- '-wilkbook-book-state-guest-authority.scm' \
+    "$EVIDENCE/image-requisites.txt" >/dev/null
+image_requisites=$(wc -l < "$EVIDENCE/image-requisites.txt")
+image_requisites_sha256=$(sha256sum "$EVIDENCE/image-requisites.txt" | cut -d' ' -f1)
+image_guix --dry-run > "$EVIDENCE/image-prerequisites-dry-run.log" 2>&1
+dry_run_missing=$(grep -c '^  /gnu/store/.*\.drv$' \
+    "$EVIDENCE/image-prerequisites-dry-run.log")
+[ "$dry_run_missing" -gt 0 ]
+[ "$dry_run_missing" -lt 100 ]
+grep -F "$image_drv" "$EVIDENCE/image-prerequisites-dry-run.log" >/dev/null
+if grep -F -e \
+    '/gnu/store/61ls988abhyi7lzvm19plffyv580nxc1-linux-pinenote-book-execution-test-7.1.8-pinenote.drv' \
+    -e '/gnu/store/il8gj1gxb3ssqx9iwwyjm7mmz85izzla-gvisor-source-built-20260831.0.drv' \
+    "$EVIDENCE/image-prerequisites-dry-run.log" >/dev/null; then
+    exit 1
+fi
+[ -e /gnu/store/334ljs8qa7ww8vlg9gpv428bh8yjd1nx-linux-pinenote-book-execution-test-7.1.8-pinenote ]
+[ -e /gnu/store/djgy782a5fjmsfkr6hzff3g953r60c86-gvisor-source-built-20260831.0 ]
+[ ! -e "$system_output" ]
+[ ! -e "$image_output" ]
+
+# Prove the source packet did not change during replay. The sibling evidence is
+# sealed only after this command returns.
+find "$FROZEN_PACKET" -printf '%P\t%y\t%m\t%n\n' \
+    | LC_ALL=C sort > "$EVIDENCE/final-packet-modes-after.tsv"
+cmp "$EVIDENCE/final-packet-modes-before.tsv" \
+    "$EVIDENCE/final-packet-modes-after.tsv"
+cat > "$EVIDENCE/DERIVATIONS.txt" <<EOF
+schema=1
+system-derivation=$system_drv
+system-output=$system_output
+system-requisites=$system_requisites
+system-requisites-sha256=$system_requisites_sha256
+image-derivation=$image_drv
+image-output=$image_output
+image-requisites=$image_requisites
+image-requisites-sha256=$image_requisites_sha256
+image-dry-run-missing-derivations=$dry_run_missing
+kernel-output-cached=/gnu/store/334ljs8qa7ww8vlg9gpv428bh8yjd1nx-linux-pinenote-book-execution-test-7.1.8-pinenote
+gvisor-output-cached=/gnu/store/djgy782a5fjmsfkr6hzff3g953r60c86-gvisor-source-built-20260831.0
+EOF
+printf '%s\n' \
+    'PASS: exact finished v7 packet replay completed without realization' \
+    'PASS: authority relay success and fail-closed matrix ran through accepted owned captures' \
+    'PASS: system and image derivations changed from accepted v6' \
+    'PASS: kernel and gVisor remained cached and absent from the dry-run build list' \
+    'PASS: no image, system, kernel, gVisor, QEMU, runsc, ARM, or device build/run occurred' \
+    > "$EVIDENCE/FINAL-RESULT.txt"

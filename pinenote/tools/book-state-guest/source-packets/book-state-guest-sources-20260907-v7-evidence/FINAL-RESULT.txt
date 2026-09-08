@@ -1,0 +1,5 @@
+PASS: exact finished v7 packet replay completed without realization
+PASS: authority relay success and fail-closed matrix ran through accepted owned captures
+PASS: system and image derivations changed from accepted v6
+PASS: kernel and gVisor remained cached and absent from the dry-run build list
+PASS: no image, system, kernel, gVisor, QEMU, runsc, ARM, or device build/run occurred

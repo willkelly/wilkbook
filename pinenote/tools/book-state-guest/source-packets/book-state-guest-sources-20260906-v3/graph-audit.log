@@ -1,0 +1,5 @@
+system=/gnu/store/nfd0492jbf77bxyp9il9hfv9ck74icgd-system.drv
+requisites=2784
+source-gvisor-derivations=['/gnu/store/il8gj1gxb3ssqx9iwwyjm7mmz85izzla-gvisor-source-built-20260831.0.drv']
+forbidden-matches=[]
+RESULT=PASS_SOURCE_GVISOR_ONLY_NO_LOCAL_OR_MUTABLE_ARTIFACTS

@@ -1,0 +1,8 @@
+PASS: requisites are unique and sorted
+PASS: requisites include system root
+PASS: requisites retain exact USER_NS kernel derivation
+PASS: requisites retain exact source-built gVisor derivation
+PASS: requisites contain exactly one source-built gVisor derivation
+PASS: requisites exclude binary/local/CONTROL/generated/tmp/review inputs
+PASS: requisites contain the exact 2,786-node system graph
+REQUISITES-CHECK count=2786

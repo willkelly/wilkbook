@@ -1,0 +1,32 @@
+--- a/go/private/sdk.bzl
++++ b/go/private/sdk.bzl
+@@ -576,19 +576,16 @@
+     }
+ 
+ def fetch_sdks_by_version(ctx):
+-    ctx.download(
+-        url = [
+-            "https://go.dev/dl/?mode=json&include=all",
+-            "https://golang.google.cn/dl/?mode=json&include=all",
+-        ],
+-        output = "versions.json",
+-    )
+-    data = ctx.read("versions.json")
+-
+-    # module_ctx doesn't have delete, but its files are temporary anyway.
+-    if hasattr(ctx, "delete"):
+-        ctx.delete("versions.json")
+-    return _parse_versions_json(data)
++    # gVisor's offline package supports an x86_64 Linux execution host. Keep
++    # the versions requested by the selected module graph explicit so module
++    # extension evaluation never queries the mutable go.dev release index.
++    return {
++        "1.23.0": {"linux_amd64": ("go1.23.0.linux-amd64.tar.gz", "905a297f19ead44780548933e0ff1a1b86e8327bb459e92f9c0012569f76f5e3")},
++        "1.24.0": {"linux_amd64": ("go1.24.0.linux-amd64.tar.gz", "dea9ca38a0b852a74e81c26134671af7c0fbe65d81b0dc1c5bfe22cf7d4c8858")},
++        "1.24.6": {"linux_amd64": ("go1.24.6.linux-amd64.tar.gz", "bbca37cc395c974ffa4893ee35819ad23ebb27426df87af92e93a9ec66ef8712")},
++        "1.25.0": {"linux_amd64": ("go1.25.0.linux-amd64.tar.gz", "2852af0cb20a13139b3448992e69b868e50ed0f8a1e5940ee1de9e19a123b613")},
++        "1.26.3": {"linux_amd64": ("go1.26.3.linux-amd64.tar.gz", "2b2cfc7148493da5e73981bffbf3353af381d5f93e789c82c79aff64962eb556")},
++    }
+ 
+ def parse_version(version):
+     """Parses a version string like "1.15.5" and returns a tuple of numbers or None"""

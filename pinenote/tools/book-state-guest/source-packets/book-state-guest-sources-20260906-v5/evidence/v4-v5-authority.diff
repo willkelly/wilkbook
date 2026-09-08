@@ -1,0 +1,18 @@
+--- pinenote/tools/book-state-guest/source-packets/book-state-guest-sources-20260906-v4/capsule/repo/pinenote/tools/book-state-guest/book-state-guest-authority.scm	2026-09-06 19:25:46.171954688 -0600
++++ pinenote/tools/book-state-guest/source-packets/book-state-guest-sources-20260906-v5/capsule/repo/pinenote/tools/book-state-guest/book-state-guest-authority.scm	2026-09-06 22:08:34.386541378 -0600
+@@ -924,6 +924,7 @@
+          (python-bundle (string-append work-root "/python")))
+     (generate-guile
+      #:profile-input profile-path
++     #:boundary-probe-input (field config 'guile-boundary-probe)
+      #:book-entry-input (field config 'guile-book)
+      #:protocol-input (field config 'guile-protocol)
+      #:blocking-input (field config 'blocking-protocol)
+@@ -932,6 +933,7 @@
+      #:requisites-runner (lambda (_profile) closure))
+     (generate-python
+      #:profile-input profile-path
++     #:boundary-probe-input (field config 'python-boundary-probe)
+      #:book-entry-input (field config 'python-book)
+      #:protocol-input (field config 'python-protocol)
+      #:bundle-input python-bundle

@@ -1,0 +1,519 @@
+--- book-session.scm
++++ book-session.scm
+@@ -26,10 +26,11 @@
+             max-output-bytes-per-pump
+             max-output-frames-per-pump
+             max-outbound-frames
+-            max-outbound-bytes
+-            make-book-session-host
+-            make-book-session-host-with-state
+-            book-session-host?
++             max-outbound-bytes
++             make-book-session-host
++             make-book-session-host-with-state
++             make-book-session-host-with-state-observer
++             book-session-host?
+             open-session-endpoint!
+             session-endpoint?
+             session-endpoint-diagnostic-name
+@@ -40,9 +41,10 @@
+             endpoint-pump-result?
+             endpoint-pump-result-status
+             endpoint-pump-result-bytes
+-            endpoint-pump-result-frames
+-            endpoint-pump-result-values
+-            release-session-endpoint!
++             endpoint-pump-result-frames
++             endpoint-pump-result-values
++             endpoint-take-state-completion!
++             release-session-endpoint!
+             restart-session!
+             host-action!
+             cancel-request!
+@@ -62,9 +64,18 @@
+             presented-text-request-id
+             presented-text-action-id
+             presented-text-surface-handle
+-            presented-text-surface-generation
+-            presented-text-sequence
+-            presented-text-value))
++             presented-text-surface-generation
++             presented-text-sequence
++             presented-text-value
++             book-state-completion?
++             book-state-completion-session-id
++             book-state-completion-surface-generation
++             book-state-completion-grant-generation
++             book-state-completion-operation-kind
++             book-state-completion-operation-id
++             book-state-completion-expected-state-version
++             book-state-completion-text
++             book-state-completion-response))
+ 
+ (define protocol-version 1)
+ (define max-sessions 8)
+@@ -150,6 +161,74 @@
+ (define (presented-text-value value)
+   (string-copy (%presented-text-value value)))
+ 
++;; One trusted, endpoint-owned observation of a typed backend result.  The
++;; endpoint identity is retained privately and checked by the drain operation;
++;; no peer value can select a recipient.  Operation and response strings are
++;; copied into this record and copied again by public accessors.
++(define-record-type <book-state-completion>
++  (%make-book-state-completion endpoint-identity session-id surface-generation
++                               grant-generation operation-kind operation-id
++                               expected-state-version text response)
++  book-state-completion?
++  (endpoint-identity book-state-completion-endpoint-identity)
++  (session-id %book-state-completion-session-id)
++  (surface-generation book-state-completion-surface-generation)
++  (grant-generation book-state-completion-grant-generation)
++  (operation-kind book-state-completion-operation-kind)
++  (operation-id %book-state-completion-operation-id)
++  (expected-state-version book-state-completion-expected-state-version)
++  (text %book-state-completion-text)
++  (response %book-state-completion-response))
++
++(define (book-state-completion-session-id completion)
++  (string-copy (%book-state-completion-session-id completion)))
++(define (book-state-completion-operation-id completion)
++  (and (%book-state-completion-operation-id completion)
++       (string-copy (%book-state-completion-operation-id completion))))
++(define (book-state-completion-text completion)
++  (and (%book-state-completion-text completion)
++       (string-copy (%book-state-completion-text completion))))
++
++(define (copy-state-authority-response response)
++  (cond
++   ((state-value-message? response)
++    (make-state-value-message
++     (state-value-message-present? response)
++     (state-value-message-state-version response)
++     (state-value-message-text response)))
++   ((state-committed-message? response)
++    (make-state-committed-message
++     (state-committed-message-operation-id response)
++     (state-committed-message-state-version response)
++     (state-committed-message-text-bytes response)))
++   ((state-conflict-message? response)
++    (make-state-conflict-message
++     (state-conflict-message-operation-id response)
++     (state-conflict-message-current-state-version response)))
++   ((state-commit-failed-message? response)
++    (make-state-commit-failed-message
++     (state-commit-failed-message-operation-id response)
++     (state-commit-failed-message-code response)))
++   (else
++    (session-error 'state "state completion response is not an accepted type"))))
++
++(define (book-state-completion-response completion)
++  (copy-state-authority-response
++   (%book-state-completion-response completion)))
++
++(define-record-type <state-completion-reservation>
++  (%make-state-completion-reservation endpoint-identity session-id
++                                      surface-generation)
++  state-completion-reservation?
++  (endpoint-identity state-completion-reservation-endpoint-identity)
++  (session-id state-completion-reservation-session-id)
++  (surface-generation state-completion-reservation-surface-generation))
++
++(define-record-type <failed-state-completion>
++  (%make-failed-state-completion transition)
++  failed-state-completion?
++  (transition failed-state-completion-transition))
++
+ (define (copy-dispatch-result value)
+   (cond
+    ((presented-text? value)
+@@ -202,8 +281,8 @@
+ 
+ (define-record-type <session-endpoint>
+   (%make-session-endpoint host binding session mutex input-owner output-owner
+-                          input-buffer output-queue output-bytes transport-open?
+-                          state-delegate)
++                           input-buffer output-queue output-bytes transport-open?
++                           state-delegate state-completion-slot)
+   session-endpoint?
+   (host session-endpoint-host)
+   (binding session-endpoint-binding)
+@@ -215,8 +294,10 @@
+   (output-queue endpoint-output-queue set-endpoint-output-queue!)
+   (output-bytes endpoint-output-bytes set-endpoint-output-bytes!)
+   (transport-open? endpoint-transport-open?
+-                   set-endpoint-transport-open!)
+-  (state-delegate endpoint-state-delegate set-endpoint-state-delegate!))
++                    set-endpoint-transport-open!)
++  (state-delegate endpoint-state-delegate set-endpoint-state-delegate!)
++  (state-completion-slot endpoint-state-completion-slot
++                         set-endpoint-state-completion-slot!))
+ 
+ (define-record-type <outbound-frame>
+   (%make-outbound-frame bytes offset)
+@@ -236,19 +317,27 @@
+   (map copy-dispatch-result (%endpoint-pump-result-values result)))
+ 
+ (define-record-type <book-session-host>
+-  (%make-book-session-host endpoints mutex state-delegate-factory)
++  (%make-book-session-host endpoints mutex state-delegate-factory
++                           state-completion-observer?)
+   book-session-host?
+   (endpoints host-endpoints set-host-endpoints!)
+   (mutex host-mutex)
+-  (state-delegate-factory host-state-delegate-factory))
++  (state-delegate-factory host-state-delegate-factory)
++  (state-completion-observer? host-state-completion-observer?))
+ 
+ (define (make-book-session-host)
+-  (%make-book-session-host '() (make-mutex) #f))
++  (%make-book-session-host '() (make-mutex) #f #f))
+ 
+ (define (make-book-session-host-with-state factory)
+   (unless (book-state-delegate-factory? factory)
+     (session-error 'state "typed Book State delegate factory required"))
+-  (%make-book-session-host '() (make-mutex) factory))
++  (%make-book-session-host '() (make-mutex) factory #f))
++
++(define (make-book-session-host-with-state-observer factory)
++  "Create a state-enabled host with one trusted completion slot per endpoint."
++  (unless (book-state-delegate-factory? factory)
++    (session-error 'state "typed Book State delegate factory required"))
++  (%make-book-session-host '() (make-mutex) factory #t))
+ 
+ ;; The endpoint records and cleanup shape follow the small conventions in the
+ ;; pinned Shepherd 1.0.9 'endpoints.scm' and Guix e343ff0 'inferior.scm': make
+@@ -555,7 +644,7 @@
+                   (cons 'book-session-endpoint 'identity) socket
+                   (string-copy diagnostic-name))))
+     (%make-session-endpoint host binding session (make-mutex)
+-                            #f #f (make-bytevector 0) '() 0 #t #f)))
++                            #f #f (make-bytevector 0) '() 0 #t #f #f)))
+ 
+ (define (attach-state-delegate! endpoint)
+   ;; The endpoint is not returned to a caller until this finishes.  Grant
+@@ -754,8 +843,180 @@
+ (define (state-output-reservation-available? endpoint)
+   (and (< (length (endpoint-output-queue endpoint)) max-outbound-frames)
+        (<= (+ (endpoint-output-bytes endpoint)
+-              max-state-outbound-frame-bytes)
+-           max-outbound-bytes)))
++               max-state-outbound-frame-bytes)
++            max-outbound-bytes)))
++
++(define (state-completion-observer-enabled? endpoint)
++  (host-state-completion-observer? (session-endpoint-host endpoint)))
++
++(define (reserve-state-completion-under-owner! endpoint)
++  ;; The state FSM's one pending operation is the in-flight reservation.  Once
++  ;; that operation completes, this endpoint-owned marker is atomically replaced
++  ;; by one typed completion.  A caller must drain it before another state
++  ;; request can mutate the FSM; surface traffic remains independent.
++  (and (state-completion-observer-enabled? endpoint)
++       (begin
++         (when (endpoint-state-completion-slot endpoint)
++           (session-error
++            'backpressure "trusted state completion slot is occupied"))
++         (let* ((session (session-endpoint-session endpoint))
++                (identity
++                 (endpoint-binding-identity
++                  (session-endpoint-binding endpoint)))
++                (reservation
++                 (%make-state-completion-reservation
++                  identity (string-copy (session-id session))
++                  (session-generation session))))
++           (set-endpoint-state-completion-slot! endpoint reservation)
++           reservation))))
++
++(define (clear-state-completion-reservation-under-owner! endpoint reservation)
++  (when (and reservation
++             (eq? reservation (endpoint-state-completion-slot endpoint)))
++    (set-endpoint-state-completion-slot! endpoint #f)))
++
++(define (completion-operation-fields identity operation)
++  (cond
++   ((state-read-operation? operation)
++    (unless (eq? (state-read-operation-owner operation) identity)
++      (session-error 'authority
++                     "read completion operation names another endpoint"))
++    (list 'read (state-read-operation-grant-generation operation)
++          #f #f #f))
++   ((state-commit-operation? operation)
++    (unless (eq? (state-commit-operation-owner operation) identity)
++      (session-error 'authority
++                     "commit completion operation names another endpoint"))
++    (list 'commit (state-commit-operation-grant-generation operation)
++          (state-commit-operation-operation-id operation)
++          (state-commit-operation-expected-state-version operation)
++          (state-commit-operation-text operation)))
++   ((state-commit-message? operation)
++    ;; Cached replies are reached only after the accepted state FSM has matched
++    ;; the complete inbound commit against its endpoint-retained binding and
++    ;; prior operation.  The wire record supplies no owner object by design.
++    (list 'commit (state-commit-message-grant-generation operation)
++          (state-commit-message-operation-id operation)
++          (state-commit-message-expected-state-version operation)
++          (state-commit-message-text operation)))
++   (else
++    (session-error 'state
++                   "state completion does not name an accepted operation"))))
++
++(define (validate-completion-response! fields response)
++  (let ((kind (car fields))
++        (operation-id (caddr fields))
++        (expected (cadddr fields))
++        (text (car (cddddr fields))))
++    (case kind
++      ((read)
++       (unless (state-value-message? response)
++         (session-error 'state "read completion has a non-value response")))
++      ((commit)
++       (unless (or (state-committed-message? response)
++                   (state-conflict-message? response)
++                   (state-commit-failed-message? response))
++         (session-error 'state "commit completion has a non-commit response"))
++       (let ((response-operation-id
++              (cond
++               ((state-committed-message? response)
++                (state-committed-message-operation-id response))
++               ((state-conflict-message? response)
++                (state-conflict-message-operation-id response))
++               (else
++                (state-commit-failed-message-operation-id response)))))
++         (unless (string=? operation-id response-operation-id)
++           (session-error 'authority
++                          "completion response names another operation")))
++       (when (state-committed-message? response)
++         (unless (and (= (state-committed-message-state-version response)
++                         (+ expected 1))
++                      (= (state-committed-message-text-bytes response)
++                         (bytevector-length (string->utf8 text))))
++           (session-error
++            'state "committed completion metadata disagrees with operation"))))
++      (else
++       (session-error 'state "unknown state completion operation kind")))))
++
++(define (make-state-completion-under-owner endpoint reservation operation
++                                           response)
++  (let ((identity
++         (endpoint-binding-identity (session-endpoint-binding endpoint)))
++        (session (session-endpoint-session endpoint)))
++    (unless (and (state-completion-reservation? reservation)
++                 (eq? identity
++                      (state-completion-reservation-endpoint-identity
++                        reservation)))
++      (session-error 'authority
++                      "state completion reservation names another endpoint"))
++    (unless (and
++             (string=? (session-id session)
++                       (state-completion-reservation-session-id reservation))
++             (= (session-generation session)
++                (state-completion-reservation-surface-generation reservation)))
++      (session-error 'state
++                     "state completion reservation names a stale surface lifetime"))
++    (let ((fields (completion-operation-fields identity operation)))
++      (validate-completion-response! fields response)
++      (%make-book-state-completion
++       identity
++       (string-copy (state-completion-reservation-session-id reservation))
++       (state-completion-reservation-surface-generation reservation)
++       (cadr fields) (car fields)
++       (and (caddr fields) (string-copy (caddr fields)))
++       (cadddr fields)
++       (let ((text (car (cddddr fields))))
++         (and text (string-copy text)))
++       (copy-state-authority-response response)))))
++
++(define (publish-state-completion-under-owner! endpoint operation response)
++  (when (state-completion-observer-enabled? endpoint)
++    (let ((reservation (endpoint-state-completion-slot endpoint)))
++      (unless (state-completion-reservation? reservation)
++        (session-error 'state
++                       "state completion has no exact observer reservation"))
++      (set-endpoint-state-completion-slot!
++       endpoint
++       (make-state-completion-under-owner
++        endpoint reservation operation response)))))
++
++(define (endpoint-take-state-completion! endpoint)
++  "Return and clear one trusted typed state completion, or #f.
++
++This never performs backend, transport, or UI I/O.  A reservation still owned by
++the worker is not observable.  Close/restart clears the exact endpoint slot."
++  (unless (session-endpoint? endpoint)
++    (error "Book Session endpoint record required"))
++  (unless (state-completion-observer-enabled? endpoint)
++    (session-error 'state "state completion observation is not enabled"))
++  (with-endpoint-owner
++   endpoint
++   (lambda ()
++      (let* ((identity
++              (endpoint-binding-identity
++               (session-endpoint-binding endpoint)))
++             (session (session-endpoint-session endpoint))
++             (completion (endpoint-state-completion-slot endpoint)))
++        (if (and (endpoint-current? endpoint identity)
++                 (book-state-completion? completion)
++                 (eq? identity
++                      (book-state-completion-endpoint-identity completion))
++                 (string=? (session-id session)
++                           (%book-state-completion-session-id completion))
++                 (= (session-generation session)
++                    (book-state-completion-surface-generation completion)))
++            (begin
++              (set-endpoint-state-completion-slot! endpoint #f)
++              completion)
++            (begin
++              ;; A completed result can become stale between publication and
++              ;; trusted polling if the surface generation advances.  It must
++              ;; not retain capacity or cross into the new UI lifetime.  An
++              ;; in-flight reservation remains for the worker's exact stale
++              ;; generation check and fail-close path.
++              (when (book-state-completion? completion)
++                (set-endpoint-state-completion-slot! endpoint #f))
++              #f))))))
+ 
+ (define (append-outbound-frame-under-owner! endpoint frame)
+   (let ((frame-length (bytevector-length frame)))
+@@ -772,12 +1033,35 @@
+      endpoint (+ (endpoint-output-bytes endpoint) frame-length))
+     frame-length))
+ 
+-(define (queue-state-response-under-owner! endpoint delegate response)
++(define (queue-state-response-under-owner! endpoint delegate operation response
++                                           fresh-backend-result?)
+   (let ((frame (encode-state-message response)))
+     (when (> (bytevector-length frame) max-state-outbound-frame-bytes)
+       (session-error 'state "bounded state response exceeded reservation"))
+     (append-outbound-frame-under-owner! endpoint frame)
+-    (note-book-state-session-response-queued! delegate response)))
++    ;; A cached durable receipt was acknowledged when its original response was
++    ;; queued.  Requeueing the same typed response must not re-enter that FSM
++    ;; transition, but it does create a new trusted observation for this exact
++    ;; accepted retry.
++    (when fresh-backend-result?
++      (note-book-state-session-response-queued! delegate response))
++    (publish-state-completion-under-owner! endpoint operation response)))
++
++(define (queue-cached-state-response-under-owner! endpoint delegate operation
++                                                   response)
++  (catch #t
++    (lambda ()
++      (queue-state-response-under-owner!
++       endpoint delegate operation response #f)
++      #f)
++    (lambda arguments
++      ;; Cached response encoding, queueing, validation, or observation failure
++      ;; has the same exception-total local transition as worker completion.
++      (%make-failed-state-completion
++       (invalidate-state-completion-under-owner!
++        endpoint
++        (endpoint-binding-identity (session-endpoint-binding endpoint))
++        delegate 'cached-state-completion-failed)))))
+ 
+ (define (dispatch-decoded! endpoint peer-message)
+   (let ((message (peer-message-value peer-message)))
+@@ -801,16 +1085,26 @@
+          (unless delegate
+            (session-error 'schema
+                           "persistent-state messages are not enabled"))
+-         (unless (state-output-reservation-available? endpoint)
+-           (session-error 'backpressure
+-                          "no bounded output reservation for state result"))
+-         (let ((result
+-                (dispatch-book-state-session-message! delegate message)))
+-           (when (state-delegate-dispatch-result-response result)
+-             (queue-state-response-under-owner!
+-              endpoint delegate
+-              (state-delegate-dispatch-result-response result)))
+-           (list result))))
++          (unless (state-output-reservation-available? endpoint)
++            (session-error 'backpressure
++                           "no bounded output reservation for state result"))
++          (let ((reservation (reserve-state-completion-under-owner! endpoint)))
++            (catch #t
++              (lambda ()
++                (let* ((result
++                        (dispatch-book-state-session-message! delegate message))
++                       (response
++                        (state-delegate-dispatch-result-response result)))
++                  (if response
++                      (let ((failure
++                             (queue-cached-state-response-under-owner!
++                              endpoint delegate message response)))
++                        (if failure failure (list result)))
++                      (list result))))
++              (lambda arguments
++                (clear-state-completion-reservation-under-owner!
++                 endpoint reservation)
++                (apply throw arguments))))))
+       (else (session-error 'schema "unknown decoded peer message kind")))))
+ 
+ (define (endpoint-current? endpoint identity)
+@@ -926,12 +1220,25 @@
+ (define (dispatch-if-current! endpoint identity peer-message)
+   (catch 'book-state-protocol-error
+     (lambda ()
+-      (with-endpoint-owner
+-       endpoint
+-       (lambda ()
+-         (and (endpoint-current? endpoint identity)
+-              (cons 'committed
+-                    (dispatch-decoded! endpoint peer-message))))))
++      (let ((dispatched
++             (with-endpoint-owner
++              endpoint
++              (lambda ()
++                (and (endpoint-current? endpoint identity)
++                     (let ((values
++                            (dispatch-decoded! endpoint peer-message)))
++                       (if (failed-state-completion? values)
++                           values
++                           (cons 'committed values))))))))
++        (if (failed-state-completion? dispatched)
++            (begin
++              ;; Local invalidation happened under the endpoint mutex.  Finish
++              ;; transport shutdown and the one revoke/reap owner only after
++              ;; releasing it, then report no successful dispatch value.
++              (finish-failed-state-completion!
++               endpoint (failed-state-completion-transition dispatched))
++              (session-error 'state "cached state completion failed closed"))
++            dispatched)))
+     (lambda arguments
+       ;; A schema error leaves the pure model live.  Authority/generation or
+       ;; impossible-state failures close it; pair the outer endpoint close and
+@@ -1182,8 +1489,8 @@
+                           (if (book-state-session-delegate-closing? delegate)
+                               (invalidate! 'state-backend-result-closed)
+                               (begin
+-                                (queue-state-response-under-owner!
+-                                 endpoint delegate response)
++                                 (queue-state-response-under-owner!
++                                  endpoint delegate operation response #t)
+                                 'queued))))))
+                     (lambda arguments
+                       (invalidate! 'state-completion-failed))))))
+@@ -1407,10 +1714,11 @@
+                 (set-session-terminal! session terminal)
+                  (set-session-state! session 'revoked)
+                  (let ((open? (endpoint-transport-open? endpoint)))
+-                   (set-endpoint-transport-open! endpoint #f)
+-                   (set-endpoint-output-queue! endpoint '())
+-                   (set-endpoint-output-bytes! endpoint 0)
+-                   (list open?
++                    (set-endpoint-transport-open! endpoint #f)
++                    (set-endpoint-output-queue! endpoint '())
++                    (set-endpoint-output-bytes! endpoint 0)
++                    (set-endpoint-state-completion-slot! endpoint #f)
++                    (list open?
+                          (detach-state-delegate-under-owner!
+                           endpoint 'surface-revoked)))))))))
+     (when (car transition)
+@@ -1437,6 +1745,7 @@
+       (set-endpoint-transport-open! endpoint #f)
+       (set-endpoint-output-queue! endpoint '())
+       (set-endpoint-output-bytes! endpoint 0)
++      (set-endpoint-state-completion-slot! endpoint #f)
+       open?)))
+ 
+ (define (shutdown-and-close-transport! endpoint)

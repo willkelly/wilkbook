@@ -1,0 +1,19 @@
+;; INVALID EXPLANATORY TEMPLATE ONLY.  Production does not trust this file,
+;; a status inside BUNDLE.scm, or a caller-supplied hash.
+;;
+;; The real private bundle is carried beside the frozen review packet, not in
+;; public source.  Its exact closed schema is listed as `metadata-role-fields'
+;; in modules/two-boot/bundle.scm and every value is repeated in the separate
+;; source-pinned modules/two-boot/image-binding.scm authority.
+;; PAYLOAD.sha256 is a required exact bundle member, not a metadata field; its
+;; source-pinned digest occupies reviewed-boot-payload-manifest-sha256 below.
+((schema . INVALID-TEMPLATE)
+ (bundle-id . not-a-production-bundle)
+ (guest-source-manifest-sha256 . omitted)
+ (reviewed-boot-payload-manifest-sha256 . omitted)
+ (image-output-sha256 . omitted)
+ (kernel-image-sha256 . omitted)
+ (initrd-sha256 . omitted)
+ (boot-config-sha256 . omitted)
+ (rootfs-sha256 . omitted)
+ (bundle-manifest-sha256 . not-a-bundle-metadata-field))

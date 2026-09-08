@@ -1,0 +1,11 @@
+FAIL: module-view source mode/type is wrong: pinenote/tools/gvisor-package/check.sh
+PASS: capsule path is canonical
+PASS: capsule top level has only four fixed views
+PASS: metadata roster is read-only regular data
+PASS: capsule roster paths are unique
+PASS: capsule roster paths are sorted
+PASS: repo and metadata carry the same capsule roster
+PASS: repo contains exactly rostered source plus its roster
+PASS: every repo source is mode 0444 with its rostered hash
+PASS: repo roster is immutable regular data
+PASS: positive module view contains exactly modules and relative local-file assets

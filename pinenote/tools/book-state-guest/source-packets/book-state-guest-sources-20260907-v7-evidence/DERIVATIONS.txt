@@ -1,0 +1,12 @@
+schema=1
+system-derivation=/gnu/store/3s4gz8f6i8dkclwbknp2x4ww786wv19p-system.drv
+system-output=/gnu/store/i1ws95jfmvmkjcli5731i1h0ql0k1qn7-system
+system-requisites=2786
+system-requisites-sha256=8c3a82775da2377c51eb4d138d850d981b4ef67973d18e6616f3e9972f2d00c5
+image-derivation=/gnu/store/z714ddhf80rndbx4iz3qs1ys3wwryy5i-disk-image.drv
+image-output=/gnu/store/lsk489hgzszvym56m5pnsbrvf5malhiy-disk-image
+image-requisites=4855
+image-requisites-sha256=d5336e73403344796af1cfcdfb4380a41b14bccb4b1bcec966f3253779c05072
+image-dry-run-missing-derivations=15
+kernel-output-cached=/gnu/store/334ljs8qa7ww8vlg9gpv428bh8yjd1nx-linux-pinenote-book-execution-test-7.1.8-pinenote
+gvisor-output-cached=/gnu/store/djgy782a5fjmsfkr6hzff3g953r60c86-gvisor-source-built-20260831.0

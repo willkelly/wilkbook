@@ -1,0 +1,51 @@
+# Run from this packet directory. All scripts are invoked through their
+# interpreters because frozen source files are deliberately read-only.
+packet=$(pwd -P)
+
+# Authenticate the complete frozen capsule and this evidence packet.
+sha256sum --check --strict SOURCE-SNAPSHOT.sha256
+sha256sum --check --strict EVIDENCE.sha256
+python3 -I -S -B \
+  capsule/repo/pinenote/tools/book-state-guest/check-source-capsule.py \
+  "$packet/capsule"
+
+# Replay source, native FD, liveness, backend, cache-poison, module-origin, and
+# static Guix checks using only the capsule. This does not lower a derivation.
+BOOTSTRAP_GUIX=$(/usr/bin/readlink -f "$(command -v guix)")
+sh capsule/repo/pinenote/tools/book-state-guest/run-prepared.sh \
+  "$packet/capsule" "$BOOTSTRAP_GUIX"
+
+# Recreate and test the capsule from any public fresh candidate checkout.
+# CANDIDATE must be its absolute canonical repository root.
+cd "$CANDIDATE"
+sh pinenote/tools/book-state-guest/run-tests.sh
+
+# Optional authorized derivation-only lowering. PRIVATE must not exist.
+cd "$packet"
+PRIVATE=$(mktemp -d /tmp/opencode/book-state-v4-private.XXXXXX)
+rmdir "$PRIVATE"
+sh capsule/repo/pinenote/tools/book-state-guest/pinned-guix.sh \
+  "$PRIVATE" "$packet/capsule/module-view" "$packet/capsule/package-view" \
+  "$packet/capsule/repo/channels.scm" "$BOOTSTRAP_GUIX" repl -q -- \
+  "$packet/capsule/repo/pinenote/tools/book-state-guest/derive-system.scm"
+# Expected: /gnu/store/qb9s3c1p4xwzfy0i6j2qn084rc2g4wf8-system.drv
+
+# Query that already-computed graph through the same pinned/private repl. A
+# direct caller-environment `guix gc --requisites` is deliberately not used.
+QUERY_PRIVATE=$(mktemp -d /tmp/opencode/book-state-v4-query.XXXXXX)
+rmdir "$QUERY_PRIVATE"
+sh capsule/repo/pinenote/tools/book-state-guest/pinned-guix.sh \
+  "$QUERY_PRIVATE" "$packet/capsule/module-view" \
+  "$packet/capsule/package-view" "$packet/capsule/repo/channels.scm" \
+  "$BOOTSTRAP_GUIX" repl -q -- \
+  "$packet/capsule/repo/pinenote/tools/book-state-guest/query-requisites.scm" \
+  /gnu/store/qb9s3c1p4xwzfy0i6j2qn084rc2g4wf8-system.drv \
+  > /tmp/opencode/book-state-v4-requisites.txt
+python3 -I -S -B \
+  capsule/repo/pinenote/tools/book-state-guest/check-requisites.py \
+  /gnu/store/qb9s3c1p4xwzfy0i6j2qn084rc2g4wf8-system.drv \
+  /tmp/opencode/book-state-v4-requisites.txt
+
+# There is deliberately no image-build or QEMU command. An actual boot remains
+# unsupported until the independent two-boot owner proves the exact 360-second
+# timeout and 5-second TERM grace binding for each QEMU process group.

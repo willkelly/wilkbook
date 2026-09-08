@@ -1,0 +1,313 @@
+Add system-sleep support to the ST accelerometer drivers.
+
+The ST sensor drivers carry no power management at all: struct
+i2c_driver/spi_driver have no .pm, and there is no suspend/resume anywhere
+under drivers/iio/common/st_sensors/ or drivers/iio/accel/st_accel*.
+
+Across a suspend that actually removes power the chip returns at its reset
+defaults.  Everything the driver programmed is gone: ODR, full-scale,
+BDU/DAS, axis enables, the data-ready interrupt enable, and -- the part
+that is easiest to miss -- the interrupt line polarity.
+
+Observed on a Pine64 PineNote (SC7A20 on i2c, level-triggered through the
+rockchip GPIO controller) after its first platform "deep" suspend, and
+confirmed to reproduce on both a 6.12 BSP kernel and 7.0.11 -- i.e. it is
+inherent to the driver, not to one image.
+
+There are two distinct failures, and fixing only the first converts a loud
+one into a silent one:
+
+  a) the interrupt storms.  With a level-triggered DRDY line the threaded
+     handler cannot claim the interrupt, it re-asserts forever, and the
+     kernel's spurious-interrupt protection disables it permanently:
+
+       irq 73: nobody cared (try booting with the "irqpoll" option)
+       CPU: 0 UID: 0 PID: 200 Comm: irq/73-sc7a20-t
+
+  b) the interrupt goes silent.  The chip keeps sampling into an overrun
+     and still looks alive in sysfs -- registers read back fine, raw
+     channels are readable -- while not one interrupt is ever delivered
+     and autorotation is dead.
+
+The fix has four parts:
+
+1. Split the register-programming tail of st_sensors_init_sensor() into
+   st_sensors_reinit_hw(), which touches no mutex initialisation and no
+   device-tree parsing and is therefore safe to repeat.
+
+2. On resume, reprogram from cached state and re-arm DRDY -- latching
+   ->hw_irq_trigger BEFORE calling st_sensors_reinit_hw().  reinit_hw()
+   inherits init_sensor()'s "disable DRDY, this might still be enabled
+   after reboot" step, and st_sensors_set_dataready_irq() assigns
+   ->hw_irq_trigger as a side effect, so a later test of the flag always
+   reads false.  The re-arm is then skipped, DRDY stays off, and
+   st_sensors_irq_thread() returns IRQ_NONE on every interrupt -- failure
+   (a), measured as ~100,000 interrupts in the second after resume.
+
+3. Restore the interrupt polarity in st_sensors_reinit_hw().
+   st_sensors_allocate_trigger() is the only place the active-low bit is
+   ever written and it runs once at probe, so after a power-removing
+   suspend the chip is back to its active-high reset default while the
+   GPIO is still configured IRQ_TYPE_LEVEL_LOW.  The line reads
+   permanently de-asserted -- failure (b).
+
+   Measured on the PineNote (addr_ihl 0x25, mask_ihl 0x02): after a deep
+   cycle 0x25 read back 0x00 and the data-ready IRQ counted 0 in 5 s with
+   STATUS_REG at 0xff (data ready, all axes overrun).  Writing the bit by
+   hand restored exactly 1 Hz, matching the configured ODR, with no storm.
+
+4. Mask the interrupt across the transition with disable_irq()/
+   enable_irq(), so the handler cannot run against a chip that is still at
+   its reset defaults.  A ->pm_irq_disabled flag keeps the pairing exact
+   so the depth counter cannot unbalance if suspend returns early.
+
+A note on (4): an earlier revision carried parts 1 and 4 only and still
+stormed, which was attributed to resume_device_irqs() running at the noirq
+stage, before driver .resume callbacks.  That revision also contained the
+(2) ordering bug, which is sufficient on its own to explain the failure,
+so the noirq argument should be read as unproven motivation for (4)
+rather than as a measured result.  Part 4 is retained because masking a
+level-triggered line across a power-removing transition is correct
+regardless, but the defects actually measured were (2) and (3).
+
+Signed-off-by: (wilkbook -- see doc/upstream-register.md item 8)
+
+diff -u -r a/drivers/iio/accel/st_accel_i2c.c b/drivers/iio/accel/st_accel_i2c.c
+--- a/drivers/iio/accel/st_accel_i2c.c
++++ b/drivers/iio/accel/st_accel_i2c.c
+@@ -207,6 +207,7 @@
+ 		.name = "st-accel-i2c",
+ 		.of_match_table = st_accel_of_match,
+ 		.acpi_match_table = st_accel_acpi_match,
++		.pm = pm_sleep_ptr(&st_sensors_pm_ops),
+ 	},
+ 	.probe = st_accel_i2c_probe,
+ 	.id_table = st_accel_id_table,
+diff -u -r a/drivers/iio/accel/st_accel_spi.c b/drivers/iio/accel/st_accel_spi.c
+--- a/drivers/iio/accel/st_accel_spi.c
++++ b/drivers/iio/accel/st_accel_spi.c
+@@ -175,6 +175,7 @@
+ 	.driver = {
+ 		.name = "st-accel-spi",
+ 		.of_match_table = st_accel_of_match,
++		.pm = pm_sleep_ptr(&st_sensors_pm_ops),
+ 	},
+ 	.probe = st_accel_spi_probe,
+ 	.id_table = st_accel_id_table,
+diff -u -r a/drivers/iio/common/st_sensors/st_sensors_core.c b/drivers/iio/common/st_sensors/st_sensors_core.c
+--- a/drivers/iio/common/st_sensors/st_sensors_core.c
++++ b/drivers/iio/common/st_sensors/st_sensors_core.c
+@@ -354,6 +354,24 @@
+ 			return err;
+ 	}
+ 
++	return st_sensors_reinit_hw(indio_dev);
++}
++EXPORT_SYMBOL_NS(st_sensors_init_sensor, "IIO_ST_SENSORS");
++
++/*
++ * Program every register the sensor needs from cached state in @sdata.
++ *
++ * Split out of st_sensors_init_sensor() so it can also run from resume: a
++ * suspend that removes power leaves the chip at its reset defaults, and
++ * unlike the probe path this touches no mutex initialisation and no
++ * device-tree parsing, so it is safe to repeat.
++ */
++int st_sensors_reinit_hw(struct iio_dev *indio_dev)
++{
++	struct device *parent = indio_dev->dev.parent;
++	struct st_sensor_data *sdata = iio_priv(indio_dev);
++	int err;
++
+ 	err = st_sensors_set_enable(indio_dev, false);
+ 	if (err < 0)
+ 		return err;
+@@ -413,11 +431,142 @@
+ 			return err;
+ 	}
+ 
++	/*
++	 * Restore the interrupt polarity.  st_sensors_allocate_trigger() is
++	 * the only place this is ever programmed, and it runs once at probe,
++	 * so a chip that lost power comes back at its active-high reset
++	 * default while the GPIO is still configured active-low.  The line
++	 * then reads permanently de-asserted and not one interrupt is ever
++	 * delivered again -- the sensor keeps sampling into an overrun and
++	 * looks alive in sysfs while autorotation is silently dead.
++	 *
++	 * Measured on a PineNote (SC7A20, addr_ihl 0x25 mask 0x02): after a
++	 * platform "deep" cycle 0x25 read back 0x00 and the data-ready IRQ
++	 * counted 0/5 s; writing the bit by hand restored exactly 1 Hz,
++	 * matching the configured ODR.
++	 */
++	if (sdata->int_active_low && sdata->sensor_settings->drdy_irq.addr_ihl) {
++		err = st_sensors_write_data_with_mask(indio_dev,
++				sdata->sensor_settings->drdy_irq.addr_ihl,
++				sdata->sensor_settings->drdy_irq.mask_ihl, 1);
++		if (err < 0)
++			return err;
++	}
++
+ 	err = st_sensors_set_axis_enable(indio_dev, ST_SENSORS_ENABLE_ALL_AXIS);
+ 
+ 	return err;
+ }
+-EXPORT_SYMBOL_NS(st_sensors_init_sensor, "IIO_ST_SENSORS");
++EXPORT_SYMBOL_NS(st_sensors_reinit_hw, "IIO_ST_SENSORS");
++
++/*
++ * System sleep support.
++ *
++ * The ST sensor drivers previously had no power management at all.  Across
++ * a suspend that actually removes power (platform "deep" on RK356x, for
++ * example) the chip returns at its reset defaults: the configured ODR,
++ * full-scale, BDU/DAS and axis enables are gone, and crucially the
++ * data-ready interrupt is left in a state the driver never programmed.
++ * With a level-triggered DRDY line the threaded handler then cannot clear
++ * the source, the IRQ re-asserts forever, and the kernel's spurious
++ * interrupt protection disables it permanently:
++ *
++ *   irq NN: nobody cared (try booting with the "irqpoll" option)
++ *
++ * after which the sensor is dead until reboot.  Observed on a Pine64
++ * PineNote (SC7A20 on i2c, level-triggered via rockchip GPIO) on both a
++ * 6.12 and a 7.0 kernel.
++ */
++static int st_sensors_suspend(struct device *dev)
++{
++	struct iio_dev *indio_dev = dev_get_drvdata(dev);
++	struct st_sensor_data *sdata = iio_priv(indio_dev);
++
++	/* Remember what to come back to; set_enable() clears ->enabled. */
++	sdata->pm_enabled = sdata->enabled;
++
++	/*
++	 * Mask the data-ready line for the duration.  This is the load-bearing
++	 * half of the fix, and reprogramming registers on resume is not enough
++	 * without it: resume_device_irqs() runs at the noirq stage, BEFORE
++	 * driver .resume callbacks, so on a suspend that removed power the
++	 * interrupt is re-enabled while the chip sits at reset defaults with
++	 * its level-triggered line asserted.  The threaded handler then runs
++	 * before anything has reconfigured the device, cannot clear the
++	 * source, and the kernel's spurious protection disables the interrupt
++	 * permanently:
++	 *
++	 *   irq NN: nobody cared (try booting with the "irqpoll" option)
++	 *
++	 * Observed on a PineNote 0.7 s after each resume from platform "deep"
++	 * until this bracket was added.
++	 */
++	if (sdata->irq > 0 && !sdata->pm_irq_disabled) {
++		disable_irq(sdata->irq);
++		sdata->pm_irq_disabled = true;
++	}
++
++	if (!sdata->pm_enabled)
++		return 0;
++
++	return st_sensors_set_enable(indio_dev, false);
++}
++
++static int st_sensors_resume(struct device *dev)
++{
++	struct iio_dev *indio_dev = dev_get_drvdata(dev);
++	struct st_sensor_data *sdata = iio_priv(indio_dev);
++	bool want_drdy;
++	int err;
++
++	/*
++	 * Latch this BEFORE st_sensors_reinit_hw().  That helper inherits
++	 * st_sensors_init_sensor()'s "disable DRDY, this might still be
++	 * enabled after reboot" step, and st_sensors_set_dataready_irq()
++	 * assigns ->hw_irq_trigger as a side effect.  Testing the flag
++	 * afterwards therefore always reads false, the re-arm below never
++	 * runs, and enable_irq() unmasks a line the handler can no longer
++	 * claim: st_sensors_irq_thread() takes its "spurious IRQ" branch
++	 * and returns IRQ_NONE every time.  On a level-triggered DRDY that
++	 * is exactly the endless storm this patch exists to prevent.
++	 */
++	want_drdy = sdata->hw_irq_trigger;
++
++	/* The chip may have lost power: reprogram from cached state. */
++	err = st_sensors_reinit_hw(indio_dev);
++	if (err < 0)
++		return err;
++
++	/* Re-arm the data-ready interrupt only when a trigger owns it. */
++	if (want_drdy) {
++		err = st_sensors_set_dataready_irq(indio_dev, true);
++		if (err < 0)
++			return err;
++	}
++
++	if (sdata->pm_enabled) {
++		err = st_sensors_set_enable(indio_dev, true);
++		if (err < 0)
++			return err;
++	}
++
++	/* Only now is it safe to let the handler run again. */
++	if (sdata->pm_irq_disabled) {
++		sdata->pm_irq_disabled = false;
++		enable_irq(sdata->irq);
++	}
++
++	return 0;
++}
++
++/*
++ * Note: EXPORT_NS_*_PM_OPS() stringifies its namespace argument (#ns),
++ * unlike EXPORT_SYMBOL_NS() which takes an already-quoted string.  Passing
++ * "IIO_ST_SENSORS" here would export into the namespace "\"IIO_ST_SENSORS\""
++ * and modpost would reject every importer.
++ */
++EXPORT_NS_SIMPLE_DEV_PM_OPS(st_sensors_pm_ops, st_sensors_suspend,
++			    st_sensors_resume, IIO_ST_SENSORS);
+ 
+ int st_sensors_set_dataready_irq(struct iio_dev *indio_dev, bool enable)
+ {
+diff -u -r a/drivers/iio/common/st_sensors/st_sensors_trigger.c b/drivers/iio/common/st_sensors/st_sensors_trigger.c
+--- a/drivers/iio/common/st_sensors/st_sensors_trigger.c
++++ b/drivers/iio/common/st_sensors/st_sensors_trigger.c
+@@ -156,6 +156,12 @@
+ 				sdata->sensor_settings->drdy_irq.mask_ihl, 1);
+ 			if (err < 0)
+ 				return err;
++			/*
++			 * Remember it: this is the only place the polarity is
++			 * ever programmed, so st_sensors_reinit_hw() has to be
++			 * able to put it back after the chip loses power.
++			 */
++			sdata->int_active_low = true;
+ 			dev_info(parent,
+ 				 "interrupts on the falling edge or active low level\n");
+ 		}
+diff -u -r a/include/linux/iio/common/st_sensors.h b/include/linux/iio/common/st_sensors.h
+--- a/include/linux/iio/common/st_sensors.h
++++ b/include/linux/iio/common/st_sensors.h
+@@ -246,6 +246,14 @@
+ 	struct regmap *regmap;
+ 
+ 	bool enabled;
++	/* ->enabled as it was before a system sleep, for resume. */
++	bool pm_enabled;
++	/* interrupt line is active low; re-applied by st_sensors_reinit_hw()
++	 * because the chip resets it to active high when it loses power. */
++	bool int_active_low;
++	/* set when system suspend masked ->irq, so resume re-enables it
++	 * exactly once and cannot unbalance the depth counter. */
++	bool pm_irq_disabled;
+ 
+ 	unsigned int odr;
+ 	unsigned int num_data_channels;
+@@ -285,6 +293,10 @@
+ int st_sensors_init_sensor(struct iio_dev *indio_dev,
+ 					struct st_sensors_platform_data *pdata);
+ 
++int st_sensors_reinit_hw(struct iio_dev *indio_dev);
++
++extern const struct dev_pm_ops st_sensors_pm_ops;
++
+ int st_sensors_set_enable(struct iio_dev *indio_dev, bool enable);
+ 
+ int st_sensors_set_axis_enable(struct iio_dev *indio_dev, u8 axis_enable);

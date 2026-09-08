@@ -1,0 +1,10 @@
+path	v5-mode	v6-mode	authenticated-roster-mode	sha256
+pinenote/tools/gvisor-package/check.sh	0444	0555	0555	b146c80ef70459b76c0874a909b8bd24d389bc5663c38ef4803e413a886c310a
+pinenote/tools/gvisor-package/emit_guix_inputs.py	0444	0555	0555	d89f961dd8e6bd8579a2ec71d0eefcaf2df34fa99ebf270d2384e39a6d3f62b3
+pinenote/tools/gvisor-package/inventory.py	0444	0555	0555	c3280c7423f58cb8aa3b0002869092e7abf5b12359ed32b634152f6f9508ae76
+pinenote/tools/gvisor-package/offline-check.sh	0444	0555	0555	2c73610649831e6ec7f8960c25ad443bf7755ab0744f9597835c12540ba9c168
+pinenote/tools/gvisor-package/test_inventory.py	0444	0555	0555	9c50415d92c8820dd7a1b49a754467380487ecbd7bbb441c561ed74141a581ef
+pinenote/tools/gvisor-package/test_vendor.py	0444	0555	0555	5ed78adf66dce2a3c9b9518deb93b5849eaf55c16310c47c7d1dec03cd42ec87
+pinenote/tools/gvisor-package/vendor-discover.sh	0444	0555	0555	100ffb5897a7cab8ae627e0629bc9470e5299071081d5d869cead7a894cb4cc8
+pinenote/tools/gvisor-package/vendor_inputs.py	0444	0555	0555	09ff4decc808251487958c3f77e8cff63bbc387b6a134079a9b048ab6e1d1bc7
+pinenote/tools/gvisor-package/vendor_manifest.py	0444	0555	0555	373bf691711da9783fe1ecf46cc56609591fed63830e30040fffe30e2107f17a

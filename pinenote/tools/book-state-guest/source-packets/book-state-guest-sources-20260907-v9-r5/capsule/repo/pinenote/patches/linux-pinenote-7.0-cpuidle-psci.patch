@@ -1,0 +1,76 @@
+arm64: dts: rockchip: add CPU idle-states to the PineNote (rk3566)
+
+RK3566/RK3568 is the gap in Rockchip's own tree: their BSP ships
+cpu idle-states for rk3308, rk3328, rk1808, rk3528, rk3562, rk3576 and
+rk3588, but not for rk356x.  Mainline has none either.  The result is that
+Linux registers no cpuidle driver at all
+(/sys/devices/system/cpu/cpuidle/current_driver reads "none") and the
+cores never leave WFI between events, which is why awake idle on this
+board is a flat ~206 mA floor almost independent of workload.
+
+The firmware supports it.  Read straight off the device from the kernel's
+own PSCI debugfs, which runs psci_features(CPU_SUSPEND) and only reaches
+these lines when it returns >= 0:
+
+    PSCIv1.1
+    SMC Calling Convention v1.2
+    OSI is not supported
+    Original StateID format is used
+
+So CPU_SUSPEND is implemented, the platform-coordinated (non-OSI) mode is
+in force -- which is exactly what a DT arm,psci-suspend-param is for --
+and the Original StateID format is the one Rockchip's parameter encodes.
+PSCI CPU_OFF is also demonstrably live on this board ("psci: CPU3 killed
+(polled 1 ms)" during suspend), so the firmware's CPU power management is
+real rather than stubbed.
+
+The parameter is Rockchip's own, taken from rk3588s.dtsi, which is the
+same Cortex-A55 core as ours; rk3562 uses the identical value.
+0x0010000 decodes in the Original format as StateID 0, bit[16] set =
+PowerDown, affinity level 0 = core.
+
+EXPERIMENTAL.  This is unproven on rk356x by anyone, including Rockchip.
+If the firmware rejects the parameter it returns INVALID_PARAMS and Linux
+simply declines to register the state -- a soft failure.  The bad case is
+firmware accepting it and failing to bring the core back, which wedges the
+device and needs a PMIC long-press.  Boot this with UART attached.
+
+Acceptance: cpuidle/current_driver becomes "psci", the per-state usage
+counters climb, and awake idle drops below the 205.7 mA measured on
+2026-08-05 under an identical 900 s gauge window.
+diff -u -r a/arch/arm64/boot/dts/rockchip/rk3566-pinenote.dtsi b/arch/arm64/boot/dts/rockchip/rk3566-pinenote.dtsi
+--- a/arch/arm64/boot/dts/rockchip/rk3566-pinenote.dtsi
++++ b/arch/arm64/boot/dts/rockchip/rk3566-pinenote.dtsi
+@@ -16,6 +16,21 @@
+ 		status = "okay";
+ 	};
+ 
++	cpus {
++		idle-states {
++			entry-method = "psci";
++
++			CPU_SLEEP: cpu-sleep {
++				compatible = "arm,idle-state";
++				local-timer-stop;
++				arm,psci-suspend-param = <0x0010000>;
++				entry-latency-us = <100>;
++				exit-latency-us = <120>;
++				min-residency-us = <1000>;
++			};
++		};
++	};
++
+ 	aliases {
+ 		mmc0 = &sdhci;
+ 	};
+@@ -917,3 +932,10 @@
+ 		};
+ 	};
+ };
++
++/* Cortex-A55 core power-down idle, one state, platform-coordinated.
++ * See the block comment on the idle-states node above. */
++&cpu0 { cpu-idle-states = <&CPU_SLEEP>; };
++&cpu1 { cpu-idle-states = <&CPU_SLEEP>; };
++&cpu2 { cpu-idle-states = <&CPU_SLEEP>; };
++&cpu3 { cpu-idle-states = <&CPU_SLEEP>; };

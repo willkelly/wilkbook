@@ -1,0 +1,23 @@
+From: wilkbook packaging
+Subject: build: make split-architecture sysmsg headers explicit
+
+This is a build-environment adaptation, not a gVisor runtime fix.  The sysmsg
+object macro invokes $(CC) directly from a genrule, so Coral's normal compile
+features do not supply Linux UAPI headers.  Select separate Guix-declared
+native and AArch64 header flags for the upstream split architecture transition.
+
+--- a/pkg/sentry/platform/systrap/sysmsg/build.bzl
++++ b/pkg/sentry/platform/systrap/sysmsg/build.bzl
+@@ -8,7 +8,11 @@ def cc_pie_obj(name, srcs, outs):
+         name = name,
+         srcs = srcs,
+         outs = outs,
+-        cmd = "$(CC)  $(CC_FLAGS)  " +
++        cmd = "$(CC)  $(CC_FLAGS)  " + select_arch(
++            amd64 = "$$GVISOR_SYSMSG_NATIVE_INCLUDE_FLAGS ",
++            arm64 = "$$GVISOR_SYSMSG_AARCH64_INCLUDE_FLAGS ",
++            default = "false unsupported-sysmsg-architecture ",
++        ) +
+               select({
+                   "//tools/bazeldefs:pagesize_64k": " -DPAGE_SIZE=65536 ",
+                   "//conditions:default": " -DPAGE_SIZE=4096 ",

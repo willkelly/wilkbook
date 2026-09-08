@@ -1,0 +1,5 @@
+;;; note: source file ./pinenote/systems/pinenote-book-state-reader.scm
+;;;       newer than compiled /home/wkelly/.cache/guile/ccache/3.0-LE-8-4.7/tmp/opencode/wilkbook-book-computer/pinenote/systems/pinenote-book-state-reader.scm.go
+PIN kernel-output=/gnu/store/334ljs8qa7ww8vlg9gpv428bh8yjd1nx-linux-pinenote-book-execution-test-7.1.8-pinenote
+PIN gvisor-source-output=/gnu/store/djgy782a5fjmsfkr6hzff3g953r60c86-gvisor-source-built-20260831.0
+SYSTEM-DERIVATION /gnu/store/nfd0492jbf77bxyp9il9hfv9ck74icgd-system.drv

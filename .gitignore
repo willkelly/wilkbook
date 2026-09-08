@@ -22,3 +22,10 @@ __pycache__/
 # per-device PineNote backups contain irreplaceable factory calibration
 # and must never be committed
 /device-backups/
+
+# book-computer generated runs and retained local evidence
+/guest-virtio-book-ui.log
+/pinenote/tools/book-state/build/
+/pinenote/tools/book-state-integration/build/
+/pinenote/tools/book-state-integration/completion-observer/build/
+/pinenote/tools/book-state-reader-join/build/

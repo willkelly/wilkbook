@@ -1,0 +1,4 @@
+PASS: exact finished v6 packet replay completed without realization
+PASS: system and image derivations retained their v5 identities
+PASS: dry run reports 34 missing derivations with kernel/gVisor cached
+PASS: no image, system, kernel, gVisor, QEMU, runsc, or ARM build/run occurred

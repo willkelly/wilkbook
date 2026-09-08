@@ -1,0 +1,27 @@
+accepted Book Session source (live source unchanged)
+  base f5823fa7fd7c6fd81780c70960fd80530e24f990af2fa346c30ed94604ba7668
+private BSD-1 successor candidate
+  new  f0e2a0432ed6391806099ca791fa66b65cc3beb36df7a5f31d9cb959ab65a301
+complete accepted-to-candidate patch
+  patch d779ed2c257d9fe0e995011e5a8c83ba9c6945b7eb189648067a29ed7a7d0280
+  numstat: 366 insertions, 64 deletions
+  forward application reproduced new source exactly
+  reverse application reproduced accepted source exactly
+
+blocked v3 candidate preserved in this packet
+  base d60757f38812bd82b03d1e075303036dd0dae740bca4b5f2ba8e5f4b7b7ec813
+focused BSD-1 correction patch
+  patch c229c218f48debd36d7209dd1106d22b6e5b9ec34c9f35e979b4ea8682a32d74
+  numstat: 90 insertions, 37 deletions
+  forward application reproduced the successor exactly
+
+typed delegate (unchanged from blocked v3)
+  eca58675dfd91615ae8695ca676d81ec7565311b076aebc1b79e3c6a665b2ca6
+focused tests
+  4008d9e4491e814b8a33d9a015038eb8684f2c9a0378966839cfd21309055562
+
+accepted typed dependencies (unchanged)
+  425ccc468b49f126c561d029d5c4aa61e73d6cc807cfb15e464067f31d7f7257  book-state-protocol.scm
+  dab6c72bd6f22fab7ae15b25ed415bb3564eb7f974740e9cf27352a7525870ee  book-state-operation-id.scm
+  91f121adea358e198fac68aa399dec0b5d1f35df32d1f9f0dca42ccda8cefd44  book-protocol.scm
+  dbd96cbc13fc601edb5d7db5b676cabd2dcf9ad7f832ce85ebdea93b93294aec  accepted test-book-session.scm

@@ -96,6 +96,18 @@ PATCH_REQUIREMENTS = (
     "input->suspend_state_override.value != 5",
     "policy->value.suspend_state_override.present ?",
 )
+FINAL_ULTRA_OVERRIDE = "rockchip,suspend-state-override = <5>;"
+FINAL_DTS_FORBIDDEN = (
+    "rockchip,power-ctrl",
+    "rockchip,regulator-on-in-",
+    "rockchip,regulator-off-in-",
+    "rockchip,virtual-poweroff",
+    "rockchip,pwm-regulator-config",
+    "rockchip,apios-suspend",
+    "-in-mem-lite",
+    "-in-mem-ultra",
+)
+BSP_DTS_FORBIDDEN = FINAL_DTS_FORBIDDEN + ("rockchip,suspend-state-override",)
 
 
 class InvalidArtifact(ValueError):
@@ -131,6 +143,169 @@ def function_body(source: str, name: str) -> str:
             if depth == 0:
                 return source[start:index + 1]
     reject(f"source has unbalanced function body: {name}")
+
+
+def without_comments(source: str, context: str) -> str:
+    """Mask C/DTS comments while preserving offsets, strings, and newlines."""
+    masked = list(source)
+    index = 0
+    quote = None
+    while index < len(source):
+        if quote is not None:
+            if source[index] == "\\":
+                index += 2
+                continue
+            if source[index] == quote:
+                quote = None
+            index += 1
+            continue
+        if source[index] in {'"', "'"}:
+            quote = source[index]
+            index += 1
+            continue
+        if source.startswith("//", index):
+            end = source.find("\n", index + 2)
+            if end < 0:
+                end = len(source)
+            for position in range(index, end):
+                masked[position] = " "
+            index = end
+            continue
+        if source.startswith("/*", index):
+            end = source.find("*/", index + 2)
+            if end < 0:
+                reject(f"{context} contains an unterminated block comment")
+            for position in range(index, end + 2):
+                if masked[position] != "\n":
+                    masked[position] = " "
+            index = end + 2
+            continue
+        index += 1
+    if quote is not None:
+        reject(f"{context} contains an unterminated quoted literal")
+    return "".join(masked)
+
+
+def matching_brace(source: str, opening: int, context: str) -> int:
+    if opening >= len(source) or source[opening] != "{":
+        reject(f"{context} does not start at an opening brace")
+    depth = 0
+    quote = None
+    index = opening
+    while index < len(source):
+        character = source[index]
+        if quote is not None:
+            if character == "\\":
+                index += 2
+                continue
+            if character == quote:
+                quote = None
+        elif character in {'"', "'"}:
+            quote = character
+        elif character == "{":
+            depth += 1
+        elif character == "}":
+            depth -= 1
+            if depth == 0:
+                return index
+        index += 1
+    reject(f"{context} has unbalanced braces")
+
+
+def brace_depth_at(source: str, position: int, context: str) -> int:
+    depth = 0
+    quote = None
+    index = 0
+    while index < position:
+        character = source[index]
+        if quote is not None:
+            if character == "\\":
+                index += 2
+                continue
+            if character == quote:
+                quote = None
+        elif character in {'"', "'"}:
+            quote = character
+        elif character == "{":
+            depth += 1
+        elif character == "}":
+            depth -= 1
+            if depth < 0:
+                reject(f"{context} closes a brace outside its scope")
+        index += 1
+    return depth
+
+
+def direct_scope(source: str, context: str) -> str:
+    """Mask nested brace scopes, leaving only direct node-body statements."""
+    masked = list(source)
+    depth = 0
+    quote = None
+    index = 0
+    while index < len(source):
+        character = source[index]
+        if quote is not None:
+            if depth and character != "\n":
+                masked[index] = " "
+            if character == "\\":
+                if depth and index + 1 < len(source) and source[index + 1] != "\n":
+                    masked[index + 1] = " "
+                index += 2
+                continue
+            if character == quote:
+                quote = None
+        elif character in {'"', "'"}:
+            quote = character
+            if depth:
+                masked[index] = " "
+        elif character == "{":
+            masked[index] = " "
+            depth += 1
+        elif character == "}":
+            depth -= 1
+            if depth < 0:
+                reject(f"{context} has an unmatched closing brace")
+            masked[index] = " "
+        elif depth and character != "\n":
+            masked[index] = " "
+        index += 1
+    if depth:
+        reject(f"{context} has an unmatched nested opening brace")
+    return "".join(masked)
+
+
+def dts_direct_node_body(source: str, node_name: str,
+                         compatible: str) -> tuple[str, str]:
+    code = without_comments(source, "PineNote DTS")
+    roots = list(re.finditer(r"(?m)^[ \t]*/[ \t]*\{", code))
+    if len(roots) != 1:
+        reject("PineNote DTS does not contain exactly one root node")
+    root_opening = code.find("{", roots[0].start(), roots[0].end())
+    root_closing = matching_brace(code, root_opening, "PineNote DTS root node")
+    node = re.compile(
+        rf"(?m)^[ \t]*(?:(?P<label>[A-Za-z_][A-Za-z0-9_]*)[ \t]*:[ \t]*)?"
+        rf"(?P<name>{re.escape(node_name)}(?:@[0-9A-Fa-f]+)?)[ \t]*\{{")
+    matches = list(node.finditer(code))
+    if len(matches) != 1:
+        reject(f"PineNote DTS does not contain exactly one {node_name} node")
+    match = matches[0]
+    if match.group("label") is not None or match.group("name") != node_name:
+        reject(f"PineNote DTS {node_name} node declaration differs from reviewed form")
+    if not root_opening < match.start() < root_closing:
+        reject(f"PineNote DTS {node_name} is outside the root node")
+    root_prefix = code[root_opening + 1:match.start()]
+    if brace_depth_at(root_prefix, len(root_prefix), "PineNote DTS root body") != 0:
+        reject(f"PineNote DTS {node_name} is not a direct child of the root node")
+    opening = code.find("{", match.start(), match.end())
+    closing = matching_brace(code, opening, f"PineNote DTS {node_name} node")
+    body = direct_scope(code[opening + 1:closing],
+                        f"PineNote DTS {node_name} direct body")
+    compatible_pattern = re.compile(
+        rf'(?m)^[ \t]*compatible[ \t]*=[ \t]*"{re.escape(compatible)}"'
+        rf'[ \t]*;[ \t]*$')
+    if len(compatible_pattern.findall(body)) != 1:
+        reject(f"PineNote DTS {node_name} direct compatible differs")
+    return code, body
 
 
 def decode(data: bytes, context: str) -> str:
@@ -313,20 +488,25 @@ def validate_production_sources(sources: dict[str, str]) -> None:
                   "rockchip,wakeup-config = <0x10>;",
                   "rockchip,sleep-debug-en = <0x00>;"):
         require(dts, token, "PineNote measured suspend policy")
-    # Everything beyond those three stays out of THIS patch's DT hunk --
-    # deliberately, and the reason changed on 2026-08-08.  The ultra
-    # payload IS adopted now, but it lives whole in
-    # linux-pinenote-7.0-ultra-rails.patch: the override and the rail
-    # flips are a matched pair (either half alone is a proven-broken
-    # configuration -- R10/R11 vs R12), so this pin is what prevents the
-    # override from ever being reintroduced here, decoupled from the
-    # rails.  validate-ultra-coupling.sh enforces the pair from the other
-    # side.
-    for token in ("rockchip,power-ctrl", "rockchip,regulator-on-in-",
-                  "rockchip,regulator-off-in-", "rockchip,suspend-state-override",
-                  "rockchip,virtual-poweroff", "rockchip,pwm-regulator-config",
-                  "rockchip,apios-suspend", "-in-mem-lite", "-in-mem-ultra"):
-        forbid(dts, token, "PineNote DT stays baseline-deep only")
+    # The fully applied source must carry the hardware-proven R12 override
+    # exactly once, at its exact value, directly on the unique reviewed
+    # rockchip-suspend node. Whole-file uniqueness rejects a second assignment
+    # elsewhere; direct-node scope rejects moving the sole assignment to (for
+    # example) /chosen. Its patch-stage ownership remains separate:
+    # validate_patch() forbids the BSP patch's DTS hunk from adding it, while
+    # validate-ultra-coupling.sh pins it to the later matched rails+card-power
+    # patch.
+    dts_code, suspend_node = dts_direct_node_body(
+        dts, "rockchip-suspend", "rockchip,pm-rk3568")
+    if dts_code.count("rockchip,suspend-state-override") != 1:
+        reject("PineNote final DT does not contain exactly one suspend-state-override")
+    override_pattern = re.compile(
+        r"(?m)^[ \t]*rockchip,suspend-state-override[ \t]*=[ \t]*"
+        r"<5>[ \t]*;[ \t]*$")
+    if len(override_pattern.findall(suspend_node)) != 1:
+        reject("PineNote rockchip-suspend node lacks one exact <5> override property")
+    for token in FINAL_DTS_FORBIDDEN:
+        forbid(dts, token, "PineNote final DT unsupported suspend policy")
     for token in ("rockchip_suspend_executor_run", "arm_smccc_smc",
                   "register_pm_notifier", "register_sys_off_handler",
                   "regulator_suspend_", "suspend_disable_secondary_cpus"):
@@ -439,8 +619,6 @@ def validate_production_sources(sources: dict[str, str]) -> None:
     require(parser, '"rockchip,suspend-state-override", '
                     'OPTIONAL_OFFSET(suspend_state_override)',
             "production OF parser accepts the standing ultra override")
-    require(parser, "dt_state_override",
-            "prepare restores the DT override snapshot")
 
     for token in (
         "consumer = (struct regulator *)regulator",
@@ -487,14 +665,36 @@ def validate_production_sources(sources: dict[str, str]) -> None:
                   "rockchip_suspend_model_build_virtual_poweroff"):
         forbid(probe_body, token, "activation probe")
     prepare_body = function_body(activation, "rockchip_suspend_prepare")
-    state_position = prepare_body.find("pm_suspend_target_state != PM_SUSPEND_MEM")
-    probe_position = prepare_body.find("rockchip_suspend_model_build_probe")
-    prepare_position = prepare_body.find("rockchip_suspend_model_build_prepare")
-    execute_position = prepare_body.find("rockchip_suspend_execute")
-    if min(state_position, probe_position, prepare_position, execute_position) < 0:
-        reject("active device prepare lacks state/build/execute phases")
-    if not state_position < probe_position < prepare_position < execute_position:
-        reject("active device prepare phase order is not gate/build/build/execute")
+    prepare_code = without_comments(prepare_body, "rockchip_suspend_prepare")
+    restore = ("activation->policy.value.suspend_state_override =\n"
+               "\t\tactivation->dt_state_override;")
+    if prepare_code.count(restore) != 1:
+        reject("prepare does not contain exactly one executable DT override restore")
+    restore_position = prepare_code.find(restore)
+    if brace_depth_at(prepare_code, restore_position,
+                      "rockchip_suspend_prepare") != 1:
+        reject("prepare DT override restore is not in the direct function scope")
+    restore_prefix = prepare_code[:restore_position].rstrip()
+    if re.search(r"(?m)^[ \t]*#[ \t]*(?:if|ifdef|ifndef)\b", restore_prefix):
+        reject("prepare DT override restore is behind a preprocessor condition")
+    if re.search(r"\b(?:if|for|while)[ \t]*\([^;{}]*\)[ \t]*$",
+                 restore_prefix):
+        reject("prepare DT override restore is controlled by a preceding predicate")
+    state_position = prepare_code.find("pm_suspend_target_state != PM_SUSPEND_MEM")
+    arm_position = prepare_code.find("if (ultra_arm)")
+    probe_position = prepare_code.find("rockchip_suspend_model_build_probe")
+    prepare_position = prepare_code.find("rockchip_suspend_model_build_prepare")
+    execute_position = prepare_code.find("rockchip_suspend_execute")
+    policy_positions = [match.start() for match in
+                        re.finditer(r"\bactivation->policy\b", prepare_code)]
+    if min(state_position, arm_position, probe_position, prepare_position,
+           execute_position) < 0 or not policy_positions:
+        reject("active device prepare lacks restore/arm/build/execute phases")
+    if policy_positions[0] != restore_position:
+        reject("prepare uses policy before restoring the DT override")
+    if not (state_position < restore_position < arm_position < probe_position <
+            prepare_position < execute_position):
+        reject("active device prepare order is not gate/restore/arm/build/build/execute")
     if probe_position < 0 or prepare_position < 0 or probe_position >= prepare_position:
         reject("device prepare does not execute donor probe before prepare")
     require(core, "#if !IS_ENABLED(CONFIG_ROCKCHIP_SUSPEND_MODE_ACTIVATE)",
@@ -543,6 +743,12 @@ def validate_patch(patch: str) -> None:
     if not patch.startswith(f"diff --git a/{PATHS[0]} b/{PATHS[0]}\n"):
         reject("patch has content before its first canonical diff")
     sections = patch_sections(patch)
+    dts_additions = "\n".join(
+        line[1:] for line in sections[PATHS[0]].splitlines()
+        if line.startswith("+") and not line.startswith("+++"))
+    for token in BSP_DTS_FORBIDDEN:
+        forbid(dts_additions, token,
+               "canonical BSP patch PineNote DTS additions stay baseline-deep only")
     for token in PATCH_REQUIREMENTS:
         require(patch, token, "canonical patch")
     for retired in RETIRED:
@@ -628,6 +834,13 @@ def run_patch_mutations(patch: str) -> None:
                           "diff --git a/escape b/escape", 1), "path escape")
     expect_patch_rejected(patch, patch.replace("index ", "index 1111111111111111111111111111111111111111..", 1),
                           "placeholder object ID")
+    dts_anchor = "+\t\trockchip,sleep-debug-en = <0x00>;"
+    expect_patch_rejected(
+        patch,
+        patch.replace(dts_anchor, dts_anchor +
+                      "\n+\t\trockchip,suspend-state-override = <5>;", 1),
+        "standing ultra override injected into canonical BSP DTS hunk",
+    )
     core_log = '+\tdev_info(&pdev->dev, "DORMANT policy core bound; activation compiled out\\n");'
     expect_patch_rejected(
         patch,
@@ -698,14 +911,31 @@ def expect_source_rewrite_rejected(sources: dict[str, str], path: str,
     raise RuntimeError(f"validator accepted source rewrite: {description}")
 
 
+def expect_source_set_rejected(mutated: dict[str, str],
+                               description: str) -> None:
+    try:
+        validate_production_sources(mutated)
+    except InvalidArtifact:
+        return
+    raise RuntimeError(f"validator accepted source mutation set: {description}")
+
+
+def expect_unique_source_rewrite_rejected(sources: dict[str, str], path: str,
+                                           old: str, new: str,
+                                           description: str) -> None:
+    count = sources[path].count(old)
+    if count != 1:
+        raise RuntimeError(
+            f"source rewrite anchor is not unique ({count}): {description}")
+    expect_source_rewrite_rejected(sources, path, old, new, description)
+
+
 def run_source_mutations(sources: dict[str, str]) -> None:
     for path, token in (
         ("drivers/soc/rockchip/Kconfig", "default n"),
         ("drivers/soc/rockchip/Kconfig",
          "depends on ARM64 && ARCH_ROCKCHIP && OF && REGULATOR && SUSPEND"),
         ("drivers/soc/rockchip/Makefile", "rockchip_suspend_backend.o"),
-        ("arch/arm64/configs/pinenote_defconfig",
-         "# CONFIG_ROCKCHIP_SUSPEND_MODE_ACTIVATE is not set"),
         ("drivers/regulator/of_regulator.c",
          "_regulator_get_common(rdev, dev, \"of-node\", NORMAL_GET)"),
         ("drivers/regulator/of_regulator.c", "get_device(&rdev->dev)"),
@@ -739,6 +969,9 @@ def run_source_mutations(sources: dict[str, str]) -> None:
         ("drivers/soc/rockchip/rockchip_suspend_activate.c",
          "pm_suspend_target_state != PM_SUSPEND_MEM"),
         ("drivers/soc/rockchip/rockchip_suspend_activate.c",
+         "activation->policy.value.suspend_state_override =\n"
+         "\t\tactivation->dt_state_override;"),
+        ("drivers/soc/rockchip/rockchip_suspend_activate.c",
          ".prepare = rockchip_suspend_prepare"),
         ("drivers/soc/rockchip/rockchip_suspend_activate.c",
          ".complete = rockchip_suspend_complete"),
@@ -754,7 +987,78 @@ def run_source_mutations(sources: dict[str, str]) -> None:
          "regulator_restore_suspend_enable"),
     ):
         expect_sources_rejected(sources, path, token)
+    expect_unique_source_rewrite_rejected(
+        sources, "arch/arm64/configs/pinenote_defconfig",
+        "CONFIG_ROCKCHIP_SUSPEND_MODE_ACTIVATE=y",
+        "# CONFIG_ROCKCHIP_SUSPEND_MODE_ACTIVATE is not set",
+        "production PineNote activation disabled",
+    )
+    dts_path = "arch/arm64/boot/dts/rockchip/rk3566-pinenote.dtsi"
+    override_line = "\t\t" + FINAL_ULTRA_OVERRIDE
+    expect_unique_source_rewrite_rejected(
+        sources, dts_path, override_line, "",
+        "standing ultra override removed from final source",
+    )
+    expect_unique_source_rewrite_rejected(
+        sources, dts_path, override_line,
+        "\t\trockchip,suspend-state-override = <3>;",
+        "standing ultra override changed from 5 to 3",
+    )
+    expect_unique_source_rewrite_rejected(
+        sources, dts_path, override_line,
+        override_line + "\n" + override_line,
+        "standing ultra override duplicated in final source",
+    )
+    chosen_anchor = '\t\tstdout-path = "serial2:1500000n8";'
+    if sources[dts_path].count(chosen_anchor) != 1:
+        raise RuntimeError("source rewrite anchor is not unique: /chosen stdout-path")
+    moved_override = dict(sources)
+    moved_override[dts_path] = moved_override[dts_path].replace(
+        override_line + "\n", "", 1)
+    moved_override[dts_path] = moved_override[dts_path].replace(
+        chosen_anchor, chosen_anchor + "\n" + override_line, 1)
+    expect_source_set_rejected(
+        moved_override,
+        "sole standing ultra override moved from rockchip-suspend to /chosen",
+    )
     activation_path = "drivers/soc/rockchip/rockchip_suspend_activate.c"
+    restore_statement = (
+        "\tactivation->policy.value.suspend_state_override =\n"
+        "\t\tactivation->dt_state_override;")
+    execute_statement = (
+        "\tret = rockchip_suspend_execute(activation, activation->probe_events,\n"
+        "\t\tprobe_count);")
+    if (sources[activation_path].count(restore_statement) != 1 or
+            sources[activation_path].count(execute_statement) != 1):
+        raise RuntimeError("prepare restore/execute relocation anchors are not unique")
+    late_restore = dict(sources)
+    late_restore[activation_path] = late_restore[activation_path].replace(
+        restore_statement + "\n", "", 1)
+    late_restore[activation_path] = late_restore[activation_path].replace(
+        execute_statement, execute_statement + "\n" + restore_statement, 1)
+    expect_source_set_rejected(
+        late_restore, "DT override restore moved after policy build and execution")
+    branch_restore = dict(sources)
+    branch_restore[activation_path] = branch_restore[activation_path].replace(
+        restore_statement,
+        "\tif (ultra_arm) {\n\t" + restore_statement + "\n\t}", 1)
+    expect_source_set_rejected(
+        branch_restore, "DT override restore made conditional on ultra_arm")
+    predicate_restore = dict(sources)
+    predicate_restore[activation_path] = predicate_restore[activation_path].replace(
+        restore_statement, "\tif (ultra_arm)\n\t" + restore_statement, 1)
+    expect_source_set_rejected(
+        predicate_restore, "DT override restore controlled by a bare predicate")
+    dead_restore = dict(sources)
+    dead_restore[activation_path] = dead_restore[activation_path].replace(
+        restore_statement, "\t#if 0\n" + restore_statement + "\n\t#endif", 1)
+    expect_source_set_rejected(
+        dead_restore, "DT override restore moved behind a dead preprocessor branch")
+    commented_restore = dict(sources)
+    commented_restore[activation_path] = commented_restore[activation_path].replace(
+        restore_statement, "\t/*\n" + restore_statement + "\n\t*/", 1)
+    expect_source_set_rejected(
+        commented_restore, "DT override restore retained only in a comment")
     anchor = "static int rockchip_suspend_activate_probe(struct platform_device *pdev)\n{"
     expect_source_rewrite_rejected(
         sources, activation_path, anchor,

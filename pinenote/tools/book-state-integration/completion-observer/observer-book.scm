@@ -1,0 +1,98 @@
+;;; Native book process for the trusted completion-observer proof.
+;;; Its sole protocol channel is the connected socket donated as FD 0.
+(use-modules (book-protocol blocking-io)
+             (rnrs bytevectors)
+             (srfi srfi-1))
+
+(define operation-id "ActualBookSave_1")
+
+(define (fail message . details)
+  (error message details))
+
+(define (field message name)
+  (assoc-ref message name))
+
+(define (require-type port expected)
+  (let ((message (read-frame port)))
+    (unless (and (list? message)
+                 (string? (field message "type"))
+                 (string=? (field message "type") expected))
+      (fail "authority sent an unexpected message" expected message))
+    message))
+
+(define (presentation action text)
+  `(("type" . "present")
+    ("request_id" . ,(field action "request_id"))
+    ("action_id" . ,(field action "action_id"))
+    ("surface_handle" . ,(field action "surface_handle"))
+    ("surface_generation" . ,(field action "surface_generation"))
+    ("sequence" . ,(field action "sequence"))
+    ("count" . 1)
+    ("text" . ,text)))
+
+(define (state-read ready)
+  `(("type" . "state-read")
+    ("protocol_version" . 1)
+    ("grant_handle" . ,(field ready "grant_handle"))
+    ("grant_generation" . ,(field ready "grant_generation"))))
+
+(define (state-commit ready expected text)
+  `(("type" . "state-commit")
+    ("protocol_version" . 1)
+    ("grant_handle" . ,(field ready "grant_handle"))
+    ("grant_generation" . ,(field ready "grant_generation"))
+    ("operation_id" . ,operation-id)
+    ("expected_state_version" . ,expected)
+    ("text" . ,text)))
+
+(define (run port)
+  (write-frame port '(("type" . "hello") ("version" . 1)))
+  (let ((initialize (require-type port "initialize"))
+        (ready (require-type port "state-ready")))
+    (unless (and (= (field initialize "grant_count") 1)
+                 (string=? (field ready "access") "read-write"))
+      (fail "authority initialization is not state-enabled"))
+
+    ;; A valid surface presentation before any state operation is deliberately
+    ;; forged as "saved".  It must remain only a presentation fact.
+    (let ((early (require-type port "action")))
+      (unless (string=? (field early "action_id") "early-forged-present")
+        (fail "wrong early action"))
+      (write-frame port (presentation early "FORGED-SAVED")))
+
+    (write-frame port (state-read ready))
+    (let ((value (require-type port "state-value")))
+      (unless (and (not (field value "present"))
+                   (= (field value "state_version") 0)
+                   (string-null? (field value "text")))
+        (fail "fresh real backend did not return absent state"))
+      (let* ((action (require-type port "action"))
+             (text (field action "text")))
+        (unless (string=? (field action "action_id") "ui-submit-save")
+          (fail "wrong save action"))
+        (write-frame port
+                     (state-commit ready (field value "state_version") text))
+        (let ((committed (require-type port "state-committed")))
+          (unless (and (string=? (field committed "operation_id") operation-id)
+                       (= (field committed "state_version") 1)
+                       (= (field committed "text_bytes")
+                          (bytevector-length (string->utf8 text))))
+            (fail "book did not receive its exact typed durable receipt"))
+          (write-frame port
+                       (presentation action "BOOK-PRESENT-AFTER-RECEIPT")))))))
+
+(unless (equal? (getenv "BOOK_SESSION_FD") "0")
+  (fail "BOOK_SESSION_FD must name donated FD 0"))
+(unless (eq? (stat:type (stat 0)) 'socket)
+  (fail "donated FD 0 is not a socket"))
+(when (positive? (logand (fcntl 0 F_GETFD) FD_CLOEXEC))
+  (fail "donated FD 0 remained close-on-exec"))
+(setpgid 0 0)
+(kill (getpid) SIGSTOP)
+(let ((port (fdopen 0 "r+0")))
+  (setvbuf port 'none)
+  (dynamic-wind
+    (lambda () #t)
+    (lambda () (run port))
+    (lambda ()
+      (unless (port-closed? port) (close-port port)))))

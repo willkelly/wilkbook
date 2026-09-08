@@ -1,0 +1,23 @@
+From: wilkbook packaging
+Subject: build: make VDSO Linux headers explicit
+
+The VDSO genrule invokes $(CC) directly, so Coral's ordinary compile features
+do not supply Linux UAPI headers.  Select the separately declared native or
+AArch64 headers for the configured architecture instead of relying on an FHS
+include tree or a global CPATH.
+
+--- a/vdso/BUILD
++++ b/vdso/BUILD
+@@ -31,7 +31,11 @@ genrule(
+     outs = [
+         "vdso.so",
+     ],
+-    cmd = "$(CC) $(CC_FLAGS) " +
++    cmd = "$(CC) $(CC_FLAGS) " + select_arch(
++              amd64 = "$$GVISOR_VDSO_NATIVE_INCLUDE_FLAGS ",
++              arm64 = "$$GVISOR_VDSO_AARCH64_INCLUDE_FLAGS ",
++              no_match_error = "unsupported VDSO architecture",
++          ) +
+           "-I. " +
+           "-O2 " +
+           "-std=c++11 " +

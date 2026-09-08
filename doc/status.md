@@ -1,7 +1,279 @@
 # Hardware status
 
-Last updated: 2026-09-04 (late). Update protocol: add a dated entry at the top
+Last updated: 2026-09-08. Update protocol: add a dated entry at the top
 after every hardware session; entries are per-device/per-operator.
+
+## 2026-09-08 (wkelly PineNote, generation 20 with diagnostic overrides) — restart recovery confirmed by operator
+
+The operator confirmed that reopening the note after restarting both services
+worked. The authority logged recovery of version 3 at 06:25:24 and clean close
+at 06:25:28; PID 5262 remained running. No additional post-restart commit is
+recorded, so this proves recovery and close, not a new save after restart.
+
+A later log read also exposed an overlapping user reopen before the restart:
+old KOReader PID 3222 connected again at 06:24:49 and recovered version 3 at
+06:24:51, after the preceding close had been checked. The authority restart
+therefore stopped an active read session at 06:24:58, recording its bounded
+cleanup at 06:24:59. No intervening commit is logged. The next fresh-process
+recovery above succeeded. This qualifies the earlier statement that the note
+was closed at restart: it was closed at inspection, then reopened by the user.
+
+Accepted attended scope: human note edits/saves, clean close, recovery after
+authority + KOReader restart, and working persistent personal fonts. The
+generation-20 diagnostic overrides remain installed; a clean immutable build
+and subsequent generation trial are still needed. No cold boot, suspend/wake,
+or physical-power-loss durability claim is added by this session.
+
+Final device step: restored `/data/wilkbook/autosuspend.conf` from `enabled=0`
+to `enabled=1` and verified the value. Normal idle, power-button and cover
+suspend behavior is enabled again; this configuration restoration is not a
+new suspend/wake test.
+
+## 2026-09-08 (wkelly PineNote, generation 20 with diagnostic overrides) — human note saves confirmed
+
+The operator reported that the note worked. The authority log independently
+confirms a real KOReader peer (PID 3222) opening version 1 at 06:24:12, saving
+version 2 at 06:24:16 and version 3 at 06:24:26, then closing cleanly at
+06:24:28. The authority PID 3708 remained running. Note contents were not
+harvested. This is the first human-driven device save evidence for the fixed
+Guile note through gVisor and the trusted state backend, on the documented
+generation-20 source overrides.
+
+With the note confirmed closed, the authority and KOReader were restarted at
+06:24:59 for the next persistence check (new authority PID 5262). The restarted
+KOReader PID 5290 connected at 06:25:21 and the authority logged recovery of
+version 3 at 06:25:24. The UI log records a dialog open and subsequent panel
+refresh; operator confirmation of the displayed text is still pending.
+No OS reboot occurred. Suspend remains paused during the attended test.
+
+## 2026-09-08 (wkelly PineNote, generation 20 with diagnostic overrides) — scripted sandbox save/reopen passes
+
+The operator confirmed the clearer disconnect messages but encountered another
+authority exit. This time the book loaded absent/version 0 at 06:16:37; editing
+then produced `(status 1 "dirty")`, which `drive-human-note!` rejected at
+06:16:46. The earlier open/read/close probe had not exercised editing. No user
+save occurred. Cleanup succeeded on this failure: the transient runtime root
+was absent before restarting the service.
+
+The canonical adapter now accepts local `dirty`/`failed` editor status outside
+a save without creating a state operation or changing the backend version.
+Other unsolicited status values remain rejected. Its native runtime tests now
+send `dirty` before submit; Guile/Python controlled-host saves, reopen/restart,
+disconnect/stop and production-entry cleanup checks pass. Evidence:
+`/tmp/opencode/book-state-device-dirty-status-test.log`, SHA-256
+`09da8a75f73328a88ad31f7ddaeec0806426294baf480ebfa9bcaac44ef7e3be`.
+That mixed-input host run explicitly skipped OCI regeneration; it is not
+sandbox evidence. Updated authority SHA-256:
+`2ec47fcc23bae89b7670460fa06de3a7ed4d298fc63535e878783b2099633028`.
+
+After updating the volatile supervised source override, a bounded trusted
+operator diagnostic used the packaged KOReader LuaJIT and real production UI
+transport against the running service. It refused to overwrite an existing
+note, found the namespace absent, sent dirty status, paused before Save, and
+submitted `Book State diagnostic save — 2026-09-08`. The sandbox returned a
+correlated commit receipt and separate matching book presentation. The script
+acknowledged that presentation, closed, opened a **fresh sandbox session**, and
+recovered the exact diagnostic note. These are scripted acknowledgements, not
+KOReader paint evidence. Device logs: version 1 saved (41 bytes) at 06:21:26;
+fresh session loaded version 1 at 06:21:28. The authority PID 3708 stayed running,
+its runtime directory contained only the listening socket afterwards, and no
+runsc process remained.
+
+The probe is `/run/wilkbook-book-state-hotfix/probe-save-reopen.lua` (host copy
+under `/tmp/opencode/book-state-device-menu-hotfix-20260907/`). It consumed one
+of the fixed namespace's 64 receipts; the saved diagnostic note is deliberately
+left for the operator to edit. Human save/paint/reopen and service-restart
+recovery on device remain pending. KOReader was not restarted during this fix,
+so any disconnected unsaved draft remains available in its existing dialog.
+Suspend remains paused for the attended session.
+
+## 2026-09-08 (wkelly PineNote, generation 20 with diagnostic overrides) — sandbox open/read/close passes
+
+The operator's next menu attempt opened a note dialog but lost the authority
+before loading. They entered `a` and tried Save; reopening reported that the
+authority was not running. **No save occurred:** the subsequent sandbox read
+returned absent/version 0.
+
+The logged null-netns identity error was a cleanup error masking the original
+failure. The device adapter passed its UI label (`device-guile-note`) to the
+production launch reader's language argument; the generated bundle declares
+`fixtureKind: guile`. Replaying the reader against the retained device bundle
+reproduced rejection with the UI label and passed with `guile`, without launching
+anything. The canonical adapter now passes the language and logs the original
+session error before attempting strict runtime cleanup. This does not repair
+the cleanup helper's assumption that runsc has already mounted null-netns;
+pre-launch failures can still leave a runtime directory and require inspection.
+
+Fixed authority SHA-256:
+`d1dab960342f0241637e897fd4569f432fae0c6869ffbef9d74140bbdb82df94`.
+It was installed into the existing volatile supervised override. The failed
+runtime tree was preserved as `/run/wilkbook-book-state.failed-gen20-launch-label`
+after confirming no mounts under it, no runsc process, and no corresponding
+book cgroup.
+
+A trusted operator diagnostic using the packaged KOReader LuaJIT and production
+UI transport then opened/read/closed the actual sandboxed Guile note, without
+submitting or printing its text. Device log: accepted peer PID 2782 at 06:15:15,
+opened absent/version 0 and closed version 0 at 06:15:18. The authority (PID 2770)
+remained running; only its control socket remained in its runtime directory,
+and no runsc process remained. This is device **sandbox open/read/close** evidence,
+not human save/paint evidence. The diagnostic is retained at
+`/run/wilkbook-book-state-hotfix/probe-open-close.lua` (host copy in
+`/tmp/opencode/book-state-device-menu-hotfix-20260907/`).
+
+The plugin now distinguishes disconnected from storage failure, keeps Save
+disabled after further edits on a dead connection, retains the draft, and
+labels the input as note text rather than a file name. Real native KOReader
+tests passed save/paint/close/reopen plus socket-EOF/draft-retention/disabled-Save
+paint. The diagnostic fixture's first extension attempt exhausted its original
+two socketpairs; extending it to three allowed the new disconnect case to run.
+The updated plugin SHA-256 is
+`b4f5d19b2cb2d3c3b6b780362ffde1431e0debeb0bcfb2251117b263503020b7`;
+it was copied to the existing userpatch location and KOReader alone restarted.
+Human save/reopen remains pending; suspend remains paused for the session.
+
+## 2026-09-07 (wkelly PineNote, generation 20) — authority control-structure hotfix
+
+The device adapter's `run-sandbox-session!` had malformed nesting: its two
+`catch` handlers and `dynamic-wind` after-thunk were parsed in the wrong scopes.
+The source fix is
+`8bbbd17429a140047bce528868cd8dee22b4ac51d52bd8797dcbd889fd71c1e0`;
+focused tests exercise the canonical entrypoint with controlled native
+Guile/Python FD-3 books and its failure/unwind paths. These host tests are not
+a device sandbox result.
+
+The fixed source and a wrapper retaining the exact generation-20 configuration
+were installed under `/run/wilkbook-book-state-hotfix/`. Only the authority
+service was stopped, unloaded and re-registered with this temporary entry;
+the OS and reader were not rebooted. Its first start refused an old runtime
+directory left by the original malformed handler. Inspection showed only an
+empty `session-1` directory, no book cgroups, no runsc processes, and no mounts
+under it. The directory was preserved as
+`/run/wilkbook-book-state.failed-gen20-initial-catch`, then the service was
+enabled and started again. Device open/save testing is still pending.
+
+This service override is volatile and disappears on reboot; a later clean
+generation must contain the canonical fix before release acceptance.
+
+## 2026-09-07 (wkelly PineNote, generation 20) — persistent fonts restored; note hotfix still under test
+
+The operator reported missing personal fonts. Read-only inspection found the
+44-file local-font package still retained on the device, visible through pinned
+generation 10 but absent from generations 16, 18, 19 and 20. The running reader
+had no `EXT_FONT_DIR`; `/data` was correctly mounted. This was a build/font-path
+omission, not an observed kexec mount failure.
+
+All 44 files were copied locally from the retained font package to
+`/data/fonts/mbtype-restored-gen10` and hash-verified. A temporary KOReader early
+user patch adds `/data/fonts` to its external font path. The reader-service
+source now always searches that persistent path alongside any build-time fonts.
+After a reader-only restart, **the operator confirmed the fonts work**. No
+licensed font bytes were copied into the repository.
+
+Generation 20 also has a temporary user patch applying the canonical note
+plugin's `note_dialog` separation and native saved-baseline fix. Its source
+hash is `dddb6fce93b55c3b06b343770e78fa07018c37a2e5a3877d2a0d651d7152c754`.
+The real host KOReader menu/widget save/close/reopen test passes
+(`/tmp/opencode/book-state-device-real-ui.j8Ve7E`), but **the operator has not
+confirmed a working device note**. Device logs exposed a separate malformed
+`catch` call in the new authority adapter after accepting the KOReader peer;
+that correction is in progress. No device save is claimed.
+
+Temporary patch files are under `/root/.config/koreader/patches/`:
+`1-wilkbook-persistent-fonts.lua`, `2-wilkbook-book-state-dialog.lua`, and
+`book-state-dialog-fix/main.lua`. Remove the note override after deploying a
+generation containing its source fix; the font patch is redundant once the
+reader service includes `/data/fonts`. These are documented generation-20
+diagnostic overrides, not a clean-generation acceptance. Suspend remains paused.
+
+## 2026-09-07 (wkelly PineNote, operator present with UART) — generation 20 experimental Book State trial and activation
+
+With the operator explicitly present for the trial, the deployer transferred
+75 missing store paths and registered generation 20:
+`/gnu/store/7wyr4smys53jgf2cjrif0mm94n9cg11p-system`, flavor
+`book-state-device-reader`. It armed the UART watcher before the kexec from
+generation 19. Generation 20 returned over SSH and passed health checks
+(`broker_ready=true`, `reader_started=true`), then was promoted. Generations
+10 and 16 remain pinned; nothing was pruned. This is a **kexec trial**, not a
+cold-boot/device-tree validation. Boot ID:
+`d52be06e-c94b-43fe-b71f-5125448c95a4`.
+
+The feature was dormant at boot. Its mode-0600 activation marker was created
+under `/data/wilkbook/book-state/`. The first `herd start` refused because
+Shepherd had disabled the previously exited service; `herd enable` followed by
+`herd start` succeeded. KOReader was restarted. The authority logged `ready`
+with database `/data/wilkbook/book-state/book-state-v1.sqlite` and root-owned
+mode-0600 socket `/run/wilkbook-book-state/control.sock`.
+
+Manual menu testing exposed a device-plugin defect: the operator selected
+**More tools → Persistent note (experimental)** and the menu closed without
+opening an editor. KOReader injects its reader window as the plugin's `dialog`
+attribute; the plugin reused that attribute and its open guard returned early.
+The canonical fix separates `note_dialog` from the inherited owner, and a
+real-KOReader regression and temporary generation-20 diagnostic patch are being
+prepared. No device save/reopen result exists yet. Suspend remains paused
+(`enabled=0`) for that test. Deployment logs are retained at
+`/tmp/opencode/book-state-device-deploy-j10dzt9t/`. Device log timestamps read
+2026-09-08; this entry follows the host session date, 2026-09-07.
+
+## 2026-09-07 (wkelly PineNote, book-computer lane) — suspend paused for attended preparation
+
+The operator reported the UART cable connected and requested suspend be
+disabled. A strict-host-key SSH connection through `pinenote-os2` confirmed
+root `/dev/mmcblk0p6` (ext4), `/data` mounted as ext4 from the data partition,
+and current system `/gnu/store/8zcb8zq9x92sag30m68b6jww86xd1nq7-system`.
+The config contained only `enabled=1`; it was changed to `enabled=0` in
+`/data/wilkbook/autosuspend.conf` and read back successfully. Kernel remains
+7.1.8; boot ID is `12fa8b15-30e2-4b66-b679-77268c0ce99d`.
+
+This pauses broker-controlled suspend, including power-button and cover
+requests, without a service restart. Restore `enabled=1` as the final step
+of the attended session. No generation was installed or trialled, no reboot
+occurred, and UART reception has not been tested. The Book Computer work
+continues on the host.
+
+## 2026-09-06 (wkelly PineNote, book-computer lane) — follow-up shipping preflight, read-only
+
+After the operator again confirmed availability, a bounded read-only SSH check
+found os2 (`/dev/mmcblk0p6`, ext4) running and booted from the same
+`/gnu/store/8zcb8zq9x92sag30m68b6jww86xd1nq7-system` as the earlier preflight.
+The kernel remains `7.1.8`, with `CONFIG_USER_NS` disabled and both seccomp
+options enabled. `/data` is mounted read-write as ext4. `df -h` reports 12 GiB
+available on root and 36 GiB on `/data`. The power-supply capacity query emitted
+`99`; its separate WS8100 pen-capacity read returned `Bad message`, so that pen
+query adds no battery-health evidence.
+
+This confirms reachability and available storage, not readiness of the Book
+Computer software for deployment. A USER_NS-enabled test kernel is built on
+the host, but no successor generation was copied or trialled. No service,
+configuration, autosuspend setting, filesystem or display operation was changed;
+no reboot occurred.
+
+## 2026-09-06 (wkelly PineNote, book-computer lane) — read-only availability and sandbox prerequisite check
+
+With the operator making the device available again, two bounded read-only SSH
+checks through the existing `pinenote-os2` alias established:
+
+- Running root: `/dev/mmcblk0p6` (os2), kernel release `7.1.8`.
+- Both `/run/current-system` and `/run/booted-system` resolve to
+  `/gnu/store/8zcb8zq9x92sag30m68b6jww86xd1nq7-system`.
+- Battery capacity reported `93` percent.
+- `/data` is mounted from `/dev/disk/by-partlabel/data` as ext4 with
+  `rw,relatime`, rather than the library placeholder.
+- `/run/booted-system/kernel/.config` reports
+  `# CONFIG_USER_NS is not set`, `CONFIG_SECCOMP=y`, and
+  `CONFIG_SECCOMP_FILTER=y`; `/proc/self/ns/user` is absent.
+
+The current kernel therefore lacks the user namespaces required by the
+book-computer lane's chosen gVisor `isolation-userns` configuration. Its accepted
+QEMU demonstration used a separate PineNote test kernel with `CONFIG_USER_NS=y`.
+A device sandbox run needs a separately built and validated successor generation;
+the shared `7.1.8` release string does not make these kernels interchangeable.
+
+This inspection performed no deployment, service change, suspend, reboot, panel
+test, or book execution. Autosuspend configuration was not changed. The result
+establishes reachability and these prerequisites only; it adds no book-computer
+hardware acceptance.
 
 ## 2026-09-04 late (wkelly PineNote, operator present, no UART) — the four post-tag fixes on glass: generations 17 and 18, the pin prunes for real, the trial refuses and comes back, patch 15's leaks gone and its one warning fixed
 

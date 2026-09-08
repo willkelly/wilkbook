@@ -1,0 +1,79 @@
+#!/bin/sh
+# Exact V9 author-successor source replay. This performs the finite guest source
+# gate and one derivation-only system lowering. It realizes no system or image.
+set -eu
+umask 077
+
+: "${FROZEN_PACKET:?}"
+: "${EVIDENCE:?}"
+: "${BOOTSTRAP_GUIX:?}"
+: "${PYTHON_BIN:?}"
+case "$FROZEN_PACKET:$EVIDENCE:$BOOTSTRAP_GUIX:$PYTHON_BIN" in
+    /*:/*:/gnu/store/*-guix-command:/gnu/store/*-python-*/bin) ;;
+    *) exit 2 ;;
+esac
+[ "$(CDPATH= cd -- "$FROZEN_PACKET" && pwd -P)" = "$FROZEN_PACKET" ]
+[ "$(CDPATH= cd -- "$EVIDENCE" && pwd -P)" = "$EVIDENCE" ]
+[ -z "$(find "$EVIDENCE" -mindepth 1 -print -quit)" ]
+[ -f "$BOOTSTRAP_GUIX" ] && [ ! -L "$BOOTSTRAP_GUIX" ]
+[ -x "$PYTHON_BIN/python3" ]
+export PATH="$PYTHON_BIN:/usr/bin:/bin"
+
+capsule=$FROZEN_PACKET/capsule
+tool=$capsule/repo/pinenote/tools/book-state-guest
+module_view=$capsule/module-view
+package_view=$capsule/package-view
+channels=$capsule/repo/channels.scm
+
+(
+    cd "$FROZEN_PACKET"
+    /usr/bin/sha256sum --check --strict PACKET-CONTENTS.sha256
+    /usr/bin/sha256sum --check --strict SOURCE-SNAPSHOT.sha256
+) > "$EVIDENCE/packet-and-snapshot-verification.txt"
+
+find "$capsule/module-view" -type f -perm /111 -printf '%m\t%n\t%P\n' \
+    | LC_ALL=C sort > "$EVIDENCE/module-view-executable-modes.tsv"
+find "$capsule/module-view/pinenote" -type f -name '*.scm' -print \
+    | sed "s|^$capsule/module-view/||" | LC_ALL=C sort \
+    > "$EVIDENCE/module-view-scheme-files.txt"
+awk -F '\t' 'NR > 1 && $4 == "module" { modules++ } NR > 1 && $3 == "0555" { executables++ } END { printf "module-files=%d\nexecutable-files=%d\n", modules, executables }' \
+    "$capsule/metadata/CAPSULE-ROSTER.tsv" > "$EVIDENCE/capsule-role-counts.txt"
+
+set +e
+sh "$tool/run-prepared.sh" "$capsule" "$BOOTSTRAP_GUIX" \
+    > "$EVIDENCE/guest-source-gate.stdout" \
+    2> "$EVIDENCE/guest-source-gate.stderr"
+gate_status=$?
+set -e
+printf '%s\n' "$gate_status" > "$EVIDENCE/guest-source-gate.status"
+[ "$gate_status" -eq 0 ]
+
+private=$EVIDENCE/derive-private
+set +e
+sh "$tool/pinned-guix.sh" "$private" "$module_view" "$package_view" \
+    "$channels" "$BOOTSTRAP_GUIX" repl -q -- "$tool/derive-system.scm" \
+    > "$EVIDENCE/derive-system.stdout" \
+    2> "$EVIDENCE/derive-system.stderr"
+derive_status=$?
+set -e
+printf '%s\n' "$derive_status" > "$EVIDENCE/derive-system.status"
+[ "$derive_status" -eq 0 ]
+rm -rf -- "$private"
+
+printf '%s\n' \
+    'schema=1' \
+    'packet=book-state-guest-sources-20260907-v9-r5' \
+    'status=author-source-gate-and-derivation-lowering-pass' \
+    'independent-review=not-performed' \
+    'system-or-image-realized=no' \
+    'qemu-runsc-arm-koreader-executed=no' \
+    > "$EVIDENCE/RESULT.txt"
+(
+    cd "$EVIDENCE"
+    find . -type f ! -name EVIDENCE.sha256 -printf '%P\n' \
+        | LC_ALL=C sort \
+        | while IFS= read -r path; do /usr/bin/sha256sum -- "$path"; done \
+        > EVIDENCE.sha256
+)
+find "$EVIDENCE" -type f -exec chmod 0400 {} +
+find "$EVIDENCE" -depth -type d -exec chmod 0500 {} +

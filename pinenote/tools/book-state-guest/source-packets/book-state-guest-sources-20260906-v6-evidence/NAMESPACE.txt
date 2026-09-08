@@ -1,0 +1,30 @@
+The successful replay ran the already-finished v6 packet through its exact
+mode-0444 `COMMANDS.txt` using bubblewrap as uid/gid 1000 in new mount, PID, and
+network namespaces. The network namespace had no host interfaces. A fresh
+tmpfs hid all host `/tmp`, including the checkout and previous private work; a
+fresh tmpfs hid `/home`; `/proc` and `/dev` were private namespace mounts.
+
+Only these relevant paths were re-exposed:
+
+- the finished v6 packet, read-only, as `/tmp/packet`;
+- the preserved v5 packet, read-only, as `/tmp/v5`;
+- the accepted review document, read-only, as `/tmp/review.md`;
+- the v5 independent evidence manifest, read-only, as
+  `/tmp/review-evidence-manifest`;
+- this fresh evidence directory, writable, as `/tmp/evidence`;
+- `/gnu/store` and `/var/guix`, writable solely for the pinned Guix daemon and
+  derivation records.
+
+`/tmp/opencode` was an empty mode-0700 directory created inside the tmpfs for
+the accepted replay scripts' fixed temporary-directory templates. The process
+started through `env -i`; the host test PATH contained only one exact immutable
+Python bin directory plus `/usr/bin:/bin`. Pinned Guix established its own
+private HOME/XDG/cache/compiled boundaries before Guix/Guile evaluation.
+
+The packet command first recorded and checked every finished-packet mode, then
+proved all 246 capsule bytes equal v5 and exactly nine mode deltas. It ran the
+required private-clone BSG5 negative before the full source/native/static gate.
+It then lowered/queried the unchanged system, computed/queried the unchanged
+image derivation, and performed the no-realization 34-derivation dry run.
+Finally it recorded all packet modes again and byte-compared the before/after
+records. The records are identical.

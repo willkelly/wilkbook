@@ -111,7 +111,11 @@ if deep and not set_wf(prior) then
 end
 ")
 
-(define (pinenote-reader-session-shepherd-service _config)
+(define (pinenote-reader-session-shepherd-service config)
+  ;; CONFIG may select a KOReader package for an experimental flavor.  The
+  ;; default remains the shipping koreader-bin object, so this does not alter
+  ;; the reader flavor or its closure.
+  (define koreader (or config koreader-bin))
   (list
    (shepherd-service
     (provision '(reader-session))
@@ -213,7 +217,7 @@ end
              (lambda (port) (display "0" port))))
          ;; wash the boot text off the panel before KOReader appears
          (when (file-exists? "/dev/fb0")
-           (system* #$(file-append koreader-bin "/lib/koreader/luajit")
+           (system* #$(file-append koreader "/lib/koreader/luajit")
                     "-e" #$%panel-blank-lua))
          ;; NOTE: this service does NOT seed KOReader's settings file.  It
          ;; used to, and that copy was DEAD CODE for its whole life: activation
@@ -231,9 +235,9 @@ end
           (make-forkexec-constructor
            ;; reader.lua's own shebang is #!./luajit, so run the
            ;; bundled luajit directly from the bundle directory.
-           (list #$(file-append koreader-bin "/lib/koreader/luajit")
+           (list #$(file-append koreader "/lib/koreader/luajit")
                  "reader.lua")
-           #:directory #$(file-append koreader-bin "/lib/koreader")
+           #:directory #$(file-append koreader "/lib/koreader")
            #:environment-variables
            ;; KO_HOME is load-bearing: without it KOReader treats its
            ;; own directory (the read-only store) as the data dir and
@@ -245,11 +249,12 @@ end
                  "KO_HOME=/root/.config/koreader"
                  "PATH=/run/current-system/profile/bin"
                  "LC_ALL=en_US.UTF-8"
-                 ;; KOReader's supported external-font hook; only set
-                 ;; when fonts are actually staged in this image
-                 #$@(if pinenote-local-fonts
-                        #~("EXT_FONT_DIR=/run/current-system/profile/share/fonts/local")
-                        #~()))
+                  ;; User-installed fonts survive generation changes on /data.
+                  ;; Keep optional build-time fonts visible as well; KOReader
+                  ;; accepts a semicolon-separated external font search path.
+                  #$(if pinenote-local-fonts
+                        "EXT_FONT_DIR=/run/current-system/profile/share/fonts/local;/data/fonts"
+                        "EXT_FONT_DIR=/data/fonts"))
            #:log-file "/var/log/reader-session.log")
           args)))
     (stop

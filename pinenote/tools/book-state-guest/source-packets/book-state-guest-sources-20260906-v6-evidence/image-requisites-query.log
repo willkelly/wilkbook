@@ -1,0 +1,3 @@
+/tmp/packet/capsule/repo/channels.scm:1:6: warning: channel 'nonguix' is not trusted
+/tmp/packet/capsule/repo/channels.scm:11:6: warning: channel 'saayix' is not trusted
+REQUISITES count=4855 root=/gnu/store/p6iwha5axl4s5yi2qb9l76x00cw9vqzg-disk-image.drv

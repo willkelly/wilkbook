@@ -1,0 +1,85 @@
+# Run from this packet directory. Frozen scripts are invoked through their
+# interpreters because all source/check files are deliberately read-only.
+packet=$(pwd -P)
+
+# Authenticate the complete frozen capsule and evidence packet.
+sha256sum --check --strict SOURCE-SNAPSHOT.sha256
+sha256sum --check --strict EVIDENCE.sha256
+python3 -I -S -B \
+  capsule/repo/pinenote/tools/book-state-guest/check-source-capsule.py \
+  "$packet/capsule"
+
+# Replay source, syntax, native FD, liveness, backend, cache-poison,
+# module-origin, and static Guix checks. The probes are not executed here.
+BOOTSTRAP_GUIX=$(/usr/bin/readlink -f "$(command -v guix)")
+sh capsule/repo/pinenote/tools/book-state-guest/run-prepared.sh \
+  "$packet/capsule" "$BOOTSTRAP_GUIX"
+
+# Derivation-only lowering. PRIVATE must not exist.
+PRIVATE=$(mktemp -d /tmp/opencode/book-state-v5-derive.XXXXXX)
+rmdir "$PRIVATE"
+sh capsule/repo/pinenote/tools/book-state-guest/pinned-guix.sh \
+  "$PRIVATE" "$packet/capsule/module-view" "$packet/capsule/package-view" \
+  "$packet/capsule/repo/channels.scm" "$BOOTSTRAP_GUIX" repl -q -- \
+  "$packet/capsule/repo/pinenote/tools/book-state-guest/derive-system.scm"
+# Expected: /gnu/store/kjiz9wzqbdr9p1y3w0ni6qh8hzhqrkp0-system.drv
+
+# Query and check that exact system graph through the same private boundary.
+QUERY_PRIVATE=$(mktemp -d /tmp/opencode/book-state-v5-query.XXXXXX)
+rmdir "$QUERY_PRIVATE"
+sh capsule/repo/pinenote/tools/book-state-guest/pinned-guix.sh \
+  "$QUERY_PRIVATE" "$packet/capsule/module-view" \
+  "$packet/capsule/package-view" "$packet/capsule/repo/channels.scm" \
+  "$BOOTSTRAP_GUIX" repl -q -- \
+  "$packet/capsule/repo/pinenote/tools/book-state-guest/query-requisites.scm" \
+  /gnu/store/kjiz9wzqbdr9p1y3w0ni6qh8hzhqrkp0-system.drv \
+  > /tmp/opencode/book-state-v5-requisites.txt
+python3 -I -S -B \
+  capsule/repo/pinenote/tools/book-state-guest/check-requisites.py \
+  /gnu/store/kjiz9wzqbdr9p1y3w0ni6qh8hzhqrkp0-system.drv \
+  /tmp/opencode/book-state-v5-requisites.txt
+
+# Exact private environment shared by image derivation, dry-run, and the one
+# future build. Setting these variables does not authorize the build.
+IMAGE_PRIVATE=$(mktemp -d /tmp/opencode/book-state-v5-image.XXXXXX)
+chmod 700 "$IMAGE_PRIVATE"
+mkdir -m 700 "$IMAGE_PRIVATE/home" "$IMAGE_PRIVATE/cache" \
+  "$IMAGE_PRIVATE/config" "$IMAGE_PRIVATE/data" "$IMAGE_PRIVATE/state" \
+  "$IMAGE_PRIVATE/tmp" "$IMAGE_PRIVATE/empty-path" "$IMAGE_PRIVATE/compiled"
+IMAGE_SYSTEM="$packet/capsule/module-view/pinenote/systems/pinenote-book-state-reader.scm"
+image_guix () {
+  /usr/bin/env -i \
+    HOME="$IMAGE_PRIVATE/home" XDG_CACHE_HOME="$IMAGE_PRIVATE/cache" \
+    XDG_CONFIG_HOME="$IMAGE_PRIVATE/config" \
+    XDG_DATA_HOME="$IMAGE_PRIVATE/data" XDG_STATE_HOME="$IMAGE_PRIVATE/state" \
+    TMPDIR="$IMAGE_PRIVATE/tmp" PATH="$IMAGE_PRIVATE/empty-path" \
+    LANG=C LC_ALL=C GUILE_AUTO_COMPILE=0 \
+    GUILE_LOAD_PATH="$packet/capsule/module-view" \
+    GUILE_LOAD_COMPILED_PATH="$IMAGE_PRIVATE/compiled" \
+    GUILE_EXTENSIONS_PATH= BOOK_STATE_MODULE_VIEW="$packet/capsule/module-view" \
+    BOOK_STATE_PACKAGE_VIEW="$packet/capsule/package-view" \
+    "$BOOTSTRAP_GUIX" time-machine -L "$packet/capsule/package-view" \
+      -C "$packet/capsule/repo/channels.scm" --no-substitutes -- \
+      system -L "$packet/capsule/package-view" image --no-grafts \
+      --no-substitutes --max-jobs=1 --cores=2 \
+      --target=aarch64-linux-gnu -t raw-with-offset "$@" "$IMAGE_SYSTEM"
+}
+
+# Authorized now: compute and check the image derivation; realize nothing.
+IMAGE_DRV=$(image_guix -d)
+test "$IMAGE_DRV" = /gnu/store/p6iwha5axl4s5yi2qb9l76x00cw9vqzg-disk-image.drv
+
+# Authorized now: prerequisite dry-run; realize nothing. Expected: exactly the
+# 34 paths frozen in evidence/image-prerequisites-dry-run.log. The accepted
+# kernel and source-built gVisor derivations are already cached and absent.
+image_guix --dry-run
+
+# EXACT NEXT IMAGE BUILD COMMAND. DO NOT RUN until the parent separately
+# authorizes one build after independent v5 source acceptance. It builds the
+# reviewed raw image with one job/two cores and no substitutes:
+image_guix
+# Expected output: /gnu/store/9yx1xmhf2hnsp6vdwnvvxzqv3i9i9fkz-disk-image
+
+# No QEMU/runsc/ARM command belongs to this packet. The separate two-boot owner
+# must independently bind the reviewed image and exact 360-second timeout plus
+# 5-second TERM grace before the parent can authorize either boot.

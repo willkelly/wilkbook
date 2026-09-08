@@ -1,0 +1,6 @@
+/tmp/capsule/repo/channels.scm:1:6: warning: channel 'nonguix' is not trusted
+/tmp/capsule/repo/channels.scm:11:6: warning: channel 'saayix' is not trusted
+WARNING: (pinenote systems pinenote-book-execution-spike): imported module (gnu services) overrides core binding `delete'
+PIN kernel-output=/gnu/store/334ljs8qa7ww8vlg9gpv428bh8yjd1nx-linux-pinenote-book-execution-test-7.1.8-pinenote
+PIN gvisor-source-output=/gnu/store/djgy782a5fjmsfkr6hzff3g953r60c86-gvisor-source-built-20260831.0
+SYSTEM-DERIVATION /gnu/store/kjiz9wzqbdr9p1y3w0ni6qh8hzhqrkp0-system.drv

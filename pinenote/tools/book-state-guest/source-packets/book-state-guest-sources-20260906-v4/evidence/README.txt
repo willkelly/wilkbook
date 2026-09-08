@@ -1,0 +1,17 @@
+schema=1
+role=source-native-static-and-derivation-only-evidence
+canonical-full-source-native-static=pass
+frozen-packet-full-replay=pass
+frozen-capsule-check=pass
+namespace-derive=pass
+namespace-requisites-check=pass
+namespace-requisites-count=2784
+namespace-requisites-sha256=a8342e6ffe531182779e560ddf9960765809f877565b987decc25f8c274f827d
+namespace-boundary=unprivileged-user-and-mount-namespace
+namespace-visible-private-source=/tmp/capsule-only
+namespace-original-checkout=hidden
+namespace-historical-tmp-and-packets=hidden
+system-derivation=/gnu/store/qb9s3c1p4xwzfy0i6j2qn084rc2g4wf8-system.drv
+system-derivation-delta=expanded-embedded-source-manifest-cascade
+kernel-and-gvisor-output-identities=unchanged
+image-qemu-runsc-arm-device=not-executed

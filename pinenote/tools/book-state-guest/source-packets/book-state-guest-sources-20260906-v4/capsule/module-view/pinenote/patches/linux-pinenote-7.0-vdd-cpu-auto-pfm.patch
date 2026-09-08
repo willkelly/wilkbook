@@ -1,0 +1,139 @@
+vdd_cpu (TCS4525): boot in automatic PFM/PWM instead of forced PWM.
+
+MEASURED ON GLASS 2026-08-06 -- the gate below is satisfied.  Runtime
+ABA via direct i2c poke of COMMAND(0x14) bit 6, DVFS clamped to 408 MHz
+(850 mV), 900 s per phase, differential coulomb-counter method while
+charging (input saturation verified by a +-750 mA burn calibration;
+ABA cancels linear charger taper):
+
+    A  force-PWM : +803.3 mA charging
+    B  auto-PFM  : +823.3 mA charging
+    A2 force-PWM : +779.9 mA charging
+
+Drift-corrected saving: +31.7 mA; quoting ~30 +- 8 mA after bounding the
+taper-shape uncertainty.  That is ~18% of the board's measured 163 mA
+awake static floor, from one register bit.  The rail was stable through
+the full auto-PFM window and the revert verified byte-exact.  Note the
+board's OTHER bucks (RK817, e.g. vdd_logic) already request
+regulator-initial-mode = <0x2> in this same dtsi and get it, because
+rk808's driver has of_map_mode -- vdd_cpu was left in forced PWM only
+because fan53555 could not parse the property.  This patch completes the
+board's existing intent.
+
+MEASURED (2026-08-05 device state + code proof, no device write yet):
+- regulator_summary reports vdd_cpu opmode "fast" at 1100-1150 mV.  On the
+  TCS4525 "fast" is literally the force-PWM bit for the active VSEL:
+  get_mode reads COMMAND (0x14) and tests TCS_VSEL1_MODE (bit 6)
+  (fan53555.c:209-222 with fcs,suspend-voltage-selector = <0> selecting
+  vol_reg = VSEL1@0x10, mode_mask = BIT(6), fan53555.c:490-506, 544-554).
+- Nothing in software sets that bit: the 7.0.11 probe never writes 0x14,
+  the driver has no of_map_mode so regulator-initial-mode is ignored
+  (of_regulator.c:197-208), no in-tree consumer calls regulator_set_mode
+  on this rail, mainline u-boot's fan53555 driver is voltage-only, and
+  Rockchip's downstream u-boot defines the TCS mode bits but never writes
+  them.  Forced PWM is the chip's power-on state; at light load it burns
+  quiescent power that the automatic PFM/PWM comparator would not.
+- DVFS cannot interfere with the mode: set_voltage_sel writes only
+  VSEL1@0x10 masked 0x7F (helpers.c:281-288, fan53555.c:604-605); the
+  mode bit lives in a different register entirely.
+
+ASSUMED (verify against the runtime A/B before merging):
+- That automatic PFM/PWM at light load actually lowers the measured
+  static floor on this board, and that auto PFM->PWM transitions absorb
+  PineNote-scale load steps.  The TCS4525 datasheet was not obtainable;
+  "auto mode is the designed light-load behaviour" is inferred from the
+  FAN53526 heritage and the register semantics encoded in four
+  independent codebases (mainline + BSP kernels, mainline + downstream
+  u-boot).
+
+The change is three parts and the driver parts are load-bearing:
+
+1. fan53555_set_mode(): REGULATOR_MODE_NORMAL wrote di->vol_reg instead
+   of di->mode_reg.  Harmless on original FAN53555 (mode_reg == vol_reg)
+   but on the TCS4525 vol_reg is the ACTIVE VSEL register whose bit 6 is
+   part of the 7-bit voltage selector: requesting NORMAL through the
+   kernel would drop the CPU rail by 64 steps = 400 mV whenever it sits
+   at >= 1.0 V — an instant hang.  This bug is present in current
+   mainline and the Rockchip BSP; with it unfixed, part 3 would crash
+   the board at every boot.  Upstream-register candidate: report to the
+   fan53555 maintainers / community lineage (doc/upstream-register.md);
+   this local fix exists only because part 3 requires it.
+
+2. Add desc.of_map_mode (strict FAST/NORMAL map, mirroring the BSP
+   driver's shape) so of_get_regulation_constraints() honours
+   regulator-initial-mode.  Set before fan53555_parse_dt(), which is
+   what consumes it.
+
+3. rk3566-pinenote.dtsi: regulator-initial-mode = <2> (NORMAL) on
+   vdd_cpu.  Applied once by set_machine_constraints() at probe
+   (core.c:1504-1514) via the fixed set_mode path — a single write that
+   clears COMMAND bit 6 and never touches a VSEL register, safe at any
+   rail voltage.
+
+Wiring: add this file to %linux-pinenote-patches in
+pinenote/packages/kernel.scm (after the forward-port patch; no hunk
+overlaps — the forward-port patch does not touch fan53555.c or the
+vdd_cpu node).
+
+diff -u -r a/arch/arm64/boot/dts/rockchip/rk3566-pinenote.dtsi b/arch/arm64/boot/dts/rockchip/rk3566-pinenote.dtsi
+--- a/arch/arm64/boot/dts/rockchip/rk3566-pinenote.dtsi
++++ b/arch/arm64/boot/dts/rockchip/rk3566-pinenote.dtsi
+@@ -226,6 +226,15 @@
+ 		regulator-min-microvolt = <712500>;
+ 		regulator-max-microvolt = <1390000>;
+ 		regulator-ramp-delay = <2300>;
++		/*
++		 * 0x2 = REGULATOR_MODE_NORMAL: clear the TCS4525's force-PWM
++		 * bit for the active VSEL and return light-load behaviour to
++		 * the chip's automatic PFM/PWM comparator.  Requires the
++		 * of_map_mode/set_mode changes in fan53555.c from this same
++		 * patch; without them the property is ignored with a boot
++		 * warning ("mapping for mode 2 not defined").
++		 */
++		regulator-initial-mode = <2>;
+ 		regulator-always-on;
+ 		vin-supply = <&vcc_sys>;
+ 
+diff -u -r a/drivers/regulator/fan53555.c b/drivers/regulator/fan53555.c
+--- a/drivers/regulator/fan53555.c
++++ b/drivers/regulator/fan53555.c
+@@ -188,6 +188,17 @@
+ 				  VSEL_BUCK_EN, 0);
+ }
+ 
++static unsigned int fan53555_map_mode(unsigned int mode)
++{
++	switch (mode) {
++	case REGULATOR_MODE_FAST:
++	case REGULATOR_MODE_NORMAL:
++		return mode;
++	default:
++		return REGULATOR_MODE_INVALID;
++	}
++}
++
+ static int fan53555_set_mode(struct regulator_dev *rdev, unsigned int mode)
+ {
+ 	struct fan53555_device_info *di = rdev_get_drvdata(rdev);
+@@ -198,7 +209,7 @@
+ 				   di->mode_mask, di->mode_mask);
+ 		break;
+ 	case REGULATOR_MODE_NORMAL:
+-		regmap_update_bits(rdev->regmap, di->vol_reg, di->mode_mask, 0);
++		regmap_update_bits(rdev->regmap, di->mode_reg, di->mode_mask, 0);
+ 		break;
+ 	default:
+ 		return -EINVAL;
+@@ -686,6 +697,12 @@
+ 	if (!di)
+ 		return -ENOMEM;
+ 
++	/*
++	 * Must be set before fan53555_parse_dt(): of_get_regulator_init_data()
++	 * consults desc->of_map_mode when parsing regulator-initial-mode.
++	 */
++	di->desc.of_map_mode = fan53555_map_mode;
++
+ 	pdata = dev_get_platdata(&client->dev);
+ 	if (!pdata)
+ 		pdata = fan53555_parse_dt(&client->dev, np, &di->desc);

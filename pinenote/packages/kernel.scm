@@ -252,6 +252,26 @@ rockchip/rk3566-pinenote-v1.2.dtb; this package does not flash, repartition,
 or mutate bootloader state.")
     (license license:gpl2)))
 
+;; Experimental gVisor execution kernel.  This is deliberately a separate
+;; package object: the shipping reader keeps linux-pinenote unchanged, while
+;; Book execution gets the one additional namespace primitive required by
+;; systrap with directfs disabled.  The QEMU spike predates this reusable home
+;; and retains its equivalent private definition so its accepted source packet
+;; and one-shot system stay untouched.
+(define-public linux-pinenote-book-execution-test
+  (package
+    (inherit linux-pinenote)
+    (name "linux-pinenote-book-execution-test")
+    (arguments
+     (substitute-keyword-arguments (package-arguments linux-pinenote)
+       ((#:phases phases)
+        #~(modify-phases #$phases
+            (add-after 'configure 'enable-user-namespaces-for-gvisor
+              (lambda _
+                (invoke "scripts/config" "--enable" "USER_NS")
+                (invoke "make" "olddefconfig")
+                (invoke "grep" "-Fqx" "CONFIG_USER_NS=y" ".config")))))))))
+
 
 
 ;; The EXTRACT_FBS diagnostic kernel (linux-pinenote-debug) and the direct-mode

@@ -1,0 +1,5 @@
+PASS: all finished v7 packet directories are mode 0555
+PASS: all finished v7 packet records have authenticated read-only modes
+PASS: all 246 inherited capsule files are mode-stable against v6
+PASS: v6-to-v7 capsule delta is exactly 16 records and two added host checks
+PASS: all nine module-view wrappers retain authenticated mode 0555

@@ -1,0 +1,28 @@
+arm64: dts: rockchip: give the PineNote's SDIO Wi-Fi power sequence a settle delay
+
+The PineNote runs its BCM4345C0 Wi-Fi module behind mmc-pwrseq-simple
+with no post-power-on-delay-ms, so the mmc core starts SDIO enumeration
+the moment the reset line is released.  At cold boot that is already
+marginal (the first brcmfmac probe fails with -5 and the retry lands
+12 ms later).  With cap-power-off-card the card is powered off in
+suspend and every resume repeats the sequence; on 2026-09-03 one resume
+downloaded the firmware and then timed out on the first control
+exchange ("brcmf_sdio_bus_rxctl: resumed on timeout"), the driver
+released both functions, and Wi-Fi stayed dead until a cold boot.
+
+The Quartz64, same SoC and module family, carries
+post-power-on-delay-ms = <100>.  Adopt the same settle time; it costs
+100 ms per power-on and nothing else.
+
+wilkbook: doc/networking.md, doc/status.md 2026-09-03.
+
+--- a/arch/arm64/boot/dts/rockchip/rk3566-pinenote.dtsi	2026-09-03 19:17:33.422356200 -0600
++++ b/arch/arm64/boot/dts/rockchip/rk3566-pinenote.dtsi	2026-09-03 19:17:34.070899115 -0600
+@@ -165,6 +165,7 @@
+ 		clock-names = "ext_clock";
+ 		pinctrl-0 = <&wifi_enable_h>;
+ 		pinctrl-names = "default";
++		post-power-on-delay-ms = <100>;
+ 		reset-gpios = <&gpio0 RK_PC6 GPIO_ACTIVE_LOW>;
+ 	};
+ 
