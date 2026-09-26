@@ -19,7 +19,7 @@ if initial == "absent" then service[authority], runtime = "absent", false end
 if initial == "stopped" or initial == "inert" then service[authority], runtime = "stopped", false end
 if initial == "reader-stopped" then service["reader-session"] = "stopped" end
 if initial == "already-ro" then root_ro, data_ro = true, true end
-local data_id, loaded = "21", false
+local data_id, root_id, root_present, loaded = "21", "20", true, false
 local files = {
     ["/boot/gen-2/append"] = "root=LABEL=PNGuixRoot console=ttyS2,1500000n8\n",
     ["/run/current-system/profile/sbin/kexec"] = "binary",
@@ -34,7 +34,7 @@ local function mountinfo()
     end
     local data = data_present and mount(data_id, "/data", data_ro) or ""
     if scenario == "bind-ro" then data = data:gsub("/data rw,", "/data ro,") end
-    return mount("20", "/", root_ro) .. data
+    return (root_present and mount(root_id, "/", root_ro) or "") .. data
 end
 local function read(path)
     if path == "/proc/self/mountinfo" then return mountinfo() end
@@ -137,6 +137,8 @@ local function command(cmd)
         if scenario == "data-replaced" then data_id = "22" end
         if scenario == "data-appeared" then data_present = true end
         if scenario == "data-disappeared" then data_present = false end
+        if scenario == "root-replaced" then root_id = "23" end
+        if scenario == "root-disappeared" then root_present = false end
         return scenario == "load-fail" and 1 or 0, "load diagnostic"
     end
     if cmd:find("sbin/kexec -u", 1, true) then return 0, "" end

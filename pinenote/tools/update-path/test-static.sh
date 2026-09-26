@@ -73,7 +73,8 @@ echo "PASS: add stages payloads for generations that predate the helper"
 reject -q 'mmcblk0p7\|mmcblk0p5\|sfdisk\|parted' "$helper"
 sed '/^[[:space:]]*--/d' "$helper" | grep '/data' | reject -F -x -v \
   -e '    if torn.data_readonly then data_ok = restore("/data read-write", function() return restore_mount("/data", torn.data_readonly, "mount -o remount,rw /data >/dev/null 2>&1") end) end' \
-  -e '    local root_mount, data_mount = mount_state("/"), mount_state("/data")' \
+  -e '        local verified = restore("original data mount state", function() return verify_mount("/data", torn.data_mount) end)' \
+  -e '    torn.data_mount = mount_state("/data") or false' \
   -e '    remount_readonly("/data", data_mount, "data_readonly")'
 echo "PASS: /data operations are limited to mount inspection and reversible remounts; no partition writes"
 # The ledger pin (2026-09-04, the review's S5): pin/unpin exist, list shows the

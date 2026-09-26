@@ -143,6 +143,21 @@ local function bail(fmt, ...)
     local data_ok, root_ok = true, true
     if torn.data_readonly then data_ok = restore("/data read-write", function() return restore_mount("/data", torn.data_readonly, "mount -o remount,rw /data >/dev/null 2>&1") end) end
     if torn.readonly then root_ok = restore("/ read-write", function() return restore_mount("/", torn.readonly, "mount -o remount,rw / >/dev/null 2>&1") end) end
+    -- Snapshot validity is independent of whether we attempted a remount.
+    -- In particular, a vanished/replaced mount refuses before setting the
+    -- remount flag; that must not authorize a writer on the placeholder.
+    local function verify_mount(target, before)
+        if before == nil then return false end -- inspection never completed
+        local current = mount_state(target)
+        if before == false then return current == nil end -- originally absent
+        return current and current.id == before.id and current.readonly == before.readonly
+    end
+    if torn.mount_snapshot_started then
+        local verified = restore("original data mount state", function() return verify_mount("/data", torn.data_mount) end)
+        data_ok = data_ok and verified
+        verified = restore("original root mount state", function() return verify_mount("/", torn.root_mount) end)
+        root_ok = root_ok and verified
+    end
     if torn.dwc3 then restore("PIPE power control", function() write_file(DWC3_CONTROL, torn.dwc3); return true end) end
     if torn.udc then
         restore("USB gadget", function()
@@ -400,7 +415,12 @@ function commands.trial(n)
     -- Each step remembers what it undid, for bail(): only what was up comes
     -- back (a reader that was not running stays stopped, a radio that was
     -- off stays off).
-    local root_mount, data_mount = mount_state("/"), mount_state("/data")
+    torn.mount_snapshot_started = true
+    -- nil means unverified, false means verified absent.  Retain these even
+    -- when teardown refuses before its first remount attempt.
+    torn.root_mount = mount_state("/") or false
+    torn.data_mount = mount_state("/data") or false
+    local root_mount, data_mount = torn.root_mount, torn.data_mount
     if not root_mount then bail("root filesystem is not mounted") end
     stop_service("reader-session", "reader")
     stop_service(AUTHORITY, "authority")
