@@ -6,10 +6,61 @@ campaign harvest.
 
 | script | question | run |
 | --- | --- | --- |
-| `refresh-episodes.py` | **how often, how big, how clustered** — gap-threshold sweep, episode runs, the menu antecedent, and the bound a non-reproduction is worth | `make refresh-episodes-check` (self-test); `python3 refresh-episodes.py LOG…` |
+| `refresh-episodes.py` | **how often, how big, how clustered** — request gap-threshold sweep, episode runs, menu-antecedent coverage, conditional field comparisons | `make refresh-episodes-check` (self-test); `python3 refresh-episodes.py LOG…` |
 | `refresh-triggers.py` | **what asks twice** — the candidate triggers, each scored against the signature it would have to leave | `make refresh-trigger-check` (self-test); `python3 refresh-triggers.py LOG…` |
+| `campaign-report.scm` | **was the capture complete, and did analysis succeed?** — validate the snapshot and run both analysers with checked exit status | `guile --no-auto-compile -e main -s campaign-report.scm HARVEST OUT LEDGER` |
 
-Both are pure stdlib. Neither needs a device, a waveform, or a build.
+The analysers use Python's standard library. The capture/report stage uses
+Guile 3 and coreutils (`base64`, `sha256sum`). Tests need no device,
+waveform or build. New capture/system tooling is Guile. The two existing
+Python analysers remain **legacy migration work**: replacing the episode
+analyser in this correction would combine transport changes with a rewrite
+of its statistical arithmetic. A later Guile migration must preserve the
+CLI/JSON compatibility below and pass both the synthetic and committed
+corpus gates. The trigger analyser does not need a wholesale rewrite here.
+
+## Capture fidelity and failure handling
+
+`run-virt-pageturn-campaign.sh` snapshots the guest's current
+`/var/log/reader-session.log` once, then harvests that **complete snapshot**
+as base64 between line-delimited `WBCAMP-LOG-BEGIN`/`WBCAMP-LOG-END`
+markers. `WBCAMP-LOGSTAT` gives its original byte count and SHA-256. Encoding
+avoids console CRLF processing, split UTF-8, control bytes and unterminated
+last-line loss. Metadata and payload refer to the same snapshot, so reader
+appends during transport cannot create a count race.
+
+The Guile report stage rejects missing/duplicate framing, invalid encoding,
+size/hash mismatch, missing clock metadata and failed analyzers. The console
+harvester exits nonzero on timeout. There is no successful `tee` status to
+hide an analyzer failure. Malformed refresh lines and backwards timestamps
+within a source log fail analysis instead of silently dropping/reordering
+events. A failed QMP driver or missing `PLAN-END` also fails the campaign.
+
+Artifacts under the campaign output directory:
+
+* `harvest.txt`: raw console transport, including host clock samples;
+* `reader-session.base64`, `reader-session.log`: encoded and validated full log;
+* `reader-session.log.partial`: retained on decode/validation failure;
+* `capture-validation.txt`: byte/hash validation and harvest clock interval;
+* `episodes.txt` / `episodes.json`, `triggers.txt` / `triggers.json`: both
+  analyses of the full log; failed analyzer stdout/stderr stays in its text file;
+* `report-driver.out`: validation/analysis failure diagnostics.
+
+`pn-refresh.log` (grep-only input) and the unqualified `clock-offset.txt` are
+replaced by the full log and the clock interval report. A validated snapshot
+does not recover already rotated logs or prove that every publishing path
+emits `[pn-refresh]`.
+
+Run the transport/error-path gate with:
+
+```
+guile --no-auto-compile -s pinenote/tools/refresh-episodes/test-campaign-capture.scm
+```
+
+It covers complete UTF-8/binary logs, CRLF transport, missing/truncated/
+corrupted captures, console noise, duplicate framing, missing clocks, and
+failing/missing analyzers (including failure of the second analyzer). Test
+artifacts stay in this tool's ignored `build/` directory.
 
 ## The input, and the one way to get it wrong
 
@@ -37,9 +88,51 @@ those files and requires the published numbers back, so every figure in
 the issue-#14 trigger writeup is one command from being re-derived. That
 is the whole reason the logs are in the tree.
 
-`test-refresh-episodes.py` instead replays a **synthetic** fixture
-reconstructed from the issue's published structure — see its docstring
-for why, and for what that does and does not prove.
+`test-refresh-episodes.py` replays a **synthetic** fixture reconstructed
+from the issue's published structure, and pins CLI results against the
+committed corpus: 764 traces, 412 full-panel partials, 283 pairs within
+the default 30 s cap (distinct from the issue's historical 399 denominator),
+five episodes, four menu hits and a 131 ms observed partial/partial minimum.
+The context fixture tests missing antecedents and uncertain input attribution.
+
+## Interpretation and output compatibility
+
+* **Request-only semantics.** A trace is emitted before dispatch. The
+  reports do not count completed refreshes, visible double draws or a
+  visible-defect rate. A wash-then-ui sequence is two requests; it does not
+  by itself identify one dismissal or two visible passes.
+* **Antecedent coverage.** Zero eligible flash/global or full-panel
+  ui/partial lookbacks explicitly means the conjunction was unexercised.
+  Leading lookback windows are reported as unverified; a truncated history
+  cannot establish that no antecedent occurred.
+* **Context.** Missing bracket/wash markers or missing/inconsistent marker
+  clock alignment prevent D/E exclusion verdicts. A source-based exclusion
+  still depends on the recorded reader context. A notebook may publish ink
+  or Refresh directly, outside `[pn-refresh]`; neither tool measures those
+  requests, even when the full session log contains notebook activity.
+* **Clock alignment.** No `--clock-offset` means no ledger attribution.
+  An offset alone has unknown uncertainty. `--clock-uncertainty WIDTH`
+  specifies an offset interval `[offset, offset+WIDTH]`. The campaign
+  bounds this interval with host command-send/receipt stamps around guest
+  `date`; it assumes no wall-clock step during the exchange and does not
+  measure drift over the campaign. Host command timestamps are not guest
+  input or gesture timestamps. Preceding MARKs are nominal, conditional
+  associations; the report flags when the interval can reverse their order.
+  Trigger markers have second-resolution stamps; offset range and discarded
+  unstamped markers are reported, rather than treating median alignment as exact.
+* **Conditional statistics.** Published binomial calculations are retained
+  for reproducibility, not presented as iid population evidence. Adjacent
+  pairs overlap, episodes cluster, reading behaviour differs, and the field
+  corpus is one selected operator/image. These calculations do not bound
+  non-reproduction or establish a defect rate. Observed minima are sample
+  statistics, not hard floors of a mechanism.
+
+Existing numerical JSON keys are preserved, including `field_bound`,
+`p_value` and `identical_repeat_floor_ms`. Their interpretation is qualified
+by new `semantics`, `statistical_interpretation` and `coverage` fields.
+`identical_repeat_min_ms` aliases the last key under an accurate name.
+Episodes also include `clock_alignment` and `antecedent_coverage`; a
+`preceding_mark` is explicitly conditional and can carry `dt_interval_s`.
 
 ## What the trigger analysis covers
 

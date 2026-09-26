@@ -22,9 +22,12 @@ Run:  python3 test-refresh-episodes.py     (or: make refresh-episodes-check)
 from __future__ import annotations
 
 import importlib.util
+import io
+import json
 import os
 import sys
 import tempfile
+from contextlib import redirect_stdout
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 spec = importlib.util.spec_from_file_location(
@@ -120,6 +123,17 @@ def check(label, got, want, tol=None):
         FAILURES.append(label)
 
 
+def report(logs, tmp, *args):
+    output = os.path.join(tmp, "episodes.json")
+    text = io.StringIO()
+    with redirect_stdout(text):
+        rc = RE_MOD.main(list(logs) + ["--json", output] + list(args))
+    if rc:
+        raise AssertionError(text.getvalue())
+    with open(output) as fh:
+        return json.load(fh), text.getvalue()
+
+
 def main():
     print("refresh-episodes self-test (synthetic issue-#14 field structure)")
     tmp = tempfile.mkdtemp(prefix="refresh-episodes-test-")
@@ -168,9 +182,9 @@ def main():
     check("binomial P(>=4 of 5 | p=0.072) ~ 1e-4",
           round(p, 6), 0.000122, tol=2e-5)
 
-    # The floor and the continuum claim: the fastest gap is 131 ms and no
+    # Observed minimum and continuum: the fastest gap is 131 ms and no
     # multiplicative step in the low tail is large enough to be a boundary.
-    check("hard floor (published 131 ms)", round(1000 * min(gaps)), 131)
+    check("observed partial/partial minimum (published 131 ms)", round(1000 * min(gaps)), 131)
     tail = sorted(gaps)[:13]
     steps = [b / a for a, b in zip(tail, tail[1:])]
     check("no low-tail step above x1.5 (continuum, not bimodal)",
@@ -184,6 +198,53 @@ def main():
                             and 0 < tr.t - o.t <= 15.0 for o in traces))
     check("conjunction is stricter than a lone wash",
           base_hits <= lone_flash, True)
+
+    # Pin the CLI's arithmetic on the actual committed corpus as well as
+    # the reconstructed fixture. Reporting changes must not repin its counts.
+    corpus = os.path.join(HERE, "..", "..", "..", "doc", "artifacts",
+                          "pinenote-refresh-traces-20260815")
+    out, text = report([os.path.join(corpus, "reader-session-rotated.log"),
+                        os.path.join(corpus, "reader-session-current.log")], tmp)
+    check("corpus CLI: trace count", out["traces"], 764)
+    check("corpus CLI: full-panel partials", out["full_panel_partials"], 412)
+    check("corpus CLI: episodes and menu hits",
+          (out["report_threshold_summary"]["episodes"],
+           out["report_threshold_summary"]["menu_hits"]), (5, 4))
+    check("corpus CLI: capped field comparison pairs", out["field_bound"][0]["pairs"], 283)
+    check("corpus CLI: observed minimum ms", round(out["gap_min_s"] * 1000), 131)
+    check("conditional field comparison label", "CONDITIONAL FIELD COMPARISON" in text, True)
+    check("hard-floor claim removed", "hard floor (fastest" in text, False)
+    check("request-only semantics in JSON", "requests only" in out["semantics"], True)
+
+    # The fixture has context but neither antecedent component. Zero is
+    # unexercised coverage, not evidence excluding a menu-related trigger.
+    context = os.path.join(HERE, "fixtures", "context.log")
+    ledger = os.path.join(tmp, "ledger.txt")
+    with open(ledger, "w") as fh:
+        fh.write("99.9 MARK possible-input\n")
+    out, text = report([context], tmp, "--ledger", ledger)
+    check("no antecedent: both component counts zero", out["antecedent_coverage"],
+          {"partials_with_flash": 0, "partials_with_ui": 0, "partials_with_both": 0})
+    check("no antecedent: coverage warning", "MISSING ANTECEDENT COVERAGE" in text, True)
+    check("no clock offset: no fabricated attribution",
+          "preceding_mark" in out["episodes_at_report_threshold"]["episodes"][0], False)
+    check("no clock offset: warning", "ledger attribution disabled" in text, True)
+    check("leading lookback not assumed complete", out["coverage"]["leading_lookback_unverified_traces"], 2)
+    check("notebook context counted", out["coverage"]["notebook_lines"], 1)
+    out, text = report([context], tmp, "--ledger", ledger, "--clock-offset", "0")
+    check("offset alone has unknown uncertainty", "uncertainty UNKNOWN" in text, True)
+    out, text = report([context], tmp, "--ledger", ledger, "--clock-offset", "0",
+                       "--clock-uncertainty", "1")
+    mark = out["episodes_at_report_threshold"]["episodes"][0]["preceding_mark"]
+    check("clock interval can reverse apparent input order", mark["dt_interval_s"][0] < 0, True)
+    check("uncertain input order called out", "order uncertain" in text, True)
+    check("host timestamps not presented as input timestamps", "not guest input timestamps" in text, True)
+    broken = os.path.join(tmp, "malformed.log")
+    with open(broken, "w") as fh:
+        fh.write(line(100.0, "partial", "partial") + "\n[pn-refresh] truncated\n")
+    with redirect_stdout(io.StringIO()):
+        rc = RE_MOD.main([broken])
+    check("malformed trace fails instead of analyzing a subset", rc, 1)
 
     print()
     if FAILURES:

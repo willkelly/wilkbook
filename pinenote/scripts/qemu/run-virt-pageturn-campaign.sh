@@ -10,14 +10,14 @@
 #     fixed "sub-second" cut is arbitrary and a SWEEP must be reported,
 #   * 4 of 5 episodes start within 15 s of BOTH a flashui/global wash
 #     and a full-panel ui/partial repaint — the menu open/dismiss
-#     signature (base rate 7.2 %, P(>=4 of 5) ~ 1e-4),
+#     signature (base rate 7.2 %; conditional binomial arithmetic,
+#     not independent population evidence),
 #
 # so a plain page-turn loop would probably miss the antecedent that four
 # of the five episodes share.  This harness therefore drives page turns
 # AND interleaves menu open/dismiss cycles, at several cadences, then
-# extracts the guest's own [pn-refresh] traces and hands them to
-# pinenote/tools/refresh-episodes/refresh-episodes.py — the same
-# signature logic the issue analysis used.
+# preserves the guest's complete reader-session log and runs both episode
+# and trigger analysis after byte-count/SHA-256 validation.
 #
 # It reuses the rung-4v boot verbatim (run-virt-visual.sh): real
 # kernel/initrd/rootfs, virtio-gpu at panel resolution, virtio
@@ -28,21 +28,20 @@
 #      tap — unusable for a cadence campaign.  This one connects once and
 #      executes a whole plan with millisecond pacing, writing a host-side
 #      ledger of every action it took.
-#   2. a console harvester that logs in as root and cats the
-#      [pn-refresh] lines out of /var/log/reader-session.log between
-#      sentinels, waiting on the sentinel rather than a fixed pause
-#      (the log is thousands of lines).
+#   2. a console harvester that logs in as root and transfers a base64
+#      snapshot of /var/log/reader-session.log between sentinels. Encoding
+#      preserves all bytes through terminal processing; size and SHA-256
+#      detect incomplete/corrupted transport. Context is kept for triggers.
 #
 # WHAT THIS CAN AND CANNOT SHOW.  The trace is emitted at the DECISION
 # point in device.lua, before dispatch, so it measures exactly what the
 # issue measures: how many times KOReader ASKED for a refresh, and when.
 # That is a userspace-side question and it is faithful here.  What is
 # NOT faithful: there is no EBC.  virtio-gpu absorbs a full-panel blit
-# in microseconds where the panel takes ~300 ms, so any part of the
-# mechanism that depends on e-ink service time — and the issue's 131 ms
-# floor argues the second repaint is waiting on the previous pass —
-# cannot reproduce here.  Absence of episodes offline is therefore weak
-# evidence; presence is strong.
+# differently from the real display. Request gaps do not measure panel
+# service time: publish/fsync does not wait for the e-ink pass. The observed
+# 131 ms partial/partial minimum is not a mechanism floor (ui repeats reach
+# 68 ms in the corpus). Neither presence nor absence proves a visible defect.
 #
 # Usage:
 #   run-virt-pageturn-campaign.sh BOOT_BUNDLE_DIRECTORY DISK_IMAGE [OUT_DIR]
@@ -88,11 +87,14 @@ outdir=${3:-}
 
 here=$(CDPATH= cd -P "$(dirname "$0")" && pwd -P)
 repo_root=$(CDPATH= cd -P "$here/../../.." && pwd -P)
-analyzer=$repo_root/pinenote/tools/refresh-episodes/refresh-episodes.py
+reporter=$repo_root/pinenote/tools/refresh-episodes/campaign-report.scm
 
 command -v qemu-system-aarch64 >/dev/null 2>&1 || \
   fail "qemu-system-aarch64 not found; run via: guix shell qemu -- $0 ..."
 command -v guile >/dev/null 2>&1 || fail "guile not found"
+command -v python3 >/dev/null 2>&1 || fail "python3 not found (legacy analyzers)"
+command -v base64 >/dev/null 2>&1 || fail "base64 not found"
+command -v sha256sum >/dev/null 2>&1 || fail "sha256sum not found"
 
 kernel=$bundle/extlinux/Image
 initrd=$bundle/extlinux/initrd.cpio.gz
@@ -121,7 +123,6 @@ qmp=$outdir/qmp.sock
 sock=$outdir/console.sock
 plan=${CAMPAIGN_PLAN:-$outdir/plan.txt}
 ledger=$outdir/action-ledger.txt
-traces=$outdir/pn-refresh.log
 harvest=$outdir/harvest.txt
 : > "$log" || fail "cannot write console log: $log"
 
@@ -206,8 +207,8 @@ elif [ -z "${CAMPAIGN_PLAN:-}" ]; then
   #    FLOOR on purpose: one refresh per tap at 0.9 s cadence already
   #    manufactures sub-second gaps, so tapping any faster would fill
   #    the interesting band with harness artefacts and make the sweep
-  #    unreadable.  With this floor, any gap below ~0.85 s cannot be
-  #    explained by one-refresh-per-tap and is a genuine anomaly;
+  #    unreadable. Shorter request gaps need investigation: queued/delayed
+  #    input can compress them, and host tap times are not guest event times;
   #  * menu open/dismiss cycles — the antecedent 4 of the 5 field
   #    episodes share.  Open the menu, let it settle, dismiss it, then
   #    IMMEDIATELY flip fast: that is the field sequencing (the wash
@@ -418,9 +419,9 @@ cat > "$qmp_driver" <<'EOF'
 EOF
 
 # ----------------------------------------------------- console harvester --
-# Logs in as root and cats the guest's own [pn-refresh] traces out to the
+# Logs in as root and transfers the guest's complete log snapshot to the
 # console between sentinels.  Unlike run-virt-assertions.sh's probe this
-# WAITS ON THE END SENTINEL rather than a fixed pause: the trace stream is
+# WAITS ON THE END SENTINEL rather than a fixed pause: the full log is
 # thousands of lines and a 3 s pause would truncate it mid-dump.  Received
 # bytes are also written straight to a capture file, so the harvest does
 # not have to be recovered from the console log's kernel-splat noise.
@@ -438,6 +439,7 @@ cat > "$harvest_scm" <<'EOF'
 (define s   (socket PF_UNIX SOCK_STREAM 0))
 (define buf (make-bytevector 65536))
 (define cp  (open-output-file capture))
+(set-port-encoding! cp "ISO-8859-1")
 (define seen "")
 
 ;; Bytes are decoded latin-1 style, one char per byte, NOT as UTF-8: the
@@ -489,7 +491,10 @@ cat > "$harvest_scm" <<'EOF'
 (define (wait-for token limit)
   (let loop ((waited 0))
     (drain)
-    (cond ((string-contains seen token)
+    ;; Wait for a whole output line, not just a prefix whose numeric value
+    ;; might still be in transit. Guest commands assemble sentinel names.
+    (cond ((let ((start (string-contains seen (string-append "\n" token))))
+             (and start (string-index seen #\newline (+ start 1))))
            (let ((tv (gettimeofday)))
              (format cp "\nWBCAMP-HOSTAT ~a ~,6f\n" token
                      (+ (car tv) (/ (cdr tv) 1000000.0)))
@@ -510,9 +515,14 @@ cat > "$harvest_scm" <<'EOF'
           (cmd      (substring spec (+ tab 1))))
      (ctrl-c)
      (set! seen "")
+     (let ((tv (gettimeofday)))
+       (format cp "\nWBCAMP-HOSTBEFORE ~a ~,6f\n" sentinel
+               (+ (car tv) (/ (cdr tv) 1000000.0)))
+       (force-output cp))
      (send-slow cmd) (send-slow "\r\n")
      (unless (wait-for sentinel timeout)
-       (format (current-error-port) "harvest: timed out waiting for ~a\n" sentinel))))
+       (format (current-error-port) "harvest: timed out waiting for ~a\n" sentinel)
+       (close-port cp) (close-port s) (exit 1))))
  lines)
 (ctrl-c)
 (send-slow "exit\r\n") (nap 1)
@@ -631,55 +641,37 @@ printf '  baseline settled at %ss (%s retries)\n' "$(elapsed)" "$settle_tries"
 # Phase 4: run the plan.
 printf '  campaign starting at %ss\n' "$(elapsed)"
 guile -s "$qmp_driver" "$qmp" "$plan" "$ledger" "$FB_W" "$FB_H" "$CAMPAIGN_HOLD_MS" \
-  > "$outdir/qmp-driver.out" 2>&1 || printf '  (qmp driver exited non-zero)\n'
+  > "$outdir/qmp-driver.out" 2>&1 || { printf '  FAIL: qmp driver exited non-zero\n'; rc=1; }
 printf '  campaign done at %ss\n' "$(elapsed)"
 
 shot_post=$outdir/shot-post.ppm
 screendump "$shot_post"
 
-# Phase 5: harvest the guest's traces over the console.
+# Phase 5: harvest the complete current guest log over the console.
 #
 # GUEST-CLOCK ALIGNMENT: the traces carry the guest's gettimeofday, the
 # ledger carries the host's.  Both are wall clock but the guest boots
 # with its own idea of the time, so the guest echoes its clock inside a
-# sentinel and the analyzer is told the offset.  A second or two of skew
-# is irrelevant to a 15 s antecedent window.
-host_clock_at_harvest=$(date +%s.%N)
-printf '  harvesting traces over the console...\n'
+# sentinel. Host send/receipt stamps bound the offset at harvest only,
+# assuming no wall-clock steps. Drift during the campaign is unmeasured;
+# even a small skew can change nearest-input or window-edge attribution.
+printf '  harvesting complete reader-session log over the console...\n'
 tab=$(printf '\t')
 # EVERY sentinel is assembled in the guest from $s, and the token the
 # driver waits for is the ASSEMBLED string.  Spelling a sentinel
 # literally in the command makes the shell's own echo of that command
 # satisfy the wait instantly — the driver then sends its next Ctrl-C
-# straight into the still-running grep and harvests nothing at all.
+# straight into the still-running transfer and harvests nothing at all.
 # (That failure is silent: you get the BEGIN marker and an empty body.)
 guile -s "$harvest_scm" "$sock" "$harvest" "$CAMPAIGN_HARVEST_WAIT" \
   "WBCAMP-READY${tab}s=WBCAMP; stty columns 400; echo \$s-READY" \
   "WBCAMP-GUESTCLOCK${tab}s=WBCAMP; echo \$s-GUESTCLOCK \$(date +%s.%N)" \
-  "WBCAMP-LOGSTAT${tab}s=WBCAMP; echo \$s-LOGSTAT \$(wc -c < /var/log/reader-session.log 2>/dev/null || echo missing) \$(grep -ac pn-refresh /var/log/reader-session.log 2>/dev/null || echo 0)" \
-  "WBCAMP-TRACE-END${tab}s=WBCAMP; echo \$s-TRACE-BEGIN; grep -a pn-refresh /var/log/reader-session.log; echo \$s-TRACE-END" \
-  "WBCAMP-WARN-END${tab}s=WBCAMP; echo \$s-WARN-BEGIN; grep -aE 'WARN|ERROR' /var/log/reader-session.log | tail -30; echo \$s-WARN-END" \
-  > "$outdir/harvest-driver.out" 2>&1 || printf '  (harvest driver exited non-zero)\n'
+  "WBCAMP-LOG-END${tab}s=WBCAMP; f=/tmp/wbcamp-reader-session.log; cp /var/log/reader-session.log \$f && n=\$(wc -c < \$f) && h=\$(sha256sum \$f) && echo \$s-LOGSTAT \$n \${h%% *} && echo \$s-LOG-BEGIN && base64 \$f && echo \$s-LOG-END" \
+  > "$outdir/harvest-driver.out" 2>&1 || { printf '  FAIL: harvest driver exited non-zero\n'; rc=1; }
 
 kill_qemu
 trap - EXIT
 
-# Cut the trace block out of the capture.  Strip the echoed command line
-# itself (it contains the sentinels) by requiring the [pn-refresh] tag.
-tr -d '\r' < "$harvest" \
-  | sed -n '/WBCAMP-TRACE-BEGIN/,/WBCAMP-TRACE-END/p' \
-  | grep -a '\[pn-refresh\]' \
-  | grep -av 'WBCAMP-TRACE' \
-  > "$traces" || true
-
-guest_clock=$(tr -d '\r' < "$harvest" \
-  | sed -n 's/^WBCAMP-GUESTCLOCK \([0-9][0-9.]*\).*/\1/p' | tail -1)
-guest_count=$(tr -d '\r' < "$harvest" \
-  | sed -n 's/^WBCAMP-LOGSTAT [0-9]* \([0-9]*\).*/\1/p' | tail -1)
-guest_logsize=$(tr -d '\r' < "$harvest" \
-  | sed -n 's/^WBCAMP-LOGSTAT \([0-9a-z]*\) .*/\1/p' | tail -1)
-
-trace_lines=$(wc -l < "$traces" | tr -d ' ')
 # grep -c prints 0 AND exits 1 on no match, so `|| echo 0' appends a
 # second line and every later [ ] test dies with "Illegal number".
 taps=$(grep -c '^[0-9.]* TAP-DOWN' "$ledger" 2>/dev/null | head -1)
@@ -687,36 +679,22 @@ taps=$(grep -c '^[0-9.]* TAP-DOWN' "$ledger" 2>/dev/null | head -1)
 
 printf '\nCampaign summary:\n'
 printf '  taps issued          : %s\n' "$taps"
-printf '  [pn-refresh] harvested: %s (guest reported %s in a %s-byte log)\n' \
-  "$trace_lines" "${guest_count:-?}" "${guest_logsize:-?}"
-
-# Guest-minus-host clock offset, for aligning the ledger to the traces.
-# Measured against the host stamp taken when the guest's clock line
-# actually arrived, not against $host_clock_at_harvest (which predates
-# the console login).  The latter is kept only as a sanity bound.
-offset=0
-hostat=$(tr -d '\r' < "$harvest" \
-  | sed -n 's/^WBCAMP-HOSTAT WBCAMP-GUESTCLOCK \([0-9][0-9.]*\).*/\1/p' | tail -1)
-if [ -n "$guest_clock" ] && [ -n "$hostat" ]; then
-  offset=$(awk -v g="$guest_clock" -v h="$hostat" 'BEGIN { printf "%.3f", g - h }')
-  printf '  guest-host clock offset: %ss (login-to-harvest span %ss)\n' "$offset" \
-    "$(awk -v a="$host_clock_at_harvest" -v b="$hostat" 'BEGIN { printf "%.1f", b - a }')"
-  printf '%s\n' "$offset" > "$outdir/clock-offset.txt"
-fi
 
 printf '\nCampaign assertions:\n'
 require 'boot reached login prompt' "$(grep -aq 'login:' "$log" && echo 0 || echo 1)"
 require 'virtio-gpu DRM bound'      "$(grep -aq 'virtio[-_]gpu' "$log" && echo 0 || echo 1)"
 require 'KOReader painted the fb'   "$painted"
 require 'taps were issued'          "$([ "$taps" -gt 0 ] && echo 0 || echo 1)"
-require 'traces were harvested'     "$([ "$trace_lines" -gt 0 ] && echo 0 || echo 1)"
+require 'QMP plan completed'        "$(grep -aq ' PLAN-END ' "$ledger" && echo 0 || echo 1)"
 
-# Phase 6: analyse.
-if [ "$trace_lines" -gt 0 ] && [ -x "$analyzer" ] && command -v python3 >/dev/null 2>&1; then
-  printf '\n'
-  python3 "$analyzer" "$traces" \
-    --ledger "$ledger" --clock-offset "$offset" \
-    --json "$outdir/episodes.json" | tee "$outdir/episodes.txt" || true
+# Phase 6: validate the full snapshot and run both analyses with checked
+# exit status. A malformed/missing harvest or analyser error fails the run.
+if guile --no-auto-compile -e main -s "$reporter" "$harvest" "$outdir" "$ledger" \
+    > "$outdir/report-driver.out" 2>&1; then
+  cat "$outdir/capture-validation.txt" "$outdir/episodes.txt" "$outdir/triggers.txt"
+else
+  cat "$outdir/report-driver.out" >&2
+  require 'complete log and successful analyses' 1
 fi
 
 printf '\n'
