@@ -35,7 +35,8 @@ Commands (physical px unless noted; the vocabulary the glue codes to):
   repaint {region}     setDirty on the notebook window (nil: all of it)
   panel {layout}       show or update the panel at layout (LOGICAL
                        px, nb_panel's), or hide it when layout is nil
-  washer_charge        IdleWasher:chargePageTurn(), once per page shown
+  washer_charge {n}    IdleWasher:chargePageTurn(n or 1); page turns made
+                       with the pen nearby wait for its leave
   washer_debt {n}      IdleWasher:chargeDebt(n): n repaints that leave a
                        ghost, since the last washer_debt (the ghost debt
                        rule below)
@@ -137,8 +138,9 @@ Why the rules below are what they are:
     tap: nb_input reports its rest as a new stroke, so a stroke from the
     canvas cut over a button would otherwise press it at the lift.  (That
     rest began on the panel, so it inks nothing: a dropout over the panel
-    costs the stroke its tail.)  Anything else it does is ignored: a pen
-    drag from the panel, even from the title bar, moves nothing (the
+    costs the stroke its tail.) A panel-owned tail stays panel-owned even
+    when a dropout brings it back on the canvas. Anything else it does is
+    ignored: a pen drag from the panel, even from the title bar, moves nothing (the
     finger drags the panel), and the rubber end activates nothing.  The
     pen never opens the panel and never turns a page by swiping; a tap on
     Prev or Next turns it after the tip has lifted.  A contact that
@@ -157,8 +159,10 @@ Why the rules below are what they are:
     suspend and close; so no charge is ever emitted with a stroke down.  A finger's action (palm
     rejection keeps the pen out of range for it) charges in its own list,
     at the touch's end.  The Refresh button charges nothing, since it
-    washes, and resets nothing: the washer has no reset, and what the
-    debt left behind costs at most one idle wash, at the next pause.
+    washes. The shell retires the washer debt only after the queued full
+    refresh's successful ioctl acknowledgement, preserving newer charges.
+    Page-turn charges wait for the leave too, but may bundle a wash there;
+    close, suspend and a pending explicit Refresh accumulate them only.
   * The Refresh button.  It closes the panel; the glue paints the page
     where the panel was and publishes that paint (publish), then says when
     it did (published): the list is built before the glue paints, so a
@@ -308,6 +312,7 @@ function Ctl.new(o)
     self.leave_at = nil      -- when a pending leave runs (realtime us)
     self.erased_box = nil    -- a stroke erase's render, waiting for the leave
     self.ghost_debt = 0      -- units not yet charged to the washer
+    self.turn_debt = 0       -- page turns made by the hovering panel pen
     self.wash_us = cfg.refresh_settle_us or 0
     self.wash_wanted = false -- Refresh was tapped and its wash has not run
     self.wash_at = nil       -- when it may run (realtime us); nil while the
@@ -336,7 +341,7 @@ function Ctl:open(nb_info, page_n, page)
     self.page_n, self.page = page_n, page or J.replay({}, self.cfg)
     self.loading, self.pending_load = nil, nil
     self.stroke, self.pen_down, self.pen_panel = nil, false, nil
-    self.cut_t = nil
+    self.cut_t, self.cut_panel = nil, nil
     -- The new Input knows no pen until the glue's resync.
     self.in_range = false
     self.leave_at, self.erased_box = nil, nil
@@ -679,7 +684,7 @@ function Ctl:_leave(out, visible)
         if self.pn:is_open() then self:_panel_emit(out) end
     end
     self:_hold(false, out)
-    self:_flush_debt(out)
+    self:_flush_debt(out, visible and not self.suspended and not self.wash_wanted)
     -- A Refresh the pen held waits from here, after what the leave painted.
     if self.wash_wanted then self:_wait_wash(out) end
 end
@@ -725,15 +730,17 @@ function Ctl:_begin(it, out)
     -- nb_input ends a contact at a proximity dropout (gap) and starts a
     -- new stroke where the nib comes back, 22-44 ms later: a stroke that
     -- begins inside the leave window of a gap is the rest of a contact.
-    local cut_t = self.cut_t
-    self.cut_t = nil
+    local cut_t, cut_panel = self.cut_t, self.cut_panel
+    local cut = cut_t ~= nil and it.t - cut_t <= self.leave_us
+    self.cut_t, self.cut_panel = nil, nil
     self.pen_panel = nil
     self.pen_down = true
     if not self.ink_live or self.suspended then return end
     -- Before the failure check: a panel tap works after a failed write,
     -- as a finger's does.
-    if self:_hit_test(it.x, it.y) == "panel" then
-        local cut = cut_t ~= nil and it.t - cut_t <= self.leave_us
+    -- Ownership follows the contact across a dropout, even if the nib
+    -- returned outside the panel.  A cut tail cannot activate a button.
+    if (cut and cut_panel) or self:_hit_test(it.x, it.y) == "panel" then
         self.pen_panel = { tool = it.tool, x = it.x, y = it.y, t0 = it.t,
                            d2 = 0, cut = cut }
         return
@@ -751,7 +758,9 @@ function Ctl:_begin(it, out)
     local tool = it.tool
     local use = self:_use(tool)
     local s = { tool = tool, use = use, page = self.page_n, rot = self.mode,
-                pts = { it }, n = 1, run = 0, max_run = 0, max_lag = 0 }
+                pts = { it }, n = 1, run = 0, max_run = 0, max_lag = 0,
+                brush = use == "strokes" and "stroke_eraser" or self:_pref("brush"),
+                size = use == "strokes" and "-" or self:_pref("size"), spans = 0 }
     self.stroke = s
     self:_clock(s, it.t)
     if use == "strokes" then
@@ -818,6 +827,7 @@ function Ctl:_end(gap, t, out)
         end
     end
     self.cut_t = gap and t or nil
+    self.cut_panel = gap and pp ~= nil or nil
 end
 
 -- Loop health for the pen-up log.  A sample stamped no later than the
@@ -846,6 +856,7 @@ function Ctl:_stamp(style, a, b, out)
     local spans, dens = col_spans, col_dens
     col_spans = nil
     if col_n == 0 then return false end
+    self.stroke.spans = self.stroke.spans + col_n / 3
     if not self.armed then self:_arm(out) end
     out[#out + 1] = { op = "ink", spans = spans, comp = style.comp,
                       pat = style.pat, dens = dens }
@@ -859,6 +870,7 @@ function Ctl:_whiteout(entry, out)
     local spans = col_spans
     col_spans = nil
     if col_n == 0 then return false end
+    self.stroke.spans = self.stroke.spans + col_n / 3
     if not self.armed then self:_arm(out) end
     out[#out + 1] = { op = "ink", spans = spans, comp = "white", pat = "solid" }
     return true
@@ -996,6 +1008,9 @@ function Ctl:_log(s, gap, rec, out)
         "rec=" .. (rec and (rec.k .. int(rec.a)) or "-"),
         "tool=" .. s.tool,
         "use=" .. s.use,
+        "brush=" .. s.brush,
+        "size=" .. s.size,
+        "spans=" .. int(s.spans),
         "n=" .. int(s.n),
         "dur=" .. int(dur) .. "us",
         "gap=" .. (gap and "1" or "0"),
@@ -1065,7 +1080,11 @@ function Ctl:_show_page(n, page, out)
                       strokes = snapshot(page.strokes) }
     self:_panel_sync(out, true)
     out[#out + 1] = { op = "repaint" }
-    out[#out + 1] = { op = "washer_charge" }
+    if self.in_range or self.pen_down or self.leave_at then
+        self.turn_debt = self.turn_debt + 1
+    else
+        out[#out + 1] = { op = "washer_charge" }
+    end
 end
 
 function Ctl:_undo_redo(kind, out)
@@ -1375,11 +1394,23 @@ function Ctl:_charge(n, out)
 end
 
 -- The units owed, as one command: the leave, suspend and close.
-function Ctl:_flush_debt(out)
+function Ctl:_flush_debt(out, allow_turn_wash)
+    local turns = self.turn_debt
+    self.turn_debt = 0
+    if turns > 0 and not allow_turn_wash then
+        -- Close and suspend retain the charge but never start a
+        -- bundled wash during teardown or over the screensaver.
+        self.ghost_debt = self.ghost_debt + turns
+    end
     local n = self.ghost_debt
     if n > 0 then
         self.ghost_debt = 0
         out[#out + 1] = { op = "washer_debt", n = n }
+    end
+    -- A bundled wash also cleans the ghost-producing actions from this
+    -- visit, so those charges must reach the washer before this one.
+    if turns > 0 and allow_turn_wash then
+        out[#out + 1] = { op = "washer_charge", n = turns }
     end
 end
 

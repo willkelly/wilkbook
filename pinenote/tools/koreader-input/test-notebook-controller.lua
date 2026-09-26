@@ -547,7 +547,7 @@ function Session:_track(cmd)
         self.logs = self.logs + 1
         self.log_lines[#self.log_lines + 1] = cmd.line
     elseif op == "washer_charge" then
-        self.washers = self.washers + 1
+        self.washers = self.washers + (cmd.n or 1)
     elseif op == "washer_debt" then
         if type(cmd.n) ~= "number" or cmd.n <= 0 then self:violate("empty washer_debt") end
         self.debt = self.debt + cmd.n
@@ -592,7 +592,8 @@ function Session:_check_pen_away(name, cmds)
     for _, cmd in ipairs(cmds) do
         if cmd.op == "wash" then
             self:violate("wash from " .. name .. " with the pen here")
-        elseif cmd.op == "washer_debt" and name ~= "close" and name ~= "suspend" then
+        elseif (cmd.op == "washer_debt" or cmd.op == "washer_charge")
+               and name ~= "close" and name ~= "suspend" then
             self:violate("washer_debt from " .. name .. " with the pen here")
         end
     end
@@ -869,7 +870,7 @@ do
     end
     S:run("note_timing", "bogus", 7)
     S:ev_at(pen(22, "TOUCH", 0), ms(22) + 300)
-    report(S.log_lines[1] == "pen-up page=0 rec=s1 tool=pen use=ink n=4 dur=9000us "
+    report(S.log_lines[1] == "pen-up page=0 rec=s1 tool=pen use=ink brush=ballpoint size=M spans=20 n=4 dur=9000us "
            .. "gap=0 hits=0 batch=3 lag=7000us drops=0 stamp=4/900/300us "
            .. "publish=4/4200/1200us append=- fsync=-",
            "log: samples, duration, batch run, lag, drops and timings", S.log_lines[1])
@@ -877,7 +878,7 @@ do
     S:ev(hover_out(30, "pen"))
     S:run("note_timing", "fsync", 5000)
     S:ev(visit(100, "pen", { { 700, 700 } }))
-    report(S.log_lines[2] == "pen-up page=0 rec=s2 tool=pen use=ink n=1 dur=0us "
+    report(S.log_lines[2] == "pen-up page=0 rec=s2 tool=pen use=ink brush=ballpoint size=M spans=5 n=1 dur=0us "
            .. "gap=0 hits=0 batch=1 lag=500us drops=0 stamp=- publish=- "
            .. "append=1/80/80us fsync=1/5000/5000us",
            "log: timings noted since the previous line, the append and fsync included",
@@ -959,7 +960,7 @@ do
            .. "the render waits for the pen to leave", got,
            "ink(white/solid) publish append(p0 x4[2]) log")
     local line = S.log_lines[#S.log_lines]
-    report(line:match(" rec=x4 tool=pen use=strokes n=3 ")
+    report(line:find(" rec=x4 tool=pen use=strokes brush=stroke_eraser size=- spans=20 n=3 ", 1, true)
            and line:match(" hits=1 ") ~= nil,
            "stroke erase: the log names the x record and its hits", line)
     -- Still in range, nothing armed since the render: the report that
@@ -1269,13 +1270,13 @@ do
     expect("load under the pen: the page waits; the stroke goes to page 0, "
            .. "then page 1 shows",
            got, j("hold(on)", ARM, INK, INK, INK, "append(p0 s1 pen) log",
-                  "disarm render(p1 0) repaint washer"))
+                   "disarm render(p1 0) repaint"))
     got = S:ev((down(400, { { 700, 700 } })))
     expect("load under the pen: the next stroke re-arms and lands on page 1", got,
            "arm(0,0,1872,1404/0x00) ink(black/solid) publish append(p1 s1 pen) log")
     got = S:ev(hover_out(450, "pen"))
     expect("load under the pen: both pages written get their fsync, in order", got,
-           "fsync(p0) fsync(p1) hold(off)")
+           "fsync(p0) fsync(p1) hold(off) washer")
     S:check("load under the pen")
 end
 
@@ -1593,6 +1594,34 @@ do
 end
 
 do
+    for _, finish in ipairs{ "leave", "close", "suspend", "refresh" } do
+        local S = live_session()
+        S:long_press(0, 900, 700)
+        local x, y = S:button("page:next")
+        S:ev(hover_in(1000, "pen", x, y))
+        S:ev(down(1010, { { x, y } }))
+        local got = S:loaded(1)
+        report(S.c.page_n == 1 and S.washers == 0 and S.c.turn_debt == 1,
+               "pen Next shows page but defers its washer charge until " .. finish, seq(got))
+        if finish == "refresh" then
+            x, y = S:button("refresh")
+            S:ev(down(1100, { { x, y } }))
+        end
+        if finish == "leave" or finish == "refresh" then
+            got = S:ev(hover_out(1200, "pen"))
+        else
+            got = S:run(finish)
+        end
+        report(S.c.turn_debt == 0 and S.c.ghost_debt == 0
+               and S.washers == (finish == "leave" and 1 or 0)
+               and S.debt == (finish == "leave" and 0 or 1),
+               "deferred page charge paid once; only a normal leave may bundle: " .. finish,
+               seq(got, SHOW_DEBT))
+        S:check("deferred page " .. finish)
+    end
+end
+
+do
     -- After a failed write the panel still answers the pen, as it does a
     -- finger; the canvas takes no more ink.
     local S = live_session()
@@ -1707,6 +1736,30 @@ do
            "a pen tap split by a dropout chooses nothing", seq(got))
     S:ev(hover_out(2100, "pen"))
     S:check("a dropout over the panel")
+end
+
+do
+    for _, tool in ipairs{ "pen", "rubber" } do
+        local S = live_session()
+        S:long_press(0, 900, 700)
+        local bx, by = S:button("brush:marker")
+        local x = S.layout.x - 80
+        S:ev(hover_in(1000, tool, bx, by))
+        local got = S:ev(pen(1005, "TOUCH", 1, "P", 2000))
+        append_all(got, S:ev(pen(1008, "X", RX(x))))
+        for _, t in ipairs{ 1011, 1051 } do
+            append_all(got, S:ev(pen(t, key_of(tool), 0)))
+            append_all(got, S:ev(pen(t + 22, key_of(tool), 1, "TOUCH", 1)))
+        end
+        append_all(got, S:ev(pen(1080, "TOUCH", 0)))
+        report(#ops(got, "ink") == 0 and S.appends == 0,
+               "panel-owned " .. tool .. " dragged onto canvas survives repeated dropouts", seq(got))
+        got = S:ev(down(1100, { { x, by } }))
+        report(#ops(got, "ink") > 0 and S.appends == 1,
+               "a fresh contact after the panel tail lifts inks normally: " .. tool)
+        S:ev(hover_out(1200, tool))
+        S:check("panel tail " .. tool)
+    end
 end
 
 do
@@ -2197,12 +2250,12 @@ do
     append_all(got, S:loaded(1))
     append_all(got, S:ev(pen(1013, "PEN", 0, "RUBBER", 1, "X", RX(340))))
     expect("tool switch under a pending load: the stroke goes to page 0, then page 1 shows",
-           got, j(INK, "append(p0 s1 pen gap) log disarm render(p1 0) repaint washer"))
+           got, j(INK, "append(p0 s1 pen gap) log disarm render(p1 0) repaint"))
     got = S:ev(pen(1020, "TOUCH", 0))
     append_all(got, S:ev((down(1030, { { 500, 500 } }, 500))))
     append_all(got, S:ev(hover_out(1050, "rubber")))
     expect("tool switch under a pending load: the rubber re-arms on page 1; both pages synced",
-           got, j(ARM, WHITE, "append(p1 s1 eraser) log fsync(p0) fsync(p1) hold(off)"))
+           got, j(ARM, WHITE, "append(p1 s1 eraser) log fsync(p0) fsync(p1) hold(off) washer"))
     S:check("tool switch under a load")
 end
 
@@ -2233,7 +2286,7 @@ do
     append_all(got, S:ev(slice(evs, 9)))
     expect("stroke erase under a pending load: the x record on page 0, then page 1 "
            .. "shows; page 0's waiting render is dropped with it",
-           got, j(WHITE, "append(p0 x4[2]) log disarm render(p1 0) repaint washer"))
+           got, j(WHITE, "append(p0 x4[2]) log disarm render(p1 0) repaint"))
     report(S.c.erased_box == nil, "stroke erase under a pending load: nothing left waiting")
     S:check("stroke erase under a load")
 end
@@ -2727,7 +2780,7 @@ do
     S.fail_op = "append"
     local got = S:ev(slice(evs, 9))
     expect("a failed append before a page change: nothing of page 0 is rendered over page 1",
-           got, "append(p0 s1 pen) log disarm render(p1 0) repaint washer log disarm toast")
+           got, "append(p0 s1 pen) log disarm render(p1 0) repaint log disarm toast")
     S:check("failed append before a turn")
     S:ev(hover_out(1100, "pen"))
     S:ev(finger(S.K, 2000, 500, 700, 1000, 700, 5, 30))
@@ -2848,7 +2901,7 @@ do
     S:ev((down(200, { { 300, 500 } })))
     local got = S:ev(hover_out(300, "pen"))
     expect("three pages written in one visit: synced in page order", got,
-           "fsync(p-1) fsync(p0) fsync(p2) hold(off)")
+           "fsync(p-1) fsync(p0) fsync(p2) hold(off) washer")
     S:check("fsync order")
 end
 
