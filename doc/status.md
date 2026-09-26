@@ -68,8 +68,14 @@ Auto-suspend stayed `enabled=1`.
   - only the known boot-time log lines, and all three services running.
 
 **Generation 23 now has two cold boots** (`34742c60…` and `69ac9f1e…`).
-It is not yet pinned; that waits for the operator. Refresh and a KOReader
-restart are still owed from the entry below.
+At the operator's word it was pinned on boot `69ac9f1e…` (`wilkbook-generation
+pin 23`, 23:39). The ledger shows 23 `[promoted] [booted] [pinned]` beside
+10, 16 and 18. The two checks still owed from the entry below then passed
+on the same boot (operator: "koreader works, refresh works"):
+- **KOReader restart:** KOReader exited at 23:38:19 (`Tearing down UIManager
+  with exit code: 0`), and the session service started it again. The
+  notebook reopened at 23:38:32 with its strokes.
+- **Refresh:** the full wash at 23:39:21 came with no idle-wash line.
 
 ## 2026-09-26 (wkelly PineNote, generations 22 and 23, cable-free) — the notebook's first glass run; the note fixes accepted; the touchscreen reports two contacts
 
@@ -169,14 +175,16 @@ pen-ups on it.
     to 16 on a `charge 1` at 23:07:34.
   - The operator found it hard to judge how much a unit is
     (`doc/notebook.md`).
-- **Refresh: not reported, and still owed.** The log shows no Refresh wash.
-  Refresh writes no log line of its own. The only full global refreshes
-  inside notebook sessions are the two idle washes.
-- **A KOReader restart: not done.**
-  - The reader process (pid 606) has run since the kexec boot. The log has
-    no restart or crash after the trial's teardown at 22:31:28.
-  - The operator's report said only "koreader restart !?!?". What they
-    meant is not yet known.
+- **Refresh: not reported at first, then passed** after the cold boots
+  (the entry above). Refresh writes no log line of its own. Until then, the
+  only full global refreshes inside notebook sessions were the two idle
+  washes.
+- **A KOReader restart: not done at first, then passed** after the cold
+  boots (the entry above).
+  - Until then the reader process (pid 606) had run since the kexec boot,
+    and the log had no restart or crash after the trial's teardown at
+    22:31:28.
+  - The operator's first report said only "koreader restart !?!?".
 - **A cold boot: passed**, at about 23:17, by the operator without UART.
   - The operator waived UART for it ("we can cold boot without uart"),
     since CLAUDE.md's policy lists cold boots as still needing it. The
@@ -213,12 +221,12 @@ only where no brush was ever chosen.
 - Battery 86 %. No recovery was needed.
 - **Cable-free count:**
   - Both trials passed health and promotion.
-  - The generation-22 checks passed, and so did seven of generation 23's
-    nine, the cold boot included.
-  - Refresh and a KOReader restart remain. So by the policy's definition
-    this session does not yet count as a success.
-  - It becomes the second of three once those pass, or if the operator
-    narrows the agreed checks.
+  - The generation-22 checks passed, and so did all nine of generation 23's.
+    The last two were Refresh and a KOReader restart, after the cold boots
+    (the entry above).
+  - Auto-suspend was restored.
+  - So this session counts as the **second of three** successful
+    cable-free sessions. The third is the policy's review point.
 
 Evidence: `doc/artifacts/pinenote-gen22-23-notebook-20260926/`.
 
