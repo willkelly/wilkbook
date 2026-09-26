@@ -322,6 +322,11 @@ local function suspend_transaction(fallback)
     end
     write_value("/sys/power/mem_sleep", "deep")
     if not (read_line("/sys/power/mem_sleep") or ""):find("%[deep%]") then
+        -- arm_rtc already succeeded; refusing deep sleep must not leave its
+        -- backstop armed while the reader stays awake.
+        if not write_value("/sys/class/rtc/rtc0/wakealarm", "0") then
+            log("RTC backstop clear failed after deep suspend refusal")
+        end
         gadget_restore(gadget); frontlight_restore(lights); if had_wifi then restore_wifi() end
         cleanup_display(); return false, "deep suspend unavailable"
     end

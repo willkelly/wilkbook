@@ -9,6 +9,7 @@ check:
 	luajit test-quiesce.lua $(sources)/broker_quiesce.lua
 	luajit test-banner.lua $(sources)/pinenote-power-broker.lua
 	luajit test-clocks.lua $(sources)/pinenote-power-broker.lua
+	luajit test-transaction.lua $(sources)/pinenote-power-broker.lua
 	luajit test-driver.lua $(device)
 	luajit test-frontlight-toggle.lua $(device)
 	./test-wifi-control.sh $(sources)/pinenote-wifi-control
