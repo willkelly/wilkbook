@@ -70,7 +70,35 @@ it adds a CDC-ACM gadget plus a `ttyGS0` getty and passwordless `sudo` for
 `reader` so the host can operate a boot that reaches Shepherd without Wi-Fi or a
 physical keyboard.
 
+UART scripts in `pinenote/scripts/uart/` drive the U-Boot menu over the debug
+cable. `uboot-pick-slot.sh` picks a slot once, both for the deployer's watcher
+and for hand-run recovery (`make uart-pick-check`; `doc/device-access.md`).
+
+os1 scripts in `pinenote/scripts/os1/` run on the stock Debian rescue slot.
+`rescue-generation.sh` can:
+- list os2's generations;
+- tail os2's log;
+- change which generation os2 boots.
+
+It does all of this by running os2's own generation helper in a chroot on p6.
+It is streamed over ssh (`sh -s`), so nothing is copied to os1, and it writes
+nothing there but its `/mnt/os2` mountpoint. On os2 it changes nothing but the
+DEFAULT (`make os1-rescue-check`; `doc/hardware-deploy.md`, "Recovery from
+os1, no cable").
+
 Keep this directory for future source scripts when helpers outgrow inline
-`trivial-build-system` builders. Scripts in this repository must remain
-build-only or first-boot local actions and must not alter storage layout or
-persistent boot selection.
+`trivial-build-system` builders.
+
+**What scripts here must never alter:**
+- the partition table or storage layout;
+- U-Boot or its environment;
+- os1;
+- per-device calibration data.
+
+**Two scripts do change a device**, each confined to os2 and documented
+where it lives:
+- `preflight/write-os2-verified.sh`, the os2 write protocol
+  (`doc/hardware-deploy.md`);
+- `os1/rescue-generation.sh`, which changes os2's extlinux DEFAULT.
+
+Everything else stays build-only, host-side, or a first-boot local action.

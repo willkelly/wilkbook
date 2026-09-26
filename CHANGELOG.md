@@ -24,6 +24,14 @@ this lineage. **Unreleased** above it collects what has landed since.
 
 ## Unreleased
 
+- **Recovery from os1 without the cable.** If the reader's default
+  generation is one that should not boot, you can now change it from the
+  stock Debian slot (os1) over ssh, with no debug cable:
+  `pinenote/scripts/os1/rescue-generation.sh` lists the generations, shows
+  which one will boot, and promotes another. Then pick "Boot OS2" at the boot
+  menu. It ran on os1 on 2026-09-26, and has since been reworked after review
+  and checked offline (`doc/hardware-deploy.md`, "Recovery from os1, no
+  cable").
 - **The notebook, after its first run on the device.**
   - Generation 22 ran it on 2026-09-26. Ink felt "very responsive … good and
     accurate", and each pen report cost ~0.6 ms of software time on average.
