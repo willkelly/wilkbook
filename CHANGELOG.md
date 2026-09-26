@@ -24,6 +24,20 @@ this lineage. **Unreleased** above it collects what has landed since.
 
 ## Unreleased
 
+- **The emergency sleep banner understands the direct reader's framebuffer.**
+  When KOReader misses suspend preparation, the broker now reads the pixel
+  format and stride instead of assuming four bytes per pixel. Host tests cover
+  RGB565 and XRGB8888, clipping and failed writes; the fallback appearance still
+  needs a device check. Broker acknowledgement, grace and settle timers also
+  use monotonic time, so a system-clock correction cannot expire or extend
+  them. Suspend duration uses a clock that includes time asleep. The separate
+  race between RTC synchronization and backstop-alarm writes remains open.
+- **The device Workbench has a scoped integration plan.** It specifies the
+  Guile coordinator port, existing Lua reader interface, durable workspace and
+  suspend/update lifecycle. A small Guile owner-receipt gate starts that work;
+  there is no device Workbench launcher yet. See
+  `doc/workbench-device-integration.md`.
+
 - **The notebook, after its first run on the device.**
   - Generation 22 ran it on 2026-09-26. Ink felt "very responsive … good and
     accurate", and each pen report cost ~0.6 ms of software time on average.

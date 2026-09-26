@@ -77,7 +77,7 @@ FLAVORS = minimal slim networked dev usb-console usb-console-linux-6-6 reader
         manuals-check ultra-coupling-check timesync-check \
         settings-check koreader-profile-check ebc-modprobe-options-check \
         ebc-clut-check ebc-card-resolution-check ebc-ioctl-roster-check direct-probe-quirk-check direct-rect-hints-check update-path-check uart-pick-check deploy reader-stop-check pen-check ebc-lab-check \
-        check-source book-workbench-check book-workbench-editor-check book-workbench-qemu-drv book-workbench-editor-qemu-drv $(FLAVORS) $(addprefix image-,$(FLAVORS)) $(addprefix rootfs-,$(FLAVORS))
+        check-source book-workbench-check book-workbench-editor-check book-workbench-device-check book-workbench-qemu-drv book-workbench-editor-qemu-drv $(FLAVORS) $(addprefix image-,$(FLAVORS)) $(addprefix rootfs-,$(FLAVORS))
 
 help:
 	@echo "Targets:"
@@ -97,6 +97,7 @@ help:
 	@echo "  check-source      finite Book Computer source lane (SOURCE_ROOT=/absolute/fresh-candidate)"
 	@echo "  book-workbench-check  offline workspace, revision, preview and reader checks"
 	@echo "  book-workbench-editor-check  native source-defined editor, grants and successor checks"
+	@echo "  book-workbench-device-check  Guile device-coordinator owner-receipt contract"
 	@echo "  book-workbench-qemu-drv  pinned Workbench ARM64 system/image derivation gate"
 	@echo "  book-workbench-editor-qemu-drv  pinned long-lived sandbox editor QEMU gate"
 	@echo "  wbf-check         waveform parser checks (WBF=..; never committed)"
@@ -151,6 +152,10 @@ book-workbench-check:
 
 book-workbench-editor-check:
 	sh pinenote/tools/book-workbench-editor/run-tests.sh
+
+book-workbench-device-check:
+	$(call guix-shell,guile) guile --no-auto-compile -L pinenote/tools/book-workbench-device \
+	  pinenote/tools/book-workbench-device/test-owner-control.scm
 
 book-workbench-qemu-drv:
 	guix time-machine -C channels.scm -- repl -L . -- pinenote/tools/book-workbench/check-system.scm

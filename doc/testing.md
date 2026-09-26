@@ -132,6 +132,13 @@ backend failure with the local draft retained. These native tests are separate
 from the sandbox execution gate. Exact interfaces and
 commands: `pinenote/tools/book-workbench-editor/README.md`.
 
+**`make book-workbench-device-check`** exercises the isolated Guile
+owner-receipt contract for the proposed device coordinator. It checks
+fragmented readiness/cleanup messages, terminal process observations and
+permanent retirement after invalid receipts. It launches no processes and
+does not establish sandbox cleanup or device integration by itself. The
+porting and lifecycle plan is `doc/workbench-device-integration.md`.
+
 **`make book-workbench-editor-qemu-drv`** checks and lowers the separate long-lived
 sandbox editor system. After a build and source inspection, the existing QEMU
 adapter runs its fixed coordinator scenario on ARM64. The September 19 v16 run
