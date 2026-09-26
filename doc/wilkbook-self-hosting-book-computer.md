@@ -1254,15 +1254,30 @@ A search meta-book can receive a scoped `LibraryQuery` plus text-read handles fo
 
 Develop a narrow working path, then document the interface it actually needs. Do not make complete EPUB, workspace, capability, and multi-runtime specifications prerequisites for the first book-defined interaction.
 
-**Current status (2026-09-06):** host and QEMU bootstrap work has established a
-bounded JSON/session path, fixed-language ARM64 gVisor compatibility, a fixed
-offscreen KOReader interaction, separately accepted persistent-state
-components, and an accepted in-memory persistent-note native-UI fixture. The
-native real-storage v1 functional join passed independent source-only execution,
-but exact-source acceptance is blocked by NI-1/NI-2. The trusted receipt
-observer, corrected native successor, durable KOReader join,
-two-boot QEMU state recovery, general Workbench, and every physical-device Book
-Computer claim remain open. The phases below are product gates, so none is
+**Current status (2026-09-19):** the bounded JSON/session/state path now has
+native durable-reader and two-fresh-boot ARM64/QEMU persistence results. The
+clean packaged opt-in note passed on wkelly's PineNote as generation 21:
+previous text recovered and a new edit survived save/close/reopen. Exact
+evidence and the narrower scopes are in `book-computer-implementation.md` and
+`status.md`; the earlier native-v1 blocks remain historical records.
+
+The Workbench source/revision successor is implemented and native-tested under
+`pinenote/tools/book-workbench/`: draft persistence, executable preview,
+activation/rollback, export, and a real KOReader editor. Its desktop composition
+is an explicitly trusted-native developer fixture. Its separate one-shot
+ARM64 sandbox composition now passes 92 authoring assertions across 14 real
+runsc executions, including expected failures with cleanup and subsequent
+availability, and a read-only audit of retained rollback state. A separate
+`pinenote/tools/book-workbench-editor/` now joins endpoint-scoped workspace
+operations to a source-defined editor and generic KOReader surface. Native
+tests exercise R0 → R1 → R2 with unchanged trusted code and restart recovery.
+Its candidate preview is now interactive, with disposable read/save operations
+and trusted Finish/Cancel controls. The long-lived sandbox coordinator passes
+29 ARM64 QEMU assertions, including installation, failure cleanup and recovery;
+the retained database audit passes. Actual KOReader preview widgets are tested
+natively/offscreen. General sandboxed book loading, on-tablet self-authoring,
+and experimental device suspend/wake qualification remain open. The phases below
+are product gates, so none is
 complete merely because one of its offline prerequisites is accepted.
 
 ### Phase 0: preserve the reader baseline
@@ -1340,9 +1355,9 @@ pinned device configuration, and on-tablet usability.
 | Warm interpreter sessions | Proposed | Ordinary session model and `runsc exec` | Latency, memory, idle power, cleanup. |
 | Clean checkpoint templates | Exploratory optimization | Upstream checkpoint/restore | Authority-free snapshots, reconnection, measured benefit. |
 | Book Protocol bootstrap | Accepted implementation | Framing plus ordinary and state schemas/FSMs accepted at exact hashes | Aggregate scheduling, timer leases, richer exact object schemas. |
-| Persistent text state | Accepted components and native UI; blocked v1 join | SQLite/backend/protocol/adapter/delegate and in-memory KOReader UI accepted separately; native functional join independently passed | NI-1 executable closure, NI-2 drop-before-ack/restart/retry scenario, receipt observer, durable reader and two-boot QEMU join. |
+| Persistent text state | Opt-in fixed-note integration | Durable native reader and two-boot QEMU successors; clean generation-21 note save/reopen on wkelly's PineNote; exact scopes in `book-computer-implementation.md` | Experimental device suspend/wake, physical-power-loss qualification, and general book loading; native-v1 blocks are historical. |
 | Delegated surfaces | Accepted direction; narrow text bootstrap | One bound text surface, generations, and exact offscreen paint accepted | Clipping, rich content, input, safe custom rendering. |
-| Workspace/revision model | Accepted direction, unimplemented | Proposed operations only | Persistence, migrations, activation/rollback, structural previews. |
+| Workspace/revision model | Accepted direction; offline authoring prototypes | One-source draft/revision store, preview-bound activation/rollback and export; source-defined successor authoring in the native editor; scoped workspace grants and interactive disposable preview in the v16 ARM64 sandbox coordinator scenario | Instance-state migrations, structural previews, ARM KOReader-widget qualification and on-tablet authoring. |
 | EPUB envelope | Accepted direction | Standard extension mechanisms | Valid examples, fallback, dependency portability. |
 | Capabilities | Accepted direction with narrow implementation | Endpoint-owned surface/state grants and revocation accepted | General object grants, delegation, storage/auditing UX. |
 | Inline document editing | Exploratory | Not established by reviewed wrapper | Source transformation and preview integration. |

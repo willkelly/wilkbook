@@ -77,7 +77,7 @@ FLAVORS = minimal slim networked dev usb-console usb-console-linux-6-6 reader
         manuals-check ultra-coupling-check timesync-check \
         settings-check koreader-profile-check ebc-modprobe-options-check \
         ebc-clut-check ebc-card-resolution-check ebc-ioctl-roster-check direct-probe-quirk-check direct-rect-hints-check update-path-check uart-pick-check deploy reader-stop-check pen-check ebc-lab-check \
-        check-source $(FLAVORS) $(addprefix image-,$(FLAVORS)) $(addprefix rootfs-,$(FLAVORS))
+        check-source book-workbench-check book-workbench-editor-check book-workbench-qemu-drv book-workbench-editor-qemu-drv $(FLAVORS) $(addprefix image-,$(FLAVORS)) $(addprefix rootfs-,$(FLAVORS))
 
 help:
 	@echo "Targets:"
@@ -95,6 +95,10 @@ help:
 	@echo "  refresh-trigger-check   self-test of the trigger analyser against the COMMITTED issue-#14 traces"
 	@echo "  check-host        every host suite needing no hardware ([WBF=..] adds wbf-check + waveform-gated tests)"
 	@echo "  check-source      finite Book Computer source lane (SOURCE_ROOT=/absolute/fresh-candidate)"
+	@echo "  book-workbench-check  offline workspace, revision, preview and reader checks"
+	@echo "  book-workbench-editor-check  native source-defined editor, grants and successor checks"
+	@echo "  book-workbench-qemu-drv  pinned Workbench ARM64 system/image derivation gate"
+	@echo "  book-workbench-editor-qemu-drv  pinned long-lived sandbox editor QEMU gate"
 	@echo "  wbf-check         waveform parser checks (WBF=..; never committed)"
 	@echo "  clut-check        C CLUT compiler vs hrdl's wbf_to_custom.py, byte-identical ([WBF=..] [CLUT_REF=..])"
 	@echo "  ebc-clut-check    the direct-mode CLUT installer one-shot, driven through every branch"
@@ -141,6 +145,20 @@ check-source:
 		echo "SOURCE_ROOT=/absolute/fresh-candidate is required" >&2; exit 2; }
 	"$(SOURCE_ROOT)/pinenote/tools/book-source-check/run.sh" check \
 		--source-root "$(SOURCE_ROOT)"
+
+book-workbench-check:
+	sh pinenote/tools/book-workbench/run-tests.sh
+
+book-workbench-editor-check:
+	sh pinenote/tools/book-workbench-editor/run-tests.sh
+
+book-workbench-qemu-drv:
+	guix time-machine -C channels.scm -- repl -L . -- pinenote/tools/book-workbench/check-system.scm
+	guix time-machine -C channels.scm -- repl -L . -- pinenote/tools/book-workbench/derive-system.scm --image
+
+book-workbench-editor-qemu-drv:
+	guix time-machine -C channels.scm -- repl -L . -- pinenote/tools/book-workbench/check-system.scm
+	guix time-machine -C channels.scm -- repl -L . -- pinenote/tools/book-workbench/derive-system.scm --image --editor
 
 $(addprefix image-,$(FLAVORS)): image-%:
 	$(GUIX) system image -t raw-with-offset $(GUIX_FLAGS) pinenote/systems/pinenote-$*.scm

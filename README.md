@@ -398,8 +398,10 @@ foundation: real KOReader editing, fixed Guile and Python books, and a trusted
 Guile/SQLite authority. It supports repeated save/restart/reopen cycles, empty
 saves, and 4 KiB text. The default reader does not include it. A separate
 `book-state-device-reader` flavor now packages the real PineNote reader plus an
-explicitly activated Guile-note menu and source-built gVisor; it builds and
-passes focused offline lifecycle tests, but has not run on PineNote hardware.
+explicitly activated Guile-note menu and source-built gVisor. Clean packaged
+generation 21 passed previous-note recovery and a new save/close/reopen on
+wkelly's PineNote on September 11. Experimental suspend/wake qualification
+remains open; [hardware status](doc/status.md) records the exact scope.
 
 Start with the [protocol and evidence reference](doc/book-computer-protocols.md),
 then the [demonstrations](doc/book-computer-demo.md) and
@@ -426,6 +428,10 @@ is not a QEMU or device command.
 | Entry point | Scope |
 |---|---|
 | `make check-source SOURCE_ROOT=/absolute/candidate` | Source/unit checks and Guix-prepared native persistence integration |
+| `make book-workbench-check` | Pinned native source/revision, preview, activation/rollback, lifecycle and real KOReader editor checks |
+| `make book-workbench-editor-check` | Source-defined native editor, interactive disposable preview, scoped grants, trusted installation and successor continuation |
+| `make book-workbench-qemu-drv` | Pinned text-function Workbench ARM64 system/image lowering; no build or boot |
+| `make book-workbench-editor-qemu-drv` | Pinned long-lived sandbox editor ARM64 system/image lowering; no build or boot |
 | `pinenote/tools/book-execution-spike/public-source/run.sh --source-root "$PWD"` | Authenticated source-package/system derivation graphs; no OS image build or runtime test |
 | [Retained replay commands](pinenote/tools/book-source-check/README.md) | Explicit external historical artifacts; missing evidence fails rather than being regenerated |
 
@@ -434,8 +440,23 @@ two-fresh-boot QEMU proof: Guile and Python save A/version 1, recover it after a
 fresh boot, and save B/version 2 through one private 64 MiB state image. The
 authenticated command and exact evidence identities are in
 `pinenote/tools/book-state-qemu/two-boot/README.md`; this does not enable the
-feature in the default reader. [Workbench self-revision](doc/wilkbook-self-hosting-book-computer.md)
-is a later implementation slice.
+feature in the default reader.
+
+The next source-authoring step is now a
+[desktop Workbench prototype](pinenote/tools/book-workbench/README.md): edit a
+Guile source draft in KOReader, preview it, activate an immutable revision, run
+the installed version, roll back, and export its source. Draft and installation
+state survive restarting the developer fixture. A separate
+[source-defined editor](pinenote/tools/book-workbench-editor/README.md) moves the
+authoring workflow into editable source: an installed successor can change its
+actions and author another revision with the trusted host unchanged. Its
+interactive preview runs candidate actions against a disposable draft; trusted
+Finish/Cancel and installation confirmation remain outside authored code.
+The desktop commands explicitly select trusted-native execution. A separate
+immutable sandbox backend and ARM64 editor scenario are documented in the
+[editor QEMU runbook](pinenote/tools/book-workbench-editor/QEMU.md). On-tablet
+self-authoring remains a qualification step in the
+[Workbench program](doc/wilkbook-self-hosting-book-computer.md).
 
 ## Reading order (humans)
 

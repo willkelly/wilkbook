@@ -19,7 +19,7 @@ This is an execution record for that direction, not a replacement specification.
 Accepted source, active candidate, blocked gate, historical failure, and future
 product claims are intentionally kept separate.
 
-## Current snapshot — 2026-09-08
+## Current snapshot — 2026-09-19
 
 ### Release scope: opt-in developer foundation
 
@@ -49,10 +49,11 @@ The delivery work is therefore:
 | --- | --- | --- |
 | Public baseline checks | `pinenote/tools/book-source-check/`; README's `export-candidate` and `make check-source` commands | Published native persistent-editor and source validation |
 | Storage authority | `pinenote/tools/book-state/` and `pinenote/tools/book-state-protocol/` | Guile-owned SQLite, typed Book Session operations; books receive no direct storage capability |
-| Note presentation | `pinenote/tools/book-state-reader/`, `pinenote/tools/book-state-reader-join/`, and `pinenote/tools/book-state-device/` | Real native KOReader widget save/paint/reopen/disconnect tests; human device saves and restart recovery on generation 20 with source overrides |
+| Note presentation | `pinenote/tools/book-state-reader/`, `pinenote/tools/book-state-reader-join/`, and `pinenote/tools/book-state-device/` | Real native KOReader widget save/paint/reopen/disconnect tests; generation 20 restart recovery with overrides, then clean packaged generation 21 recovery/save/reopen on glass |
 | Sandboxed ARM guest | `pinenote/tools/book-state-guest/` and `pinenote/systems/pinenote-book-state-reader.scm` | Explicit QEMU-only one-shot system, despite the system filename |
 | Two-boot execution | `pinenote/tools/book-state-qemu/two-boot/run-two-boot.sh` and its `CONTRACT.md` | Strict two-fresh-boot QEMU pass on one private 64 MiB state disk: both languages A/version 1, then recovery and B/version 2; opt-in only |
-| Device integration | `pinenote/systems/pinenote-book-state-device-reader.scm` and `pinenote/tools/book-state-device/README.md` | Opt-in inherited reader flavor; generation 20 trialled/promoted, then live-debugged successfully; clean fixed-generation boot remains |
+| Device integration | `pinenote/systems/pinenote-book-state-device-reader.scm` and `pinenote/tools/book-state-device/README.md` | Opt-in inherited reader flavor; clean generation 21 kexec-trialled, health-checked and promoted, with operator acceptance on 2026-09-11; suspend/wake and cold-boot qualification remain |
+| Source authoring successor | `pinenote/tools/book-workbench/` and `book-workbench-editor/` | Native self-authoring and interactive KOReader preview; ARM64 one-shot/resource gates and long-lived sandbox editor pass. Device authoring remains open |
 
 The PR #79 follow-up includes guest, two-boot and device sources and retained
 review history. The source/build/test entrypoints live alongside each tool;
@@ -95,6 +96,187 @@ dirty-status handling. Human saves and recovery after restarting both services
 passed with those source overrides. Normal suspend has been restored, but
 suspend/wake qualification of this experimental feature is still open. Book
 Computer stays opt-in; the independent `/data/fonts` fix applies to all readers.
+
+**Clean packaged device acceptance (2026-09-11):** generation 21, system
+`/gnu/store/iv1div034ka7qaa05rqm4vlr6g5lzsxs-system`, passed an attended
+cable-free kexec trial and automatic health/promotion. With the temporary
+generation-20 overrides removed, the operator confirmed previous-note recovery
+and a saved edit surviving close/reopen. The packaged authority logged recovery
+of version 4, commit of version 5, and fresh recovery of version 5. Auto-suspend
+was restored to its prior setting. Exact identities and evidence are in
+`doc/status.md`; this does not establish cold-boot, suspend/wake, or
+physical-power-loss qualification.
+
+#### Workbench authoring successor — 2026-09-11/12
+
+Following the generation-21 acceptance, the next implementation step is one
+editable Guile source resource in a separate private authoring database.
+The implementation keeps saved drafts, immutable installed source revisions
+and activation epochs distinct, with preview authorization bound to the exact
+saved draft and requesting endpoint. The generic KOReader editor uses the
+existing widgets and asynchronous channel integration. The bounded source
+runner supplies a text-processing function; it does not yet supply sandbox-side
+workspace grants or the full self-authoring workflow.
+
+Entry points and current bounds are in `pinenote/tools/book-workbench/README.md`
+and `CONTRACT.md`. The desktop composition is an explicitly selected
+trusted-native developer fixture. Sandbox bundle preparation and policy tests
+are a separate proof boundary from executing that bundle on ARM64 or the
+PineNote. The generation-21 device record remains the fixed-note proof.
+
+**Combined native gate passed:** `make book-workbench-check`, using the default
+channel-pinned dependency path, passed 168 workspace checks, 71 authority
+checks, 147 preview/lifetime/policy checks, 503 channel/UI-FSM checks, 16
+fresh-process/adversarial/launcher tests, and the actual KOReader/authority
+widget join. Two UI receipt scenarios come from real two-connection
+SQLite/authority interleavings. Six real-widget regressions additionally cover
+native dirty baselines, generated Save/Close behavior and closed-editor polling.
+The final UI regressions additionally preserve a retained draft across repeated
+rotation or Close/reopen while a saved-baseline resync is pending. The authority
+also recovers activation and rollback after unread replies;
+syntax errors, exceptions and loops leave installed source usable.
+
+Full output: `/tmp/opencode/book-workbench-final-check.log`. Reproduction and
+review findings are in `reviews/2026-09-11-book-workbench-adversarial.md`.
+Native inputs resolve to supervisor `nlkcijvhrj9xfz4dz134iwlc9z52mb4s…` and
+KOReader `p9wkiddhvifzwbm7rg82wamgipd9rgp9…` (`v2026.03`). All new Scheme,
+shell, Lua and Python sources also passed syntax and whitespace checks.
+
+The first visible desktop launch then exposed a dependency the offscreen gate
+did not cover: SDL could not load an EGL/GLES renderer, and KOReader continued
+running without a window. The launcher now supplies pinned Mesa separately and
+checks SDL startup failures. A replacement demo visibly rendered on Sway using
+the existing workspace. Eight launcher checks pass after the follow-up,
+including a missing-SDL regression and an optional test of the actual Mesa
+EGL/GLES renderer under offscreen. Details and source identities are in the
+review's visible-desktop addendum.
+
+The same implementation pass reproduced and fixed two inherited note-lifetime
+bugs without a device session. A save's ordinary action remained pending after
+its typed storage completion; the fourth save could commit before the separate
+presentation action hit the four-request limit. The authority now retires that
+completed command locally, preserving independent presentation correlation.
+The regression executes eight saves and six real quota failures on single
+endpoints. Separately, delayed close/paint/status callbacks could act on a
+reopened dialog because every connection used the same wire generation. They
+now retain the exact channel and widget identity; the overlap regression fails
+on the old code and passes in real native KOReader. The combined device-tool
+runner passed after both fixes, including its Guile/Python, SQLite, service,
+activation, and idle-stop checks. Log:
+`/tmp/opencode/book-state-device-workbench-followup.log`. These source fixes
+are not part of the running generation-21 system. The channel-pinned derivation
+gate also passed for `/gnu/store/aw65hlk17l5fyzq6qzhkicwmms4394p4-system.drv`,
+retaining the exact `334ljs8q…` kernel and `djgy782a…` source-built gVisor
+outputs. This is a derivation result, not a built or deployed system.
+
+#### Source-defined editor successor — 2026-09-15
+
+The next native composition is `pinenote/tools/book-workbench-editor/`. Its
+complete editable Guile seed owns the authoring actions and event loop. The
+trusted KOReader plugin renders a typed text field and declared actions; source
+can change the title, add an action, and implement that action without changing
+the plugin. A separately granted workspace endpoint supplies read, CAS save,
+preview, installation proposal and installed-source export. Installation requires
+a private trusted confirmation and the existing transactional draft/epoch check.
+Previous-revision rollback and permanent-seed recovery preserve the saved draft.
+
+The first combined native pass exercised R0 → R1 → R2 with the same trusted
+runner, authority and plugin: R1 executes changed authoring behavior, authors
+R2, and a fresh process recovers installed R2. It also joined the production
+plugin to real offscreen KOReader widgets. The initial aggregate was 58 protocol,
+107 SQLite/delegate and 54 surface assertions, eight real-child runner tests,
+seven integration tests and 104 Lua assertions. After review corrections the
+aggregate passes **13 integration tests and 125 Lua assertions**, with the other
+counts unchanged. Actual-widget tests now exercise native edits and edit serials,
+late responses/confirmation, native Back, stale Close, multiline layout and idle
+polling. Separate execution owners preserve the main editor's descendants during
+preview cleanup, and deadlines are enforced before admitting writes or publishing
+late results. Follow-up logic and project-fit reviews closed the findings. The
+default desktop command also visibly rendered in Sway. Exact source identity and
+scopes are in `reviews/2026-09-15-workbench-sandbox-and-self-authoring.md`.
+
+This checkpoint was an explicit trusted-native fixture using a new editor entry/ABI identity
+and a fresh private store. Its preview checked startup and a
+valid initial form in a disposable workspace, then stops and reaps the candidate.
+The integration tests separately exercise disposable read/write and denied
+installation; there was no interactive preview completion UI at that checkpoint. Native
+successor continuation does not establish sandboxed self-hosting or device
+acceptance. Reproduce with `make book-workbench-editor-check`.
+
+The text-function prototype has a separate sandbox supervisor and opt-in ARM64
+QEMU composition. Its shared authoring scenario now requires trusted execution
+and cleanup observations even for expected failures, and checks unactivated-draft
+and rollback recovery independently. `make book-workbench-qemu-drv` lowers the
+system and image with the existing kernel/gVisor pins. Runtime review corrected
+detached support-process ownership, forced-stop cleanup and pathname identity;
+the unsafe force-delete fallback is removed. The full host preparation path
+also has a real-helper/guardian regression. ARM boots now report directly to the
+console, and the inherited Scheme-list closure format is correctly consumed.
+After revising the startup budgets and fixing an observation race, the final
+v9 ARM scenario passed **92 assertions across 14 actual runsc executions**: seed
+execution, save/preview/activation, installed execution/export, reopen,
+syntax/exception/nontermination rejection with recovery after each, and rollback.
+All fourteen proved action delivery and cleanup. A read-only audit of the
+retained workspace passed
+fsck and SQLite integrity checks and confirmed draft version 4, activation epoch
+2, the installed seed and the retained broken draft. Its extracted database is
+byte-for-byte identical to the earlier audited v8 pass. Independent final review
+accepted this scope. Each boot used a fresh workspace; this is not a two-boot
+recovery test. These are
+new execution results, not additional generation-21 hardware results.
+
+#### Resource/access continuation — 2026-09-19
+
+The final v13 QEMU run passed **112 assertions across 20 sandbox executions**:
+the existing authoring scenario plus host-file exclusion, denied source/root
+writes, usable scratch space, host task-limit pressure and memcg OOM. Every
+execution proved action delivery and complete cleanup. Fresh ordinary programs
+succeeded after both pressure cases. The task workload terminated the runtime
+at the host PID limit; it did not produce graceful guest `EAGAIN`. The kernel
+identified the memory kill as `CONSTRAINT_MEMCG` in the tested invocation.
+
+The runs also found another cgroup retirement ordering: a counter can return
+`ENODEV` before its directory is unlinked. The observer now waits at most 50 ms
+per failed observation, within the original work deadline, for that same
+directory to disappear. It does not accept partial counters or dispatch without
+a valid live control sample. Host regression and full native tests pass.
+
+Read-only filesystem/SQLite audit passed. The retained authoring database is
+byte-identical to v8/v9 and the private canary is unchanged. Exact outputs,
+counter evidence, scope and all three failed attempts are in
+`reviews/2026-09-19-workbench-resource-qualification.md`. Complete support-process
+accounting and the remaining resource/access policies remain open; this does not
+add a physical-device result. The long-lived editor continuation follows below.
+
+#### Long-lived editor and interactive preview — 2026-09-19
+
+The editor now supports a separate immutable sandbox owner and an interactive
+candidate editor. Author and candidate retain different execution domains,
+workspace grants, drafts, surfaces and UI correlation. Candidate read/save
+operations use a disposable store; Finish/Cancel closes it before the author
+receives a preview result. Installation still needs its own trusted confirmation.
+
+The native gate passes **27 integration tests and 171 Lua assertions**, including
+real offscreen candidate widgets, multi-step authored preview/confirmation
+chains, late edits and draft retention after a terminal authority timeout.
+The runtime host gate adds **30 policy/control assertions and 19 controlled
+lifecycle tests**. Adversarial review corrected startup cancellation, staged
+cgroup readiness, teardown output-limit handling, terminal execution verdicts,
+malformed candidate messages, and transport waits across action deadlines.
+All source/native review findings are closed.
+
+`make book-workbench-editor-qemu-drv` selects a dedicated ARM64 editor scenario
+with the existing kernel/runtime pins; `make book-workbench-qemu-drv` retains
+the finite resource scenario. The execution record, including failed attempts,
+is `reviews/2026-09-19-workbench-interactive-editor.md`; reproduction is
+`pinenote/tools/book-workbench-editor/QEMU.md`. The **v16 ARM64 run passed all 29
+scenario assertions**, including two concurrent author/candidate domains,
+disposable saves, confirmation/install/reopen, busy cancellation, timeout and
+owner-failure refusal, seed recovery and fresh-coordinator state recovery.
+Final cgroup/process/runtime-mount checks and read-only filesystem/SQLite audit
+passed. Draft version 2 and activation epoch 2 retain the looping saved draft,
+active seed and previous successor. This qualifies the sandbox coordinator;
+actual KOReader widgets are native-tested and on-tablet authoring remains open.
 
 #### Experimental device reader: generation-20 build record
 

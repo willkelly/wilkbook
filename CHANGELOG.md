@@ -24,14 +24,70 @@ this lineage. **Unreleased** above it collects what has landed since.
 
 ## Unreleased
 
+- **The source-defined Workbench now has interactive sandboxed previews.**
+  A candidate editor can run actions and save/read a disposable draft while the
+  live author remains open. Trusted Finish/Cancel controls require cleanup;
+  installation still needs separate confirmation. The ARM64 QEMU editor gate
+  passed 29 checks, including cancellation, timeout recovery and refusal after
+  an owner failure; the retained database audit passed. Native tests exercise
+  the actual KOReader widgets and preservation of unsaved text after backend
+  failure. Run `make book-workbench-editor-check`; sandbox reproduction and
+  limits are in `pinenote/tools/book-workbench-editor/QEMU.md`. This is opt-in
+  developer integration; on-tablet authoring remains unqualified.
+- **Workbench sandbox qualification now exercises resource pressure and file access.**
+  The opt-in QEMU gate checks an excluded host file, denied source/root writes,
+  usable scratch space, task and memory pressure, cleanup and recovery. These
+  runs also exposed a cgroup-observation teardown race; the observer now handles
+  delayed directory removal within its existing deadline. The final ARM64 run
+  passed 112 assertions across 20 executions, including recovery after host
+  task-limit pressure and a cgroup OOM kill. Results and remaining
+  limits are recorded in
+  `doc/reviews/2026-09-19-workbench-resource-qualification.md`.
+- **The text-function Workbench has passed its ARM64 sandbox authoring scenario.**
+  Fourteen real runsc executions exercised save, preview, installation, reopen,
+  rollback and recovery after syntax errors, exceptions and nontermination.
+  Cleanup passed for every execution; a read-only audit of the retained workspace
+  confirmed the final draft and rollback state. This is an opt-in QEMU result;
+  the long-lived editor has its separate gate above. Reproduction:
+  `pinenote/tools/book-workbench/QEMU.md`.
+- **A source-defined desktop editor can author its successor.** The separate
+  `book-workbench-editor` fixture lets editable Guile source define its title,
+  actions and authoring workflow. Native tests install a changed editor, use it
+  to author another revision, and recover that revision after restarting.
+  Trusted controls retain installation confirmation, rollback and seed recovery.
+  Run `make book-workbench-editor-check`; see
+  `pinenote/tools/book-workbench-editor/README.md`. The fixture uses native
+  execution when explicitly selected; the interactive sandbox continuation is
+  recorded above. On-tablet self-authoring remains a qualification step.
+- **A desktop Workbench prototype can edit and install source revisions.** Its
+  KOReader editor saves a Guile source draft, previews its behavior, activates
+  the exact previewed revision, and retains rollback and source export.
+  Reopening the developer fixture recovers saved source from a separate SQLite
+  database. Run `make book-workbench-check`; launch instructions and bounds are
+  in `pinenote/tools/book-workbench/README.md`. The visible desktop launcher
+  supplies the pinned graphics libraries SDL needs on Wayland and reports
+  renderer failures instead of continuing without a window. Execution is an
+  explicit trusted-native desktop fixture. The source-defined editor above adds
+  sandboxed self-authoring; on-tablet authoring remains follow-up work.
 - **An opt-in sandboxed persistent note now runs on the PineNote.** The
   `book-state-device-reader` developer flavor adds a dormant fixed Guile note;
   explicit activation is documented in `pinenote/tools/book-state-device/README.md`.
   Human saves and recovery after restarting KOReader and its authority passed
-  on generation 20 with diagnostic overrides. The source includes those fixes;
-  a clean-generation boot and suspend qualification remain pending. The exact
+  on generation 20 with diagnostic overrides. On September 11, clean packaged
+  generation 21 passed an attended cable-free update, recovered the previous
+  note, and saved/reopened a new edit on wkelly's device. Suspend qualification
+  remains pending (`doc/status.md`). The exact
   PineNote-kernel QEMU campaign separately passed two-boot persistence for both
-  Guile and Python. Workbench and general book loading remain future work.
+  Guile and Python. On-tablet Workbench authoring and general book loading remain
+  future work.
+- **Repeated saves and rapid reopen work in the experimental note.** A save
+  now releases its completed request slot; previously the fourth save could
+  commit and then fail to display because earlier saves still occupied slots.
+  Delayed UI callbacks also belong to the exact dialog and connection that
+  scheduled them, so an old close cannot disconnect a newly opened note.
+  Both regressions failed before their fixes and pass in native tests,
+  including real desktop KOReader widgets for the reopen case. These
+  follow-ups have not been deployed to the PineNote.
 - **Personal fonts can survive builds made from a fresh checkout.** Put fonts
   under `/data/fonts`; the reader now searches that persistent directory as
   well as optional build-time fonts. Restart KOReader after adding fonts.

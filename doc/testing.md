@@ -6,8 +6,8 @@ charged battery, a debug cable, and a human watching. So the testing
 strategy is built to answer as much as possible *without* the device, and
 to make each hardware session validate a maximal, pre-verified stack.
 
-There are two layers: **host-side tools** (no device, no VM — plain C
-compiled on your workstation) and **the validation ladder** (Guix builds,
+There are two layers: **host-side tools** (no device, no VM) and
+**the validation ladder** (Guix builds,
 QEMU, then hardware). New contributors should understand both.
 
 ## Why host tools at all
@@ -51,8 +51,9 @@ and `doc/kernel-forward-port.md`.
 
 The C tools build with `guix shell gcc-toolchain python -- make -C <dir>
 check` and every host suite has a root-level convenience target.
-**`make check-host` is the one-command green state**: it runs every
-suite that needs no hardware and no waveform.
+**`make check-host` is the one-command plain-host gate**: it runs the suites
+that need no Guix-store inputs, hardware or waveform. The book-computer native
+dependency gates are listed separately below.
 Waveform-dependent tests need the per-device `.wbf` (never committed —
 see the firmware policy): pass `WBF=/path/to/ebc.wbf` (to `check-host`
 too, which then also runs `wbf-check`); without it those tests skip
@@ -104,6 +105,65 @@ qualifier (e.g. rung 7a, the offline refresh-machine executor inside
 Each tool's `README.md` documents what it does and does **not** cover
 (`ddr-dvfs-test` has no README yet; its `procedure.md` and `protocol.md`
 serve that role).
+
+The experimental book-computer tools have separate native dependency gates:
+`make check-source SOURCE_ROOT=…` checks the prepared persistent-note source
+lane, and **`make book-workbench-check`** checks the source/revision successor.
+The latter resolves pinned native Guile/SQLite and KOReader inputs, then runs
+workspace durability/CAS, executable preview, activation/rollback, malformed
+peer, process-cleanup and real-widget tests. Its execution mode is an explicit
+trusted-native desktop fixture; generated OCI-policy checks do not claim a
+sandbox-runtime result. Commands and proof boundaries are in
+`pinenote/tools/book-source-check/README.md` and
+`pinenote/tools/book-workbench/README.md`.
+The default widget backend is SDL offscreen. Supplying
+`BOOK_WORKBENCH_GRAPHICS` selects an additional headless check of the visible
+desktop's actual Mesa EGL/GLES renderer; the launcher's Wayland display also
+has a separate Sway observation in the Workbench review record.
+
+**`make book-workbench-editor-check`** checks the distinct source-defined editor
+contract with cached, explicitly selected native dependencies. It joins raw
+typed-message tests, real SQLite grants/proposals, source R0 → R1 → R2 execution,
+process restart, isolated disposable workspace operations and actual KOReader
+widgets. The authored seed owns its actions; the trusted host owns installation
+confirmation and recovery. It exercises interactive candidate actions, sequential
+preview/confirmation chains, stale controls, bounded transports and terminal
+backend failure with the local draft retained. These native tests are separate
+from the sandbox execution gate. Exact interfaces and
+commands: `pinenote/tools/book-workbench-editor/README.md`.
+
+**`make book-workbench-editor-qemu-drv`** checks and lowers the separate long-lived
+sandbox editor system. After a build and source inspection, the existing QEMU
+adapter runs its fixed coordinator scenario on ARM64. The September 19 v16 run
+passed 29 assertions covering concurrent author/candidate domains, disposable
+saves, installation, cancellation during an action, timeout and owner-failure
+refusal, cleanup and fresh-coordinator recovery. The retained filesystem/SQLite
+audit passed. `book-workbench-check` also includes 30 editor policy/control
+assertions and 19 controlled runtime-owner lifecycle tests; these use fixed
+native helpers rather than hostile sandbox workloads. Scope and failed attempts:
+`doc/reviews/2026-09-19-workbench-interactive-editor.md`.
+
+**`make book-workbench-qemu-drv`** checks and lowers the text-function Workbench
+QEMU system/image with the existing USER_NS kernel and source-built gVisor pins.
+It does not build or boot. The separately invoked `book-workbench/run-qemu.sh`
+uses authenticated private inputs and a separate ext4 workspace disk. Its
+host-only adapter tests are included in `book-workbench-check`. The shared
+authoring scenario requires both trusted delivery of the init/action frames and
+complete cleanup for every execution, including expected failures. A generic
+`preview-failed` response alone cannot prove that source ever ran or that its
+children were cleaned up. Delivery means an accepted output pump left an active,
+open endpoint with no queued frames or bytes; hello or a queue emptied by closure
+is insufficient. It does not prove the authored body completed. Runtime
+observations record their actual evidence
+scope; requested cgroup settings are not measured resource enforcement.
+
+The resource extension's host tests compile the fixed hostile probes without
+executing them. Actual workloads run only through the explicit QEMU gate. The
+September 19 v13 run passed file-exclusion/write-denial, host task-limit and
+memcg-OOM cases with cleanup and recovery. A limit event must increase from the
+fresh pre-dispatch baseline; a generic crash, timeout or configured limit is
+insufficient. Missing terminal samples refuse the gate as incomplete evidence.
+Exact scope: `doc/reviews/2026-09-19-workbench-resource-qualification.md`.
 
 A second caveat, learned on 2026-08-01: **the host harness compiles the
 driver under its own config, so code behind an `#ifdef` the shim does not

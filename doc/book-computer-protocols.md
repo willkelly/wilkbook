@@ -1,7 +1,8 @@
 # Book computer protocol and state reference
 
 **Status:** current reference for accepted bootstrap contracts, blocked gates,
-and explicitly labelled candidates, as observed 2026-09-06. It is not a shipping
+and explicitly labelled candidates, as observed 2026-09-06, with the source
+authoring supplements of 2026-09-12/15 below. It is not a shipping
 specification, hardware-acceptance record, or replacement for the exact source
 and frozen review packets.
 
@@ -45,6 +46,66 @@ source and its final independent review disposition win.
 
 ## 1. Trust, processes, and identity
 
+**Source authoring successor (2026-09-12):**
+`pinenote/tools/book-workbench/CONTRACT.md` specifies the new private
+KOReader-to-authority commands for one source workspace. Saved draft versions,
+immutable source digests and activation epochs are separate identities. A
+successful preview authorizes installation only for the requesting endpoint
+and the exact still-current draft; activation compares the draft and epoch in
+the pointer-update transaction. Rollback preserves the draft. The separate
+source database and export contain no instance-note state.
+
+Its execution runner reuses ordinary Book Session over FD 3. Workspace controls
+are currently trusted-UI operations, not sandbox-side workspace grants. The
+desktop join is explicitly trusted-native; OCI preparation is a separate
+policy-check boundary. Current fixed-note native, QEMU and generation-21
+hardware results are linked from `book-computer-implementation.md`; the dated
+bootstrap rows below retain their original, narrower evidence boundaries.
+
+**Text-function sandbox qualification (2026-09-15):** the fixed Workbench runner
+and workspace authority now pass the ARM64 QEMU scenario through actual runsc:
+92 assertions and 14 executions, including three deliberately failing sources
+with recovery after each. Every execution requires host-observed init/action
+delivery and independent cleanup; hello alone cannot satisfy that evidence.
+The retained disk passes read-only filesystem/SQLite audit. This qualifies the
+one-shot text-function composition, not the interactive editor contract below
+or general resource-exhaustion handling. Exact identities and earlier failed
+attempts are in `reviews/2026-09-15-workbench-sandbox-and-self-authoring.md`.
+
+**Finite resource/access qualification (2026-09-19):** v13 extends that gate to
+112 assertions and 20 executions. It observes host-file exclusion, source/root
+write denial, host task-limit pressure and kernel-attributed memcg OOM, with
+complete cleanup and fresh successful execution after both pressure cases.
+Counter evidence uses the matching control sample immediately before dispatch.
+This does not establish graceful guest fork refusal, isolated read-only-mount
+enforcement or complete support-process accounting. Evidence and retained failed
+attempts: `reviews/2026-09-19-workbench-resource-qualification.md`.
+
+**Source-defined editor (updated 2026-09-19):** the separate
+`pinenote/tools/book-workbench-editor/` joins Workspace Protocol 1 and Editor
+Surface 1 over bounded Book Protocol frames. It is an explicit editor-session
+successor, not a modification of the accepted ordinary Book Session core.
+`WORKSPACE.md`, `SURFACE.md` and `SEED.md` define its executable interfaces.
+Workspace handles bind to a host-private owner/store; no request selects a path
+or another workspace. Source can save, preview and propose installation, but
+only a host-private confirmation can queue the installation transaction.
+Export's `exported_revision` names the artifact; the separate `source_digest`
+still describes the saved draft, which may differ.
+
+The authored seed owns action meanings and its event loop. The generic renderer
+accepts one 8,192-byte text field and at most eight declared actions, with view
+and request correlation. A trusted Python supervisor owns execution lifetimes and
+routes origin-separated envelopes; Guile retains workspace and confirmation
+authority. The explicit trusted-native fixture now exercises interactive
+disposable previews through actual KOReader widgets. A separate immutable
+sandbox backend passes the v16 ARM64 coordinator gate: 29 assertions and a
+read-only retained-state audit. Candidate grants remain read/save-only; trusted
+Finish/Cancel controls preserve the original author action correlation across
+sequential preview and confirmation operations. Cleanup proof and successful
+terminal execution are both required before preview success. Native fallback
+is never selected by sandbox failure. Final evidence and scope:
+`reviews/2026-09-19-workbench-interactive-editor.md`.
+
 ### 1.1 Role split
 
 | Participant | Role | Trust status |
@@ -53,6 +114,7 @@ source and its final independent review disposition win.
 | KOReader Lua bridge | Widget lifetime, input callback, bounded private channel, final presentation/paint observation | Trusted presentation host |
 | Guile or Python book | Book-defined computation behind one donated Book Session endpoint | Sandboxed in the accepted QEMU demo; trusted-native only in host fixtures |
 | Python test code | Independent codec, lifecycle, and SQLite oracle | Test-only; never the production broker or supervisor |
+| Native editor Python supervisor | Explicit fixture process ownership and origin-separated routing | Trusted native fixture; Guile retains workspace and proposal authority |
 | gVisor Sentry/Gofer and host kernel | Execution containment below the broker boundary | Part of the security boundary, not a capability authority |
 
 Guix supplies immutable software closures. It does not grant a book access to a
@@ -86,6 +148,9 @@ endpoint's retained backend grant.
 | Book ↔ Guile authority | 4-byte big-endian length + UTF-8 JSON object over a dedicated Unix stream | Ordinary session and typed persistent state | Accepted codecs and ordinary session; optional state-enabled successor accepted as source, not installed in the live core |
 | Guile authority ↔ KOReader Lua, original interaction | `kind|generation|lowercase-hex-UTF8\n` over one private full-duplex FD | Fixed dialog input, lifecycle, and result painting | Accepted private fixture channel; not Book Protocol |
 | Guile authority ↔ KOReader Lua, persistent-note successor | Same framing family, different closed vocabulary | Load/edit/save/failure/saved UI FSM | Accepted offline native-UI fixture with an in-memory authority; not Book Protocol or durable storage evidence |
+| Workbench authority ↔ KOReader source editor | `command/reply\|sequence\|lowercase-hex-JSON\n`, one pending request | Draft save, preview, installed run, explicit activation, rollback and export | Offline trusted-native prototype; exact fields and bounds in `pinenote/tools/book-workbench/CONTRACT.md` |
+| Source-defined editor ↔ workspace/surface authority | Book Protocol frames with closed Workspace 1 and Editor Surface 1 messages | Scoped source operations and authored editor actions | Native and ARM64 sandbox coordinator scenarios accepted; `book-workbench-editor/WORKSPACE.md` and `SURFACE.md` |
+| Generic editor authority ↔ KOReader renderer | `command/reply\|sequence\|lowercase-hex-JSON\n`, distinct closed schemas | Generic forms, view lifetime and trusted confirmation | Native candidate; no authored action ID selects a trusted operation |
 | Host KOReader ↔ AArch64 authority in the accepted demo | Private FD 3 on KOReader side, QEMU socket chardev, named virtio-serial port | Carries the private UI channel through QEMU | Accepted for the fixed four-result demonstration |
 | Authority ↔ sandboxed fixed book in the accepted demo | One Book Session Unix socket donated as guest FD 3 with `run --pass-fd=3:3` | `hello`/`initialize`/`action`/`present` | Accepted for the fixed Guile and Python books |
 | Child stdout/stderr | Separate bounded files or captures | Diagnostics only | Never protocol, identity, result, or receipt authority |
@@ -93,9 +158,11 @@ endpoint's retained backend grant.
 
 Neither accepted channel carries framebuffer bytes, page images, arbitrary
 raster commands, host paths, SQLite, or launcher control. The accepted
-presentation payload is one bounded plain-text value. Rich structured surfaces,
-custom display lists, resources, workspace operations, and a general object RPC
-remain unimplemented.
+ordinary-session presentation payload is one bounded plain-text value. The
+editor adds its specific typed form and workspace grant; its ARM64 sandbox
+coordinator scenario passed on September 19. ARM KOReader-widget qualification
+and on-tablet authoring remain open. General rich surfaces, custom display lists,
+resources and a general object RPC remain unimplemented.
 
 ## 3. Book Protocol framing
 

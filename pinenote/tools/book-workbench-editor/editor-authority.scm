@@ -1,0 +1,202 @@
+;;; Successor editor-session composition, not a BookSession core extension.
+;;; Authored source remains opaque bytes here. Python owns execution lifetimes;
+;;; this authority alone retains workspace, grant, surface and proposal objects.
+(use-modules (book-protocol) (book-protocol blocking-io)
+             (book-workspace) (workspace-protocol) (workspace-delegate)
+             (editor-surface) (ice-9 match) (ice-9 threads)
+             (ice-9 textual-ports) (rnrs bytevectors))
+
+(define (field object key) (assoc-ref object key))
+(define (require! condition message) (unless condition (error message)))
+(define (read-payload port)
+  (let ((header ((@@ (book-protocol blocking-io) read-exactly) port 4 #t)))
+    (if (eof-object? header) header
+        ((@@ (book-protocol blocking-io) read-exactly)
+         port (frame-payload-length header) #f))))
+
+(match (cdr (command-line))
+  (((or "--trusted-native-fixture" "--workspace-authority") fd-text directory seed-file environment access-text)
+   (require! (member access-text '("author" "preview")) "invalid workspace access")
+   (umask #o077)
+   (sigaction SIGPIPE SIG_IGN)
+   (let* ((port (fdopen (string->number fd-text) "r+0"))
+          (store (open-workspace-store
+                  directory (call-with-input-file seed-file get-string-all)
+                  #:environment environment))
+           (owner (list 'editor-owner))
+          (access (if (equal? access-text "preview") 'preview 'author))
+          (generation 0) (delegate #f)
+          (surface (make-editor-surface (format #f "editor-~a" (getpid)))) (hello? #f)
+          (events '()) (worker #f) (completion #f) (worker-error #f)
+          (preview-request #f) (preview-result #f) (preview-number 0)
+          (preview-mutex (make-mutex)) (preview-condition (make-condition-variable))
+          (proposal #f) (proposal-number 0) (stopped? #f) (restart? #f) (open-text ""))
+     (define (emit target message)
+       (set! events (cons `(("target" . ,target) ("message" . ,message)) events)))
+     (define (send-child message) (emit "child" message))
+     (define (send-ui message) (emit "ui" message))
+     (define (preview source snapshot cancelled?)
+       (with-mutex preview-mutex
+         (if (or stopped? (cancelled?))
+             '((status . failed) (diagnostic . "preview cancelled"))
+             (begin
+               (set! preview-number (+ preview-number 1))
+               (set! preview-result #f)
+               (set! preview-request `(("id" . ,preview-number) ("source" . ,source)))
+               (let loop ()
+                 (cond ((or stopped? (cancelled?))
+                        '((status . failed) (diagnostic . "preview cancelled")))
+                       (preview-result preview-result)
+                       (else (wait-condition-variable preview-condition preview-mutex)
+                             (loop))))))))
+     (define (retire!)
+       (when delegate (workspace-delegate-close! delegate))
+       (when surface (editor-surface-close! surface))
+       (set! proposal #f)
+       (with-mutex preview-mutex
+         (set! preview-request #f)
+         (set! preview-result '((status . failed) (diagnostic . "view retired")))
+         (signal-condition-variable preview-condition))
+       (emit "cancel-preview" '()))
+     (define (new-view!)
+       (require! (not worker) "cannot replace a view while its task is running")
+       (retire!)
+       (set! generation (+ generation 1))
+       (set! hello? #f)
+       (set! delegate (make-workspace-delegate
+                       owner store (format #f "workspace-~a" generation)
+                       generation access preview))
+       (emit "launch"
+             `(("source" . ,(workspace-revision-source
+                              store (assoc-ref (workspace-snapshot store) 'active-revision))))))
+     (define (start-task!)
+       (unless worker
+         (let ((task (and delegate (workspace-delegate-take-task! delegate))))
+           (when task
+             (let ((retained delegate))
+               (set! completion #f) (set! worker-error #f)
+               (set! worker
+                     (call-with-new-thread
+                      (lambda ()
+                        (catch #t
+                          (lambda ()
+                            (set! completion (workspace-delegate-run-task! retained task)))
+                          (lambda args (set! worker-error args)))))))))))
+     (define (drain!)
+       (when (and worker (thread-exited? worker))
+         (join-thread worker) (set! worker #f)
+         (when worker-error (apply throw worker-error))
+         (when completion
+           (let ((reply (workspace-delegate-complete! delegate completion)))
+             (set! completion #f)
+             (when reply (send-child reply)))))
+       (let ((next (and delegate (workspace-delegate-proposal delegate))))
+         (when (and next (not (eq? next proposal)))
+           (set! proposal next) (set! proposal-number (+ proposal-number 1))
+           (send-ui `(("type" . "editor-host-proposal")
+                      ("proposal_id" . ,proposal-number)
+                      ("text" . "Install the successfully previewed saved source?")))))
+       (with-mutex preview-mutex
+         (when preview-request
+           (emit "preview" preview-request) (set! preview-request #f)))
+       (when (and restart? (not worker))
+         (set! restart? #f) (new-view!))
+       (start-task!))
+     (define (accept-child payload message)
+       (let ((type (field message "type")))
+         (cond
+          ((not hello?)
+           (require! (and (= (length message) 2)
+                          (equal? (field message "type") "hello")
+                          (equal? (field message "version") 1))
+                     "expected compatible hello")
+           (set! hello? #t)
+           (send-child '(("type" . "initialize") ("version" . 1)
+                         ("grant_count" . 1) ("surface_handle" . "compatibility-text")
+                         ("surface_generation" . 1) ("max_pending_requests" . 4)
+                         ("max_present_text_bytes" . 4096)))
+           (send-child (workspace-delegate-announce! delegate))
+           (send-child (editor-message->object (editor-surface-new-view! surface)))
+           (send-child (editor-message->object (editor-surface-action! surface "open" open-text))))
+          ((equal? type "editor-present")
+           (require! (eq? (workspace-delegate-phase delegate) 'ready)
+                     "presentation cannot overtake pending workspace work")
+           (let ((accepted (editor-surface-present!
+                            surface (decode-editor-payload payload 'book-to-authority))))
+             (send-ui (editor-message->object accepted))))
+          (else
+           (require! (editor-surface-pending surface)
+                     "workspace work requires a pending editor action")
+           (workspace-delegate-receive!
+            delegate owner (decode-workspace-payload payload))))))
+     (define (host-command message)
+       (match (field message "type")
+         ("host-start" (new-view!))
+         ("host-poll" #t)
+         ("host-preview-result"
+          (with-mutex preview-mutex
+            (require! (= (field message "id") preview-number) "stale preview callback")
+            (set! preview-result
+                  `((status . ,(if (field message "ok") 'ok 'failed))
+                    (diagnostic . ,(field message "diagnostic"))))
+            (signal-condition-variable preview-condition)))
+         ("host-action"
+          (send-child (editor-message->object
+                       (editor-surface-action! surface (field message "action_id")
+                                               (field message "text")))))
+         ("host-confirm"
+          (require! (and proposal (= (field message "proposal_id") proposal-number))
+                    "stale proposal control")
+          (workspace-delegate-confirm! delegate owner proposal)
+          (set! proposal #f))
+         ("host-cancel"
+          (require! (and proposal (= (field message "proposal_id") proposal-number))
+                    "stale proposal control")
+          (send-child (workspace-delegate-cancel! delegate owner proposal))
+          (set! proposal #f))
+         ("host-reopen"
+          (set! open-text (or (field message "text") ""))
+          (emit "stop" '()) (retire!) (set! restart? #t))
+         ("host-retire" (set! restart? #f) (retire!))
+         ("host-recover"
+          (require! (eq? access 'author) "preview cannot recover live revisions")
+          (require! (not worker) "workspace task still running")
+          (retire!)
+          (let ((snapshot (workspace-snapshot store)))
+            (if (equal? (field message "kind") "seed")
+                (workspace-activate! store (assoc-ref snapshot 'seed-revision)
+                                     (assoc-ref snapshot 'activation-generation))
+                (begin
+                  (require! (equal? (field message "kind") "rollback") "unknown recovery")
+                  (workspace-rollback! store (assoc-ref snapshot 'activation-generation)))))
+          (emit "stop" '()) (new-view!))
+         ("host-snapshot"
+          ;; Private fixture observation, never donated to authored source.
+          (emit "snapshot" (map (lambda (entry)
+                                  (cons (symbol->string (car entry)) (cdr entry)))
+                                (workspace-snapshot store))))
+         ("host-close" (set! stopped? #t) (set! restart? #f) (retire!))
+         (_ (error "unknown trusted coordinator operation"))))
+     (dynamic-wind
+       (lambda () #t)
+       (lambda ()
+         (let loop ()
+           (let ((payload (read-payload port)))
+             (unless (eof-object? payload)
+               (set! events '())
+               (let* ((message (decode-payload payload)) (type (field message "type")))
+                 (catch #t
+                   (lambda ()
+                     (if (and (string? type) (string-prefix? "host-" type))
+                         (host-command message) (accept-child payload message))
+                     (drain!)
+                     (write-frame port `(("events" . ,(list->vector (reverse events)))
+                                         ("busy" . ,(and (or worker restart?) #t)))))
+                   (lambda (key . args)
+                     (write-frame port `(("error" . ,(format #f "~a: ~s" key args)))))))
+               (unless stopped? (loop))))))
+       (lambda ()
+         (set! stopped? #t) (retire!)
+         (when worker (join-thread worker))
+         (close-workspace-store! store) (close-port port)))))
+  (_ (error "usage: editor-authority.scm --workspace-authority FD STORE SEED ENVIRONMENT author|preview")))
