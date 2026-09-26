@@ -24,6 +24,19 @@ this lineage. **Unreleased** above it collects what has landed since.
 
 ## Unreleased
 
+- **A pen notebook, built and host-tested, not yet run on the device.**
+  Tools → Notebook opens a blank page with no toolbar. The pen inks, with
+  pressure-sensitive brushes, and the rubber end erases. A finger swipe
+  turns the page, and pages run on in both directions. A swipe with
+  several fingers undoes or redoes: three fingers, because the touch
+  controller has never reported five. A long finger press brings up a
+  floating panel for brushes, sizes, erase modes and notebooks; flick it
+  away or tap Close. Ink goes through a per-region DU hint, the route the
+  2026-09-26 blinded test found pen-class. Notebooks are append-only
+  journals under `/data/notebooks` and survive a reflash. Every host suite
+  passes, including a replay of real pen captures whose live page matches
+  the page rebuilt from its journal. Design, limits and the first glass
+  session: `doc/notebook.md`.
 - **The source-defined Workbench now has interactive sandboxed previews.**
   A candidate editor can run actions and save/read a disposable draft while the
   live author remains open. Trusted Finish/Cancel controls require cleanup;

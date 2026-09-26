@@ -398,6 +398,12 @@ feature and no hint plumbing, so its partial refreshes, `a2` and
       (2026-08-24). It reports every 2.77 ms median (~360 Hz),
       pen-down and hovering alike (2026-09-26,
       `doc/artifacts/pinenote-du-canvas-feel-20260926/stats.txt`).
+      The first consumer is built and host-tested (2026-09-26): the
+      notebook (`doc/notebook.md`), raw samples journaled on `/data`,
+      with pressure brushes, erasing and undo. Its first glass run is
+      planned as generation 22 of the experimental
+      `book-state-device-reader` flavor; the `reader` flavor, which will
+      also ship it, needs its own run.
 - [ ] **The settings book** (`doc/configuration.md` §5): settings as a
       real document with plugin-supplied live regions — the first
       instance of the drawn-UIs-in-books machinery, arriving early

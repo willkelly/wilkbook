@@ -125,6 +125,12 @@ code review — before a single reboot. That's the standard.
   decisions with recommendations, the six steps with their offline
   proofs, and the bail-out. Read before touching anything
   direct-related.
+- `doc/notebook.md` — the pen notebook (2026-09-26, proof of concept
+  built and host-tested, not on glass): paper-and-pen with a floating
+  panel on long press, DU ink through a per-region hint, pressure brushes,
+  multi-finger undo, an append-only stroke journal on `/data`, its module
+  map and offline proofs, and the generation-22 session that first runs
+  it.
 - `doc/driver-findings-report.md` — the community-facing writeup of driver
   bugs the host tools found.
 - `doc/upstream-register.md` — the standing list of what we owe the
@@ -605,7 +611,16 @@ gitignored `build/`, or the reader's static address.
   `wlan0.conf`. The teardown now remounts `/data` read-only after `/`
   (the bail-out puts it back) — proven by two kexecs on generation 19.
   When a kexec'd boot loses something only a sleep reveals, check what
-  was mounted where before suspecting the radio.
+  was mounted where before suspecting the radio. **The remount fails if
+  anything still holds `/data` open for writing, and the teardown only
+  logs that failure, after Wi-Fi is off.** The teardown stops only
+  `reader-session`. On the `book-state-device-reader` flavor, once the
+  note feature is activated (its marker present), the authority keeps its
+  SQLite database open read-write while idle, so the remount is expected
+  to fail there. That is inferred from the source, not observed: the
+  2026-09-11 session stopped the authority by hand first. Do the same
+  before every trial on that flavor until the teardown handles it
+  (`doc/notebook.md`, housekeeping).
 - **The UART capture drops ~25 bytes every 150–250 at 1.5 Mbaud, and it
   is the adapter, not termios** (2026-09-04, measured from the two
   generation-16 captures): `uboot-pick-slot.sh` has always set the port
