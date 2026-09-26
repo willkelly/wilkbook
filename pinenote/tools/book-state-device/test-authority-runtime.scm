@@ -2,6 +2,7 @@
 ;;; seams.  It uses the real fixed Guile book over donated FD 3 and the exact
 ;;; accepted child owner, replacing only the unavailable AArch64 runsc exec.
 (use-modules (book-session)
+             (book-state)
              (book-state-device-authority)
              (book-state-protocol)
              (book-state-reader-bridge)
@@ -124,7 +125,7 @@
          (child #f)
          (endpoint #f)
          (released? #f)
-         (stop-details #f))
+          (session-failure #f))
     (dynamic-wind
       (lambda () #t)
       (lambda ()
@@ -186,8 +187,11 @@
             (lambda (key . details)
               (cond
                ((eq? key 'book-state-device-ui-closed) #t)
-               ((eq? key 'book-state-device-stop-requested)
-                (set! stop-details (cons key details)))
+               ((memq key '(book-state-device-stop-requested
+                            book-state-device-error))
+                ;; Check cleanup before propagating the expected post-receipt
+                ;; UI failure, just as for a supervised stop.
+                (set! session-failure (cons key details)))
                (else (apply throw key details)))))
           (((authority 'world-record) 'set-closing!) world #t)
           (set! session-records
@@ -206,7 +210,8 @@
     (assert released? "session endpoint was not released")
     (let ((snapshot (host-session-snapshot endpoint)))
       (assert (and (eq? (field snapshot "state") 'closed)
-                   (not (field snapshot "transport_open")))
+                   (not (field snapshot "transport_open"))
+                   (zero? (field snapshot "pending_requests")))
               "released endpoint remained live" snapshot))
     (assert
      (catch #t
@@ -238,8 +243,8 @@
     (set! sessions-until-stop (- sessions-until-stop 1))
     (when (zero? sessions-until-stop)
       (set-authority! 'stop-requested? #t))
-    (when stop-details
-      (apply throw (car stop-details) (cdr stop-details)))))
+    (when session-failure
+      (apply throw (car session-failure) (cdr session-failure)))))
 
 (define (wait-for-path path)
   (let loop ((remaining 1000))
@@ -272,6 +277,17 @@
     (setvbuf client 'none)
     client))
 
+(define* (save-ui-note! client text #:optional (after-receipt 'saved))
+  (send-event! client 'status "dirty")
+  (send-event! client 'submit text)
+  (send-event! client 'status "pending")
+  (receive-command! client 'commit-ok text)
+  (unless (eq? after-receipt 'disconnect)
+    (send-event! client 'status (symbol->string after-receipt))
+    (when (eq? after-receipt 'saved)
+      (receive-command! client 'present text)
+      (send-event! client 'applied text))))
+
 (define (run-ui-session! initial save-text close-mode)
   (let ((client (connect-ui)))
     (dynamic-wind
@@ -291,26 +307,24 @@
           ;; exist.  The handler records stop and wakes the listener; the active
           ;; interaction observes the typed stop at its next bounded pump.
           (kill (getpid) SIGTERM))
-         (when (and save-text (not (eq? close-mode 'stop)))
-           (send-event! client 'status "dirty")
-           (send-event! client 'submit save-text)
-          (send-event! client 'status "pending")
-          (receive-command! client 'commit-ok save-text)
-          (send-event! client 'status "saved")
-          (receive-command! client 'present save-text)
-          (send-event! client 'applied save-text))
+        (when (and save-text (not (eq? close-mode 'stop)))
+          (if (procedure? save-text)
+              (save-text client)
+              (save-ui-note! client save-text)))
         (when (eq? close-mode 'clean)
           (send-event! client 'closed "")))
       (lambda () (close-port client)))))
 
-(define (run-authority-cycle! language initial-values save-first?)
+(define* (run-authority-cycle! language initial-values save-first?
+                              #:key save-driver expected-error)
   (set! sessions-until-stop (length initial-values))
   (set-authority! 'stop-requested? #f)
   (let* ((cycle-config (make-config language))
-         (save-text (case language
-                      ((guile) guile-text)
-                      ((python) python-text)
-                      (else (fail "unknown cycle language" language))))
+         (save-text (or save-driver
+                        (case language
+                          ((guile) guile-text)
+                          ((python) python-text)
+                          (else (fail "unknown cycle language" language)))))
          (stopping?
           (any (lambda (specification)
                  (and (pair? specification)
@@ -327,9 +341,11 @@
                       (if (eq? key 'book-state-device-stop-requested)
                           'stopped
                           (begin
-                            (format (current-error-port)
-                                    "AUTHORITY-THREAD-FAIL: ~s ~s~%"
-                                    key details)
+                             (format (current-error-port)
+                                     (if (equal? expected-error (cons key details))
+                                         "AUTHORITY-THREAD-EXPECTED: ~s ~s~%"
+                                         "AUTHORITY-THREAD-FAIL: ~s ~s~%")
+                                     key details)
                             (force-output (current-error-port))
                             (cons key details))))))))))
     (wait-for-path socket-path)
@@ -348,7 +364,8 @@
         (set! first? #f)
         (loop (cdr values) first?)))
     (join-thread worker)
-    (assert (eq? thread-result (if stopping? 'stopped 'ok))
+    (assert (equal? thread-result
+                    (or expected-error (if stopping? 'stopped 'ok)))
             "authority cycle failed" thread-result)
     (assert (and (not (file-exists? socket-path))
                  (not (file-exists? runtime-root)))
@@ -407,9 +424,198 @@
               "closed database row differs from fixed namespace" row wanted))
            rows expected))
         (assert (= (query-scalar database "SELECT COUNT(*) FROM commit_receipts")
-                   (length expected))
+                   (apply + (map (lambda (row) (list-ref row 2)) expected)))
                 "closed database has wrong receipt count"))
       (lambda () (sqlite-close database)))))
+
+(define (observe-save-commands! thunk)
+  ;; Observe the real authority after its unchanged typed receipt observer and
+  ;; presentation validator. No backend result, request, or wire frame is faked.
+  (let ((queue (authority 'queue-ui!))
+        (observed '()))
+    (dynamic-wind
+      (lambda ()
+        (set-authority!
+         'queue-ui!
+         (lambda (world kind value)
+           (when (memq kind '(commit-ok commit-failed present))
+             (let* ((endpoint
+                     ((@@ (book-state-device-authority) world-endpoint) world))
+                    (snapshot (host-session-snapshot endpoint))
+                    (surface
+                     (initial-grant-envelope-surface
+                      (host-initial-grants endpoint))))
+               (assert (and (eq? (field snapshot "state") 'active)
+                            (field snapshot "transport_open")
+                            (zero? (field snapshot "pending_requests")))
+                       "completed save/display retained a pending action"
+                       kind snapshot)
+               (set! observed
+                     (append observed
+                             (list (list kind value snapshot
+                                         (surface-grant-handle surface)))))))
+           (queue world kind value))))
+      thunk
+      (lambda () (set-authority! 'queue-ui! queue)))
+    observed))
+
+(define (assert-one-save-endpoint! observed sequence-count)
+  (let ((session-id (cadr (last session-records))))
+    (assert (and (pair? observed)
+                 (every (lambda (entry)
+                          (string=? (field (caddr entry) "session_id")
+                                    session-id))
+                        observed)
+                 (= (field (caddr (last observed)) "sequence") sequence-count))
+            "repeated saves did not use one continuing endpoint"
+            observed sequence-count)))
+
+(define (inspect-save-receipts! observed)
+  (let ((database (sqlite-open database-path SQLITE_OPEN_READONLY))
+        (commits (filter (lambda (entry) (eq? (car entry) 'commit-ok)) observed)))
+    (dynamic-wind
+      (lambda () #t)
+      (lambda ()
+        (let ((rows
+               (query-rows
+                database
+                "SELECT r.operation_id, r.expected_state_version, r.resulting_state_version, r.text, r.text_bytes FROM commit_receipts AS r JOIN book_instances AS b USING (namespace_id) WHERE b.book_revision = 'reader-note/guile@1' AND r.resulting_state_version > 1 ORDER BY r.resulting_state_version")))
+          (assert (= (length rows) (length commits))
+                  "repeated saves have the wrong number of durable receipts")
+          (for-each
+           (lambda (row event expected-version)
+             (let ((text (cadr event)) (snapshot (caddr event)))
+               (assert
+                (and (string=?
+                      (vector-ref row 0)
+                      (format #f "note_~a_s~a_q~a" (cadddr event)
+                              (field snapshot "surface_generation")
+                              (field snapshot "sequence")))
+                     (= (vector-ref row 1) expected-version)
+                     (= (vector-ref row 2) (+ expected-version 1))
+                     (string=? (vector-ref row 3) text)
+                     (= (vector-ref row 4)
+                        (bytevector-length (string->utf8 text))))
+                "durable receipt differs from correlated UI save" row event)))
+           rows commits (iota (length commits) 1))))
+      (lambda () (sqlite-close database)))))
+
+(define (fill-guile-receipt-quota! text expected-version)
+  ;; Reach the real backend failure without changing its limits, grants, schema,
+  ;; or observer. The authority is closed while this trusted test owner writes.
+  (let* ((store (open-book-state-store state-root))
+         (namespace (open-book-instance!
+                     store "reader-note/guile@1" "persistent-note-guile"))
+         (owner (list 'quota-test-owner))
+         (grant (issue-book-state-grant! store namespace owner 'read-write)))
+    (dynamic-wind
+      (lambda () #t)
+      (lambda ()
+        (assert (book-state-grant? grant) "quota setup did not issue a grant")
+        (for-each
+         (lambda (version)
+           (let ((receipt
+                  (commit-book-state!
+                   store owner grant (book-state-grant-generation grant)
+                   (format #f "quota_setup_~a" version) version text)))
+             (assert (and (book-state-receipt? receipt)
+                          (= (book-state-receipt-state-version receipt)
+                             (+ version 1)))
+                     "quota setup did not commit the exact next version" version)))
+         (iota (- book-state-max-receipts-per-namespace expected-version)
+               expected-version)))
+      (lambda () (close-book-state-store! store)))))
+
+(define (check-save-action-retirement!)
+  (let* ((texts (map (lambda (index)
+                       (format #f "Repeated save ~a — λ" index))
+                     (iota 6 1)))
+         (dirty-text "Committed while a newer editor draft remains")
+         (final-text "Saved after the newer-draft branch — 東京")
+         (disconnected-text "Receipt received before UI disconnect — λ")
+         (before (length session-records))
+         (saved
+          (observe-save-commands!
+           (lambda ()
+             (run-authority-cycle!
+              'guile (list guile-text) #t
+              #:save-driver
+              (lambda (client)
+                (for-each (lambda (text) (save-ui-note! client text)) texts)
+                (save-ui-note! client dirty-text 'dirty)
+                (save-ui-note! client final-text)))))))
+    (assert (= (length session-records) (+ before 1))
+            "repeated saves restarted their endpoint")
+    (assert-one-save-endpoint! saved 15)
+    (assert
+     (equal? (map (lambda (event) (take event 2)) saved)
+             (append
+              (append-map (lambda (text)
+                            (list (list 'commit-ok text) (list 'present text)))
+                          texts)
+              (list (list 'commit-ok dirty-text)
+                    (list 'commit-ok final-text) (list 'present final-text))))
+     "receipt/presentation ordering or newer-draft suppression changed" saved)
+    (inspect-closed-database!
+     (list (list "reader-note/guile@1" "persistent-note-guile" 9 final-text)
+           (list "reader-note/python@1" "persistent-note-python" 1 python-text)))
+    (inspect-save-receipts! saved)
+    (let ((disconnected
+           (observe-save-commands!
+            (lambda ()
+              (run-authority-cycle!
+               'guile (list (cons final-text 'disconnect)) #t
+               ;; The existing authority rejects this EOF in expect-status!.
+               ;; Preserve that result while proving local retirement preceded
+               ;; the failed UI phase and cleanup/restart retain the commit.
+               #:expected-error
+               '(book-state-device-error
+                 "unexpected post-commit UI event: (closed 1 \"\")")
+               #:save-driver
+               (lambda (client)
+                 (save-ui-note! client disconnected-text 'disconnect)))))))
+      (assert-one-save-endpoint! disconnected 1)
+      (assert (equal? (map (lambda (event) (take event 2)) disconnected)
+                      (list (list 'commit-ok disconnected-text)))
+              "post-receipt disconnect manufactured a presentation")
+      (inspect-save-receipts! (append saved disconnected)))
+    (run-authority-cycle! 'guile (list disconnected-text) #f)
+    (inspect-closed-database!
+     (list (list "reader-note/guile@1" "persistent-note-guile" 10 disconnected-text)
+           (list "reader-note/python@1" "persistent-note-python" 1 python-text)))
+    (display
+     "PASS: one endpoint completed eight saves with exact durable receipts and seven separately correlated presentations; newer-draft and post-receipt disconnect paths retired actions and recovered after restart\n")
+    (fill-guile-receipt-quota! disconnected-text 10)
+    (let* ((before (length session-records))
+           (failed
+           (observe-save-commands!
+            (lambda ()
+              (run-authority-cycle!
+               'guile (list disconnected-text) #t
+               #:save-driver
+               (lambda (client)
+                 (for-each
+                  (lambda (index)
+                    (send-event! client 'status "dirty")
+                    (send-event! client 'submit
+                                 (format #f "Rejected save ~a" index))
+                    (send-event! client 'status "pending")
+                    (receive-command! client 'commit-failed
+                                      "receipt-quota-exhausted")
+                    (send-event! client 'status "failed"))
+                  (iota 6 1))))))))
+      (assert (= (length session-records) (+ before 1))
+              "failed saves restarted their endpoint")
+      (assert-one-save-endpoint! failed 6)
+      (assert (equal? (map (lambda (event) (take event 2)) failed)
+                      (make-list 6 '(commit-failed "receipt-quota-exhausted")))
+              "failed saves fabricated a receipt or presentation" failed))
+    (inspect-closed-database!
+     (list (list "reader-note/guile@1" "persistent-note-guile"
+                 book-state-max-receipts-per-namespace disconnected-text)
+           (list "reader-note/python@1" "persistent-note-python" 1 python-text)))
+    (display
+     "PASS: six real receipt-quota failures on one endpoint retired every action without state mutation, durable receipts, or presentations\n")))
 
 (define (check-fixed-bundles!)
   (let* ((root (string-append test-root "/bundle-check"))
@@ -705,6 +911,8 @@
       ;; at one again, but the CSPRNG-backed handle and session are both fresh.
       (assert (equal? generations '(1 2 1 2 1 1 2 1))
               "grant generation lifecycle changed" generations))
+
+    (check-save-action-retirement!)
 
     (display
      "PASS: Guile/Python authority runners saved, closed, reopened, disconnected/reconnected, stopped active, restarted, invalidated endpoints, reaped naturally, and rejected stale state\n"))

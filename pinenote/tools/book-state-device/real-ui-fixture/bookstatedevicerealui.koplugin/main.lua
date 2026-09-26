@@ -213,46 +213,57 @@ function Probe:_await_paint(generation, title, text, minimum_count, continuation
 end
 
 function Probe:_close_and_reopen(first_dialog)
+    local first_channel = self.production.channel
+    -- Queue a real presentation acknowledgement, then use generated Close and
+    -- TouchMenu reopen in this same callback, before nextTick or the 50 ms
+    -- transport-close timer can run. Neither may target the new editor.
+    SocketFixture.send(1, "present", SAVED_TEXT)
+    first_channel:waitEvent()
     local close = first_dialog.button_table:getButtonById("close")
     close.callback()
-    self:_schedule(0.05, function()
-        if not self:_check(self.production.dialog == self.dialog,
-                "generated Close changed the injected ReaderUI owner") then return end
-        if not self:_check(self.production.note_dialog == nil
-                and not UIManager:isWidgetShown(first_dialog),
-                "generated Close did not close only the note editor") then return end
-        self:_await_events(1, {{"closed", ""}}, function()
-            self:_schedule(0.06, function()
-                if not self:_check(self.production.channel == nil,
-                        "closed editor retained its StateChannel") then return end
-                if not self:_check(SocketFixture.peerClosed(1),
-                        "closed editor retained its socketpair endpoint") then return end
-                self:_open_through_touch_menu()
-                local second = self:_assert_real_dialog(2)
-                if not second then return end
-                self:_await_events(2,
-                    {{"channel-ready", ""}, {"ready", ""}}, function()
-                    SocketFixture.send(2, "load-value", SAVED_TEXT)
-                    self:_await_events(2,
-                        {{"status", "loaded-value"}, {"applied", SAVED_TEXT}},
-                        function()
-                            if not self:_check(second:getInputText() == SAVED_TEXT,
-                                    "fresh socket load did not restore saved text") then return end
-                            local before = self.paint_count
-                            self:_await_paint(2, "Persistent note — Loaded",
-                                SAVED_TEXT, before, function()
-                                second.button_table:getButtonById("close").callback()
-                                self:_await_events(2, {{"closed", ""}}, function()
-                                    self:_schedule(0.06, function()
-                                        if not self:_check(self.production.dialog == self.dialog
-                                                and self.production.note_dialog == nil,
-                                                "second Close damaged owner/editor lifecycle") then return end
-                                        marker("close-reopen:fresh-socket:same-text")
-                                         self:_test_disconnect()
-                                    end)
-                                end)
+    if not self:_check(self.production.dialog == self.dialog,
+            "generated Close changed the injected ReaderUI owner") then return end
+    if not self:_check(self.production.note_dialog == nil
+            and not UIManager:isWidgetShown(first_dialog),
+            "generated Close did not close only the note editor") then return end
+    self:_open_through_touch_menu()
+    local second = self:_assert_real_dialog(2)
+    if not second then return end
+    local second_channel = self.production.channel
+    if not self:_check(second_channel ~= first_channel and not first_channel.closed,
+            "reopen must precede retirement of the old StateChannel") then return end
+    self:_await_events(1, {{"closed", ""}}, function()
+        self:_await_events(2, {{"channel-ready", ""}, {"ready", ""}}, function()
+            SocketFixture.send(2, "load-value", SAVED_TEXT)
+            self:_await_events(2,
+                {{"status", "loaded-value"}, {"applied", SAVED_TEXT}}, function()
+                if not self:_check(second:getInputText() == SAVED_TEXT,
+                        "fresh socket load did not restore saved text") then return end
+                local before = self.paint_count
+                self:_await_paint(2, "Persistent note — Loaded",
+                    SAVED_TEXT, before, function()
+                    self:_schedule(0.06, function()
+                        if not self:_check(first_channel.closed and SocketFixture.peerClosed(1),
+                                "old editor retained its StateChannel/socket") then return end
+                        if not self:_check(self.production.channel == second_channel
+                                and not second_channel.closed and not self.production.transport_failed
+                                and self.production.note_dialog == second,
+                                "old close timer killed the reopened editor/channel") then return end
+                        if not self:_check(SocketFixture.take(2) == nil,
+                                "stale callback sent an extra frame to the new socket") then return end
+                        marker("immediate-reopen:old-paint-discarded:old-socket-retired:new-channel-live")
+                        second.button_table:getButtonById("close").callback()
+                        self:_await_events(2, {{"closed", ""}}, function()
+                            self:_schedule(0.06, function()
+                                if not self:_check(self.production.dialog == self.dialog
+                                        and self.production.note_dialog == nil
+                                        and second_channel.closed and SocketFixture.peerClosed(2),
+                                        "second Close damaged owner/editor lifecycle") then return end
+                                marker("close-reopen:fresh-socket:same-text")
+                                self:_test_disconnect()
                             end)
                         end)
+                    end)
                 end)
             end)
         end)

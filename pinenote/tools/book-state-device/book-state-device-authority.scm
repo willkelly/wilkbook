@@ -436,6 +436,12 @@
                      (await-world! world (lambda () (pop-completion! world))
                                    operation-timeout-seconds "typed commit completion"))
                     (decision (reader-save-completion->decision completion pending)))
+               ;; The correlated storage outcome completes this command. Retire
+               ;; its unused presentation slot for success and failure alike;
+               ;; present-saved has its own separately correlated action below.
+               ;; This is local cancellation only: the fixed book consumes the
+               ;; typed state reply, not a cancel frame. It cannot undo a commit.
+               (cancel-request! endpoint (field action "request_id"))
                (wait-for-dispatch-count! world (+ dispatch-count 1))
                (case (car decision)
                  ((committed)

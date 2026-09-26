@@ -58,6 +58,16 @@ function Plugin:_send(kind, value)
     return ok
 end
 
+function Plugin:_next_note_tick(callback)
+    local dialog, channel = self.note_dialog, self.channel
+    if not dialog or not channel then return end
+    UIManager:nextTick(function()
+        -- Close/reopen can happen before this tick. The wire generation is
+        -- constant across connections, so retain the exact editor and channel.
+        if self.note_dialog == dialog and self.channel == channel then callback() end
+    end)
+end
+
 function Plugin:_save_button()
     return self.note_dialog and self.note_dialog.button_table:getButtonById("save")
 end
@@ -74,8 +84,8 @@ function Plugin:_set_state(state)
     self.state = state
     self.note_dialog.title_bar:setTitle(TITLES[state])
     UIManager:setDirty(self.note_dialog, "ui")
-    UIManager:nextTick(function()
-        if self.note_dialog and self.state == state then self:_send("status", state) end
+    self:_next_note_tick(function()
+        if self.state == state then self:_send("status", state) end
     end)
 end
 
@@ -83,11 +93,7 @@ function Plugin:_transport_failed(reason)
     if self.transport_failed then return end
     self.transport_failed = true
     marker("transport-failed:" .. tostring(reason))
-    if self.channel then
-        UIManager:removeZMQ(self.channel)
-        self.channel:stop()
-        self.channel = nil
-    end
+    self:_close_transport(self.channel)
     if self.note_dialog then
         self:_set_save_enabled(false)
         self:_set_state("disconnected")
@@ -138,8 +144,8 @@ function Plugin:_load(value, present)
     self:_set_save_enabled(false)
     self:_set_state(present and "loaded-value" or "loaded-absent")
     UIManager:setDirty(self.note_dialog, "ui")
-    UIManager:nextTick(function()
-        if self.note_dialog then self:_send("applied", value) end
+    self:_next_note_tick(function()
+        self:_send("applied", value)
     end)
 end
 
@@ -179,15 +185,14 @@ function Plugin:_handle(message)
             return self:_transport_failed("presentation differs from dialog value")
         end
         UIManager:setDirty(self.note_dialog, "ui")
-        UIManager:nextTick(function()
-            if self.note_dialog then self:_send("applied", message.value) end
+        self:_next_note_tick(function()
+            self:_send("applied", message.value)
         end)
     else self:_transport_failed("unexpected authority command") end
 end
 
-function Plugin:_close_transport()
-    local channel = self.channel
-    self.channel = nil
+function Plugin:_close_transport(channel)
+    if self.channel == channel then self.channel = nil end
     if channel then
         UIManager:removeZMQ(channel)
         channel:stop()
@@ -195,9 +200,15 @@ function Plugin:_close_transport()
 end
 
 function Plugin:_on_close()
-    if self.channel then self:_send("closed", "") end
+    local channel = self.channel
+    if channel then self:_send("closed", "") end
+    -- Detach immediately, but leave this source registered briefly to flush
+    -- its closed frame. Its callbacks and timer must not touch a reopened note.
+    self.channel = nil
     self.note_dialog, self.state, self.pending_text = nil, "inactive", nil
-    UIManager:scheduleIn(0.05, function() self:_close_transport() end)
+    if channel then
+        UIManager:scheduleIn(0.05, function() self:_close_transport(channel) end)
+    end
 end
 
 function Plugin:_open_note()
@@ -207,33 +218,50 @@ function Plugin:_open_note()
     local fd, err = UnixClient.connect()
     if not fd then return self:_message(err) end
     self.transport_failed = false
-    self.channel = StateChannel:new{
+    local channel
+    channel = StateChannel:new{
         fd = fd,
-        receive = function(message) self:_handle(message) end,
-        on_error = function(reason) self:_transport_failed(reason) end,
+        receive = function(message)
+            if channel and self.channel == channel then self:_handle(message) end
+        end,
+        on_error = function(reason)
+            if channel and self.channel == channel then self:_transport_failed(reason) end
+        end,
     }
-    UIManager:insertZMQ(self.channel)
+    self.channel = channel
+    UIManager:insertZMQ(channel)
     self.state = "awaiting-load"
-    self.note_dialog = InputDialog:new{
+    local dialog
+    dialog = InputDialog:new{
         title = TITLES[self.state], input = "", allow_newline = true,
         input_hint = _("Note text (not a file name)"),
         keyboard_visible = true,
-        save_callback = function(content) return self:_submit(content) end,
-        edited_callback = function(edited) self:_on_edited(edited) end,
-        close_callback = function() self:_on_close() end,
+        save_callback = function(content)
+            if dialog and self.note_dialog == dialog then return self:_submit(content) end
+            return false, false
+        end,
+        edited_callback = function(edited)
+            if dialog and self.note_dialog == dialog then self:_on_edited(edited) end
+        end,
+        close_callback = function()
+            if dialog and self.note_dialog == dialog then self:_on_close() end
+        end,
     }
-    UIManager:show(self.note_dialog)
+    self.note_dialog = dialog
+    UIManager:show(dialog)
     self:_set_save_enabled(false)
     self:_send("channel-ready", "")
-    UIManager:nextTick(function()
-        if self.note_dialog then self:_send("ready", "") end
+    self:_next_note_tick(function()
+        self:_send("ready", "")
     end)
     marker("dialog-opened:fixed-guile-note")
 end
 
 function Plugin:onCloseWidget()
-    if self.note_dialog and UIManager:isWidgetShown(self.note_dialog) then UIManager:close(self.note_dialog) end
-    self:_close_transport()
+    local dialog = self.note_dialog
+    self.note_dialog, self.state, self.pending_text = nil, "inactive", nil
+    if dialog and UIManager:isWidgetShown(dialog) then UIManager:close(dialog) end
+    self:_close_transport(self.channel)
 end
 
 return Plugin
