@@ -310,11 +310,14 @@ The operator-visible policy for a dirty local draft is a product choice (§10).
 
 ### Kexec and shutdown are separate from suspend
 
-`wilkbook-generation.lua` currently stops only `reader-session` before radio-off;
-it attempts `/` and `/data` read-only remounts, but logs `/data` failure and
-continues. An idle activated note authority can retain a writable SQLite handle;
-the hardware sessions stopped it manually. Workbench must not add another such
-unmanaged writer.
+At this investigation's baseline, `wilkbook-generation.lua` stopped only
+`reader-session` before radio-off and merely logged a failed `/data` read-only
+remount. The integrated September 26 batch now stops the optional note
+authority, checks runtime cleanup, and refuses failed root/data remounts
+(`doc/update-path.md`, "Teardown hardening"). That change is host-tested;
+older target helpers still need the manual stop used in the hardware sessions.
+Workbench must extend that lifecycle for its own owners and authority, rather
+than add another unmanaged writer.
 
 Before a Workbench generation can be trialled, integrate or explicitly perform
 host quiescence/stop of Workbench **and the existing note authority**, before
