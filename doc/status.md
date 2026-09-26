@@ -1,7 +1,69 @@
 # Hardware status
 
-Last updated: 2026-09-11. Update protocol: add a dated entry at the top
+Last updated: 2026-09-26. Update protocol: add a dated entry at the top
 after every hardware session; entries are per-device/per-operator.
+
+## 2026-09-26 (wkelly PineNote, generation 21, over SSH, no deploy) — DU ink through a per-region hint is pen-class by blind feel; FAST not told apart; the digitizer reports at 360 Hz
+
+A pen-canvas design rests on one route: ink inside a region hinted `0x00`
+(Y1 → DU) through `RECT_HINTS`, with the rest of the screen at hint 32
+(GL16), all in NORMAL. Nobody had looked at a mixed-hint screen on glass,
+and DU ink latency in NORMAL had never been measured. The only filmed pen
+number, D8's ~20 ms, is FAST mode, which is whole-screen and redraws the
+page as dithered 1-bit on entry. The operator had the tablet and stylus
+but no camera, so the arms were judged by feel and blinded.
+
+Strict-host-key SSH verified os2 root `/dev/mmcblk0p6`, the real data
+partition mounted read-write, and generation 21
+(`/gnu/store/iv1div034ka7qaa05rqm4vlr6g5lzsxs-system`) still booted from the
+2026-09-11 kexec (same boot ID `06f2d463…`, 14 days up). The driver was in
+the product state: NORMAL, `default_hint` 32, `redraw_delay` 0,
+`temp_override` 22, RGB565 at 1872×1404, stride 3744. Offline: `make
+pen-check ebc-lab-check` passed at `6b9c101`. Auto-suspend was paused
+(`enabled=1` → `0`) and `reader-session` stopped. No fbcon was bound. There
+was no deploy and no reboot. This was not a cable-free trial session, so
+the trial count stays at 1 of 3.
+
+Five arms, each run with `scribble.lua` and a parallel raw evdev capture.
+Assignments came from a device-side coin and were not read until the
+operator answered.
+
+- **Split screen, blind, twice** (a fresh coin each time): 2 of 2 correct,
+  one in four by chance. Arm 1: "The left section is MUCH faster than the
+  right section and feels plenty speedy. The right section has notable
+  latency when writing." DU was on the left. Arm 2: "right side is much
+  faster this time, left lags." DU was on the right. An operator-drawn
+  triangle fixed the orientation: their left was framebuffer x < 936.
+- **Whole screen DU in NORMAL:** "feels great!"
+- **FAST vs whole-screen DU, blind pair** (FAST first, as it turned out):
+  "honestly, I can't tell."
+- **Software path,** last event timestamp to `fsync` returned: 0.7 ms
+  median, p95 1.3–1.5 ms, over 65,669 batches.
+- **Digitizer report rate:** 2.77 ms median, **about 360 Hz**, the same
+  pen-down and hovering, in all five captures. This is the first
+  measurement of it in the repo, about twice the rate the stroke-storage
+  estimates assumed. Every capture carries X, Y, pressure, tilt X/Y and
+  distance.
+- Washes in NORMAL ran 47 frames at ~11.9 ms. The first wash after leaving
+  FAST counted 192 frame interrupts over 2.28 s, with a few stretched
+  frames. Unexplained. `dmesg` showed only the temperature-override lines.
+
+Restored with `ebc-mode.lua --normal` and `rect-hints.lua --default 32`;
+sysfs read back 32 and `redraw_delay` 0. `reader-session` was started again
+and `autosuspend.conf` restored byte for byte (`enabled=1`). The boot ID
+was unchanged.
+
+**What it proves:** a DU-hinted region in NORMAL is pen-class by blinded
+feel beside GL16 on the same screen, and this operator cannot tell it from
+FAST. A pen canvas therefore does not need FAST's whole-screen mode switch.
+**What it does not:**
+- a number (no camera);
+- ink drawn by KOReader, which paints into the mmap and must publish every
+  batch, where `scribble.lua` writes with `write()` past the defio timer;
+- the gray settle after pen-up;
+- DC balance or ghosting over long sessions.
+
+Evidence: `doc/artifacts/pinenote-du-canvas-feel-20260926/`.
 
 ## 2026-09-11 (wkelly PineNote, generation 21) — first successful attended cable-free trial; packaged persistent note accepted
 
