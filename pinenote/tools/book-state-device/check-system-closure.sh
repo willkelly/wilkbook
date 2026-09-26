@@ -42,6 +42,36 @@ for file in _meta.lua activation.lua main.lua state_channel.lua unix_client.lua;
     [ -f "$plugin/$file" ] || { echo "FAIL: installed plugin lacks $file" >&2; exit 1; }
 done
 
+# The notebook (doc/notebook.md) rides the koreader-device overlay into
+# every KOReader bundle: the experimental one above and the plain one the
+# platform services' LuaJIT comes from.  Both must carry the tree's exact
+# plugin and device.lua; a build from a different checkout fails here.
+repo_root=$(cd "$(dirname "$0")/../../.." && pwd)
+overlay=$repo_root/pinenote/packages/koreader-device
+plain=$(grep -E '^/gnu/store/[a-z0-9]{32}-koreader-bin-2026\.03$' "$tmp")
+[ "$(printf '%s\n' "$plain" | grep -c .)" -eq 1 ] || {
+    echo "FAIL: plain KOReader package is not unique" >&2
+    exit 1
+}
+for bundle in "$koreader" "$plain"; do
+    installed=$bundle/lib/koreader/plugins/notebook.koplugin
+    for src in "$overlay"/plugins/notebook.koplugin/*.lua; do
+        cmp -s "$src" "$installed/$(basename "$src")" || {
+            echo "FAIL: $bundle notebook plugin differs from the tree: $(basename "$src")" >&2
+            exit 1
+        }
+    done
+    [ "$(ls "$installed" | wc -l)" -eq "$(ls "$overlay"/plugins/notebook.koplugin | wc -l)" ] || {
+        echo "FAIL: $bundle notebook plugin has files the tree does not" >&2
+        exit 1
+    }
+    cmp -s "$overlay/frontend/device/pinenote/device.lua" \
+        "$bundle/lib/koreader/frontend/device/pinenote/device.lua" || {
+        echo "FAIL: $bundle device.lua differs from the tree" >&2
+        exit 1
+    }
+done
+
 grep -Fqx 'default-reader=unchanged' "$system/etc/wilkbook-book-state-device"
 grep -Fqx 'book-session-fd=3' "$system/etc/wilkbook-book-state-device"
 grep -Fqx 'platform=systrap' "$system/etc/wilkbook-book-state-device"
