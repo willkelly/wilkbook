@@ -27,3 +27,19 @@ dmesg | grep -c "Num touch err": 0 before the capture, 0 after.
 Before the session (od -c /data/wilkbook/autosuspend.conf): "e n a b l e d = 1 \n" (10 bytes), backed up to
 /data/wilkbook/diagnostic-backups/gen21-before-gen22-20260926/autosuspend.conf; set to "enabled=0" for the session;
 restored at close-out with cp -p from the backup, then cmp against it: identical ("enabled=1").
+
+## Generation 23: the idle washes and the reader's age (boot 702f50dd, read 2026-09-26 ~23:10)
+From /var/log/reader-session.log ([idlewasher] lines and the full global refresh each wash issued):
+2026-09-26 22:39:09 [idlewasher] charge 1 (debt=46)
+2026-09-26 22:40:12 [idlewasher] idle wash (debt=46)
+2026-09-26 22:40:12 [pn-refresh] full global rect=0,0,1404,1872
+2026-09-26 23:04:40 [idlewasher] charge 8 (debt=11)
+2026-09-26 23:04:53 [idlewasher] charge 1 (debt=12)
+2026-09-26 23:07:34 [idlewasher] charge 1 (debt=16)   <- 12 -> 16: page turns add debt without a log line
+2026-09-26 23:08:30 [idlewasher] charge 17 (debt=39)
+2026-09-26 23:09:09 [idlewasher] charge 21 (debt=60)
+2026-09-26 23:09:53 [idlewasher] idle wash (debt=60)   <- the wash the operator saw
+2026-09-26 23:09:53 [pn-refresh] full global rect=0,0,1404,1872
+Suspend cycles (dmesg): entry 535.68 s / exit 544.46 s; entry 1052.92 s / exit 1056.68 s.
+Reader process: pid 606, elapsed 38:35 at uptime ~2320 s, so no KOReader restart on this boot.
+Notebook pen-ups on this boot: 122 (22:37:22 to 23:09:08).

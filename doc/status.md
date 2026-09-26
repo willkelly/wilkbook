@@ -80,20 +80,41 @@ item, and idle-washer debt.
   `x3qqz8r5…` as DEFAULT. Nothing was pruned.
 - Boot `702f50dd…` came up with `/data` clean and both services running.
 
-**Owed on generation 23.** The operator's checks on 23 did not run: the
-notebook was not opened before close-out. The log has no pen-up lines, and
-generation 22's `.probe` is still in `/data/notebooks`. Still to check:
-- the panel no longer flickers;
-- pen taps on the panel;
-- two-finger undo;
-- Refresh;
-- an idle wash. Do 15 or more erases, undos, panel closes or page turns, and
-  watch the `[idlewasher] charge … (debt=N)` lines reach 15. Then take the pen
-  out of range and wait 45 s;
-- a KOReader restart;
-- suspend/wake with the notebook open;
-- a cold boot, which needs UART under the current policy. Generations 22 and
-  23 are kexec-only.
+**Generation 23's checks.** The operator ran them later the same evening on
+boot `702f50dd…`, which is still the kexec'd boot. The log has 122 notebook
+pen-ups on it.
+- **Passed:**
+  - the panel no longer flickers ("panel flicker is gone");
+  - pen taps select panel items;
+  - two-finger undo and redo;
+  - suspend/wake. The log has two cycles on this boot, at 22:40 and from
+    22:49 to 23:03. Wi-Fi was restored after each (2.25 s).
+- **The idle wash passed on the second try.**
+  - On the first try the operator saw no wash, and was not sure the debt
+    had reached 15. The log shows it fired anyway: `idle wash (debt=46)` at
+    22:40:12, 11 s before a suspend.
+  - The second wash the operator saw: `idle wash (debt=60)` at 23:09:53,
+    44 s after the last charge, which came at the pen's leave.
+  - The check's instruction above was incomplete. Page turns add to the
+    debt without logging; only `chargeDebt` writes a `charge n (debt=N)`
+    line. So `debt=N` includes silent page turns, as when debt went from 12
+    to 16 on a `charge 1` at 23:07:34.
+  - The operator found it hard to judge how much a unit is
+    (`doc/notebook.md`).
+- **Refresh: not reported, and still owed.** The log shows no Refresh wash.
+  Refresh writes no log line of its own. The only full global refreshes
+  inside notebook sessions are the two idle washes.
+- **A KOReader restart: not done.**
+  - The reader process (pid 606) has run since the kexec boot. The log has
+    no restart or crash after the trial's teardown at 22:31:28.
+  - The operator's report said only "koreader restart !?!?". What they
+    meant is not yet known.
+- **A cold boot: not done.**
+  - The boot ID is unchanged since the deploy, so generations 22 and 23 are
+    still kexec-only.
+  - The operator said "we can cold boot without uart". CLAUDE.md's policy
+    lists cold boots as still needing UART, so this is an operator waiver.
+    It is recorded here and has not been used yet.
 
 The new Ball default cannot be seen on this device. `prefs.json` names the
 brush the operator chose on generation 22 (`brushpen`), and a default applies
@@ -103,11 +124,14 @@ only where no brush was ever chosen.
 - Auto-suspend was restored byte for byte (`enabled=1`).
 - The ledger: 10, 16 and 18 pinned; 19–22 kept; 23 promoted and booted.
 - Battery 86 %. No recovery was needed.
-- **Cable-free count:** both trials passed health and promotion, and the
-  generation-22 checks passed. Generation 23's agreed checks have not run, so
-  by the policy's definition this session does not yet count as a success. It
-  becomes the second of three once they pass, or if the operator narrows the
-  agreed checks to generation 22.
+- **Cable-free count:**
+  - Both trials passed health and promotion.
+  - The generation-22 checks passed, and so did six of generation 23's
+    nine.
+  - Refresh, a KOReader restart and a cold boot remain. So by the policy's
+    definition this session does not yet count as a success.
+  - It becomes the second of three once those pass, or if the operator
+    narrows the agreed checks.
 
 Evidence: `doc/artifacts/pinenote-gen22-23-notebook-20260926/`.
 

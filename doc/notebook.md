@@ -6,8 +6,10 @@
 - Generation 23 carries the fixes from that run: stylus taps on the
   panel, a flicker-free panel paint, two-finger undo, a Refresh item,
   idle-washer debt, and a pressure default.
-- Generation 23 is deployed and healthy, but its own operator checks are
-  owed (see "Glass sessions").
+- On generation 23 the operator confirmed the flicker-free panel, pen taps
+  on the panel, two-finger undo and redo, an idle wash, and suspend/wake.
+  Refresh, a KOReader restart and a cold boot are still owed (see "Glass
+  sessions").
 - Design agreed with the operator the same day.
 - It passes every host suite, including a replay of the operator's real
   pen captures from `doc/status.md` 2026-09-26.
@@ -366,18 +368,16 @@ trials (`doc/status.md`).
 - Generation 22's checks passed: the `25cea98` note fixes, and the
   notebook's ink, brushes, erase, undo, page turns, rotation and
   notebook management.
-- Generation 23 is healthy and promoted, but the operator's checks on it
-  were not run. **Still owed:**
-  - the panel no longer flickers;
-  - pen taps on the panel;
-  - two-finger undo;
-  - Refresh;
-  - an idle wash: reach 15 units of debt (erases, undos, panel closes or
-    page turns; watch the `[idlewasher] charge … (debt=N)` lines), take the
-    pen out of range, then wait 45 s;
-  - a KOReader restart;
-  - suspend/wake with the notebook open (step 9 below);
-  - a cold boot (step 10).
+- Generation 23 is healthy and promoted.
+  - **Passed, as the operator reported:** the panel no longer flickers,
+    pen taps select panel items, two-finger undo and redo work, and
+    suspend/wake works.
+  - **The idle wash also passed**, the operator seeing the second of the
+    two that fired (`debt=60`, 23:09:53).
+  - **Still owed:**
+    - Refresh. The log shows none, and Refresh logs nothing of its own;
+    - a KOReader restart. None happened on the boot;
+    - a cold boot (step 10). The operator has waived UART for it.
 
 The plan the first session followed is kept below; its deploy steps are
 done.
@@ -505,6 +505,18 @@ the device, and each item is for a later generation.
   long-press re-open, and opening, switching or exiting a notebook charge
   nothing.
 - **Refresh leaves the washer's debt in place.**
+- **A unit of debt is hard to judge** (the operator on generation 23: "it
+  is unintuitive to me how much a debt unit represents").
+  - One unit is one page turn, area erase, stroke erase that removed
+    something, undo or redo that changed the page, or panel close.
+  - Page turns add their unit without a log line. Only `chargeDebt` logs,
+    so a `charge n (debt=N)` line's `N` includes page turns nobody saw
+    logged.
+  - Nothing on the glass shows the debt.
+  - Fix: log page-turn charges too. Then decide with the operator whether
+    the notebook should weight its charges by how much ghost they leave
+    (an area erase leaves more than a panel close), or show the debt
+    somewhere.
 - **The op names are crossed:** `washer_charge` calls `chargePageTurn`, and
   `washer_debt` calls `chargeDebt`.
 - **`idlewasher_core`'s header still says "three inputs".**

@@ -126,7 +126,8 @@ code review — before a single reboot. That's the standard.
   proofs, and the bail-out. Read before touching anything
   direct-related.
 - `doc/notebook.md` — the pen notebook (on glass since generation 22,
-  2026-09-26; generation 23's checks owed): paper-and-pen with a floating
+  2026-09-26; generation 23's Refresh, KOReader-restart and cold-boot
+  checks owed): paper-and-pen with a floating
   panel on long press that the stylus can tap, DU ink through a
   per-region hint, pressure brushes, two-finger undo, Refresh and
   idle-washer debt for ghosting, an append-only stroke journal on
