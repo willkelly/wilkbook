@@ -42,9 +42,9 @@ the inverted value, and the alias copies the flag, so live ink is drawn
 inverted.  The page buffer is never inverted.  KOReader's C blitter only
 runs on matching flags and then copies memory unchanged, which would put
 un-inverted page memory next to inverted live ink (black ink written as
-0xFF onto 0xFF paper: invisible).  blit_page therefore copies with the C
-blitter and, when the flags differ, inverts the copied rect in place; the
-result is what KOReader's per-pixel Lua fallback gives, at C speed.  With
+0xFF onto 0xFF paper: invisible).  blit_page therefore uses the C
+invertblitFrom when the flags differ: a single write of the final value,
+so a deferred-io flush cannot see an un-inverted intermediate page. With
 the C blitter off, blit_page leaves the flags unmatched and that fallback
 does the work.
 --]]
@@ -292,7 +292,7 @@ end
 --- relative to x, y (the notebook blits the page only where its panel is
 --- not); nil is the whole target.  The page's rotation and inverse flag
 --- are matched to the target's for the C blitter and restored after.
---- When the flags differed, the C copy is inverted in place, as the
+--- When the flags differed, the C copy inverts in one pass, as the
 --- module header explains.
 function Surface.blit_page(target, page, x, y, rect)
     x, y = x or 0, y or 0
@@ -303,25 +303,29 @@ function Surface.blit_page(target, page, x, y, rect)
     if rect then rx, ry, rw, rh = rect.x, rect.y, rect.w, rect.h end
     -- Without the C blitter (KOReader's dev_no_c_blitter) matching the
     -- flags gains nothing: blitFrom's per-pixel path honours both.  The
-    -- in-place inversion would also take invertRect's Lua fallback,
-    -- whose full-width BB8 and RGB24 loop raises an error on the 64-bit
-    -- stride it uses as a loop limit.
+    -- single-pass per-pixel fallback already writes the final value.
     local flip = inv ~= tinv and Blitbuffer:getUseCBB()
     page:setRotation(target:getRotation())
     if flip then page:setInverse(tinv) end
-    target:blitFrom(page, x + rx, y + ry, rx, ry, rw, rh)
     if flip then
-        -- The rect blitFrom wrote, clipped as it clips.
-        local bw, dx = Blitbuffer.checkBounds(rw, x + rx, rx, tw,
-                                              page:getWidth())
-        local bh, dy = Blitbuffer.checkBounds(rh, y + ry, ry, th,
-                                              page:getHeight())
-        if bw > 0 and bh > 0 then
-            -- An xor ignores the flag; clearing it only picks the C path.
-            target:setInverse(0)
-            target:invertRect(dx, dy, bw, bh)
-            target:setInverse(tinv)
+        if target:getType() == page:getType() then
+            target:invertblitFrom(page, x + rx, y + ry, rx, ry, rw, rh)
+        else
+            -- The pinned C invert blitter aborts on BB8 -> RGB565 (unlike
+            -- blitFrom). Convert only the clipped rect off-screen first;
+            -- the framebuffer still receives one write of its final value.
+            local bw, dx, sx = Blitbuffer.checkBounds(rw, x + rx, rx, tw, page:getWidth())
+            local bh, dy, sy = Blitbuffer.checkBounds(rh, y + ry, ry, th, page:getHeight())
+            if bw > 0 and bh > 0 then
+                local converted = Blitbuffer.new(bw, bh, target:getType())
+                converted:setInverse(tinv)
+                converted:blitFrom(page, 0, 0, sx, sy, bw, bh)
+                target:invertblitFrom(converted, dx, dy, 0, 0, bw, bh)
+                converted:free()
+            end
         end
+    else
+        target:blitFrom(page, x + rx, y + ry, rx, ry, rw, rh)
     end
     page:setRotation(rot)
     page:setInverse(inv)

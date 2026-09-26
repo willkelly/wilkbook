@@ -770,8 +770,21 @@ function Probe:audit(win, action)
     local a = setmetatable({ events = {}, snaps = {}, before = fb_bytes() }, Audit)
     local Surface = require("nb_surface")
     local blit_page, blit_panel = Surface.blit_page, Surface.blit_panel
-    Surface.blit_page = function(...)
-        blit_page(...)
+    Surface.blit_page = function(target, ...)
+        -- Observe individual destination writes too: a Surface-level
+        -- snapshot alone missed the old copy-then-invert night-mode path.
+        local proxy = setmetatable({}, { __index = function(_, key)
+            local value = target[key]
+            if type(value) ~= "function" then return value end
+            return function(_, ...)
+                local result = value(target, ...)
+                if key == "blitFrom" or key == "invertblitFrom" or key == "invertRect" then
+                    a:snap(key)
+                end
+                return result
+            end
+        end })
+        blit_page(proxy, ...)
         a:snap("page")
     end
     Surface.blit_panel = function(...)
@@ -1456,6 +1469,28 @@ function Probe:script()
 
     self:check(gestures == 0, "no injected touch reached KOReader as a Gesture",
                gestures)
+
+    -- Night-mode page blits must never expose the un-inverted page,
+    -- including the bands outside an open panel during a full repaint.
+    Screen.bb:setInverse(1)
+    self:long_press(0.5 * lw, 0.75 * lh)
+    UIManager:setDirty(win, "ui")
+    UIManager:forceRePaint()
+    local inverted = self:audit(win, function()
+        UIManager:setDirty(win, "ui")
+        UIManager:forceRePaint()
+    end)
+    local clean = #inverted.snaps > 0
+    for _, snap in ipairs(inverted.snaps) do
+        if snap.third > 0 or snap.off > 0 then clean = false end
+    end
+    self:check(clean, "night mode: unchanged full repaint never exposes un-inverted pixels")
+    local closing = on_screen(win.panel_L)
+    inverted = self:audit(win, function() self:tap_item(win, "close") end)
+    self:check_repaint(inverted, "night mode Close: one-pass inverted page blit", closing)
+    Screen.bb:setInverse(0)
+    UIManager:setDirty(win, "ui")
+    UIManager:forceRePaint()
 
     -- The open list: a real Menu over the notebook takes touch ----------------
     self:long_press(0.5 * lw, 0.75 * lh)
