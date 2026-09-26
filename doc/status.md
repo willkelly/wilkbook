@@ -44,6 +44,14 @@ operator answered.
   measurement of it in the repo, about twice the rate the stroke-storage
   estimates assumed. Every capture carries X, Y, pressure, tilt X/Y and
   distance.
+- **The eraser end reports on the digitizer itself:** seven
+  `BTN_TOOL_RUBBER` intervals (two in arm 1, five in arm 3, 0.09–1.02 s)
+  carry contact (`BTN_TOUCH`), position and pressure (up to ~880) at the
+  same 2.77 ms cadence; `BTN_TOOL_PEN` was released when each began.
+  The operator's pen has a rubber end. The 2026-08-24 input capture
+  listed `BTN_TOOL_RUBBER` as advertised but not observed; it is observed
+  now. `scribble.lua` ignores the tool, so these strokes drew black. A
+  second pen with a hard button end is untested.
 - Washes in NORMAL ran 47 frames at ~11.9 ms. The first wash after leaving
   FAST counted 192 frame interrupts over 2.28 s, with a few stretched
   frames. Unexplained. `dmesg` showed only the temperature-override lines.

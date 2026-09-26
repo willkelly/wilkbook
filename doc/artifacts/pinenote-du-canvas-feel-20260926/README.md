@@ -68,6 +68,13 @@ ink. FAST is whole-screen, and entering it redraws the page as dithered
   is the first measurement of it in the repo. Earlier storage estimates
   assumed 133–200 Hz. Every capture carries X, Y, pressure, tilt X/Y and
   distance.
+- The eraser end reports on the Stylus node itself: seven `BTN_TOOL_RUBBER`
+  intervals (arm 1: 0.75 s and 1.02 s; arm 3: 0.12, 0.11, 0.34, 0.09 and
+  0.78 s), each begun with `BTN_TOOL_PEN` released, carrying `BTN_TOUCH` contact
+  (11–310 reports), position and pressure up to ~880 at the same 2.77 ms
+  cadence. The operator's pen has a rubber end. The 2026-08-24 capture
+  (`../pinenote-input-clocks-20260824/RESULT.md`) had it advertised but not
+  observed. `scribble.lua` ignores the tool, so these strokes drew black.
 - Washes in NORMAL: 47 frames at ~11.9 ms each. The first wash after leaving
   FAST (arm 5) counted 192 frame interrupts over 2.28 s, with a few frames
   stretched to 17.7–20.3 ms. Unexplained; not investigated.
