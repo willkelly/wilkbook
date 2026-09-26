@@ -3,6 +3,74 @@
 Last updated: 2026-09-26. Update protocol: add a dated entry at the top
 after every hardware session; entries are per-device/per-operator.
 
+## 2026-09-26 late (wkelly PineNote, os1 detour, no UART) — the touch controller's config read (#82); the os1 rescue script (PR #51) fixed and run; generation 23 cold-booted twice
+
+**Posture.** The operator ran every power cycle by hand, with UART waived
+("we can cold boot without uart"); no kexec trial ran in this part.
+Auto-suspend stayed `enabled=1`.
+- From generation 23 (boot `34742c60…`), the operator powered off from
+  KOReader.
+- os1 came up by the menu's default, on kernel
+  `6.12.11-pinenote-202501281646-00249-g211ba27556cc`, root `/dev/mmcblk0p5`.
+- Everything below ran over the os1 alias.
+- The operator then powered off os1 and picked "Boot OS2 (part 6)".
+
+**The touch controller's stored config (issue #82's read-only step).**
+- Both of hrdl's attributes are present on os1's kernel: `dump_config` and
+  `dump_cydata` under `/sys/bus/i2c/devices/5-0024/`.
+- The operator kept off the glass during the read. It logged no
+  `cyttsp5` lines, and touch worked on os1 afterwards (operator).
+- `dump_config`: 1914 bytes.
+  - Byte 0x42 (`max_num_of_tch_per_refresh_cycle`) is `0x02`.
+  - The CRC-CCITT-FALSE over all but the last two bytes is `0x93af`,
+    matching the value stored little-endian: valid.
+  - The config version (byte 0x08) is 1, the same as hrdl's
+    device-dumped config.
+- `dump_cydata`: 28 bytes. The firmware revision at bytes 6–9 is 827952
+  (little-endian).
+- So the factory two-contact limit is now read from the chip itself, not
+  inferred from captures. It agrees with the per-frame count of the
+  earlier capture. The 2026-08-24 `RESULT.md` now carries the per-event
+  counting correction.
+- The files are in the host device backups (`2026-09-26-cyttsp5/`, local
+  and NAS, with `SHA256SUMS`), not the repo. SHA-256 prefixes:
+  `c5b15d813756710d` (config) and `b9f49e8714d194df` (cydata).
+
+**The os1 rescue script, first run (PR #51, rebased onto main).**
+- **Found offline, before the run:** the original would have refused on
+  every run. It looked for the helper through
+  `/var/guix/profiles/system → system-N-link → /gnu/store/…`, an absolute
+  link that resolves against os1's root, where no store exists. The
+  check moved inside the chroot.
+- **Found on the device:** `list` then printed nothing and exited 0.
+  - The helper shells out to `ls`, `readlink`, `ln`, `mkdir`, `cp` and
+    `mv`, which inside the Guix root exist only in a system profile.
+  - sudo's Debian PATH names none of them, so the ledger read as empty,
+    and `promote` would have died.
+  - The script now runs the helper with the promoted profile as PATH.
+- **Then:**
+  - `list` showed all eight generations, 23 `[promoted]`, with no
+    `[booted]` mark (os1's command line names no Guix system).
+  - `log` tailed os2's `/var/log/messages`.
+- **The round trip:**
+  - Baseline: `extlinux.conf` `487ebbff…`, `DEFAULT gen-23`,
+    `gen-default` 23, profile → `system-23-link`.
+  - `demote`: all three moved to 22 (`affc3866…`).
+  - `promote 23`: back to `487ebbff…`, byte-identical, with 23 and
+    `system-23-link`.
+  - p6 was unmounted after every run, and the script's copy was removed
+    from os1's `/tmp`.
+- **Back on os2:**
+  - boot `69ac9f1e…`, generation 23 `[promoted] [booted]`, no kexec
+    blacklist on the command line;
+  - `extlinux.conf` still `487ebbff…`;
+  - p6 and the real `/data` mounted read-write with no journal recovery;
+  - only the known boot-time log lines, and all three services running.
+
+**Generation 23 now has two cold boots** (`34742c60…` and `69ac9f1e…`).
+It is not yet pinned; that waits for the operator. Refresh and a KOReader
+restart are still owed from the entry below.
+
 ## 2026-09-26 (wkelly PineNote, generations 22 and 23, cable-free) — the notebook's first glass run; the note fixes accepted; the touchscreen reports two contacts
 
 **Invocation.** The operator first typed "I invoke theh trial!!". That is not
