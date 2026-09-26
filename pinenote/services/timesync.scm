@@ -114,7 +114,7 @@
 ;;    which is why respawn? is #f below.
 ;;
 ;; 4. THE RTC BACKSTOP INTERACTION, which is a real foot-gun and is
-;;    handled rather than hoped about.  autosuspend.lua arms the backstop
+;;    partially handled.  The platform-controls broker arms the backstop
 ;;    by reading the RTC's OWN clock (/sys/class/rtc/rtc0/since_epoch) and
 ;;    writing `since_epoch + N' to `wakealarm' -- an absolute value in RTC
 ;;    seconds.  Two consequences:
@@ -133,14 +133,16 @@
 ;;        time.  `rearm_alarm_value' in timesync.lua is that arithmetic and
 ;;        the host suite pins it.
 ;;
-;;      RESIDUAL, stated rather than papered over: the two daemons do not
-;;      lock against each other, so a sync that lands inside the <=10 s
-;;      window between arm_backstop() and the /sys/power/state write in
-;;      suspend_once() can still leave that ONE cycle without a working
-;;      alarm.  Every subsequent suspend re-arms from scratch, so it
-;;      self-heals at the next cycle, and the primary wake (the power
-;;      button) is hardware-proven.  Set set-rtc? #f if you would rather
-;;      not carry even that.
+;;      RESIDUAL: timesync and the broker do not serialize RTC/alarm writes.
+;;      A sync can overwrite a newly armed backstop, miss one armed after
+;;      its snapshot, or restore an alarm the broker cleared on resume.
+;;      There is no established <=10 s bound: the current broker also runs
+;;      sync between alarm arming and suspend. Monotonic broker deadlines
+;;      prevent system-clock steps from changing elapsed-time policy, but
+;;      do not fix this RTC race. A later suspend re-arms from scratch;
+;;      that does not guarantee the affected cycle wakes on its backstop.
+;;      Set set-rtc? #f to avoid the RTC-write interaction. See the
+;;      platform-controls tool README for the separate qualification owed.
 ;;
 ;; 5. WRITE BACK TO THE RTC: yes, default #t.  Without it the correction
 ;;    dies at the next cold boot and a device that syncs once and then
