@@ -991,7 +991,10 @@ bundles + reports under `pinenote/tools/optics/build/bundles/sweep1.*`):
     `.../armB*`, `.../armC`.
 
 11. **The idle-washer is validated on glass (acceptance runs, 2026-07-12).**
-    The userspace refresh manager (`idlewasher.koplugin`: debt per page turn,
+    The userspace refresh manager (`idlewasher.koplugin`: debt per page turn
+    -- and, since 2026-09-26, accumulate-only debt from the pen notebook's
+    erases, undos and panel closes through `chargeDebt()`, which never
+    washes by itself (`doc/notebook.md`, "Ghosting") --
     GL16 full via the ioctl path when debt >= debt_min AND idle >= idle_s,
     bundled full riding the turn at debt_max, GC16 deep clean once per long
     idle span) passed a three-phase on-glass acceptance: idle wash exactly

@@ -1,13 +1,16 @@
 # The notebook: pen and paper on the PineNote
 
-**Status (2026-09-26): on glass.** Generation 22 ran it on wkelly's
-device the same day (`doc/status.md`); generation 23 carries the fixes
-from that run: stylus taps on the panel, a flicker-free panel paint,
-two-finger undo, a Refresh item, idle-washer debt, and a pressure default.
+**Status (2026-09-26): on glass.**
+- Generation 22 ran the notebook on wkelly's device the same day
+  (`doc/status.md`).
+- Generation 23 carries the fixes from that run: stylus taps on the
+  panel, a flicker-free panel paint, two-finger undo, a Refresh item,
+  idle-washer debt, and a pressure default.
+- Generation 23 is deployed and healthy, but its own operator checks are
+  owed (see "Glass sessions").
 - Design agreed with the operator the same day.
 - It passes every host suite, including a replay of the operator's real
   pen captures from `doc/status.md` 2026-09-26.
-- Its first glass run is planned below as generation 22.
 
 This is ROADMAP §5's first stage ("continuous note-taking") and the
 capture and storage half of stroke capture #20.
@@ -31,8 +34,8 @@ The operator's brief, 2026-09-26:
   - A long finger press summons a floating panel. It stays up until
     Close is tapped or it is flicked away, and a finger can drag it by
     its title.
-- **The pen never opens the panel or turns a page, but it can tap the
-  panel's buttons** (operator, 2026-09-26). A pen contact that starts on
+- **The pen never opens the panel or turns a page by swiping, but it can
+  tap the panel's buttons** (including ◀ ▶) (operator, 2026-09-26). A pen contact that starts on
   the open panel never inks; only a tap within 400 ms and 24 px acts, and
   the rubber end does nothing there. While the pen is in range, touch is
   ignored: palm rejection, which the operator accepted.
@@ -208,7 +211,7 @@ The eraser is 24–48 px wide (2.7–5.4 mm), from pressure.
 **Ghosting** (operator, 2026-09-26: "erased stuff hangs around, previous
 page is visible if you look closely"): DU and GL16 never run the
 panel's clearing flash, so the cleanup is a full GC16 wash, from two
-sources, never on a page turn:
+sources, not on a page turn (except the `debt_max` backstop in Known limits):
 - **Refresh** on the panel. It closes the panel, publishes the page,
   waits `refresh_settle_us` (150 ms, counted from the end of the
   publish) and then washes with a refresh-only `setDirty(nil, "full")`.
@@ -307,8 +310,8 @@ unless noted, each deterministic across two runs:
 Two instruments sit outside the gate:
 - `notebook-replay.lua` renders a raw capture to PNG. The 2026-09-26
   captures render with every brush.
-- `notebook-realui/` runs a real offscreen KOReader with the plugin and
-  takes screenshots.
+- `notebook-realui/` runs a real offscreen KOReader with the plugin. It
+  takes screenshots and audits every panel repaint and the Refresh wash.
 
 ## Known limits
 
@@ -333,21 +336,53 @@ Two instruments sit outside the gate:
 - A retried fsync on a new fd can report success after an `EIO`. That is
   why an error stops inking for the rest of the session.
 
-**Measured on glass (generation 22, 2026-09-26, 71 strokes):**
-- per pen report, stamping the ink took about 0.14 ms and the publish
-  (fsync on the framebuffer) about 0.35 ms; worst cases 3.7 ms and
-  3.3 ms;
-- event to published: 0.6–2.5 ms typical, 3.6 ms at worst;
-- every stroke drained in one input batch but one (two), with zero
-  `SYN_DROPPED`;
-- the append at pen-up took 0.2–1.4 ms and the fsync at the pen's
-  leave about 6 ms;
-- the operator: "very responsive and feels good and accurate".
+**Measured on glass** (generation 22, 2026-09-26; 218 strokes, 58,868 pen
+reports, 58,073 of them stamped;
+`doc/artifacts/pinenote-gen22-23-notebook-20260926/`):
+
+| Measure | Result |
+|---|---|
+| Stamp per stamped report | 0.20 ms mean, 8.5 ms max |
+| Publish (fsync) per stamped report | 0.37 ms mean, 16.8 ms max |
+| Worst event-to-handling delay per stroke (not per report) | p50 1.2 ms, p95 14.4 ms, max 34.3 ms |
+| Append at pen-up | 0.4 ms mean |
+| fsync at the pen's leave | 6.1 ms mean |
+
+- 50 strokes drained a backlog of more than one report in a batch (up to
+  36). So the pen path falls behind by tens of milliseconds at times; the
+  cause is not yet identified.
+- There was one evdev overrun (`SYN_DROPPED`) between opening and the first
+  pen-up.
+- Nib-to-ink was not timed.
+- The operator: "very responsive and feels good and accurate".
 
 No camera timed nib-to-ink. The `[notebook]` pen-up log line in
 `/var/log/reader-session.log` carries these per stroke.
 
-## The generation-22 session
+## Glass sessions
+
+**2026-09-26.** Generations 22 and 23 were installed as cable-free kexec
+trials (`doc/status.md`).
+- Generation 22's checks passed: the `25cea98` note fixes, and the
+  notebook's ink, brushes, erase, undo, page turns, rotation and
+  notebook management.
+- Generation 23 is healthy and promoted, but the operator's checks on it
+  were not run. **Still owed:**
+  - the panel no longer flickers;
+  - pen taps on the panel;
+  - two-finger undo;
+  - Refresh;
+  - an idle wash: reach 15 units of debt (erases, undos, panel closes or
+    page turns; watch the `[idlewasher] charge … (debt=N)` lines), take the
+    pen out of range, then wait 45 s;
+  - a KOReader restart;
+  - suspend/wake with the notebook open (step 9 below);
+  - a cold boot (step 10).
+
+The plan the first session followed is kept below; its deploy steps are
+done.
+
+### The generation-22 session plan
 
 Cable-free, with the operator present. The rules are CLAUDE.md's
 "Cable-free kexec trial period", engaged only by the operator typing the
@@ -439,6 +474,49 @@ own run later.
       system paths, every check and the metrics;
     - whether the session counts toward the three-session cable-free
       review is the operator's answer to the open question below.
+
+## Follow-ups from the generation-23 review (2026-09-26)
+
+These were found by the fit, logic and performance reviewers after
+generation 23 was deployed. None blocks it. The code was left as it runs on
+the device, and each item is for a later generation.
+
+**Washes with the pen nearby:**
+- **An idle wash can land while the pen hovers.** Hover is not activity (so
+  AutoSuspend still works), and the idle washer knows nothing about the
+  pen. After 45 s of hovering with enough debt it washes under the pen.
+  Fix: a hold predicate the washer consults, set by the notebook like the
+  rotation hold.
+- **A pen tap on ◀ or ▶ charges a page turn while the pen hovers.** At
+  `debt_max` that fires the bundled wash under the pen. Fix: defer that
+  charge to the leave, as ghost debt already is.
+
+**Painting and stroke edge cases:**
+- **Night mode breaks the one-pass paint rule.** `blit_page` copies the
+  un-inverted page, then inverts the rect in place. Fix: use Blitbuffer's
+  single-pass `invertblitFrom`, and add an inverted case to the paint
+  audit.
+- **A panel-owned pen contact can ink.** If one is dragged off the panel
+  and cut by a proximity dropout, its tail becomes a new, inked stroke. Fix:
+  carry panel ownership across the cut.
+
+**Ghost-debt coverage and naming:**
+- **Not every ghost-producing event is charged.** A panel drag, a
+  long-press re-open, and opening, switching or exiting a notebook charge
+  nothing.
+- **Refresh leaves the washer's debt in place.**
+- **The op names are crossed:** `washer_charge` calls `chargePageTurn`, and
+  `washer_debt` calls `chargeDebt`.
+- **`idlewasher_core`'s header still says "three inputs".**
+- **An `nb_config.lua` comment says a third contact "showed for ~20 ms".** In
+  the capture it exists only inside a single frame.
+
+**For the next glass run:**
+- Log brush, size and span count in the pen-up line, so the heavier Ball
+  default can be told apart from code changes. Or write one burst with Fine
+  for a comparison.
+- Find the cause of the tens-of-milliseconds backlogs, perhaps with
+  `getrusage` fault counts around each stroke.
 
 ## Housekeeping found while planning (not the notebook)
 

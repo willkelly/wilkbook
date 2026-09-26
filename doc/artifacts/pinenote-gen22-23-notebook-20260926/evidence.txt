@@ -1,0 +1,29 @@
+# Evidence excerpts, 2026-09-26 (wkelly PineNote, generations 22 and 23)
+
+## Note authority log (/var/log/book-state-device.log), generation 22, the 25cea98 check
+2026-09-26 19:38:16 BOOK_STATE_DEVICE: opened fixed-note version=6 present=#t
+2026-09-26 19:38:25 BOOK_STATE_DEVICE: saved fixed-note version=7 bytes=45
+2026-09-26 19:38:32 BOOK_STATE_DEVICE: saved fixed-note version=8 bytes=45
+2026-09-26 19:38:38 BOOK_STATE_DEVICE: saved fixed-note version=9 bytes=45
+2026-09-26 19:38:44 BOOK_STATE_DEVICE: saved fixed-note version=10 bytes=45
+2026-09-26 19:38:50 BOOK_STATE_DEVICE: saved fixed-note version=11 bytes=45
+2026-09-26 19:39:22 BOOK_STATE_DEVICE: closed fixed-note version=11
+
+## Notebook pen-up log (/var/log/reader-session.log, [notebook] lines), generation 22, first five of 218
+2026-09-26 19:39:43 [notebook] pen-up page=0 rec=s1 tool=pen use=ink n=196 dur=540967us gap=0 hits=0 batch=22 lag=19024us drops=1 stamp=196/62253/4699us publish=196/51790/1040us append=- fsync=- 
+2026-09-26 19:39:45 [notebook] pen-up page=0 rec=s2 tool=rubber use=erase n=201 dur=554753us gap=0 hits=0 batch=5 lag=6554us drops=0 stamp=201/54876/4043us publish=201/89598/1880us append=1/371/371us fsync=1/6031/6031us 
+2026-09-26 19:39:49 [notebook] pen-up page=0 rec=s3 tool=rubber use=erase n=1082 dur=3000664us gap=0 hits=0 batch=6 lag=9469us drops=0 stamp=1082/238568/1697us publish=1082/464233/2059us append=1/223/223us fsync=1/5946/5946us 
+2026-09-26 19:39:53 [notebook] pen-up page=0 rec=s4 tool=pen use=ink n=668 dur=1926749us gap=0 hits=0 batch=1 lag=1814us drops=0 stamp=668/91656/1237us publish=668/213619/1160us append=1/394/394us fsync=1/6402/6402us 
+2026-09-26 19:39:55 [notebook] pen-up page=0 rec=s5 tool=pen use=ink n=559 dur=1596098us gap=0 hits=0 batch=1 lag=1759us drops=0 stamp=559/85847/1344us publish=559/216681/1094us append=1/592/592us fsync=- 
+
+## Deploy postflights (as reported by the deploy agent)
+gen 22: boot_id 077b4be7-84e5-4085-aa85-4a933ac052ef; current=booted=/gnu/store/m2smi93nva83wv84ph9h57d93fhffxc3-system; kernel /gnu/store/334ljs8qa7ww8vlg9gpv428bh8yjd1nx-linux-pinenote-book-execution-test-7.1.8-pinenote/Image; /data ext4 rw; [7.551558] EXT4-fs (mmcblk0p7): mounted filesystem ... r/w with ordered data mode (no recovery); reader-session and pinenote-book-state-device running; 0 WARNING/timed out
+gen 23: boot_id 702f50dd-a8b9-4548-889c-99a51dd0cda5; current=booted=/gnu/store/x3qqz8r52pdh7jzghzfj8l44gfrqkncb-system; same kernel; /data ext4 rw; [7.857982] EXT4-fs (mmcblk0p7): mounted filesystem ... r/w (no recovery); both services running; 0 WARNING/timed out
+
+## Touch-error check, generation 22 (around the 60 s capture)
+dmesg | grep -c "Num touch err": 0 before the capture, 0 after.
+
+## Auto-suspend, bytes
+Before the session (od -c /data/wilkbook/autosuspend.conf): "e n a b l e d = 1 \n" (10 bytes), backed up to
+/data/wilkbook/diagnostic-backups/gen21-before-gen22-20260926/autosuspend.conf; set to "enabled=0" for the session;
+restored at close-out with cp -p from the backup, then cmp against it: identical ("enabled=1").

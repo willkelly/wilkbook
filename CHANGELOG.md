@@ -26,8 +26,8 @@ this lineage. **Unreleased** above it collects what has landed since.
 
 - **The notebook, after its first run on the device.**
   - Generation 22 ran it on 2026-09-26. Ink felt "very responsive … good and
-    accurate", taking ~0.5 ms of software time per pen report with no
-    dropped events.
+    accurate", and each pen report cost ~0.6 ms of software time on average.
+    Nib-to-ink on the panel has not been timed.
   - The panel now answers stylus taps, though the pen still cannot open it.
   - It no longer vanishes and reappears when you change a setting: it is
     painted off-screen and updated in one pass.
@@ -36,14 +36,16 @@ this lineage. **Unreleased** above it collects what has landed since.
   - The default brush is the pressure-sensitive Ball.
   - A **Refresh** button closes the panel and cleans the screen with one
     full wash.
-  - Erasing, undo and closing the panel now count toward the idle washer,
-    so after a 45 s pause it cleans up the ghosting they leave.
-- **A pen notebook, built and host-tested, not yet run on the device.**
-  Tools → Notebook opens a blank page with no toolbar. The pen inks, with
-  pressure-sensitive brushes, and the rubber end erases. A finger swipe
-  turns the page, and pages run on in both directions. A swipe with
-  several fingers undoes or redoes: three fingers, because the touch
-  controller has never reported five. A long finger press brings up a
+  - Erasing, undo and closing the panel now count toward the idle washer
+    like page turns do. Once about 15 of them have built up, a 45 s pause
+    brings a cleaning wash.
+- **A pen notebook** (first on the device 2026-09-26, generation 22; the
+  entry above lists what changed after that run). Tools → Notebook opens a
+  blank page with no toolbar. The pen inks, with pressure-sensitive
+  brushes, and the rubber end erases. A finger swipe turns the page, and
+  pages run on in both directions. A two-finger swipe undoes or redoes
+  (the touch controller reports at most two fingers; #82). A long finger
+  press brings up a
   floating panel for brushes, sizes, erase modes and notebooks; flick it
   away or tap Close. Ink goes through a per-region DU hint, the route the
   2026-09-26 blinded test found pen-class. Notebooks are append-only

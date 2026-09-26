@@ -3,6 +3,114 @@
 Last updated: 2026-09-26. Update protocol: add a dated entry at the top
 after every hardware session; entries are per-device/per-operator.
 
+## 2026-09-26 (wkelly PineNote, generations 22 and 23, cable-free) — the notebook's first glass run; the note fixes accepted; the touchscreen reports two contacts
+
+**Invocation.** The operator first typed "I invoke theh trial!!". That is not
+the policy's exact phrase, so no trial ran on it. They then typed **`I invoke
+the trial!!`**. The session ran without UART, with the operator present
+throughout. Per the operator's standing instruction, a Sonnet subagent issued
+both deploys (kexec trials).
+
+**Offline.**
+- PR #81 was merged as `01b2b32`, whose tree is identical to `f0d28fe`.
+- Generation 22 was built through the pinned gate (`derive-system.scm`: kernel
+  `334ljs8q`, gVisor `djgy782a`) as
+  `/gnu/store/m2smi93nva83wv84ph9h57d93fhffxc3-system`. `check-system-closure.sh`
+  passed; the closure differs from generation 21's in 30 of 490 paths.
+- Generation 23 (`604cba9`) was built the same way as
+  `/gnu/store/x3qqz8r52pdh7jzghzfj8l44gfrqkncb-system`. It passed 2075 host
+  checks, and the closure check passed.
+
+**Preflight.**
+- os2 root, and the real `/data` mounted read-write.
+- Generation 21 (`/gnu/store/iv1div034ka7qaa05rqm4vlr6g5lzsxs-system`) booted
+  since the 2026-09-11 kexec (boot `06f2d463…`), on kernel `334ljs8q`.
+- Auto-suspend paused (`enabled=1` backed up to
+  `/data/wilkbook/diagnostic-backups/gen21-before-gen22-20260926/`).
+- Generation 18 pinned, joining 10 and 16.
+- The note authority stopped by hand, per CLAUDE.md's kexec lesson, with no
+  writable fds left under `/data`.
+
+**21 → 22.** `make deploy` ran through the pinned PATH, with `WILKBOOK_UART`
+unset, KEEP=5 and a 600 s deadline.
+- It transferred 30 of 490 paths, then kexec'd, passed health, and promoted
+  `m2smi93n…` as DEFAULT. It pruned generation 17 and exited 0.
+- Boot `077b4be7…` came up on the same kernel. `/data` mounted clean, with no
+  journal recovery. KOReader and the note authority were running, and the
+  notebook plugin was present.
+
+**Operator checks on generation 22.**
+- **`25cea98`, the note fixes.** The operator made five saves in one open
+  dialog. The authority logged versions 7–11 consecutively, with no "pending
+  request limit". The fourth-save defect is fixed. The namespace is at 11 of its
+  64 lifetime commits.
+- **The notebook.** The operator said it was "very responsive and feels good and
+  accurate". The brushes and pressure work, erase works, and undo/redo from the
+  panel work. Page turns work, including past page 0. Physical rotation leaves
+  the page where it was written. New, Open, Exit and Open last work.
+- **What the operator reported back:**
+  - the default stroke was lighter than expected: Fine has no pressure curve;
+  - they want stylus taps on the panel;
+  - the panel vanished and reappeared on selection changes;
+  - ghosting was minor but visible: erased ink, and the previous page.
+- **Timings** (218 strokes, 58,868 pen reports, 58,073 of them stamped):
+  - per stamped report: stamp 0.20 ms and publish 0.37 ms, as means;
+  - the worst event-to-handling delay per stroke: p50 1.2 ms, p95 14.4 ms,
+    max 34.3 ms. These are not per-report percentiles, and they exclude that
+    report's own stamp and publish;
+  - 50 strokes drained a backlog of more than one report (up to 36), so the
+    pen path falls behind by tens of ms at times. The cause is not yet
+    identified;
+  - one evdev overrun (`SYN_DROPPED`) between opening and the first pen-up;
+  - the fsync at the pen's leave took about 6.1 ms;
+  - nib-to-ink was not timed (no camera).
+- **The touch capture.** 60 s of five-finger holds and swipes with the notebook
+  open peaked at **2 contacts per frame** over 255 frames, with no
+  `Num touch err`. The 2026-08-24 "3" was most likely per-event counting.
+  - Issue #82 records hrdl's ten-finger config byte and a read-only first step.
+  - Issue #83 records the operator's charcoal-mode idea.
+
+**22 → 23.** Generation 23 carries the fixes from that run: stylus taps on the
+panel, a flicker-free panel paint, two-finger undo, a Ball default, a Refresh
+item, and idle-washer debt.
+- The ssh-agent key expired first; the operator re-added it with an 8 h
+  lifetime.
+- The note authority was stopped by hand again.
+- The deploy transferred 28 of 490 paths, passed health, and promoted
+  `x3qqz8r5…` as DEFAULT. Nothing was pruned.
+- Boot `702f50dd…` came up with `/data` clean and both services running.
+
+**Owed on generation 23.** The operator's checks on 23 did not run: the
+notebook was not opened before close-out. The log has no pen-up lines, and
+generation 22's `.probe` is still in `/data/notebooks`. Still to check:
+- the panel no longer flickers;
+- pen taps on the panel;
+- two-finger undo;
+- Refresh;
+- an idle wash. Do 15 or more erases, undos, panel closes or page turns, and
+  watch the `[idlewasher] charge … (debt=N)` lines reach 15. Then take the pen
+  out of range and wait 45 s;
+- a KOReader restart;
+- suspend/wake with the notebook open;
+- a cold boot, which needs UART under the current policy. Generations 22 and
+  23 are kexec-only.
+
+The new Ball default cannot be seen on this device. `prefs.json` names the
+brush the operator chose on generation 22 (`brushpen`), and a default applies
+only where no brush was ever chosen.
+
+**Close-out.**
+- Auto-suspend was restored byte for byte (`enabled=1`).
+- The ledger: 10, 16 and 18 pinned; 19–22 kept; 23 promoted and booted.
+- Battery 86 %. No recovery was needed.
+- **Cable-free count:** both trials passed health and promotion, and the
+  generation-22 checks passed. Generation 23's agreed checks have not run, so
+  by the policy's definition this session does not yet count as a success. It
+  becomes the second of three once they pass, or if the operator narrows the
+  agreed checks to generation 22.
+
+Evidence: `doc/artifacts/pinenote-gen22-23-notebook-20260926/`.
+
 ## 2026-09-26 (wkelly PineNote, generation 21, over SSH, no deploy) — DU ink through a per-region hint is pen-class by blind feel; FAST not told apart; the digitizer reports at 360 Hz
 
 A pen-canvas design rests on one route: ink inside a region hinted `0x00`
