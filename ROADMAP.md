@@ -372,10 +372,11 @@ A2's 157 ms). On hrdl's direct driver, the product since, D8 filmed
 (generation 21) a region hinted DU in NORMAL was pen-class by blinded
 feel beside GL16, and whole-screen DU could not be told apart from
 FAST; on that evidence a pen canvas does not need FAST's whole-screen
-mode switch (`doc/status.md` 2026-09-26). No camera has timed DU in
-NORMAL, and ink drawn by KOReader is unmeasured: it has no drawing
-feature and no hint plumbing, so its partial refreshes, `a2` and
-`fast` included, render at GL16.
+mode switch (`doc/status.md` 2026-09-26). The notebook now uses that
+DU-hint path from KOReader and felt responsive on generation 22. No
+camera has timed its nib-to-ink latency. Generic reader partials,
+`a2` and `fast` included, still render at GL16; semantic reader hints
+remain separate work (#55).
 
 - [ ] **The direct-mode experiment** (`doc/direct-mode-adoption.md`).
       Status: **tentatively embraced** by both operators 2026-09-02,
@@ -391,19 +392,27 @@ feature and no hint plumbing, so its partial refreshes, `a2` and
       the scaffolding is deleted; reject means the same deletion and
       the shipping driver stays. Either way the next tag is `reader`,
       singular.
-- [ ] **Stroke capture** (#20): capture, storage, vectorization —
-      independent of the panel path, rung-1 testable, can start any time.
+- [x] **Stroke capture and durable notebook foundation** (#20).
       The digitizer is proven capable: 12-bit pressure, ±90° tilt, hover,
       at 11.2× panel resolution, all confirmed emitted on glass
       (2026-08-24). It reports every 2.77 ms median (~360 Hz),
       pen-down and hovering alike (2026-09-26,
       `doc/artifacts/pinenote-du-canvas-feel-20260926/stats.txt`).
-      The first consumer is built and host-tested (2026-09-26): the
+      The first consumer is built and hardware-exercised (2026-09-26): the
       notebook (`doc/notebook.md`), raw samples journaled on `/data`,
-      with pressure brushes, erasing and undo. Its first glass run is
-      planned as generation 22 of the experimental
-      `book-state-device-reader` flavor; the `reader` flavor, which will
-      also ship it, needs its own run.
+      with pressure brushes, erasing and undo. Generations 22 and 23 ran
+      it in the experimental `book-state-device-reader` flavor; the
+      `reader` flavor, which also includes it, needs its own run.
+- [ ] **Notebook follow-ups:** interaction/paint correctness and measured
+      event-backlog investigation first; stroke fitting, charcoal/smudge
+      (#83), annotation anchoring and recognition are separate increments.
+      Preserve raw samples as the durable source for derived rendering.
+- [ ] **Workbench on the device:** source-defined editing, interactive
+      sandbox previews and successor installation have native and ARM64
+      QEMU evidence (`doc/book-computer-implementation.md`). A device-ready
+      opt-in composition and its lifecycle/authoring qualification remain.
+      Use Guile/Guix for system integration and Lua for KOReader; Python
+      remains available as a book language.
 - [ ] **The settings book** (`doc/configuration.md` §5): settings as a
       real document with plugin-supplied live regions — the first
       instance of the drawn-UIs-in-books machinery, arriving early
