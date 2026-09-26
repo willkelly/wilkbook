@@ -8,11 +8,12 @@ Not pure like the other nb_ modules: it needs the bundle's ffi/blitbuffer
 pinenote/tools/koreader-input/test-notebook-render.lua runs it headless
 on the host bundle, and notebook-replay.lua renders real captures with it.
 
-Every buffer this module paints is PHYSICAL, rotation 0: the page buffer
-(BB8, W x H, one per notebook window) and the framebuffer alias (a
+Every buffer ink and render_page paint is PHYSICAL, rotation 0: the page
+buffer (BB8, W x H, one per notebook window) and the framebuffer alias (a
 rotation-0 view of Screen.bb's memory).  Spans arrive in physical px
 already clipped to the panel, so row y starts at data + stride * y and
-no coordinate is transformed.
+no coordinate is transformed.  blit_page and blit_panel are paintTo's:
+they write Screen.bb in its own rotation.
 
 Compositing (the stroke's style.comp):
 
@@ -287,14 +288,19 @@ end
 
 --- paintTo's blit: the physical page onto target (Screen.bb, in its
 --- rotation) at the paint offset x, y, so physical maps to physical.
---- The page's rotation and inverse flag are matched to the target's for
---- the C blitter and restored after.  When the flags differed, the C
---- copy is inverted in place, as the module header explains.
-function Surface.blit_page(target, page, x, y)
+--- rect, when given, is the logical {x, y, w, h} of the page to copy,
+--- relative to x, y (the notebook blits the page only where its panel is
+--- not); nil is the whole target.  The page's rotation and inverse flag
+--- are matched to the target's for the C blitter and restored after.
+--- When the flags differed, the C copy is inverted in place, as the
+--- module header explains.
+function Surface.blit_page(target, page, x, y, rect)
     x, y = x or 0, y or 0
     local rot, inv = page:getRotation(), page:getInverse()
     local tinv = target:getInverse()
-    local w, h = target:getWidth(), target:getHeight()
+    local tw, th = target:getWidth(), target:getHeight()
+    local rx, ry, rw, rh = 0, 0, tw, th
+    if rect then rx, ry, rw, rh = rect.x, rect.y, rect.w, rect.h end
     -- Without the C blitter (KOReader's dev_no_c_blitter) matching the
     -- flags gains nothing: blitFrom's per-pixel path honours both.  The
     -- in-place inversion would also take invertRect's Lua fallback,
@@ -303,11 +309,13 @@ function Surface.blit_page(target, page, x, y)
     local flip = inv ~= tinv and Blitbuffer:getUseCBB()
     page:setRotation(target:getRotation())
     if flip then page:setInverse(tinv) end
-    target:blitFrom(page, x, y, 0, 0, w, h)
+    target:blitFrom(page, x + rx, y + ry, rx, ry, rw, rh)
     if flip then
         -- The rect blitFrom wrote, clipped as it clips.
-        local bw, dx = Blitbuffer.checkBounds(w, x, 0, w, page:getWidth())
-        local bh, dy = Blitbuffer.checkBounds(h, y, 0, h, page:getHeight())
+        local bw, dx = Blitbuffer.checkBounds(rw, x + rx, rx, tw,
+                                              page:getWidth())
+        local bh, dy = Blitbuffer.checkBounds(rh, y + ry, ry, th,
+                                              page:getHeight())
         if bw > 0 and bh > 0 then
             -- An xor ignores the flag; clearing it only picks the C path.
             target:setInverse(0)
@@ -317,6 +325,17 @@ function Surface.blit_page(target, page, x, y)
     end
     page:setRotation(rot)
     page:setInverse(inv)
+end
+
+--- The composed panel onto target: panel is a rotation-0 buffer in
+--- target's LOGICAL orientation, whose top-left sits at target's logical
+--- px, py; rect is the logical part of target to copy, inside the panel.
+--- The glue composes the panel with target's type and inverse flag, so
+--- this is the C blitter's straight copy: every pixel goes from what the
+--- target held to the panel's pixel in one write.
+function Surface.blit_panel(target, panel, px, py, rect)
+    target:blitFrom(panel, rect.x, rect.y, rect.x - px, rect.y - py,
+                    rect.w, rect.h)
 end
 
 --- bb as a PNG in physical orientation (rotation 0 whatever its flag),

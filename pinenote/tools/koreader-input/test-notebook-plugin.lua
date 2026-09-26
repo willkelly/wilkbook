@@ -12,15 +12,26 @@ What is faked, and how:
     device.lua's adjust-hook chain (pen scaling, then consumerHook) and
     its gyro handler installed, resetState and the mixedrouter
     getTouchSlot/setTouchSlot pair recorded, input_devices, a counting
-    publishNow and a hint owner that records arm, disarm and reset;
+    publishNow and a hint owner that records arm, disarm and reset, with
+    device.lua's guard reduced to its effect here (any refresh while
+    armed disarms: the armed canvas covers the whole panel);
   * UIManager: a window stack with KOReader's toast/modal ordering, a
     recorded setDirty, scheduleIn/nextTick on a fake monotonic clock
     run by fire_due(), sendEvent/broadcastEvent, and paint(), which
-    paints the top full-screen window the way _repaint does;
+    paints the top full-screen window the way _repaint does.  repaint()
+    also keeps _refresh's queue (touching regions combine) and runs it
+    after painting the dirty windows, each refresh behind the hint
+    owner's guard as device.lua's refresh*Imp has it, tracing "paint
+    <name>" and "refresh:<mode>"; audit() watches the
+    framebuffer through a paint: after every page and panel blit and at
+    every refresh.  It paints only when a test asks, where KOReader
+    repaints after every input batch;
   * ui/time: the real module with realtime and monotonic replaced by
     fake clocks the test advances, so every stamp is reproducible;
   * the evdev queries (keystate, absinfo), InfoMessage, Menu and
-    PluginLoader: recorders;
+    PluginLoader: recorders; the idle washer: a recorder of chargePageTurn
+    and chargeDebt, except in the last section, which runs the working
+    tree's real idlewasher.koplugin at its shipped defaults;
   * the fs: in memory, with the /data mount the store insists on, and
     per-op fault injection.
 
@@ -31,9 +42,13 @@ stroke (consumed, arm before the first publish, ink in the page and the
 framebuffer, raw digitizer values and event times in the record, the
 per-pen-up log line, the synthetic InputEvent on nextTick); lift and
 proximity-out (append, then fsync); a swipe (page turn, render, 'ui'
-dirty, washer charge) and back; a 3-finger undo and redo; a long press
-(fire_due) opening the panel, which paints with inverted checked items;
-a tap on a brush (prefs saved); a flick closing the panel; a foreign
+dirty, washer charge) and back; a 2-finger undo and redo (one unit of
+the washer's ghost debt each); a long press (fire_due) opening the
+panel, which paints with inverted checked items; a tap on a brush
+(prefs saved); a flick closing the panel (one unit); the
+panel's repaints audited (open, a selection change by finger and by
+pen, a drag step, Close, a flick, a change under a toast: one refresh,
+no pixel through a value it does not keep); a foreign
 widget on top (touch passed through only after every finger lifts, with
 resetState and setTouchSlot; the pen still consumed but not inking);
 suspend and resume; rotation held under the pen and replayed, and
@@ -46,12 +61,24 @@ slotguard (two-finger taps, which a stale slot corrupts); a pen
 SYN_DROPPED (gap=1, resync_pen); a failed fsync; New after io_error; a
 page that cannot be read; a rotation with the panel open; the poweroff
 Close broadcast; opens the store refuses; and errors in the long-press
-timer, Suspend and a rotation, contained as the hook's are.
+timer, Suspend and a rotation, contained as the hook's are.  Then the
+panel's Refresh by finger and by pen (the page painted and published
+where the panel was, no wash while the pen is in range, then one wash
+after the settle wait that repaints no window), after a slow publish
+with a timer that fires early (the wait counts from the publish's end),
+under a toast (a window repaint instead of the in-place paint), and
+right before suspend (dropped); and a session under the real idle
+washer (erases, an undo and panel closes charged at the pen's leave or
+the touch's end, a minute of writing with no wash, a stroke held across
+the washer's deadline with no wash under the nib, then after 45 s of
+quiet one idle wash that repaints the notebook whole, the guard dropping
+the DU arm first).
 
-NOT covered here: the real UIManager paint and refresh loop, the real
-InfoMessage and Menu widgets, and the device's ioctls.
+NOT covered here: the real UIManager (notebook-realui/ runs it), the
+real InfoMessage and Menu widgets, and the device's ioctls.
 
-Usage: luajit test-notebook-plugin.lua <koreader_dir> <plugin_dir> <device.lua>
+Usage: luajit test-notebook-plugin.lua <koreader_dir> <plugin_dir> <device.lua> \
+           [idlewasher_dir (default: <plugin_dir>/../idlewasher.koplugin)]
 --]]
 
 local koreader_dir = assert(arg[1], "arg1: koreader bundle dir (lib/koreader)")
@@ -216,6 +243,14 @@ function hint:reset()
     return true
 end
 function hint:is_armed() return self.armed end
+-- device.lua's guard, which every refresh*Imp runs before it publishes or
+-- washes: the armed canvas rect (0x00) covers the whole panel, so any
+-- refresh while armed disarms.
+function hint:guard()
+    if not self.armed then return false end
+    self:disarm()
+    return true
+end
 
 local router_slot = 0
 local input = { gesture_detector = { contact_count = 0 } }
@@ -294,6 +329,9 @@ local HookContainer = require("ui/hook_container")
 local UIManager = {
     _window_stack = {}, event_hook = HookContainer:new(), scheduled = {},
     dirty = {},
+    -- KOReader's paint and refresh state, for repaint(): the windows
+    -- marked dirty, the refreshes queued, and every refresh executed.
+    dirty_w = {}, refresh_q = {}, refreshes = {},
 }
 function UIManager:show(w, refreshtype, region)
     local stack = self._window_stack
@@ -319,10 +357,146 @@ function UIManager:close(w, refreshtype, region)
     for i = #stack, 1, -1 do
         if stack[i].widget == w then table.remove(stack, i) end
     end
+    -- What is left uncovered repaints, as UIManager:close has it do.
+    for i = #stack, 1, -1 do
+        self.dirty_w[stack[i].widget] = true
+        if stack[i].widget.covers_fullscreen then break end
+    end
     self:setDirty(nil, refreshtype, region)
 end
 function UIManager:setDirty(w, refreshtype, region)
     self.dirty[#self.dirty + 1] = { w = w, mode = refreshtype, region = region }
+    if w == "all" then
+        for _, win in ipairs(self._window_stack) do self.dirty_w[win.widget] = true end
+    elseif w then
+        self.dirty_w[w] = true
+    end
+    if type(refreshtype) == "string" then self:_enqueue(refreshtype, region) end
+end
+-- uimanager.lua _refresh's queue: a region that intersects a queued one,
+-- or shares an edge with it (Geom:openIntersectWith), is combined with
+-- it into their bounding box; nil is the whole screen.
+function UIManager:_enqueue(mode, region)
+    local r = region and { x = region.x, y = region.y, w = region.w, h = region.h }
+              or { x = 0, y = 0, w = Screen:getWidth(), h = Screen:getHeight() }
+    for i, q in ipairs(self.refresh_q) do
+        local a, b = q.region, r
+        if a.w * a.h > 0 and b.w * b.h > 0 and not (a.x > b.x + b.w or a.y > b.y + b.h
+           or b.x > a.x + a.w or b.y > a.y + a.h) then
+            table.remove(self.refresh_q, i)
+            local x0, y0 = math.min(a.x, b.x), math.min(a.y, b.y)
+            local x1 = math.max(a.x + a.w, b.x + b.w)
+            local y1 = math.max(a.y + a.h, b.y + b.h)
+            return self:_enqueue(mode, { x = x0, y = y0, w = x1 - x0, h = y1 - y0 })
+        end
+    end
+    self.refresh_q[#self.refresh_q + 1] = { mode = mode, region = r }
+end
+-- _repaint's shape: from the top full-screen window up, a dirty window and
+-- every window above it paint; then the queued refreshes run, each
+-- recorded with the framebuffer as it stood (when an audit watches).
+function UIManager:repaint()
+    local stack, from = self._window_stack, 1
+    for i = #stack, 1, -1 do
+        if stack[i].widget.covers_fullscreen then
+            from = i
+            break
+        end
+    end
+    local painted = false
+    for i = from, #stack do
+        local w = stack[i].widget
+        if painted or self.dirty_w[w] then
+            if w.paintTo then
+                tr("paint " .. tostring(w.name))
+                w:paintTo(Screen.bb, 0, 0)
+            end
+            painted = true
+        end
+    end
+    self.dirty_w = {}
+    if painted and #self.refresh_q == 0 then self:_enqueue("partial") end
+    for _, q in ipairs(self.refresh_q) do
+        -- device.lua's refresh*Imp: the guard, then the refresh.
+        Device.hint_owner:guard()
+        tr("refresh:" .. q.mode)
+        self.refreshes[#self.refreshes + 1] = {
+            mode = q.mode, region = q.region, fb = self.watch and self.watch(),
+        }
+    end
+    self.refresh_q = {}
+end
+-- Run fn under watch, then repaint: the framebuffer's memory is kept
+-- before fn, after every page and panel blit, at every refresh, and at
+-- the end.  For each kept state, third counts the pixels that hold
+-- neither their value before nor their value at the end: a deferred-io
+-- flush that copied that state would move them away and back again.  A
+-- refresh also has off, the pixels that differ from the end.  box is the
+-- physical bounding box of the pixels that changed.
+function UIManager:audit(fn)
+    local ffi = require("ffi")
+    -- The module table main.lua calls through, so the wrappers see its
+    -- blits.
+    local Surface = require("nb_surface")
+    local bb = Screen.bb
+    local size = tonumber(bb.stride) * bb.h
+    local function mem() return ffi.string(bb.data, size) end
+    self:repaint()
+    local a = { stages = {}, d0 = #self.dirty, r0 = #self.refreshes }
+    local before = mem()
+    local blit_page, blit_panel = Surface.blit_page, Surface.blit_panel
+    Surface.blit_page = function(...)
+        blit_page(...)
+        a.stages[#a.stages + 1] = { what = "page", fb = mem() }
+    end
+    Surface.blit_panel = function(...)
+        blit_panel(...)
+        a.stages[#a.stages + 1] = { what = "panel", fb = mem() }
+    end
+    self.watch = mem
+    local ok, err = pcall(fn)
+    self:repaint()
+    Surface.blit_page, Surface.blit_panel = blit_page, blit_panel
+    self.watch = nil
+    if not ok then error(err, 0) end
+    local final = mem()
+    local U16 = ffi.typeof("const uint16_t *")
+    local pb, pf = ffi.cast(U16, before), ffi.cast(U16, final)
+    local row = tonumber(bb.stride) / 2
+    local function third(state)
+        local ps, n = ffi.cast(U16, state), 0
+        for i = 0, row * bb.h - 1 do
+            local v = ps[i]
+            if v ~= pf[i] and v ~= pb[i] then n = n + 1 end
+        end
+        return n
+    end
+    a.refreshes = {}
+    local function off(state)
+        local ps, n = ffi.cast(U16, state), 0
+        for i = 0, row * bb.h - 1 do
+            if ps[i] ~= pf[i] then n = n + 1 end
+        end
+        return n
+    end
+    for k = a.r0 + 1, #self.refreshes do
+        local r = self.refreshes[k]
+        a.refreshes[#a.refreshes + 1] = r
+        r.third, r.off, r.fb = third(r.fb), off(r.fb), nil
+    end
+    for _, st in ipairs(a.stages) do st.third, st.fb = third(st.fb), nil end
+    local x0, y0, x1, y1
+    for y = 0, bb.h - 1 do
+        for x = 0, bb.w - 1 do
+            if pb[y * row + x] ~= pf[y * row + x] then
+                x0, x1 = math.min(x0 or x, x), math.max(x1 or x, x)
+                y0, y1 = y0 or y, y
+            end
+        end
+    end
+    a.box = x0 and { x = x0, y = y0, w = x1 - x0 + 1, h = y1 - y0 + 1 }
+    a.before, a.final = nil, nil
+    return a
 end
 function UIManager:scheduleIn(s, fn)
     self.scheduled[#self.scheduled + 1] = { when = mono_s + s, fn = fn }
@@ -419,12 +593,13 @@ package.preload["ui/widget/menu"] = function()
     end
     return M
 end
-local washer = { charges = 0 }
+local washer = { charges = 0, debt = 0 }
 function washer:chargePageTurn() self.charges = self.charges + 1 end
+function washer:chargeDebt(n) self.debt = self.debt + n end
 package.preload["pluginloader"] = function()
     return {
         getPluginInstance = function(_, name)
-            if name == "idlewasher" then return washer end
+            if name == "idlewasher" and not washer.absent then return washer end
         end,
     }
 end
@@ -523,6 +698,14 @@ local function MemFS()
         return true
     end
     function fs.exists(path) return nodes[path] ~= nil end
+    function fs.unlink(path)
+        local e = hit("unlink", path)
+        if e then return nil, e end
+        local n = nodes[path]
+        if not n or n.dir then return nil, "ENOENT" end
+        nodes[path] = nil
+        return true
+    end
     function fs.put(path, data)
         nodes[path] = { data = data }
     end
@@ -690,11 +873,12 @@ local function tap(x, y)
     advance_ms(40)
     return frame{ { 3, 57, -1 } } and all
 end
--- Three fingers in slots 0..2 moving together, then lifting.
-local function swipe3(dx, dy)
-    local xs, ys = { 700, 800, 900 }, { 600, 600, 600 }
+-- Two fingers in slots 0..1 moving together, then lifting: the most the
+-- cyttsp5 reports at once (nb_config's multi_min_fingers).
+local function swipe2(dx, dy)
+    local xs, ys = { 700, 900 }, { 600, 600 }
     local ev = {}
-    for s = 0, 2 do
+    for s = 0, 1 do
         tracking = tracking + 1
         ev[#ev + 1] = { 3, 47, s }
         ev[#ev + 1] = { 3, 57, tracking }
@@ -704,15 +888,14 @@ local function swipe3(dx, dy)
     frame(ev)
     for k = 1, 4 do
         ev = {}
-        for s = 0, 2 do
+        for s = 0, 1 do
             ev[#ev + 1] = { 3, 47, s }
             ev[#ev + 1] = { 3, 53, xs[s + 1] + floor(dx * k / 4) }
             ev[#ev + 1] = { 3, 54, ys[s + 1] + floor(dy * k / 4) }
         end
         frame(ev)
     end
-    frame{ { 3, 47, 0 }, { 3, 57, -1 }, { 3, 47, 1 }, { 3, 57, -1 },
-           { 3, 47, 2 }, { 3, 57, -1 } }
+    frame{ { 3, 47, 0 }, { 3, 57, -1 }, { 3, 47, 1 }, { 3, 57, -1 } }
 end
 
 -- The panel's items, and a logical point as physical px.
@@ -855,7 +1038,8 @@ report(w1.c.page_n == 1 and page_px(600, 500) == 255,
 report(#UIManager:dirty_since(d0, w1, "ui") > 0 and washer.charges == 1,
        "the turn repaints 'ui' and charges the washer (PluginLoader)",
        "charges=" .. washer.charges)
-local washer2 = { charges = 0, chargePageTurn = washer.chargePageTurn }
+local washer2 = { charges = 0, debt = 0, chargePageTurn = washer.chargePageTurn,
+                  chargeDebt = washer.chargeDebt }
 ui.idlewasher = washer2
 swipe(900, 700, 900, 300)
 report(w1.c.page_n == 0 and page_px(600, 500) == 0,
@@ -864,25 +1048,36 @@ report(washer2.charges == 1 and washer.charges == 1,
        "the host's own idlewasher is preferred", "")
 
 ------------------------------------------------------------------------
--- 5. Three-finger undo and redo
+-- 5. Two-finger undo and redo
 ------------------------------------------------------------------------
 
+-- KOReader repaints after every input batch; this harness paints only
+-- when asked.  The turns' whole-window repaint runs here, as it would have
+-- long before the undo (a region repaint waits for one still pending).
+UIManager:repaint()
 d0 = #UIManager.dirty
-swipe3(0, 400)
+swipe2(0, 400)
 report(page_px(600, 500) == 255 and count_lines(memfs.get(page0)) == 2,
-       "a leftward 3-finger swipe undoes: record appended, stroke gone", "")
-local reg = UIManager:dirty_since(d0, w1, "ui")
+       "a leftward 2-finger swipe undoes: record appended, stroke gone", "")
+-- The region is painted in place, and only a refresh of it is asked for.
+local reg = UIManager:dirty_since(d0, nil, "ui")
 reg = reg[#reg] and reg[#reg].region
 local lx, ly = G.to_logical(3, W, H, 600, 500)
 report(reg and reg.x <= lx and lx < reg.x + reg.w and reg.y <= ly
-       and ly < reg.y + reg.h and reg.w < 400,
-       "the undo repaints a logical region around the stroke",
+       and ly < reg.y + reg.h and reg.w < 400 and fb_px(600, 500) == 255
+       and #UIManager:dirty_since(d0, w1, "ui") == 0,
+       "the undo paints a logical region around the stroke and asks for its refresh",
        reg and format("%d,%d %dx%d", reg.x, reg.y, reg.w, reg.h) or "none")
 report((memfs.calls["fsync " .. page0] or 0) == 2,
        "an undo with the pen out of range is fsynced", "")
-swipe3(0, -400)
-report(page_px(600, 500) == 0 and count_lines(memfs.get(page0)) == 3,
-       "a rightward 3-finger swipe redoes", "")
+report(washer2.debt == 1 and washer.debt == 0,
+       "the undo charged the host's washer one unit of ghost debt (chargeDebt)",
+       "debt=" .. washer2.debt)
+swipe2(0, -400)
+report(page_px(600, 500) == 0 and fb_px(600, 500) == 0
+       and count_lines(memfs.get(page0)) == 3,
+       "a rightward 2-finger swipe redoes", "")
+report(washer2.debt == 2, "and so did the redo", "debt=" .. washer2.debt)
 
 ------------------------------------------------------------------------
 -- 6. Long press, the panel, a brush, a flick
@@ -898,17 +1093,18 @@ report(w1.panel_L ~= nil and w1.panel_phys ~= nil,
        "a long press (fired by the scheduler) opens the panel", "")
 frame{ { 3, 57, -1 } }
 local L = w1.panel_L
-local pg = UIManager:dirty_since(d0, w1, "ui")
+local pg = UIManager:dirty_since(d0, nil, "ui")
 pg = pg[#pg] and pg[#pg].region
-report(pg and L and pg.x == math.max(0, L.x) and pg.w <= L.w,
-       "the panel's logical area is marked dirty 'ui'", "")
-UIManager:paint()
-local fine, pencil = item("brush:fine"), item("brush:pencil")
+report(pg and L and pg.x == math.max(0, L.x) and pg.w <= L.w
+       and #UIManager:dirty_since(d0, w1, "ui") == 0,
+       "the panel is painted in place and its logical area refreshed 'ui'", "")
+local ball, pencil = item("brush:ballpoint"), item("brush:pencil")
 local function screen_px(lx0, ly0)
     return Screen.bb:getPixel(lx0, ly0):getColor8().a
 end
-report(fine and fine.checked and screen_px(fine.x + 6, fine.y + 6) == 0,
-       "the checked brush is painted inverted", "")
+report(ball and ball.checked and screen_px(ball.x + 6, ball.y + 6) == 0,
+       "the checked brush, the default Ballpoint, is painted inverted", "")
+UIManager:paint()
 report(pencil and not pencil.checked and screen_px(pencil.x + 6, pencil.y + 6) == 255,
        "an unchecked brush has a white face", "")
 local undo_it = item("undo")
@@ -928,20 +1124,37 @@ local dim = redo_it and screen_px(redo_it.x + 1, redo_it.y + 1)
 report(redo_it and not redo_it.enabled and dim > 64 and dim < 192,
        "a disabled button is dimmed (gray border)", tostring(dim))
 
--- The pen under the open panel: the page gets the ink, the framebuffer
--- keeps the panel, and the arm covers the panel at the plane default.
+-- The pen under the open panel: a stroke from the canvas into the panel.
+-- The page gets all of it, the framebuffer keeps the panel, and the arm
+-- covers the panel at the plane default.
 local lpx, lpy = L.x + 8, L.y + L.h - 8
 local ppx, ppy = G.to_physical(3, W, H, lpx, lpy)
-pen_enter(ppx, ppy)
-report(hint.rects and hint.rects[2] and hint.rects[2].hint == 0x20
-       and hint.rects[2].x == w1.panel_phys.x and hint.rects[2].w == w1.panel_phys.w,
-       "with the panel open the arm adds its rect at 0x20", "")
-pen_down(ppx, ppy)
-pen_move(ppx + 6, ppy)
-pen_up()
-pen_leave()
-report(page_px(ppx + 3, ppy) == 0 and fb_px(ppx + 3, ppy) == 255,
-       "ink under the panel goes to the page, not over the panel", "")
+do
+    local sx, sy = G.to_physical(3, W, H, L.x - 30, lpy)
+    local ex, ey = G.to_physical(3, W, H, L.x + 12, lpy)
+    pen_enter(sx, sy)
+    report(hint.rects and hint.rects[2] and hint.rects[2].hint == 0x20
+           and hint.rects[2].x == w1.panel_phys.x and hint.rects[2].w == w1.panel_phys.w,
+           "with the panel open the arm adds its rect at 0x20", "")
+    pen_down(sx, sy)
+    pen_move(ex, ey)
+    pen_up()
+    pen_leave()
+    local bx, by = G.to_physical(3, W, H, L.x - 20, lpy)
+    report(page_px(ppx, ppy) == 0 and fb_px(ppx, ppy) == 255 and fb_px(bx, by) == 0,
+           "a stroke into the panel: ink beside it, and under it only in the page", "")
+    -- A pen contact that starts on the panel is the panel's: nothing inks.
+    local lines0 = count_lines(memfs.get(page0))
+    local qx, qy = G.to_physical(3, W, H, L.x + 8, L.y + L.h - 40)
+    advance_ms(1000)
+    pen_enter(qx, qy)
+    pen_down(qx, qy)
+    pen_move(qx + 30, qy)
+    pen_up()
+    pen_leave()
+    report(page_px(qx + 15, qy) == 255 and count_lines(memfs.get(page0)) == lines0,
+           "a pen contact that starts on the panel inks and records nothing", "")
+end
 advance_ms(1000)
 local px, py = center_phys(pencil)
 tap(px, py)
@@ -951,6 +1164,8 @@ report((memfs.get("/data/notebooks/prefs.json") or ""):find('"brush":"pencil"', 
        "the choice is saved to prefs.json", "")
 
 d0 = #UIManager.dirty
+-- (A field, not a local: this chunk is at LuaJIT's 200-local limit.)
+washer2.before_flick = washer2.debt
 local oldL = w1.panel_L
 local title = item("title")
 px, py = center_phys(title)
@@ -960,7 +1175,10 @@ frame{ { 3, 57, tracking }, { 3, 53, px }, { 3, 54, py } }
 for k = 1, 3 do frame{ { 3, 54, py - 60 * k } } end
 frame{ { 3, 57, -1 } }
 report(w1.panel_L == nil and w1.panel_phys == nil, "a flick closes the panel", "")
-local closed = UIManager:dirty_since(d0, w1, "ui")
+report(washer2.debt == washer2.before_flick + 1,
+       "the flick charged one unit (opening and a choice none)",
+       "debt=" .. washer2.debt - washer2.before_flick)
+local closed = UIManager:dirty_since(d0, nil, "ui")
 local covered = false
 for _, d in ipairs(closed) do
     if d.region and d.region.x <= math.max(0, oldL.x) and d.region.y <= math.max(0, oldL.y) then
@@ -968,6 +1186,228 @@ for _, d in ipairs(closed) do
     end
 end
 report(covered, "the old panel area is repainted", "")
+
+------------------------------------------------------------------------
+-- 6b. The panel's repaints (the generation-22 selection flicker)
+------------------------------------------------------------------------
+
+-- On glass a selection change made the panel vanish and come back.  The
+-- paint blitted the whole page over the panel and drew the panel back
+-- piece by piece, and the direct driver shows whatever a deferred-io flush
+-- copies, which can be any state in between.  UIManager:audit keeps the
+-- framebuffer after every blit and at every refresh: a pixel that holds
+-- neither its old nor its new value at any of them is the flicker.  The
+-- same holds for open, a drag step, Close and a flick, which may repaint
+-- the page under the panel, once.
+do
+    local function scr(r)
+        local x0, y0 = math.max(0, r.x), math.max(0, r.y)
+        local x1 = math.min(Screen:getWidth(), r.x + r.w)
+        local y1 = math.min(Screen:getHeight(), r.y + r.h)
+        return { x = x0, y = y0, w = x1 - x0, h = y1 - y0 }
+    end
+    local function inside(r, box)
+        return r.x >= box.x and r.y >= box.y and r.x + r.w <= box.x + box.w
+               and r.y + r.h <= box.y + box.h
+    end
+    local function same(r, box)
+        return r.x == box.x and r.y == box.y and r.w == box.w and r.h == box.h
+    end
+    local function union(a, b)
+        local x0, y0 = math.min(a.x, b.x), math.min(a.y, b.y)
+        local x1 = math.max(a.x + a.w, b.x + b.w)
+        local y1 = math.max(a.y + a.h, b.y + b.h)
+        return { x = x0, y = y0, w = x1 - x0, h = y1 - y0 }
+    end
+    local function phys(it)
+        local x, y, w, h = G.rect_to_physical(3, W, H, it.x, it.y, it.w, it.h)
+        return { x = x, y = y, w = w, h = h }
+    end
+    local function stages(a, what)
+        local n = 0
+        for _, st in ipairs(a.stages) do
+            if st.what == what then n = n + 1 end
+        end
+        return n
+    end
+    -- Whether the audit marked the window itself dirty: a whole-window
+    -- paint, rather than a region painted in place.
+    local function whole(a)
+        for k = a.d0 + 1, #UIManager.dirty do
+            if UIManager.dirty[k].w == w1 then return true end
+        end
+        return false
+    end
+    local function seen(a)
+        local parts = {}
+        for _, st in ipairs(a.stages) do
+            parts[#parts + 1] = st.what .. " third=" .. st.third
+        end
+        for _, r in ipairs(a.refreshes) do
+            parts[#parts + 1] = format("refresh(%d,%d %dx%d third=%d off=%d)", r.region.x,
+                                       r.region.y, r.region.w, r.region.h, r.third, r.off)
+        end
+        local b = a.box
+        parts[#parts + 1] = b and format("changed %d,%d %dx%d", b.x, b.y, b.w, b.h)
+                            or "unchanged"
+        return concat(parts, "; ")
+    end
+    -- One refresh, inside region, showing the end state, and no pixel
+    -- ever through a third value.
+    local function clean(a, region)
+        if #a.refreshes ~= 1 then return false end
+        local r = a.refreshes[1]
+        if r.third ~= 0 or r.off ~= 0 or not inside(r.region, region) then return false end
+        for _, st in ipairs(a.stages) do
+            if st.third ~= 0 then return false end
+        end
+        return true
+    end
+    -- The screen over logical rect r shows the page, on a 7 px grid.
+    local function shows_page(r)
+        for y = r.y, r.y + r.h - 1, 7 do
+            for x = r.x, r.x + r.w - 1, 7 do
+                local qx, qy = G.to_physical(3, W, H, x, y)
+                if math.abs(screen_px(x, y) - page_px(qx, qy)) > 8 then return false end
+            end
+        end
+        return true
+    end
+    local function long_press()
+        tracking = tracking + 1
+        frame{ { 3, 47, 0 }, { 3, 57, tracking }, { 3, 53, 1000 }, { 3, 54, 700 } }
+        advance_ms(800)
+        UIManager:fire_due()
+        frame{ { 3, 57, -1 } }
+    end
+
+    advance_ms(1000)
+    local a = UIManager:audit(long_press)
+    local P = w1.panel_L and scr(w1.panel_L)
+    report(P and clean(a, P) and same(a.refreshes[1].region, P)
+           and stages(a, "panel") == 1 and stages(a, "page") == 0 and not whole(a),
+           "open: one refresh over the panel's rect, one panel blit, no third value",
+           seen(a))
+
+    advance_ms(1000)
+    local was, now = item("brush:pencil"), item("brush:marker")
+    local tx, ty = center_phys(now)
+    a = UIManager:audit(function() tap(tx, ty) end)
+    report(clean(a, P) and a.box and inside(a.box, union(phys(was), phys(now)))
+           and stages(a, "panel") == 1 and stages(a, "page") == 0 and not whole(a)
+           and item("brush:marker").checked and screen_px(now.x + 6, now.y + 6) == 0,
+           "a selection change: one refresh within the panel, only the two buttons change,"
+           .. " no pixel through a third value", seen(a))
+    a = UIManager:audit(function() tap(tx, ty) end)
+    report(#a.refreshes == 0 and #a.stages == 0 and a.box == nil,
+           "a tap on the button already checked paints and refreshes nothing", seen(a))
+
+    -- The pen's tap on the panel repaints the same way.
+    advance_ms(1000)
+    was, now = item("size:M"), item("size:L")
+    tx, ty = center_phys(now)
+    a = UIManager:audit(function()
+        pen_enter(tx, ty)
+        pen_down(tx, ty)
+        pen_up()
+        pen_leave()
+    end)
+    report(clean(a, P) and a.box and inside(a.box, union(phys(was), phys(now)))
+           and not whole(a) and w1.c:_pref("size") == "L"
+           and (memfs.get("/data/notebooks/prefs.json") or ""):find('"size":"L"', 1, true),
+           "a pen tap on a size: one refresh within the panel, only the two buttons change,"
+           .. " the choice saved at the leave", seen(a))
+
+    -- Two drag steps by the title bar, each audited on its own.
+    advance_ms(1000)
+    tx, ty = center_phys(item("title"))
+    tracking = tracking + 1
+    frame{ { 3, 57, tracking }, { 3, 53, tx }, { 3, 54, ty } }
+    for step = 1, 2 do
+        local old = scr(w1.panel_L)
+        a = UIManager:audit(function() frame{ { 3, 54, ty - 40 * step } } end)
+        local new = scr(w1.panel_L)
+        report(clean(a, union(old, new)) and same(a.refreshes[1].region, union(old, new))
+               and not same(old, new) and not whole(a),
+               "drag step " .. step .. ": one refresh over the old and new rects,"
+               .. " no pixel through a third value", seen(a))
+    end
+    advance_ms(200) -- the finger stops before it lifts: no flick
+    frame{ { 3, 57, -1 } }
+
+    advance_ms(1000)
+    P = scr(w1.panel_L)
+    tx, ty = center_phys(item("close"))
+    a = UIManager:audit(function() tap(tx, ty) end)
+    report(w1.panel_L == nil and clean(a, P) and same(a.refreshes[1].region, P)
+           and stages(a, "page") == 1 and stages(a, "panel") == 0 and not whole(a)
+           and shows_page(P),
+           "Close: one refresh over the panel's rect, the page repainted once under it,"
+           .. " no third value", seen(a))
+
+    -- Under a toast the region cannot be painted in place: the window
+    -- repaints whole, still with no third value and one refresh.
+    advance_ms(1000)
+    long_press()
+    UIManager:repaint()
+    P = scr(w1.panel_L)
+    local toast = { name = "toast", toast = true, handleEvent = noop }
+    UIManager:show(toast)
+    was, now = item("brush:marker"), item("brush:fine")
+    tx, ty = center_phys(now)
+    a = UIManager:audit(function() tap(tx, ty) end)
+    UIManager:close(toast)
+    report(clean(a, P) and whole(a) and a.box and inside(a.box, union(phys(was), phys(now))),
+           "under a toast: the window repaints whole, one refresh, only the buttons change,"
+           .. " no third value", seen(a))
+
+    -- New ink clears Redo while the pen hovers, and the pen can tap the
+    -- panel: the panel repaints at the pen-up, once, within its rect.
+    do
+        advance_ms(1000)
+        UIManager:repaint()
+        tx, ty = center_phys(item("undo"))
+        tap(tx, ty)
+        UIManager:repaint()
+        local on = item("redo") and item("redo").enabled
+        P = scr(w1.panel_L)
+        -- A canvas point clear of the panel, above or below it.
+        local ly = P.y > 120 and 40 or Screen:getHeight() - 80
+        local cx, cy = G.to_physical(3, W, H, 40, ly)
+        advance_ms(1000)
+        a = UIManager:audit(function()
+            pen_enter(cx, cy)
+            pen_down(cx, cy)
+            pen_move(cx + 20, cy + 20)
+            pen_up()
+        end)
+        local redo = item("redo")
+        report(on and redo and not redo.enabled and w1.c:pen_in_range()
+               and clean(a, P) and not whole(a)
+               and stages(a, "panel") == 1 and stages(a, "page") == 0,
+               "new ink under a hovering pen: Redo shows off at the pen-up, one refresh"
+               .. " within the panel, no third value", seen(a))
+        pen_leave()
+    end
+
+    -- A flick from the panel's body (its bottom padding: no button, not
+    -- the title bar) closes it.
+    advance_ms(1000)
+    UIManager:repaint()
+    local L = w1.panel_L
+    P = scr(L)
+    tx, ty = G.to_physical(3, W, H, floor(L.x + L.w / 2), L.y + L.h - 6)
+    a = UIManager:audit(function()
+        tracking = tracking + 1
+        frame{ { 3, 57, tracking }, { 3, 53, tx }, { 3, 54, ty } }
+        for k = 1, 3 do frame{ { 3, 54, ty - 60 * k } } end
+        frame{ { 3, 57, -1 } }
+    end)
+    report(w1.panel_L == nil and clean(a, P) and same(a.refreshes[1].region, P)
+           and stages(a, "page") == 1 and not whole(a) and shows_page(P),
+           "a flick: one refresh over the panel's rect, the page repainted once under it,"
+           .. " no third value", seen(a))
+end
 
 ------------------------------------------------------------------------
 -- 7. A foreign widget on top
@@ -1582,8 +2022,11 @@ do
            and (before.x ~= px or before.y ~= py or before.w ~= pw),
            "a rotation with the panel open moves its physical rect", "")
     advance_ms(1000)
-    stroke(px + 5, py + ph - 10)
-    report(page_px(px + 10, py + ph - 10) == 0 and fb_px(px + 10, py + ph - 10) ~= 0,
+    -- From the canvas into the panel: a contact that starts on the panel
+    -- would ink nothing at all.
+    stroke(px - 30, py + ph - 10)
+    report(page_px(px + 5, py + ph - 10) == 0 and fb_px(px + 5, py + ph - 10) ~= 0
+           and fb_px(px - 10, py + ph - 10) == 0,
            "ink under the rotated panel stays out of the framebuffer", "")
     UIManager:sendEvent(Event:new("SetRotationMode", 1))
 
@@ -1624,8 +2067,9 @@ do
 
     -- Touch comes back to the notebook at the kernel's slot, not at the
     -- last one nb_input saw: a dialog's finger moves the kernel to slot 2,
-    -- then a three-finger undo starts there, so its first finger carries
-    -- no ABS_MT_SLOT and the second one's slot 0 would land on top of it.
+    -- then a two-finger undo starts there, so its first finger carries
+    -- no ABS_MT_SLOT and the second one's slot 0 would land on top of it:
+    -- one contact, no undo.
     w = reopen()
     local pz = root:gsub("[^/]*$", "") .. w.session.id .. "/page-" .. w.c.page_n .. ".jsonl"
     advance_ms(1000)
@@ -1641,18 +2085,16 @@ do
     UIManager:close(dlg)
     advance_ms(1000)
     local lines = count_lines(memfs.get(pz))
-    tracking = tracking + 3
-    frame{ { 3, 57, tracking - 2 }, { 3, 53, 700 }, { 3, 54, 600 },
-           { 3, 47, 0 }, { 3, 57, tracking - 1 }, { 3, 53, 800 }, { 3, 54, 600 },
-           { 3, 47, 1 }, { 3, 57, tracking }, { 3, 53, 900 }, { 3, 54, 600 } }
+    tracking = tracking + 2
+    frame{ { 3, 57, tracking - 1 }, { 3, 53, 700 }, { 3, 54, 600 },
+           { 3, 47, 0 }, { 3, 57, tracking }, { 3, 53, 900 }, { 3, 54, 600 } }
     for k = 1, 4 do
-        frame{ { 3, 47, 2 }, { 3, 54, 600 + 100 * k }, { 3, 47, 0 }, { 3, 54, 600 + 100 * k },
-               { 3, 47, 1 }, { 3, 54, 600 + 100 * k } }
+        frame{ { 3, 47, 2 }, { 3, 54, 600 + 100 * k }, { 3, 47, 0 }, { 3, 54, 600 + 100 * k } }
     end
-    frame{ { 3, 47, 2 }, { 3, 57, -1 }, { 3, 47, 0 }, { 3, 57, -1 }, { 3, 47, 1 }, { 3, 57, -1 } }
+    frame{ { 3, 47, 2 }, { 3, 57, -1 }, { 3, 47, 0 }, { 3, 57, -1 } }
     local undo = J.decode(last_line(memfs.get(pz)) or "")
     report(via_dialog and count_lines(memfs.get(pz)) == lines + 1 and undo and undo.k == "u",
-           "back from a dialog, a three-finger undo from the kernel's slot 2 undoes", "")
+           "back from a dialog, a two-finger undo from the kernel's slot 2 undoes", "")
 
     -- A finger whose lift a touch SYN_DROPPED lost must not keep touch
     -- from a dialog shown after it: the glue forgets fingers at a drop.
@@ -1706,6 +2148,403 @@ do
     end)
     -- No window is left to forward it: back to portrait through the view.
     ui.view:onSetRotationMode(1)
+end
+
+------------------------------------------------------------------------
+-- 15. Refresh: the page where the panel was, published, then one wash
+------------------------------------------------------------------------
+
+-- The helpers of sections 15 and 16, in one table: this chunk is at
+-- LuaJIT's 200-local limit.
+local H15 = {}
+H15.SETTLE_MS = dofile(plugin_dir .. "/nb_config.lua").refresh_settle_us / 1000
+
+function H15.reopen()
+    entry.sub_item_table[1].callback()
+    UIManager:fire_due()
+    return win()
+end
+
+function H15.long_press()
+    tracking = tracking + 1
+    frame{ { 3, 57, tracking }, { 3, 53, 1000 }, { 3, 54, 700 } }
+    advance_ms(800)
+    UIManager:fire_due()
+    frame{ { 3, 57, -1 } }
+end
+
+-- A pen stroke on the canvas, from its entry to its leave; the rubber end
+-- when rubber is set.
+function H15.stroke(x, y, rubber)
+    pen_enter(x, y, rubber)
+    pen_down(x, y)
+    pen_move(x + 40, y)
+    pen_up()
+    pen_leave(rubber)
+end
+
+-- The page on the screen over logical rect r (clipped), on a 7 px grid.
+function H15.shows_page(r)
+    local x0, y0 = math.max(0, r.x), math.max(0, r.y)
+    local x1 = math.min(Screen:getWidth(), r.x + r.w)
+    local y1 = math.min(Screen:getHeight(), r.y + r.h)
+    for y = y0, y1 - 1, 7 do
+        for x = x0, x1 - 1, 7 do
+            local qx, qy = G.to_physical(Screen.bb:getRotation(), W, H, x, y)
+            if math.abs(Screen.bb:getPixel(x, y):getColor8().a - page_px(qx, qy)) > 8 then
+                return false
+            end
+        end
+    end
+    return true
+end
+
+-- setDirty calls since index i with the given window and mode.
+function H15.dirties(i, w, mode)
+    local n = 0
+    for k = i + 1, #UIManager.dirty do
+        local d = UIManager.dirty[k]
+        if d.w == w and d.mode == mode then n = n + 1 end
+    end
+    return n
+end
+
+do
+    UIManager:fire_due()
+    local w = H15.reopen()
+    advance_ms(1000)
+    H15.stroke(300, 300)
+    advance_ms(1000)
+    H15.long_press()
+    UIManager:repaint()
+    local P = w.panel_L
+    local rit = item("refresh")
+    local debt0 = washer2.debt
+    local t0, d0 = #trace, #UIManager.dirty
+    tap(center_phys(rit))
+    report(w.panel_L == nil and H15.shows_page(P) and trace_from(t0 + 1) == "disarm publish",
+           "Refresh by finger: the panel goes, the page is painted where it was and published",
+           trace_from(t0 + 1))
+    report(H15.dirties(d0, nil, "full") == 0 and H15.dirties(d0, "all", "full") == 0,
+           "Refresh by finger: no wash yet", "")
+    UIManager:repaint()
+    -- frame() already moved the clocks 10 ms past the lift.
+    advance_ms(H15.SETTLE_MS - 10 - 1)
+    run_timer()
+    report(H15.dirties(d0, nil, "full") == 0,
+           "Refresh by finger: none a millisecond short of the settle wait", "")
+    local t1 = #trace
+    advance_ms(2)
+    run_timer()
+    UIManager:repaint()
+    local last = UIManager.refreshes[#UIManager.refreshes]
+    report(H15.dirties(d0, nil, "full") == 1 and H15.dirties(d0, "all", "full") == 0
+           and H15.dirties(d0, w, "full") == 0 and trace_from(t1 + 1) == "disarm refresh:full"
+           and last.mode == "full" and last.region.w == Screen:getWidth()
+           and last.region.h == Screen:getHeight(),
+           "Refresh by finger: after the wait, one full-screen wash that repaints no window",
+           trace_from(t1 + 1))
+    report(washer2.debt == debt0 and find_log("[notebook] refresh: one full wash") ~= nil,
+           "Refresh by finger: charges the washer nothing, and logs the wash", "")
+
+    -- By the pen tip: it still hovers after the tap, so the wash waits for
+    -- its leave, then the settle wait.
+    advance_ms(1000)
+    H15.long_press()
+    UIManager:repaint()
+    P = w.panel_L
+    local px, py = center_phys(item("refresh"))
+    t0, d0 = #trace, #UIManager.dirty
+    pen_enter(px, py)
+    pen_down(px, py)
+    pen_up()
+    report(w.panel_L == nil and trace_from(t0 + 1) == "arm disarm publish",
+           "Refresh by pen: the tip's lift hides the panel and publishes its place",
+           trace_from(t0 + 1))
+    UIManager:repaint()
+    advance_ms(400)
+    run_timer()
+    UIManager:fire_due()
+    UIManager:repaint()
+    report(H15.dirties(d0, nil, "full") == 0 and H15.shows_page(P),
+           "Refresh by pen: no wash while the pen hovers", "")
+    pen_leave()
+    report(H15.dirties(d0, nil, "full") == 0, "Refresh by pen: none at the leave either", "")
+    t1 = #trace
+    advance_ms(H15.SETTLE_MS + 1)
+    run_timer()
+    UIManager:repaint()
+    report(H15.dirties(d0, nil, "full") == 1 and trace_from(t1 + 1) == "disarm refresh:full",
+           "Refresh by pen: one wash, a settle wait after the pen's leave",
+           trace_from(t1 + 1))
+
+    -- A slow publish (the fsync takes 20 ms) and a timer that fires early
+    -- (KOReader's scheduler reads CLOCK_MONOTONIC_COARSE): the wait still
+    -- counts from the publish's end, not from the tap's handling.
+    advance_ms(1000)
+    H15.long_press()
+    UIManager:repaint()
+    local publish = Device.publishNow
+    Device.publishNow = function(this)
+        local r = publish(this)
+        advance_ms(20)
+        H15.pub_end = mono_s
+        return r
+    end
+    t0, d0 = #trace, #UIManager.dirty
+    tap(center_phys(item("refresh")))
+    Device.publishNow = publish
+    UIManager:repaint()
+    advance_ms((H15.pub_end - mono_s) * 1000 + H15.SETTLE_MS - 1)
+    w._timer_task()
+    report(H15.dirties(d0, nil, "full") == 0,
+           "Refresh, a slow publish: an early timer 1 ms short of the settle after it washes"
+           .. " nothing", "")
+    advance_ms(2)
+    run_timer()
+    UIManager:repaint()
+    report(H15.dirties(d0, nil, "full") == 1,
+           "Refresh, a slow publish: the wash a settle wait after the publish's end", "")
+
+    -- Under a toast (KOReader's Notification: on top, takes no input): the
+    -- finger still reaches the panel, the page goes back through a window
+    -- repaint that paints the toast over it, and the wash still waits.
+    advance_ms(1000)
+    H15.long_press()
+    UIManager:repaint()
+    P = w.panel_L
+    H15.toast = { name = "toast", toast = true, handleEvent = noop,
+                  paintTo = function() end }
+    UIManager:show(H15.toast)
+    UIManager:repaint()
+    t0, d0 = #trace, #UIManager.dirty
+    tap(center_phys(item("refresh")))
+    report(w.panel_L == nil and H15.dirties(d0, w, "ui") == 1
+           and H15.dirties(d0, nil, "ui") == 0 and trace_from(t0 + 1) == "disarm publish",
+           "Refresh under a toast: the window is marked for a repaint, not painted in place",
+           trace_from(t0 + 1))
+    t1 = #trace
+    UIManager:repaint()
+    report(trace_from(t1 + 1) == "paint notebook_window paint toast refresh:ui"
+           and H15.shows_page(P),
+           "Refresh under a toast: the repaint puts the page back, the toast over it",
+           trace_from(t1 + 1))
+    advance_ms(H15.SETTLE_MS)
+    run_timer()
+    UIManager:repaint()
+    report(H15.dirties(d0, nil, "full") == 1 and H15.dirties(d0, "all", "full") == 0,
+           "Refresh under a toast: one wash after the settle wait, repainting nothing", "")
+    UIManager:close(H15.toast)
+    UIManager:repaint()
+
+    -- Right before suspend: the Suspend inside the wait drops the wash, and
+    -- nothing washes after the resume.
+    advance_ms(1000)
+    H15.long_press()
+    UIManager:repaint()
+    t0, d0 = #trace, #UIManager.dirty
+    tap(center_phys(item("refresh")))
+    advance_ms(50)
+    pen_keys = {}
+    UIManager:broadcastEvent(Event:new("Suspend"))
+    UIManager:broadcastEvent(Event:new("Resume"))
+    advance_ms(2 * H15.SETTLE_MS)
+    run_timer()
+    UIManager:fire_due()
+    UIManager:repaint()
+    report(w.panel_L == nil and H15.dirties(d0, nil, "full") == 0
+           and H15.dirties(d0, "all", "full") == 0,
+           "Refresh right before suspend: the Suspend drops the wash", "")
+    UIManager:close(w)
+    UIManager:fire_due()
+end
+
+------------------------------------------------------------------------
+-- 16. Ghost debt and the real idle washer
+------------------------------------------------------------------------
+
+-- The working tree's idle washer, as PluginLoader would give it to the
+-- host, over this file's UIManager and clocks at its shipped defaults:
+-- the notebook's erases, undo and panel closes charge it at the pen's
+-- leave or the touch's end, writing keeps its idle clock back, and 45 s of
+-- quiet then washes the notebook once, repainting it whole first.
+do
+    local washer_dir = arg[4] or (plugin_dir .. "/../idlewasher.koplugin")
+    package.preload["idlewasher_core"] = function()
+        return dofile(washer_dir .. "/idlewasher_core.lua")
+    end
+    package.preload["dispatcher"] = function()
+        return { registerAction = function() end }
+    end
+    local IdleWasher = dofile(washer_dir .. "/main.lua")
+    local Core = require("idlewasher_core")
+
+    local w = H15.reopen()
+    local real = IdleWasher:new{}
+    ui.idlewasher = real
+    local charged = {}
+    real.chargeDebt = function(this, n)
+        charged[#charged + 1] = n
+        return IdleWasher.chargeDebt(this, n)
+    end
+    local d_all = #UIManager.dirty
+    local function now_s() return floor(mono_s * 1e6) / 1e6 end
+
+    advance_ms(1000)
+    H15.stroke(300, 500)
+    UIManager:fire_due()
+    report(real.core.debt == 0 and math.abs(real.core.last_activity - now_s()) < 0.1,
+           "real washer: the pen's contact is activity, and ink charges nothing",
+           format("debt=%d idle=%.3fs", real.core.debt, now_s() - real.core.last_activity))
+
+    -- Three rubber erases in one visit: nothing at each pen-up, 3 at the
+    -- leave.
+    advance_ms(1000)
+    pen_enter(300, 500, true)
+    for k = 0, 2 do
+        pen_down(310 + 10 * k, 500)
+        pen_move(310 + 10 * k, 520)
+        pen_up()
+    end
+    local at_up = real.core.debt
+    pen_leave(true)
+    report(at_up == 0 and concat(charged, ",") == "3" and real.core.debt == 3,
+           "real washer: three rubber erases charge 3 at the leave, none at a pen-up",
+           "charged " .. concat(charged, ","))
+
+    -- A two-finger undo and two panel closes (Close, a flick), each at
+    -- the touch's end.
+    advance_ms(1000)
+    swipe2(0, 400)
+    H15.long_press()
+    advance_ms(1000)
+    tap(center_phys(item("close")))
+    H15.long_press()
+    local tx, ty = center_phys(item("title"))
+    tracking = tracking + 1
+    frame{ { 3, 57, tracking }, { 3, 53, tx }, { 3, 54, ty } }
+    for k = 1, 3 do frame{ { 3, 54, ty - 60 * k } } end
+    frame{ { 3, 57, -1 } }
+    report(concat(charged, ",") == "3,1,1,1" and real.core.debt == 6,
+           "real washer: the undo, the Close and the flick charge one each",
+           "charged " .. concat(charged, ","))
+
+    -- Nine more erases, one visit each: debt_min.
+    for k = 1, 9 do
+        advance_ms(1000)
+        H15.stroke(200 + 60 * k, 900, true)
+    end
+    UIManager:fire_due()
+    report(real.core.debt == Core.DEFAULTS.debt_min and H15.dirties(d_all, "all", "full") == 0,
+           "real washer: debt_min reached, and no charge washed",
+           "debt=" .. real.core.debt)
+    -- KOReader repaints after every input batch; this harness only when
+    -- asked, so the panel's and the undo's refreshes run here.
+    UIManager:repaint()
+
+    -- A minute of writing, a stroke every 5 s: the washer's timer comes
+    -- due and finds the pen's activity each time.
+    for _ = 1, 12 do
+        advance_ms(5000)
+        H15.stroke(600, 1200)
+        UIManager:fire_due()
+    end
+    report(H15.dirties(d_all, "all", "full") == 0 and real.core.debt == Core.DEFAULTS.debt_min,
+           "real washer: no wash lands while the user writes, a minute past idle_s", "")
+    report(hint.armed, "real washer: the last stroke left the DU rectangle armed", "")
+
+    -- A slow writer: a pause just short of idle_s, then a stroke held across
+    -- the washer's deadline, a report every 100 ms.  The pen's contact is
+    -- activity at most once a second, and the timer due mid-stroke finds
+    -- it: no wash under the nib.
+    advance_ms(Core.DEFAULTS.idle_s * 1000 - 500)
+    UIManager:fire_due()
+    pen_enter(900, 1200)
+    pen_down(900, 1200)
+    H15.mid = 0
+    for k = 1, 30 do
+        advance_ms(100)
+        pen_move(900 + 4 * k, 1200)
+        UIManager:fire_due()
+        H15.mid = H15.dirties(d_all, "all", "full")
+    end
+    pen_up()
+    pen_leave()
+    UIManager:fire_due()
+    report(H15.mid == 0 and H15.dirties(d_all, "all", "full") == 0
+           and real.core.debt == Core.DEFAULTS.debt_min,
+           "real washer: a stroke held across the washer's deadline gets no wash under the nib",
+           "washes=" .. H15.dirties(d_all, "all", "full"))
+
+    -- 45 s of quiet: one idle wash, the notebook repainted whole, then the
+    -- full refresh, whose guard drops the DU arm.
+    advance_ms(Core.DEFAULTS.idle_s * 1000 + 100)
+    UIManager:fire_due()
+    report(H15.dirties(d_all, "all", "full") == 1 and real.core.debt == 0
+           and find_log("[idlewasher] idle wash (debt=15)") ~= nil,
+           "real washer: after idle_s of quiet, one idle wash of the 15 units",
+           "washes=" .. H15.dirties(d_all, "all", "full"))
+    local t0, r0 = #trace, #UIManager.refreshes
+    UIManager:repaint()
+    report(trace_from(t0 + 1) == "paint notebook_window disarm refresh:full"
+           and #UIManager.refreshes == r0 + 1 and not hint.armed
+           and H15.shows_page({ x = 0, y = 0, w = Screen:getWidth(), h = Screen:getHeight() }),
+           "real washer: the notebook repaints whole, the guard disarms, then one full refresh",
+           trace_from(t0 + 1))
+    advance_ms(100000)
+    UIManager:fire_due()
+    report(H15.dirties(d_all, "all", "full") == 1,
+           "real washer: no second wash with the debt retired", "")
+    t0 = #trace
+    advance_ms(1000)
+    pen_enter(700, 700)
+    pen_down(700, 700)
+    pen_move(740, 700)
+    report(trace_from(t0 + 1):match("^arm publish") ~= nil,
+           "real washer: the next ink re-arms the rectangle the wash disarmed",
+           trace_from(t0 + 1))
+    pen_up()
+    pen_leave()
+    real:onCloseWidget()
+
+    -- The lookup is nil-guarded: no washer at all, an older copy without
+    -- chargeDebt, and a disabled washer (no core) each take an undo's
+    -- charge without an error.
+    local page = root:gsub("[^/]*$", "") .. w.session.id .. "/page-" .. w.c.page_n .. ".jsonl"
+    local lines0, logs0 = count_lines(memfs.get(page)), #log_lines
+    local function errors_since()
+        local n = 0
+        for i = logs0 + 1, #log_lines do
+            if log_lines[i]:find("error", 1, true) then n = n + 1 end
+        end
+        return n
+    end
+    ui.idlewasher, washer.absent = nil, true
+    advance_ms(1000)
+    swipe2(0, 400)
+    local older = { charges = 0, chargePageTurn = washer.chargePageTurn }
+    ui.idlewasher, washer.absent = older, nil
+    advance_ms(1000)
+    swipe2(0, -400)
+    local read = G_reader_settings.readSetting
+    G_reader_settings.readSetting = function(_, key)
+        if key == "idlewasher_enabled" then return false end
+    end
+    local off = IdleWasher:new{}
+    G_reader_settings.readSetting = read
+    ui.idlewasher = off
+    advance_ms(1000)
+    swipe2(0, 400)
+    report(count_lines(memfs.get(page)) == lines0 + 3 and win() == w and off.core == nil
+           and errors_since() == 0,
+           "washer lookup: absent, without chargeDebt, or disabled, an undo's charge is"
+           .. " dropped without an error",
+           format("lines +%d, window %s, core %s, errors %d",
+                  count_lines(memfs.get(page)) - lines0, tostring(win() == w),
+                  tostring(off.core), errors_since()))
+    ui.idlewasher = washer2
+    UIManager:close(w)
+    UIManager:fire_due()
 end
 
 if fail == 0 then

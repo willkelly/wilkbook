@@ -21,7 +21,9 @@ Three mechanisms, decided by the pure core (idlewasher_core.lua, tested
 offline in pinenote/tools/koreader-input/test-idlewasher-logic.lua):
 
   * bundled wash: page-turn debt reaches debt_max -> the wash rides the
-    turn's own repaint (one flash, not two);
+    turn's own repaint (one flash, not two).  Debt also comes from
+    chargeDebt (the notebook's erases, undos and panel closes), which
+    never washes by itself;
   * idle wash: debt >= debt_min and the user pauses idle_s -> the wash
     lands where nobody is reading;
   * deep clean: after deepclean_idle_s of inactivity, one GC16 global
@@ -226,6 +228,19 @@ end
 -- is no core and a turn costs nothing.
 function IdleWasher:chargePageTurn()
     if self.core then self:_apply(self.core:on_page_turn(now_s())) end
+end
+
+-- Ghosting that is not a page turn (the notebook's erases, undos and panel
+-- closes): n units of debt, accumulate-only.  It never fires the bundled
+-- wash, which would land straight after the user's own action: the idle
+-- wash retires the debt at the next pause, or the next page turn once it
+-- sits at debt_max.  A class method like chargePageTurn, so a disabled or
+-- closed washer charges nothing.
+function IdleWasher:chargeDebt(n)
+    if not self.core then return end
+    self.core:on_charge(n)
+    logger.info(string.format("[idlewasher] charge %s (debt=%s)",
+                              tostring(n), tostring(self.core.debt)))
 end
 
 -- The dispatcher-exposed manual deep clean (gesture-assignable).

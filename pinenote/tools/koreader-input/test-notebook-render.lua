@@ -45,6 +45,9 @@ on the bundle's own Blitbuffer, headless.
     equals a blit of the inked page on BB8 and RGB16, night mode
     included; with the C blitter off (KOReader's dev_no_c_blitter)
     new_page, ink and blit_page give the same bytes as with it on;
+ 7b. blit_page over a rect equals the full blit inside it and writes
+    nothing outside; blit_panel copies the composed panel's memory
+    unchanged, clipped, in every rotation and inverse flag;
  8. fb_alias: a Screen-style RGB16 buffer with padded stride and a
     rotation; an alias write lands at the right memory and the right
     logical pixel in every rotation, inverse flag included;
@@ -1445,6 +1448,112 @@ do
     report(#bad3 == 0 and BB:getUseCBB(), "C blitter off: new_page, ink and blit_page give "
            .. "the same bytes as with it on (BB8, RGB16, RGB24, RGB32 screens)",
            #bad3 == 0 and format("%d cases", n3) or concat(bad3, "; "))
+end
+
+------------------------------------------------------------------------
+-- 7b. blit_page over a rect, and blit_panel
+------------------------------------------------------------------------
+
+-- The notebook paints the page only where its panel is not, and copies
+-- the panel it composed off-screen: a rect blit must equal the full blit
+-- inside the rect and write nothing outside it, and the panel copy must
+-- land its memory unchanged, clipped, in every rotation.
+do
+    local PW, PH = 61, 37
+    local page = BB.new(PW, PH, TYPE_BB8)
+    for y = 0, PH - 1 do
+        for x = 0, PW - 1 do
+            local blk = x == 0 or (y == 0 and x < 20) or (x * 7 + y * 13) % 5 == 0
+            row8(page, y)[x] = blk and 0x00 or 0xFF
+        end
+    end
+    -- Logical rects that fit both orientations (37 px the short side),
+    -- and one hanging off the top-left, which blitFrom clips.
+    local rects = { { x = 3, y = 4, w = 10, h = 7 }, { x = 20, y = 2, w = 15, h = 30 },
+                    { x = -3, y = -2, w = 9, h = 8 } }
+    local bad, cases = {}, 0
+    for r = 0, 3 do
+        for tinv = 0, 1 do
+            for ri, rc in ipairs(rects) do
+                cases = cases + 1
+                local full = BB.new(PW, PH, TYPE_RGB16)
+                local part = BB.new(PW, PH, TYPE_RGB16)
+                for _, t in ipairs({ full, part }) do
+                    set_all(t, 0x5555)
+                    t:setRotation(r)
+                    t:setInverse(tinv)
+                end
+                Surface.blit_page(full, page, 0, 0)
+                Surface.blit_page(part, page, 0, 0, rc)
+                local wrong = 0
+                for ly = 0, part:getHeight() - 1 do
+                    for lx = 0, part:getWidth() - 1 do
+                        local tx, ty = part:getPhysicalCoordinates(lx, ly)
+                        local inside = lx >= rc.x and ly >= rc.y and lx < rc.x + rc.w
+                                       and ly < rc.y + rc.h
+                        local want = inside and row16(full, ty)[tx] or 0x5555
+                        if row16(part, ty)[tx] ~= want then wrong = wrong + 1 end
+                    end
+                end
+                if wrong > 0 or page:getRotation() ~= 0 or page:getInverse() ~= 0 then
+                    bad[#bad + 1] = format("r%d t%d rect %d: %d wrong", r, tinv, ri, wrong)
+                end
+            end
+        end
+    end
+    report(#bad == 0, "blit_page over a rect: the full blit inside it, nothing outside, "
+           .. "all rotations, inverse 0 and 1, clipped at the edge",
+           #bad == 0 and format("%d cases", cases) or concat(bad, "; "))
+
+    -- The panel: a rotation-0 buffer in the target's logical orientation,
+    -- with the target's inverse flag.  Distinct values per pixel, so a
+    -- misplaced or transformed copy shows.
+    local NW, NH = 17, 11
+    local bad2, cases2 = {}, 0
+    for r = 0, 3 do
+        for tinv = 0, 1 do
+            local tgt0 = BB.new(PW, PH, TYPE_RGB16)
+            tgt0:setRotation(r)
+            local lw, lh = tgt0:getWidth(), tgt0:getHeight()
+            -- On screen, hanging off the right and bottom, and a region
+            -- that covers only part of the panel (a drag step's).
+            for _, c in ipairs({ { px = 9, py = 6 },
+                                 { px = lw - 5, py = lh - 4 },
+                                 { px = 9, py = 6, rect = { x = 12, y = 8, w = 6, h = 5 } } }) do
+                cases2 = cases2 + 1
+                local tgt = BB.new(PW, PH, TYPE_RGB16)
+                set_all(tgt, 0x5555)
+                tgt:setRotation(r)
+                tgt:setInverse(tinv)
+                local pan = BB.new(NW, NH, TYPE_RGB16)
+                pan:setInverse(tinv)
+                for y = 0, NH - 1 do
+                    for x = 0, NW - 1 do row16(pan, y)[x] = 0x1000 + y * 64 + x end
+                end
+                local rc = c.rect or { x = c.px, y = c.py, w = NW, h = NH }
+                Surface.blit_panel(tgt, pan, c.px, c.py, rc)
+                local wrong = 0
+                for ly = 0, lh - 1 do
+                    for lx = 0, lw - 1 do
+                        local tx, ty = tgt:getPhysicalCoordinates(lx, ly)
+                        local u, v = lx - c.px, ly - c.py
+                        local inside = lx >= rc.x and ly >= rc.y and lx < rc.x + rc.w
+                                       and ly < rc.y + rc.h and u >= 0 and v >= 0
+                                       and u < NW and v < NH
+                        local want = inside and row16(pan, v)[u] or 0x5555
+                        if row16(tgt, ty)[tx] ~= want then wrong = wrong + 1 end
+                    end
+                end
+                if wrong > 0 then
+                    bad2[#bad2 + 1] = format("r%d t%d at %d,%d%s: %d wrong", r, tinv, c.px,
+                                             c.py, c.rect and " part" or "", wrong)
+                end
+            end
+        end
+    end
+    report(#bad2 == 0, "blit_panel copies the composed panel's memory unchanged, clipped, "
+           .. "into every rotation, inverse 0 and 1, whole or a region of it",
+           #bad2 == 0 and format("%d cases", cases2) or concat(bad2, "; "))
 end
 
 ------------------------------------------------------------------------

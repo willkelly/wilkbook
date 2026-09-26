@@ -20,7 +20,9 @@ What the journal relies on (nb_journal.lua, "Durability"):
     power cut once their directory entry is synced;
   * write_atomic writes a temporary file, fsyncs it, renames it over the
     target and fsyncs the directory;
-  * exists is one access(2): append calls it for every page not yet seen.
+  * exists is one access(2): append calls it for every page not yet seen;
+  * unlink is one unlink(2), unsynced: only the store's probe file is
+    ever removed.
 
 Errors come back as nil and the bare errno name ("EEXIST", "ENOENT"):
 the Store compares those names (mkdir_excl's EEXIST, listdir's ENOENT)
@@ -256,6 +258,13 @@ end
 
 function Fs.exists(path)
     return C.access(path, F_OK) == 0
+end
+
+--- Remove a file (the store's append probe).  Not synced: the caller
+-- says whether the removal needs to survive a power cut.
+function Fs.unlink(path)
+    if C.unlink(path) ~= 0 then return last_err() end
+    return true
 end
 
 -- For the host test: the names it asserts come from this table.

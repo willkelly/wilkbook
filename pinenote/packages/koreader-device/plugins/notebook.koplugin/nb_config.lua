@@ -49,11 +49,15 @@ return {
     swipe_max_us = 900000,
     swipe_min_frac = 0.15,     -- of the logical width
     swipe_ratio = 2.0,         -- |along| >= ratio * |across|
-    -- Undo/redo swipe.  The operator asked for five fingers; the cyttsp5 as
-    -- configured has never reported more than 3 simultaneous contacts
-    -- (doc/artifacts/pinenote-input-clocks-20260824/RESULT.md), so the
-    -- recognizer fires on at least this many.  Confirm on glass.
-    multi_min_fingers = 3,
+    -- Undo/redo swipe: a swipe with at least this many fingers.  The
+    -- operator asked for five.  The cyttsp5 as configured reports at most
+    -- two contacts at once: in the 2026-09-26 capture (generation 22, five
+    -- fingers pressed repeatedly for ~44 s) the peak was 2 over 255 frames,
+    -- in slots 0-3, with no "Num touch err" in dmesg; a third contact showed
+    -- only for ~20 ms while one of the pair lifted.  So two fingers is the
+    -- most the glass can see, and a two-finger swipe left undoes, right
+    -- redoes.  Raising the limit is a flash write to the touch controller.
+    multi_min_fingers = 2,
     multi_min_frac = 0.12,
     multi_ratio = 1.5,
     multi_max_us = 1500000,
@@ -64,6 +68,18 @@ return {
     panel_button_min_px = 64,  -- touch residual reaches 25 px
     panel_margin_px = 16,
     panel_max_w_px = 1000,
+
+    -- The Refresh button's wash waits this long after the last paint the
+    -- notebook published (the page where the panel was, timed from the
+    -- publish's end; anything painted after it, timed from when the
+    -- controller asked for it).  hrdl's direct driver starts a
+    -- GLOBAL_REFRESH without flushing damage still on its way to the panel
+    -- (device.lua's publish comment), so the damage worker must have
+    -- blitted that paint first, or it lands after the wash as a partial
+    -- pass.  The publish is an fsync and the blit a kworker's commit, a
+    -- few ms; 150 ms is margin, and still short enough to read as the
+    -- tap's answer (tune on glass).
+    refresh_settle_us = 150000,
 
     -- Housekeeping.
     activity_min_interval_us = 1000000,  -- synthetic InputEvent rate limit

@@ -24,6 +24,21 @@ shell can know:
     (Device:publishNow).  A foreign refresh disarms the DU rectangle
     behind the controller's back (device.lua's hint owner), so an ink
     command re-arms first when the owner is no longer armed.
+  * Painting.  No paint passes a pixel through a value it does not keep
+    (the section "Painting" below): the deferred-io flush can copy the
+    framebuffer in the middle of a paint, and the driver shows what it
+    copied.  A panel change or a region repaint is painted in place, over
+    its region only, with one refresh; paintTo repaints the whole window.
+  * Washes.  The panel's Refresh is one full wash that repaints nothing
+    (setDirty(nil, "full"); device.lua's refresh guard disarms the plane
+    first), run by the controller's timer only after the page where the
+    panel was has been painted and published, and never with the pen in
+    range (nb_controller's Refresh rule).  Erasing, undo and redo and the panel
+    closing charge the idle washer's debt (IdleWasher:chargeDebt), which
+    never washes by itself: the washer's own idle wash then comes at the
+    next pause, repainting the whole window first.  Page turns charge
+    chargePageTurn as before.  The washer is looked up per charge, and a
+    missing or disabled one costs nothing.
   * Failure.  On the first failed append or fsync in a command list the
     rest of the list runs without its writes and ink, then c:io_error
     gets the failed command table (nb_controller's header).
@@ -301,6 +316,9 @@ function NotebookWindow:init()
 end
 
 function NotebookWindow:_on_timer()
+    -- Ink liveness is polled per pen report; a widget shown since then
+    -- must be known before the timer can wash (a Refresh would flash it).
+    self:_update_live()
     self:_run(self.c:on_timer(now_rt_us()))
 end
 
@@ -597,6 +615,30 @@ function EXEC.publish_ink(self)
     self.c:note_timing("publish", mono_us() - t0)
 end
 
+-- A paint made in place (the page where the Refresh's panel was),
+-- published now rather than at its refresh's own publish, so the settle
+-- wait before the wash starts from it: the controller is told the time
+-- after the fsync returned, since it built this list before the paint.
+-- Not ink: untimed, and run after a failure.  With a toast above the
+-- window the paint waits for the next repaint instead (NotebookWindow:
+-- _show), whose "ui" refresh publishes it a few ms into the wait, and this
+-- publish finds nothing to flush.
+function EXEC.publish(self)
+    if Device.publishNow then Device:publishNow() end
+    self:_run(self.c:published(now_rt_us()))
+end
+
+-- The Refresh's wash.  No widget is marked dirty: the notebook's paint was
+-- published before the wait, and a repaint now would be deferred-io damage
+-- that hrdl's GLOBAL_REFRESH does not flush, which can land after the wash
+-- as a partial pass (device.lua's publish comment; unchecked on glass).
+-- refreshFullImp guards the hint plane first; the controller has disarmed
+-- anyway.
+function EXEC.wash(self)
+    UIManager:setDirty(nil, "full")
+    logger.info("[notebook] refresh: one full wash")
+end
+
 function EXEC.append(self, cmd)
     local t0 = mono_us()
     local ok, err = self.nb:append(cmd.page, cmd.line)
@@ -636,12 +678,14 @@ function NotebookWindow:_logical_geom(x, y, w, h)
 end
 
 -- "ui" for every notebook redraw: never promoted to a flash
--- (full_refresh_count) and never a wash.
+-- (full_refresh_count) and never a wash.  A region is painted in place
+-- (NotebookWindow:_show); the whole window goes through paintTo.
 function EXEC.repaint(self, cmd)
     local r = cmd.region
     if r then
-        UIManager:setDirty(self, "ui", self:_logical_geom(r.x, r.y, r.w, r.h))
+        self:_show(self:_logical_geom(r.x, r.y, r.w, r.h))
     else
+        self.full_pending = true
         UIManager:setDirty(self, "ui")
     end
 end
@@ -666,22 +710,36 @@ function EXEC.panel(self, cmd)
             self.panel_phys = { x = px, y = py, w = pw, h = ph }
         end
     end
-    -- The old area shows the page again, the new one the panel.
-    local g = old and screen_geom(old.x, old.y, old.w, old.h)
-    if g then UIManager:setDirty(self, "ui", g) end
-    g = L and screen_geom(L.x, L.y, L.w, L.h)
-    if g then UIManager:setDirty(self, "ui", g) end
+    -- The old area shows the page again, the new one the panel: one
+    -- region over both, so one refresh.  A selection change is the
+    -- panel's own rect; a drag step, the two overlapping rects' bounds.
+    local a = old and screen_geom(old.x, old.y, old.w, old.h)
+    local b = L and screen_geom(L.x, L.y, L.w, L.h)
+    local g = a and b and a:combine(b) or a or b
+    if g then self:_show(g) end
 end
 
-function EXEC.washer_charge(self)
-    -- Resolved per call: the washer belongs to the current host, and is
-    -- absent when disabled or not installed.
+-- The idle washer, resolved per call: it belongs to the current host, and
+-- is absent when not installed.  A disabled washer has no core and its
+-- methods charge nothing.
+function NotebookWindow:_washer()
     local w = self.ui and self.ui.idlewasher
     if not w then
         local ok, PluginLoader = pcall(require, "pluginloader")
         w = ok and PluginLoader:getPluginInstance("idlewasher") or nil
     end
+    return w
+end
+
+function EXEC.washer_charge(self)
+    local w = self:_washer()
     if w and w.chargePageTurn then w:chargePageTurn() end
+end
+
+-- An older washer (a copy pushed to KO_HOME) may lack chargeDebt.
+function EXEC.washer_debt(self, cmd)
+    local w = self:_washer()
+    if w and w.chargeDebt then w:chargeDebt(cmd.n) end
 end
 
 function EXEC.activity(self)
@@ -746,17 +804,140 @@ end
 -- Painting
 ------------------------------------------------------------------------
 
--- The page is physical; blit_page matches its rotation and inverse to
--- the screen's, so physical lands on physical in any orientation.
+-- Every pixel the window writes goes straight from its old value to its
+-- new one.  The driver copies the framebuffer whenever a deferred-io
+-- flush runs: at a refresh's publish, and at the deferred-io timer, which
+-- starts at the first write after a flush and so can fire during a
+-- paint; the damage worker also reads the live framebuffer after the
+-- publish has returned.  Each pixel is driven toward whatever value the
+-- copy found.  The generation-22 paint blitted the whole page, over the
+-- panel, then drew the panel back: its background, then each button.
+-- Any copy in between moved the panel's pixels to the page or a blank
+-- panel and the next one moved them back, so the panel vanished and
+-- came back on a selection change.  Now:
+--
+--   * the panel is composed off-screen (_panel_bb) and copied in one
+--     blit;
+--   * the page is blitted only where the panel is not;
+--   * a panel change or a region repaint (_show) is painted here, over
+--     only its region, and KOReader is asked for a refresh of that region
+--     alone: one refresh, and deferred-io damage only in the region's
+--     rows.  When another widget (a toast, a dialog) is above the
+--     window, it would have to be painted over the region again, so the
+--     window is marked dirty instead and paintTo repaints it whole, with
+--     the widgets above painted after it.
+
+local function rect_and(a, b)
+    local x0, y0 = math.max(a.x, b.x), math.max(a.y, b.y)
+    local x1 = math.min(a.x + a.w, b.x + b.w)
+    local y1 = math.min(a.y + a.h, b.y + b.h)
+    if x1 <= x0 or y1 <= y0 then return nil end
+    return { x = x0, y = y0, w = x1 - x0, h = y1 - y0 }
+end
+
+local function add_rect(out, x, y, w, h)
+    if w > 0 and h > 0 then out[#out + 1] = { x = x, y = y, w = w, h = h } end
+end
+
+-- r less hole, as up to four disjoint rects: the bands above and below
+-- the hole, then its sides.
+local function rect_minus(r, hole)
+    local i = hole and rect_and(r, hole)
+    if not i then return { r } end
+    local out = {}
+    local ir = i.x + i.w
+    add_rect(out, r.x, r.y, r.w, i.y - r.y)
+    add_rect(out, r.x, i.y + i.h, r.w, r.y + r.h - (i.y + i.h))
+    add_rect(out, r.x, i.y, i.x - r.x, i.h)
+    add_rect(out, ir, i.y, r.x + r.w - ir, i.h)
+    return out
+end
+
+-- Paint rect r of the window (window-relative logical px) into bb, the
+-- window at x, y: the page where the panel is not, the composed panel
+-- where it is.  blit_page matches the physical page's rotation and
+-- inverse to bb's, so physical lands on physical in any orientation.
+function NotebookWindow:_paint_rect(bb, x, y, r)
+    local L = self.panel_L
+    local P = L and rect_and(L, { x = 0, y = 0, w = self.dimen.w,
+                                  h = self.dimen.h })
+    for _, pr in ipairs(rect_minus(r, P)) do
+        Surface.blit_page(bb, self.page_bb, x, y, pr)
+    end
+    local over = P and rect_and(r, P)
+    if over then
+        Surface.blit_panel(bb, self:_panel_bb(bb), x + L.x, y + L.y,
+                           { x = x + over.x, y = y + over.y,
+                             w = over.w, h = over.h })
+    end
+end
+
 function NotebookWindow:paintTo(bb, x, y)
     self.dimen.x, self.dimen.y = x, y
-    Surface.blit_page(bb, self.page_bb, x, y)
-    local L = self.panel_L
-    if L then self:_paint_panel(bb, x, y, L) end
+    self.full_pending = false
+    self:_paint_rect(bb, x, y, { x = 0, y = 0, w = self.dimen.w,
+                                 h = self.dimen.h })
     -- A widget closing above this window repaints it, and there is no
     -- other notice of that: ink may be live again.
     UIManager:unschedule(self._live_task)
     UIManager:nextTick(self._live_task)
+end
+
+-- Nothing visible above the window, toasts included (unlike _is_topmost,
+-- which is about input, and a toast takes none): only then is a paint
+-- here what the stack would paint.
+function NotebookWindow:_on_top()
+    for w in UIManager:topdown_widgets_iter() do
+        if not w.invisible then return w == self end
+    end
+    return false
+end
+
+-- Bring logical region g (a Geom) up to date on the screen, with one
+-- refresh.  A whole-window repaint already waiting covers it.
+function NotebookWindow:_show(g)
+    if self.full_pending then return end
+    if self.shown and self:_on_top() then
+        self:_paint_rect(Screen.bb, self.dimen.x, self.dimen.y,
+                         { x = g.x - self.dimen.x, y = g.y - self.dimen.y,
+                           w = g.w, h = g.h })
+        UIManager:setDirty(nil, "ui", g)
+    else
+        UIManager:setDirty(self, "ui", g)
+    end
+end
+
+-- What the composed panel shows, as a string: the buffer is rebuilt only
+-- when this changes, so a drag moves the panel without recomposing it.
+local function panel_key(L, bb)
+    local parts = { L.w, L.h, L.font_px, bb:getType(), bb:getInverse() }
+    for _, it in ipairs(L.items) do
+        parts[#parts + 1] = table.concat({ it.kind, it.label,
+            it.checked and 1 or 0, it.enabled and 1 or 0,
+            it.x - L.x, it.y - L.y, it.w, it.h }, "\1")
+    end
+    return table.concat(parts, "\0")
+end
+
+-- The open panel, composed off-screen with bb's type and inverse flag,
+-- so Surface.blit_panel is the C blitter's straight copy (night mode
+-- included: widgets paint inverted values into an inverted buffer).
+function NotebookWindow:_panel_bb(bb)
+    local L = self.panel_L
+    local key = panel_key(L, bb)
+    if key ~= self.panel_key then
+        local pb = self.panel_buf
+        if not (pb and pb:getWidth() == L.w and pb:getHeight() == L.h
+                and pb:getType() == bb:getType()) then
+            if pb then pb:free() end
+            pb = Blitbuffer.new(L.w, L.h, bb:getType())
+            self.panel_buf = pb
+        end
+        pb:setInverse(bb:getInverse())
+        self:_paint_panel(pb, -L.x, -L.y, L)
+        self.panel_key = key
+    end
+    return self.panel_buf
 end
 
 -- Font:getFace scales its size by scaleBySize; the panel's layout
@@ -855,6 +1036,9 @@ function NotebookWindow:onSetRotationMode(mode)
     self.dimen = Geom:new{ x = 0, y = 0, w = Screen:getWidth(),
                            h = Screen:getHeight() }
     if self.shown then
+        -- The whole window repaints in the new orientation, so the panel
+        -- the rotation re-lays out is not painted on its own first.
+        self.full_pending = true
         self:_guard("rotation", self._rotated)
         UIManager:setDirty(self, "ui")
     end
@@ -929,6 +1113,10 @@ function NotebookWindow:onCloseWidget()
         if w and w.free then w:free() end
     end
     self.item_widgets = {}
+    if self.panel_buf then
+        self.panel_buf:free()
+        self.panel_buf, self.panel_key = nil, nil
+    end
     if self.page_bb then
         self.page_bb:free()
         self.page_bb = nil

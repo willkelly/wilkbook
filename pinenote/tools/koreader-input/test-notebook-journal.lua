@@ -710,6 +710,17 @@ local function MemFS()
         end
         return true
     end
+    -- Unsynced, and the model does not bring an unlinked entry back at a
+    -- crash: only the probe file is ever removed, and nothing rests on it.
+    function fs.unlink(path)
+        local f = hit("unlink", path)
+        if f then return nil, f.err end
+        local n = nodes[path]
+        if not n then return nil, "ENOENT" end
+        if n.dir then return nil, "EISDIR" end
+        nodes[path] = nil
+        return true
+    end
     -- tmp, fsync, rename, fsync dir: all or nothing, and durable
     function fs.write_atomic(path, s)
         local f = hit("write_atomic", path)
@@ -857,15 +868,21 @@ do
                   == "mkdir_excl /data/notebooks; fsync_dir /data;"
                      .. " append /data/notebooks/.probe;"
                      .. " fsync /data/notebooks/.probe;"
-                     .. " truncate /data/notebooks/.probe"
-           and fs.get(ROOT .. "/.probe") == "",
+                     .. " unlink /data/notebooks/.probe"
+           and fs.get(ROOT .. "/.probe") == nil,
            "probe creates the root (fsyncing /data), appends, fsyncs and"
-           .. " truncates", table.concat(fs.log, "; "))
+           .. " removes the probe file", table.concat(fs.log, "; "))
     fs.reset_log()
     report(store:probe() and fs.calls.mkdir_excl == nil,
            "a second probe does not recreate the root")
+    -- Generation 22 truncated the probe file and left it: the next probe
+    -- appends to it and removes it.
+    fs.put(ROOT .. "/.probe", "")
+    report(store:probe() and fs.get(ROOT .. "/.probe") == nil,
+           "a probe removes the empty .probe an earlier build left")
     for _, c in ipairs{ { "append", "EROFS" }, { "append", "ENOSPC" },
-                        { "fsync", "EROFS" }, { "fsync", "ENOSPC" } } do
+                        { "fsync", "EROFS" }, { "fsync", "ENOSPC" },
+                        { "unlink", "EROFS" }, { "unlink", "EIO" } } do
         fs.clear_faults()
         fs.fault(c[1], c[2])
         local r, err = store:probe()

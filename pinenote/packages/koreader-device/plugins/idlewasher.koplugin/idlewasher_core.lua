@@ -16,6 +16,12 @@ Inputs (all times monotonic seconds, caller-supplied):
   * on_timer(now)     -- the armed idle timer fired
   * on_manual_deep_clean(now) -- a deep clean ran outside the idle
     chain (dispatcher action): retire the debt, mark the span done
+  * on_charge(n)      -- n units of ghosting that no page turn counted
+    (the notebook's erases, undos and panel closes): added to the debt,
+    capped at debt_max, and never answered with a wash.  The caller
+    charges straight after the user's own action, where a bundled wash
+    would interrupt it; the idle wash, or the next page turn once the
+    debt is at debt_max, retires it
 
 Output: nil (nothing to do), or a table with any of:
 
@@ -71,7 +77,7 @@ function Core.new(cfg)
         local v = tonumber(cfg[k])
         self[k] = (v and v > 0) and v or default
     end
-    self.debt = 0                 -- page turns since the last full wash
+    self.debt = 0                 -- page turns and charges since the last wash
     self.last_activity = tonumber(cfg.now) or 0
     self.armed = false            -- caller's idle timer state, mirrored
     self.armed_deadline = nil     -- ...and its absolute deadline
@@ -90,6 +96,17 @@ function Core:on_page_turn(now)
         self.last_wash_at = now
         return { wash = "bundled", debt = retired }
     end
+    return nil
+end
+
+-- Accumulate only; always nil.  A non-positive or non-numeric n is ignored.
+function Core:on_charge(n)
+    if not self.enabled then return nil end
+    n = tonumber(n)
+    if not n or n ~= n or n <= 0 then return nil end
+    local debt = self.debt + n
+    if debt > self.debt_max then debt = self.debt_max end
+    self.debt = debt
     return nil
 end
 

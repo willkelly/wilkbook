@@ -24,6 +24,20 @@ this lineage. **Unreleased** above it collects what has landed since.
 
 ## Unreleased
 
+- **The notebook, after its first run on the device.**
+  - Generation 22 ran it on 2026-09-26. Ink felt "very responsive … good and
+    accurate", taking ~0.5 ms of software time per pen report with no
+    dropped events.
+  - The panel now answers stylus taps, though the pen still cannot open it.
+  - It no longer vanishes and reappears when you change a setting: it is
+    painted off-screen and updated in one pass.
+  - Undo and redo are a **two-finger** swipe. The touch controller reports
+    at most two fingers on its factory firmware (#82).
+  - The default brush is the pressure-sensitive Ball.
+  - A **Refresh** button closes the panel and cleans the screen with one
+    full wash.
+  - Erasing, undo and closing the panel now count toward the idle washer,
+    so after a 45 s pause it cleans up the ghosting they leave.
 - **A pen notebook, built and host-tested, not yet run on the device.**
   Tools → Notebook opens a blank page with no toolbar. The pen inks, with
   pressure-sensitive brushes, and the rubber end erases. A finger swipe

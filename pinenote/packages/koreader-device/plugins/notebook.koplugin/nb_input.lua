@@ -41,10 +41,16 @@ Touch (cyttsp5):
     contact cancels those, and the session can then only end as a
     multi_swipe;
   * multi-finger travel is the running sum of the MEAN displacement of
-    the contacts present in consecutive frames.  The controller has never
-    reported more than 3 contacts at once and auto-lifts whichever it
-    stops reporting, so fingers drop out and come back as new contacts;
-    this sum adds no jump when they do;
+    the contacts present in consecutive frames.  The controller reports
+    at most two contacts at once (nb_config's multi_min_fingers) and
+    auto-lifts whichever it stops reporting, so fingers drop out and come
+    back as new contacts; this sum adds no jump when they do;
+  * a multi-finger swipe also needs multi_min_fingers contacts that each
+    travelled half the swipe's minimum along it, in its direction.  With
+    two fingers enough for an undo, a thumb resting on the glass beside
+    one swiping finger has a mean that moves; it must not undo, and as
+    two contacts it turns no page either (as before, when three fingers
+    were needed and two did nothing);
   * palms: a contact that starts while the pen is in range, or less than
     palm_grace_us after it left, is invisible for its whole life.  The
     grace test is signed, because one batch is drained fd by fd and a
@@ -388,6 +394,9 @@ function Input:_touch_commit(t)
             local x, y = sx[c.slot], sy[c.slot]
             if x and y and (x ~= px or y ~= py) then
                 c.x, c.y = x, y
+                -- A contact that landed without a position starts where
+                -- it is first seen.
+                if not c.sx then c.sx, c.sy = x, y end
                 if c.accepted then
                     active = true
                     local s = self.sess
@@ -480,10 +489,11 @@ end
 -- the column or row the slot already held (the kernel skips an unchanged
 -- axis); it still counts, but can make no single-contact gesture.
 function Input:_join(c, t, out)
+    c.sx, c.sy = c.x, c.y
     local s = self.sess
     if not s then
         s = { t0 = t, n = 0, total = 0, peak = 0, mdx = 0, mdy = 0, c = c,
-              dead = self.touch_blocked, vetoed = false }
+              dead = self.touch_blocked, vetoed = false, contacts = {} }
         self.sess = s
         if c.x then
             c.x0, c.y0 = c.x, c.y
@@ -497,6 +507,7 @@ function Input:_join(c, t, out)
     end
     s.n = s.n + 1
     s.total = s.total + 1
+    s.contacts[s.total] = c
     if s.total == 2 then
         local first = s.c
         if first.dragging then out = self:_end_drag(first, t, 0, 0, out) end
@@ -592,10 +603,25 @@ end
 function Input:_multi_end(s, t, out)
     local dur = t - s.t0
     if s.peak < self.multi_min or dur > self.multi_max then return out end
-    if not self:_is_swipe(s.mdx, s.mdy, self.multi_frac, self.multi_ratio) then
+    local mdx, mdy = s.mdx, s.mdy
+    if not self:_is_swipe(mdx, mdy, self.multi_frac, self.multi_ratio) then
         return out
     end
-    return push(out, { k = "multi_swipe", dx = s.mdx, dy = s.mdy,
+    -- The fingers that travelled: half the swipe's minimum along its
+    -- dominant axis, the way the mean went.  A contact the controller cut
+    -- short and brought back is two contacts here, each with its share.
+    local along_x = abs(mdx) >= abs(mdy)
+    local need = 0.5 * self.multi_frac * (along_x and self.W or self.H)
+    local sign = along_x and mdx or mdy
+    local moved = 0
+    for _, c in ipairs(s.contacts) do
+        if c.sx then
+            local d = along_x and (c.x - c.sx) or (c.y - c.sy)
+            if d * sign > 0 and abs(d) >= need then moved = moved + 1 end
+        end
+    end
+    if moved < self.multi_min then return out end
+    return push(out, { k = "multi_swipe", dx = mdx, dy = mdy,
                        fingers = s.peak, t = t })
 end
 

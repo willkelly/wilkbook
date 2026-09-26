@@ -18,7 +18,8 @@ case, the raw-unit fallback, penbtn swallowing, activity rate limiting
 with hover never counting.
 
 Touch: tap (canvas, panel), long press by timer and by a late lift,
-swipe with its time/length/ratio limits, multi-finger swipes whose
+swipe with its time/length/ratio limits, two-finger swipes (and a
+finger that stays still beside a swiping one), multi-finger swipes whose
 contacts drop out and reappear (peak 3, 4, 5), panel drag and flick
 velocity, palm rejection at start (grace boundary, a batch drained out
 of time order), the veto for a palm that landed before the pen,
@@ -875,8 +876,56 @@ do
         for s = 0, n - 1 do c[#c + 1] = { s, id = -1 } end
         return steps(l, k.frame(frames * dt_ms + 10, c))
     end
-    expect("multi: two fingers are below multi_min_fingers, and no single gesture either",
-           play(new(), fingers(2, -400, 0, 10, 30)), { act(0), tdc(true), tdc(false) })
+    expect("multi: two fingers leftward, landing together: the undo swipe, no single gesture",
+           play(new(), fingers(2, -400, 0, 10, 30)),
+           { act(0), tdc(true), mswipe(-400, 0, 2, 310), tdc(false) })
+    expect("multi: two fingers rightward: the redo swipe",
+           play(new(), fingers(2, 400, 0, 10, 30)),
+           { act(0), tdc(true), mswipe(400, 0, 2, 310), tdc(false) })
+    expect("multi: a two-finger tap is nothing",
+           play(new(), fingers(2, 0, 0, 3, 30)), { act(0), tdc(true), tdc(false) })
+
+    -- Two contacts, one swiping and one still or barely moving (a thumb
+    -- resting on the glass).  Each finger must travel half the swipe's
+    -- minimum, 0.5 x multi_min_frac x 1872 = 112.32 px along X.
+    local function pair(bdx, frames, adx)
+        adx = adx or -400
+        local k = kernel(0)
+        local l = k.frame(0, { { 0, id = 70, x = 1100, y = 600 },
+                               { 1, id = 71, x = 1100, y = 1000 } })
+        for i = 1, frames do
+            l = steps(l, k.frame(30 * i, {
+                { 0, x = 1100 + math.floor(adx * i / frames + 0.5) },
+                { 1, x = 1100 + math.floor(bdx * i / frames + 0.5) } }))
+        end
+        return steps(l, k.frame(30 * frames + 10, { { 0, id = -1 }, { 1, id = -1 } }))
+    end
+    expect("multi: one finger swiping beside a still one is neither an undo nor a turn",
+           play(new(), pair(0, 10)), { act(0), tdc(true), tdc(false) })
+    expect("multi: the second finger short of half the minimum (112 px) is nothing",
+           play(new(), pair(-112, 8)), { act(0), tdc(true), tdc(false) })
+    expect("multi: the second finger at 113 px travels: the swipe",
+           play(new(), pair(-113, 8)),
+           { act(0), tdc(true), mswipe(-256.5, 0, 2, 250), tdc(false) })
+    -- The mean, (-700 + 150) / 2 = -275 px, is a swipe on its own.
+    expect("multi: a second finger moving the other way does not count",
+           play(new(), pair(150, 8, -700)), { act(0), tdc(true), tdc(false) })
+
+    -- The fingers land in different frames: the first alone arms the long
+    -- press; the second cancels it, so its timer finds nothing to fire,
+    -- and the pair still swipes.
+    K = kernel(0)
+    list = K.frame(0, { { 0, id = 72, x = 1100, y = 600 } })
+    list = steps(list, K.frame(40, { { 1, id = 73, x = 1100, y = 1000 } }))
+    for i = 1, 10 do
+        local x = 1100 - 40 * i
+        list = steps(list, K.frame(40 + 30 * i, { { 0, x = x }, { 1, x = x } }))
+    end
+    list = steps(list, timer(700), K.frame(800, { { 0, id = -1 } }),
+                 K.frame(820, { { 1, id = -1 } }))
+    expect("multi: two fingers landing apart: no long press, no turn, the swipe",
+           play(new(), list),
+           { tmr(700000), act(0), tdc(true), mswipe(-400, 0, 2, 820), tdc(false) })
     expect("multi: longer than multi_max_us is nothing",
            play(new(), fingers(3, -400, 0, 16, 100)),
            { act(0), tdc(true), act(1000), tdc(false) })
@@ -1237,8 +1286,10 @@ do
            })
     inp = new()
     local got = play(inp, stream())
-    expect("set_touch_slot: without it the first contact lands in slot 0; gesture lost",
-           got, { tmr(700000), act(0), tdc(true), tdc(false) })
+    -- The first finger's events go to slot 0, where the second finger's
+    -- contact then replaces it: two fingers seen, not three.
+    expect("set_touch_slot: without it the first contact lands in slot 0; a finger lost",
+           got, { tmr(700000), act(0), tdc(true), mswipe(-320, 0, 2, 310), tdc(false) })
     report(not inp:any_touch_down(),
            "set_touch_slot: the stale-slot stream still leaves nothing down")
 end
@@ -1563,6 +1614,40 @@ do
            play(new(), list), {
         prox(true, "pen", 0), tdc(true), prox(false, "pen", 20),
         act(600), mswipe(-300, 0, 3, 810), tdc(false),
+    })
+
+    -- Two fingers are now enough for an undo, so a rejected palm must
+    -- still count for nothing: beside one finger it leaves a page turn,
+    -- beside two an undo of two fingers.
+    local function palm_then(fingers)
+        K = kernel(0)
+        local acts = {}
+        for s = 0, fingers - 1 do
+            acts[#acts + 1] = { s, id = 236 + s, x = 1100, y = 300 + 300 * s }
+        end
+        list = steps(pen(0, "PEN", 1, "X", 5000, "Y", 5000),
+                     K.frame(10, { { 5, id = 240, x = 300, y = 1300 } }),
+                     pen(20, "PEN", 0), K.frame(600, acts))
+        for i = 1, 6 do
+            local x, mv = 1100 - 50 * i, {}
+            for s = 0, fingers - 1 do mv[#mv + 1] = { s, x = x } end
+            -- The palm slides with them: rejected, its travel is nothing.
+            mv[#mv + 1] = { 5, x = 300 - 50 * i }
+            list = steps(list, K.frame(600 + 30 * i, mv))
+        end
+        local up = {}
+        for s = 0, fingers - 1 do up[#up + 1] = { s, id = -1 } end
+        return steps(list, K.frame(810, up), K.frame(900, { { 5, id = -1 } }))
+    end
+    expect("multi: a sliding rejected palm beside one finger: a page turn, not an undo",
+           play(new(), palm_then(1)), {
+        prox(true, "pen", 0), tdc(true), prox(false, "pen", 20),
+        tmr(700000), act(600), swipe(-300, 0, 810), tdc(false),
+    })
+    expect("multi: a sliding rejected palm beside two fingers: an undo of two",
+           play(new(), palm_then(2)), {
+        prox(true, "pen", 0), tdc(true), prox(false, "pen", 20),
+        act(600), mswipe(-300, 0, 2, 810), tdc(false),
     })
 end
 

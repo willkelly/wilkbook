@@ -6,17 +6,21 @@ Two layers, both run under the koreader-bin bundle's own luajit:
  1. the PURE decision core (idlewasher_core.lua) -- table-driven cases
     over the debt/idle state machine: debt accrual, idle-fire only at
     debt >= debt_min, debt-max bundling, deep-clean once-per-idle-span
-    with timer parking, early-fire re-arm, manual deep clean, and
-    disabled = no actions;
+    with timer parking, early-fire re-arm, manual deep clean,
+    on_charge (accumulate-only, capped at debt_max, never a wash, retired
+    by the idle wash or the next page turn), and disabled = no actions;
  2. the REAL plugin main.lua wired to a recording UIManager stub (the
     bundle's verbatim ui/hook_container underneath) -- proving the
     registration contract (a disabled plugin registers nothing), the
     setDirty("all","full") wash calls, the GC16 sysfs flip + scheduled
     restore against a fake sysfs file, the duplicate-copy load sentinel,
     onCloseWidget teardown (timer unscheduled, GC16 never left
-    active), and chargePageTurn, the notebook's page-turn entry point
+    active), chargePageTurn, the notebook's page-turn entry point
     (the debt_max turn washes; a disabled or closed washer charges
-    nothing).
+    nothing), and chargeDebt, its ghost-debt entry point (accumulates to
+    debt_max without a wash or a timer change; the idle wash fires after
+    idle_s once the debt reaches debt_min; a disabled or closed washer
+    charges nothing).
 
 NOT covered here (the residual gap, stated precisely): UIManager's real
 scheduler/paint loop and the PageUpdate/PosUpdate emission by
@@ -174,12 +178,56 @@ local cases = {
         end)(),
     },
     {
+        -- The notebook's ghost debt: accumulate-only.  No charge ever
+        -- answers with a wash, the debt stops at debt_max, and the next
+        -- page turn then rides the bundled wash as ever.
+        name = "on_charge accumulates, caps at debt_max, never washes",
+        cfg = { now = 0 },
+        steps = {
+            { "on_charge", 5, nil },
+            { "on_charge", 50, nil },
+            { "on_charge", 100, nil },
+            { "on_charge", 1, nil },
+            { "on_page_turn", 1, { wash = "bundled", debt = 61 } },
+            { "on_page_turn", 2, nil },
+        },
+        post = function(c) return c.debt == 1, "debt=" .. c.debt end,
+    },
+    {
+        name = "on_charge ignores a zero, negative, NaN or non-numeric n",
+        cfg = { now = 0 },
+        steps = {
+            { "on_charge", 0, nil },
+            { "on_charge", -3, nil },
+            { "on_charge", 0 / 0, nil },
+            { "on_charge", "x", nil },
+            { "on_charge", false, nil },
+            { "on_charge", "2", nil },
+        },
+        post = function(c) return c.debt == 2, "debt=" .. c.debt end,
+    },
+    {
+        name = "charged debt >= debt_min: the idle wash fires after idle_s",
+        cfg = { now = 0 },
+        steps = {
+            { "on_input", 0, { arm = 45 } },
+            { "on_charge", 14, nil },
+            { "on_input", 10, nil },
+            { "on_charge", 1, nil },
+            -- activity at 10: the timer finds 35 s of quiet, not 45
+            { "on_timer", 45, { rearm = 10 } },
+            { "on_timer", 55, { wash = "idle", debt = 15, rearm = 555 } },
+        },
+        post = function(c) return c.debt == 0, "debt=" .. c.debt end,
+    },
+    {
         name = "disabled = no actions, ever",
         cfg = { now = 0, enabled = false },
         steps = (function()
             local s = {}
             for i = 1, 80 do s[#s + 1] = { "on_page_turn", i, nil } end
             s[#s + 1] = { "on_input", 81, nil }
+            s[#s + 1] = { "on_charge", 20, nil }
             s[#s + 1] = { "on_timer", 900, nil }
             s[#s + 1] = { "on_manual_deep_clean", 901, nil }
             return s
@@ -247,7 +295,8 @@ for _, case in ipairs(cases) do
         local ev, t, expect = step[1], step[2], step[3]
         local got = core[ev](core, t)
         if not eq(got, expect) then
-            bad = string.format("step %d %s(t=%s): got %s want %s",
+            -- The argument is a time, or on_charge's n.
+            bad = string.format("step %d %s(%s): got %s want %s",
                                 i, ev, tostring(t), fmt(got), fmt(expect))
             break
         end
@@ -569,6 +618,62 @@ nb_off:chargePageTurn()
 report(nb_off.core == nil and UIManager:washes() == washes0 + 1
        and #UIManager.scheduled == sched0,
        "chargePageTurn: a disabled washer charges nothing", "")
+
+-- 2e. chargeDebt, the notebook's ghost-debt entry point, at the shipped
+-- defaults: accumulate-only, capped at debt_max, never a wash and never a
+-- timer change of its own; the idle chain then washes it at the next pause.
+settings.idlewasher_enabled = nil
+fake_now = 1000
+local gd = IdleWasher:new{}
+local function sched_of()
+    local n, when = 0, nil
+    for _, t in ipairs(UIManager.scheduled) do
+        if t.fn == gd.timer_task then n, when = n + 1, t.when end
+    end
+    return n, when
+end
+local n0, when0 = sched_of()
+report(type(IdleWasher.chargeDebt) == "function" and rawget(gd, "chargeDebt") == nil
+       and n0 == 1 and when0 == 1000 + Core.DEFAULTS.idle_s,
+       "chargeDebt: a class method; the washer armed at idle_s", tostring(when0))
+washes0 = UIManager:washes()
+gd:chargeDebt(Core.DEFAULTS.debt_max + 40)
+local n1, when1 = sched_of()
+report(UIManager:washes() == washes0 and gd.core.debt == Core.DEFAULTS.debt_max
+       and n1 == 1 and when1 == when0,
+       "chargeDebt: past debt_max it caps, with no wash and the timer untouched",
+       string.format("debt=%d washes=+%d", gd.core.debt, UIManager:washes() - washes0))
+report(log_grep("[idlewasher] charge 100 (debt=60)") == 1,
+       "chargeDebt: one log line per charge, with the debt", "")
+gd:chargePageTurn()
+report(UIManager:washes() == washes0 + 1 and gd.core.debt == 0,
+       "chargeDebt: the next page turn at the cap rides the bundled wash", "")
+-- Charged to debt_min, then quiet: the idle wash comes idle_s after the
+-- last input.
+fake_now = 1010
+UIManager.event_hook:execute("InputEvent")
+gd:chargeDebt(Core.DEFAULTS.debt_min - 1)
+fake_now = 1000 + Core.DEFAULTS.idle_s
+UIManager:fire_due()
+report(UIManager:washes() == washes0 + 1 and gd.core.debt == Core.DEFAULTS.debt_min - 1,
+       "chargeDebt: below debt_min, the timer finds no wash to do", "debt=" .. gd.core.debt)
+gd:chargeDebt(1)
+fake_now = 1010 + Core.DEFAULTS.idle_s
+UIManager:fire_due()
+report(UIManager:washes() == washes0 + 2 and gd.core.debt == 0
+       and log_grep("[idlewasher] idle wash (debt=15)") == 1,
+       "chargeDebt: at debt_min, the idle wash fires idle_s after the last input",
+       UIManager:washes() - washes0 .. " wash(es)")
+gd:onCloseWidget()
+local sched1 = #UIManager.scheduled
+gd:chargeDebt(5)
+settings.idlewasher_enabled = false
+local gd_off = IdleWasher:new{}
+gd_off:chargeDebt(5)
+report(gd.core == nil and gd_off.core == nil and UIManager:washes() == washes0 + 2
+       and #UIManager.scheduled == sched1
+       and log_grep("[idlewasher] charge 5 ") == 0,
+       "chargeDebt: a closed or disabled washer charges nothing, and logs nothing", "")
 
 os.remove(wf_path)
 

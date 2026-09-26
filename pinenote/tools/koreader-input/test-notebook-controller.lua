@@ -19,6 +19,8 @@ invariants, so every scripted case and the capture replays hold them:
     the first ink), and none, nor any arm or append, after io_error;
   * no fsync from a call that leaves the pen in range (close and
     suspend excepted: the contract fsyncs there);
+  * no washer_debt (close and suspend excepted) and no wash from a call
+    that leaves the pen here: in range, down, or its leave not yet run;
   * a render_page limited to a region changes nothing outside it (the
     region-limited rebuild equals a full one).
 
@@ -30,8 +32,11 @@ against the page file it never reached.
 Then the scripted properties: arm timing, io_error, fsync timing, page
 turns blocked under a down pen (and a load that lands under one), undo
 and redo by swipe and by button, the stroke eraser, rubber and tip
-eraser records, the panel flows, swipe directions in all four
-rotations, palm vetoes, suspend and resume, SYN_DROPPED, the action-id
+eraser records, the panel flows, pen taps on the panel (and every pen
+contact on it that is not a tap: drags, long presses, the rubber, cut
+contacts; a pen-chosen setting written at the leave), two-finger undo
+and redo that neither turn nor open the panel, swipe directions in all
+four rotations, palm vetoes, suspend and resume, SYN_DROPPED, the action-id
 guard, stale and failed loads, close, prefs cleaning, and the log line.
 Then the rules against each other: a tool switch mid-stroke (with and
 without a load pending), strokes and erases under a pending load, undo
@@ -40,7 +45,17 @@ resync into range, a controller reused after close, suspend and rotation
 with the panel open, rotation mid-drag, a flick at exactly the
 threshold, three fingers on the panel, activity rate limits, the action
 guard's exact boundary, the eraser's reach at its edge, fsync page order,
-and each kind of failed write.  Live ink is checked against Brush.render
+and each kind of failed write.  The idle washer's ghost debt (area and
+stroke erases, undo and redo by finger and by pen, each way the panel
+closes; charged at the leave or the touch's end, never for ink or
+Refresh) and the Refresh button (the panel hidden and its place
+published, the settle wait counted from the glue's publish, deferred by
+a pen present or arriving, restarted by a paint or a rotation, dropped
+by a turn, a widget on top, suspend and close, working after io_error,
+and a clock that moves on every read).  Every call is also checked for
+a wash within the settle wait of a paint, or in a list that shows a
+page, as the Session runs the glue's published() after each publish.
+Live ink is checked against Brush.render
 of the replayed record, span for span, and every session's buffer
 against a render of its replay.
 
@@ -335,6 +350,12 @@ local function fmt(cmd)
                or "panel(hide)"
     elseif op == "washer_charge" then
         return "washer"
+    elseif op == "washer_debt" then
+        return "debt(" .. num(cmd.n) .. ")"
+    elseif op == "publish" then
+        return "publish(paint)"
+    elseif op == "wash" then
+        return "wash"
     elseif op == "activity" then
         return "activity"
     elseif op == "schedule" then
@@ -369,8 +390,13 @@ local INK = "ink(black/solid) publish"
 local WHITE = "ink(white/solid) publish"
 local function j(...) return concat({ ... }, " ") end
 
-local QUIET = { activity = true, touch_down_changed = true, schedule = true }
-local SHOW_TIMER = { activity = true, touch_down_changed = true }
+-- The washer's ghost debt is left out of most comparisons: the section
+-- "Ghost debt" shows it (SHOW_DEBT), and the Session checks its timing in
+-- every call.
+local QUIET = { activity = true, touch_down_changed = true, schedule = true,
+                washer_debt = true }
+local SHOW_TIMER = { activity = true, touch_down_changed = true, washer_debt = true }
+local SHOW_DEBT = { activity = true, touch_down_changed = true, schedule = true }
 
 local function seq(cmds, drop)
     drop = drop or QUIET
@@ -457,9 +483,15 @@ local function new_session(o)
     S.armed, S.failed = false, false
     S.violations = {}
     S.appends, S.logs, S.log_lines, S.washers = 0, 0, {}, 0
+    S.debt, S.washes = 0, 0
     S.skipped = 0
+    S.painted_t = nil -- NOW at the last command that changed the screen
     return S
 end
+
+-- Commands that change what the glass shows: a wash sooner than the
+-- settle wait after one of them could wash a paint still on its way.
+local PAINT_OPS = { panel = true, repaint = true, publish = true, ink = true }
 
 function Session:violate(what)
     if #self.violations < 5 then self.violations[#self.violations + 1] = what end
@@ -468,6 +500,7 @@ end
 
 function Session:_track(cmd)
     local op = cmd.op
+    if PAINT_OPS[op] then self.painted_t = NOW end
     if op == "arm" then
         if self.failed then self:violate("arm after io_error") end
         self.armed = true
@@ -515,6 +548,53 @@ function Session:_track(cmd)
         self.log_lines[#self.log_lines + 1] = cmd.line
     elseif op == "washer_charge" then
         self.washers = self.washers + 1
+    elseif op == "washer_debt" then
+        if type(cmd.n) ~= "number" or cmd.n <= 0 then self:violate("empty washer_debt") end
+        self.debt = self.debt + cmd.n
+    elseif op == "wash" then
+        self.washes = self.washes + 1
+        -- Realtime stepping back (NOW before the paint) washes at once, by
+        -- design; otherwise the wash waits out the settle after any paint.
+        local settle, pt = self.cfg.refresh_settle_us or 0, self.painted_t
+        if pt and NOW >= pt and NOW - pt < settle then
+            self:violate(format("wash %s us after a paint", num(NOW - pt)))
+        end
+    end
+end
+
+-- What the glue does after a publish command: tell the controller when,
+-- by its own clock, and run what that returns.
+function Session:_published(ran)
+    local c = self.c
+    local out = c:published(c.now_rt_us())
+    for _, cmd in ipairs(out) do
+        ran[#ran + 1] = cmd
+        self:_track(cmd)
+    end
+end
+
+-- The pen is here: in range, down, or not yet gone for prox_leave_us.
+local function pen_here(c)
+    return c:pen_in_range() or c.pen_down or c.leave_at ~= nil
+end
+
+-- A washer_debt (close and suspend excepted, which charge what the pen
+-- left) and a wash only ever come from a call that leaves the pen away.
+function Session:_check_pen_away(name, cmds)
+    -- A wash never rides a page turn, whoever holds the pen.
+    local wash, turn = false, false
+    for _, cmd in ipairs(cmds) do
+        if cmd.op == "wash" then wash = true end
+        if cmd.op == "washer_charge" then turn = true end
+    end
+    if wash and turn then self:violate("wash with a page shown, from " .. name) end
+    if not pen_here(self.c) then return end
+    for _, cmd in ipairs(cmds) do
+        if cmd.op == "wash" then
+            self:violate("wash from " .. name .. " with the pen here")
+        elseif cmd.op == "washer_debt" and name ~= "close" and name ~= "suspend" then
+            self:violate("washer_debt from " .. name .. " with the pen here")
+        end
     end
 end
 
@@ -549,12 +629,14 @@ function Session:run(name, ...)
             else
                 self:_track(cmd)
                 if cmd.op == "fsync" then has_fsync = true end
+                if cmd.op == "publish" then self:_published(ran) end
             end
         end
     end
     if has_fsync and name ~= "close" and name ~= "suspend" and c:pen_in_range() then
         self:violate("fsync from " .. name .. " with the pen in range")
     end
+    self:_check_pen_away(name, ran)
     if name == "io_error" then self.failed = true end
     if err then append_all(ran, self:run("io_error", err, err_cmd)) end
     return ran
@@ -563,15 +645,18 @@ end
 -- Intents straight into the dispatcher (orders nb_input cannot produce,
 -- such as a swipe under a hovering pen), tracked like any call.
 function Session:inject(intents)
-    local out = {}
+    local out, ran = {}, {}
     self.c:_run(intents, out)
     for _, cmd in ipairs(out) do
+        ran[#ran + 1] = cmd
         self:_track(cmd)
         if cmd.op == "fsync" and self.c:pen_in_range() then
             self:violate("fsync from injected intents with the pen in range")
         end
+        if cmd.op == "publish" then self:_published(ran) end
     end
-    return out
+    self:_check_pen_away("injected intents", ran)
+    return ran
 end
 
 function Session:open(n, page)
@@ -905,8 +990,9 @@ end
 
 do
     -- With the panel open, the panel update a stroke erase makes (its
-    -- record clears Redo) waits for the leave with the render: nothing
-    -- page-scale or panel-sized is painted while the pen is in range.
+    -- record clears Redo) shows at the pen-up, since the hovering pen can
+    -- tap Redo; the render waits for the leave: nothing page-scale is
+    -- painted while the pen is in range.
     local W1 = live_session({ prefs = { brush = "ballpoint" } })
     three_lines(W1, 0)
     local S = session_on(W1.lines[0], { prefs = { mode = "stroke_erase" } })
@@ -916,13 +1002,14 @@ do
     report(S.c:_panel_state().can_redo, "stroke erase, panel open: an undo enables Redo")
     S:ev(hover_in(4000, "pen", 900, 650))
     local got = S:ev((down(4010, { { 900, 650 }, { 900, 700 }, { 900, 750 } })))
-    expect("stroke erase, panel open: at pen-up only the record; render and panel wait",
-           got, j(WHITE, "append(p0 x4[2]) log"))
-    got = S:ev(hover_out(4100, "pen"))
     local L = S.layout
-    expect("stroke erase, panel open: the leave syncs, renders, then updates the panel",
+    expect("stroke erase, panel open: at pen-up the record and the panel; the render waits",
+           got, j(WHITE, "append(p0 x4[2]) disarm", format("panel(%d,%d)", L.x, L.y),
+                  "log"))
+    got = S:ev(hover_out(4100, "pen"))
+    expect("stroke erase, panel open: the leave syncs and renders",
            got, j("fsync(p0) disarm render(p0 1 " .. RB .. ") repaint(" .. RB .. ")",
-                  format("panel(%d,%d)", L.x, L.y), "hold(off)"))
+                  "hold(off)"))
     report(not S.c:_panel_state().can_redo, "stroke erase, panel open: Redo is off")
     S:check("stroke erase, panel open")
 end
@@ -1096,7 +1183,7 @@ do
     append_all(got, S:ev(slice(evs, 10)))
     -- What the two inked samples covered, which the render takes back.
     local y300 = G.raw_to_px(RY(300), YMAX, H)
-    local R = region_of({ Brush.bbox(Brush.style("fine", "M", "pen", base_cfg),
+    local R = region_of({ Brush.bbox(Brush.style("ballpoint", "M", "pen", base_cfg),
         { { x = G.raw_to_px(RX(300), XMAX, W), y = y300, p = 2000 },
           { x = G.raw_to_px(RX(320), XMAX, W), y = y300, p = 2000 } }) })
     expect("io_error mid-stroke: the stroke is dropped and its ink rebuilt away", got,
@@ -1306,14 +1393,14 @@ do
     expect("prox in with the panel open: the panel's rect at 0x20 after the canvas", got,
            format("hold(on) arm(0,0,1872,1404/0x00;%d,%d,%d,%d/0x20)", px, py, pw, ph))
     got = S:ev((down(4010, { { 200, 200 }, { 220, 200 } })))
-    expect("a stroke with the panel open: Undo turns on, but the panel waits", got,
+    expect("a stroke with the panel open: Undo turns on, shown at the pen-up", got,
            j("ink(darken/bayer4/0.633) publish ink(darken/bayer4/0.633) publish",
-             "append(p0 s1 pen) log"))
+             "append(p0 s1 pen) disarm", pos, "log"))
     local ux, uy = G.to_logical(0, W, H, S:button("undo"))
-    report(S.c.pn:hit(ux, uy) == "undo", "the panel's hit test already has Undo enabled")
+    report(S.c.pn:hit(ux, uy) == "undo", "the panel's hit test has Undo enabled")
     got = S:ev(hover_out(4100, "pen"))
-    expect("prox out: fsync, then the waiting panel update, then the hold", got,
-           "fsync(p0) disarm " .. pos .. " hold(off)")
+    expect("prox out: fsync, then the hold; no panel update left", got,
+           "fsync(p0) hold(off)")
 
     -- Drag by the title bar.
     local tx, ty = S:button("title")
@@ -1366,6 +1453,343 @@ do
     got = S:long_press(14000, ttx, tty)
     expect("a long press on the panel does nothing", got, "")
     S:check("panel")
+end
+
+------------------------------------------------------------------------
+-- The pen on the panel
+------------------------------------------------------------------------
+
+do
+    local S = live_session()
+    S:ev((visit(0, "pen", { { 200, 300 }, { 400, 300 } })))
+    S:long_press(1000, 900, 700)
+    local L = S.layout
+    local pos = format("panel(%d,%d)", L.x, L.y)
+    local px, py, pw, ph = G.rect_to_physical(0, W, H, L.x, L.y, L.w, L.h)
+    local ARMP = format("arm(0,0,1872,1404/0x00;%d,%d,%d,%d/0x20)", px, py, pw, ph)
+    local function pen_tap(t, id, tool)
+        local x, y = S:button(id)
+        return S:ev((visit(t, tool or "pen", { { x, y } })))
+    end
+    local appends = S.appends
+
+    local got = pen_tap(2000, "brush:pencil")
+    expect("a pen tap on a brush: the panel at once; the prefs write waits for the leave",
+           got, j("hold(on)", ARMP, "disarm", pos, "prefs(pencil,-,-,- last) hold(off)"))
+    report(S.c:_pref("brush") == "pencil" and S.appends == appends
+           and #ops(got, "ink") == 0 and #ops(got, "log") == 0,
+           "the pen tap chose Pencil, and inked, journaled and logged nothing")
+
+    -- The prefs write is the leave's, after the page fsync.
+    S:ev(hover_in(2500, "pen", 200, 1200))
+    S:ev((down(2510, { { 200, 1200 }, { 300, 1200 } })))
+    local x, y = S:button("size:L")
+    got = S:ev((down(2600, { { x, y } })))
+    expect("a pen tap in range: the panel shows it, no write while the pen hovers", got,
+           "disarm " .. pos)
+    got = S:ev(hover_out(2700, "pen"))
+    expect("the leave: the page's fsync, then the prefs, then the hold", got,
+           "fsync(p0) prefs(pencil,L,-,- last) hold(off)")
+
+    appends = S.appends
+    got = pen_tap(3000, "undo")
+    local R = rect(region_of(J.decode(S.lines[0][2]).bb))
+    expect("a pen tap on Undo: the append and repaint at once, the fsync at the leave",
+           got, j("hold(on)", ARMP, "append(p0 u2) disarm render(p0 1 " .. R .. ")", pos,
+                  "repaint(" .. R .. ") fsync(p0) hold(off)"))
+    got = pen_tap(3500, "redo")
+    expect("a pen tap on Redo", got,
+           j("hold(on)", ARMP, "append(p0 r2) disarm render(p0 2 " .. R .. ")", pos,
+             "repaint(" .. R .. ") fsync(p0) hold(off)"))
+    report(S.appends == appends + 2, "Undo and Redo by pen appended their records only")
+
+    -- What the pen does on the panel that is not a tap: nothing at all.
+    -- The plane stays armed between these visits, so the arms are left
+    -- out of the comparisons from here on.
+    local NOARM = { activity = true, touch_down_changed = true, schedule = true,
+                    arm = true, washer_debt = true }
+    local tx, ty = S:button("title")
+    got = S:ev((visit(4000, "pen", { { tx, ty }, { tx + 50, ty + 20 }, { tx + 100, ty + 40 } })))
+    expect("a pen drag from the title bar moves nothing", got, "hold(on) hold(off)", NOARM)
+    local bx, by = S:button("brush:marker")
+    got = S:ev((visit(4500, "pen", { { bx, by }, { bx, by + 300 }, { bx, by + 600 } })))
+    expect("a pen contact from a button out onto the canvas inks nothing and taps nothing",
+           got, "hold(on) hold(off)", NOARM)
+    local held = {}
+    for i = 1, 140 do held[i] = { bx, by } end
+    got = S:ev((visit(5000, "pen", held)))
+    expect("a pen held on a button past tap_max_us taps nothing", got,
+           "hold(on) hold(off)", NOARM)
+    -- The digitizer's unit quantizes a px distance by ~0.05 px, so the
+    -- slop is checked a whole px either side.
+    local slop = base_cfg.tap_slop_px
+    got = S:ev((visit(6000, "pen", { { bx, by }, { bx + slop + 1, by } })))
+    expect("a pen tap that slides a px past tap_slop_px taps nothing", got,
+           "hold(on) hold(off)", NOARM)
+    got = S:ev((visit(6500, "pen", { { bx, by }, { bx + slop - 1, by } })))
+    expect("a pen tap that slides a px short of tap_slop_px is a tap", got,
+           j("hold(on) disarm", pos, "prefs(marker,L,-,- last) hold(off)"), NOARM)
+    got = pen_tap(7000, "brush:fine", "rubber")
+    expect("the rubber end tapping a button does nothing, and erases nothing", got,
+           "hold(on) hold(off)", NOARM)
+    report(S.c:_pref("brush") == "marker" and S.appends == appends + 2,
+           "none of those but the one tap chose, inked or journaled anything")
+
+    got = pen_tap(8000, "close")
+    expect("a pen tap on Close hides the panel", got,
+           "hold(on) disarm panel(hide) hold(off)", NOARM)
+    -- With the panel closed, the same place is canvas: the pen inks there,
+    -- and a long pen press is ink, never the panel.
+    held = {}
+    for i = 1, 300 do held[i] = { bx, by } end
+    got = S:ev((visit(9000, "pen", held)))
+    report(#ops(got, "ink") > 0 and #ops(got, "panel") == 0 and not S.c.pn:is_open(),
+           "with the panel closed the pen inks, and a long pen press opens no panel")
+    S:check("pen on the panel")
+end
+
+do
+    -- The panel's page buttons by pen: the turn runs after the lift.
+    local S = live_session()
+    S:long_press(0, 900, 700)
+    local x, y = S:button("page:next")
+    local got = S:ev((visit(1000, "pen", { { x, y } })))
+    append_all(got, S:loaded(1))
+    local L = S.layout
+    expect("a pen tap on Next turns the page once the tip lifts", got,
+           j("hold(on)", format("arm(0,0,1872,1404/0x00;%d,%d,%d,%d/0x20)",
+                                G.rect_to_physical(0, W, H, L.x, L.y, L.w, L.h)),
+             "disarm load(p1) hold(off) disarm render(p1 0)",
+             format("panel(%d,%d)", L.x, L.y), "repaint washer"))
+    report(S.c.page_n == 1, "the pen turned to page 1")
+
+    -- A contact cut by SYN_DROPPED, a sleep or a dialog taps nothing.
+    x, y = S:button("page:prev")
+    local evs = steps(hover_in(2000, "pen", x, y), pen(2005, "TOUCH", 1, "P", 2000,
+                                                      "X", RX(x), "Y", RY(y)))
+    S:ev(evs)
+    got = S:ev(steps(pen_drop(2008), pen(2009, "TOUCH", 0, "P", 0)))
+    report(#ops(got, "load_page") == 0 and #ops(got, "resync_pen") == 1,
+           "a pen tap cut by SYN_DROPPED taps nothing", seq(got))
+    S:run("resync", { prox = true, tool = "pen", touching = false }, ms(2010))
+    S:ev(pen(2020, "TOUCH", 1, "P", 2000, "X", RX(x), "Y", RY(y)))
+    S:run("suspend")
+    S:run("resume", { prox = true, tool = "pen", touching = true })
+    got = S:ev(pen(2030, "TOUCH", 0, "P", 0))
+    report(#ops(got, "load_page") == 0, "a pen tap a suspend cut taps nothing", seq(got))
+    S:ev(pen(2040, "TOUCH", 1, "P", 2000, "X", RX(x), "Y", RY(y)))
+    S:run("set_ink_live", false)
+    got = S:ev(pen(2050, "TOUCH", 0, "P", 0))
+    report(#ops(got, "load_page") == 0, "a pen tap a dialog cut taps nothing", seq(got))
+    got = S:ev((down(2060, { { x, y } })))
+    report(#ops(got, "load_page") == 0 and #ops(got, "ink") == 0,
+           "under a dialog a pen tap on the panel does nothing", seq(got))
+    S:run("set_ink_live", true)
+    got = S:ev((down(2100, { { x, y } })))
+    append_all(got, S:loaded(0))
+    report(S.c.page_n == 0, "back on top, a pen tap on Prev turns back", seq(got))
+    S:ev(hover_out(2200, "pen"))
+    S:check("pen on the panel's page buttons")
+end
+
+do
+    -- After a failed write the panel still answers the pen, as it does a
+    -- finger; the canvas takes no more ink.
+    local S = live_session()
+    S:long_press(0, 900, 700)
+    S:run("io_error", "EIO /data/notebooks")
+    local x, y = S:button("close")
+    local got = S:ev((visit(1000, "pen", { { x, y } })))
+    report(#ops(got, "panel") == 1 and ops(got, "panel")[1].layout == nil
+           and #ops(got, "arm") == 0,
+           "after io_error a pen tap on Close still hides the panel", seq(got))
+    S:check("pen on the panel after io_error")
+end
+
+do
+    -- The pen taps the panel from a hover, so the panel on the glass must
+    -- be the one its tap hits: what the pen's own ink changes there (Undo
+    -- turning on, Redo turning off) shows at the pen-up, not at the leave.
+    local S = live_session()
+    S:long_press(0, 900, 700)
+    local L = S.layout
+    local function shown(id)
+        for _, it in ipairs(S.layout.items) do
+            if it.id == id then return it.enabled end
+        end
+    end
+    -- Strokes well clear of the panel, left of it.
+    local x0, x1 = 100, math.min(300, L.x - 50)
+    report(shown("undo") == false and shown("redo") == false and x1 > x0,
+           "a blank page shows Undo and Redo off", format("panel x=%d", L.x))
+    S:ev(hover_in(1000, "pen", x0, 300))
+    local got = S:ev((down(1010, { { x0, 300 }, { x1, 300 } })))
+    report(shown("undo") == true and #ops(got, "panel") == 1
+           and S.c:pen_in_range(),
+           "the first stroke's pen-up shows Undo on while the pen hovers",
+           seq(got))
+    local x, y = S:button("undo")
+    S:ev((down(1100, { { x, y } })))
+    report(shown("redo") == true and shown("undo") == false,
+           "a pen tap on Undo shows Redo on and Undo off")
+    got = S:ev((down(1200, { { x0, 500 }, { x1, 500 } })))
+    report(shown("redo") == false and shown("undo") == true
+           and #ops(got, "panel") == 1,
+           "new ink drops the redo target: Redo shows off at the pen-up",
+           seq(got))
+    local appends = S.appends
+    x, y = S:button("redo")
+    got = S:ev((down(1300, { { x, y } })))
+    report(S.appends == appends and #ops(got, "panel") == 0,
+           "a pen tap on the Redo shown off does nothing", seq(got))
+    -- A second stroke changes nothing the panel shows: no repaint.
+    got = S:ev((down(1400, { { x0, 700 }, { x1, 700 } })))
+    report(#ops(got, "panel") == 0, "ink that changes nothing on the panel repaints no panel",
+           seq(got))
+    got = S:ev(hover_out(1500, "pen"))
+    report(#ops(got, "panel") == 0, "the leave has no panel update left to show", seq(got))
+    S:check("the panel under a hovering pen")
+end
+
+do
+    -- A quick stroke that starts just outside the panel and lifts on a
+    -- button, well inside tap_max_us: a stroke, recorded whole, never a
+    -- tap.  Only where the tip landed decides.
+    local S = live_session()
+    S:long_press(0, 900, 700)
+    local L = S.layout
+    local bx, by = S:button("brush:marker")
+    local got = S:ev((visit(1000, "pen", { { L.x - 5, by }, { L.x + 20, by },
+                                           { bx, by } })))
+    local rec = decode_last(S)
+    report(S.c:_pref("brush") == "ballpoint" and S.appends == 1 and rec.k == "s"
+           and #rec.d == 18 and rec.brush == "ballpoint" and #ops(got, "ink") > 0,
+           "a stroke from the canvas onto a button inks and records all of it,"
+           .. " and taps nothing", seq(got))
+    S:check("a stroke onto the panel")
+end
+
+do
+    -- A proximity dropout splits a contact into two strokes (nb_input),
+    -- the second beginning where the nib is.  A stroke from the canvas
+    -- cut over a button, then lifted there at once, is the rest of a
+    -- stroke, not a tap: it must not choose, turn or close anything.
+    -- (The rest itself inks nothing: it began on the panel.)
+    local S = live_session()
+    S:long_press(0, 900, 700)
+    local L = S.layout
+    local bx, by = S:button("nb:close")
+    S:ev(hover_in(1000, "pen", L.x - 100, by))
+    local got = S:ev(pen(1005, "TOUCH", 1, "P", 2000, "X", RX(L.x - 100), "Y", RY(by)))
+    append_all(got, S:ev(pen(1008, "X", RX(bx), "Y", RY(by))))
+    append_all(got, S:ev(pen(1011, "PEN", 0)))
+    append_all(got, S:ev(pen(1040, "PEN", 1, "TOUCH", 1, "P", 4095, "X", RX(bx),
+                             "Y", RY(by))))
+    append_all(got, S:ev(pen(1060, "TOUCH", 0, "P", 0)))
+    report(#ops(got, "close_notebook") == 0 and S.appends == 1
+           and decode_last(S).gap == 1,
+           "a stroke cut by a dropout over Exit records its first half and taps nothing",
+           seq(got))
+    -- A tap after the pen has truly left and come back is a tap again.
+    S:ev(hover_out(1100, "pen"))
+    got = S:ev((visit(1500, "pen", { { bx, by } })))
+    report(#ops(got, "close_notebook") == 1, "a fresh tap on Exit after the leave closes",
+           seq(got))
+    -- A tap a dropout cuts short at its start: the half after it is not
+    -- a tap either (the finger's rule: one contact, whole).
+    bx, by = S:button("brush:marker")
+    S:ev(hover_in(2000, "pen", bx, by))
+    S:ev(pen(2005, "TOUCH", 1, "P", 2000, "X", RX(bx), "Y", RY(by)))
+    S:ev(pen(2008, "PEN", 0))
+    got = S:ev(pen(2030, "PEN", 1, "TOUCH", 1, "P", 4095, "X", RX(bx), "Y", RY(by)))
+    append_all(got, S:ev(pen(2050, "TOUCH", 0, "P", 0)))
+    report(S.c:_pref("brush") == "ballpoint" and #ops(got, "panel") == 0,
+           "a pen tap split by a dropout chooses nothing", seq(got))
+    S:ev(hover_out(2100, "pen"))
+    S:check("a dropout over the panel")
+end
+
+do
+    -- The pen arrives while a finger drags the panel by its title bar:
+    -- the drag ends where it stands (the finger was a palm, as far as
+    -- the pen can tell), the pen's tap chooses, and the rest of the
+    -- finger's travel, even a flick, does nothing.
+    local S = live_session()
+    S:long_press(0, 900, 700)
+    local tx, ty = S:button("title")
+    S:ev(S.K.frame(1000, { { 0, id = tid(), x = tx, y = ty } }))
+    for i = 1, 3 do S:ev(S.K.frame(1000 + 20 * i, { { 0, x = tx + 20 * i } })) end
+    local dragged = S.layout.x
+    local bx, by = S:button("brush:pencil")
+    local got = S:ev((visit(1200, "pen", { { bx, by } })))
+    report(S.c:_pref("brush") == "pencil" and #ops(got, "panel") == 1
+           and S.layout.x == dragged,
+           "mid-drag, the pen's tap chooses; the panel stays where the drag left it",
+           seq(got))
+    got = {}
+    for i = 1, 3 do
+        append_all(got, S:ev(S.K.frame(1600 + 10 * i, { { 0, x = tx + 60 + 150 * i } })))
+    end
+    append_all(got, S:ev(S.K.frame(1640, { { 0, id = -1 } })))
+    report(#ops(got, "panel") == 0 and S.c.pn:is_open() and S.layout.x == dragged,
+           "the finger's travel after the pen came moves nothing, and its flick closes"
+           .. " nothing", seq(got))
+    S:check("the pen during a finger drag")
+end
+
+do
+    -- A two-finger swipe with the panel open, the fingers on the canvas:
+    -- the undo, shown on the open panel at once; no turn, and the panel
+    -- neither closes nor moves.
+    local S = live_session()
+    S:ev((visit(0, "pen", { { 100, 100 }, { 300, 100 } })))
+    S:long_press(1000, 900, 700)
+    local L = S.layout
+    local got = S:ev(three(S.K, 2000, { { 1500, 1150 }, { 1500, 1350 } }, -400, 0, 5, 20))
+    local P = ops(got, "panel")
+    local it
+    for _, x in ipairs(S.layout.items) do
+        if x.id == "redo" then it = x end
+    end
+    report(#ops(got, "append") == 1 and #P == 1 and P[1].layout
+           and P[1].layout.x == L.x and P[1].layout.y == L.y and it.enabled
+           and #ops(got, "load_page") == 0 and S.c.page_n == 0,
+           "two fingers with the panel open: an undo, Redo on at once, no turn,"
+           .. " the panel where it was", seq(got))
+    S:check("two fingers under the open panel")
+end
+
+------------------------------------------------------------------------
+-- Two fingers
+------------------------------------------------------------------------
+
+do
+    local S = live_session()
+    S:ev((visit(0, "pen", { { 200, 300 }, { 400, 300 } })))
+    S:ev((visit(100, "pen", { { 200, 800 }, { 400, 800 } })))
+    local LEFT2 = { { 1400, 500 }, { 1400, 800 } }
+    local RIGHT2 = { { 400, 500 }, { 400, 800 } }
+    local R = rect(region_of(J.decode(S.lines[0][2]).bb))
+    local got = S:ev(three(S.K, 2000, LEFT2, -400, 0, 5, 20))
+    expect("undo by a two-finger swipe left", got,
+           "append(p0 u2) disarm render(p0 1 " .. R .. ") repaint(" .. R .. ") fsync(p0)")
+    got = S:ev(three(S.K, 3000, RIGHT2, 400, 0, 5, 20))
+    expect("redo by a two-finger swipe right", got,
+           "append(p0 r2) disarm render(p0 2 " .. R .. ") repaint(" .. R .. ") fsync(p0)")
+    -- The fingers rest past the long-press time before they swipe.
+    local acts = { { 0, id = tid(), x = 1400, y = 500 }, { 1, id = tid(), x = 1400, y = 800 } }
+    got = S:ev(S.K.frame(4000, acts))
+    append_all(got, S:ev({ { timer = ms(4000 + base_cfg.longpress_us / 1000 + 100) } }))
+    for i = 1, 5 do
+        append_all(got, S:ev(S.K.frame(4900 + 20 * i, { { 0, x = 1400 - 80 * i },
+                                                        { 1, x = 1400 - 80 * i } })))
+    end
+    append_all(got, S:ev(S.K.frame(5020, { { 0, id = -1 }, { 1, id = -1 } })))
+    report(#ops(got, "panel") == 0 and #ops(got, "load_page") == 0
+           and #ops(got, "append") == 1 and S.c.page_n == 0,
+           "two fingers held past the long press, then swiped: an undo, no panel, no turn",
+           seq(got))
+    S:check("two fingers")
 end
 
 ------------------------------------------------------------------------
@@ -1717,7 +2141,7 @@ do
     report(ok and p.brush == nil and p.size == nil and p.mode == "erase"
            and p.rubber == "stroke" and p.last_id == ID and p.last_page[other] == 4
            and p.last_page.nope == nil and p.last_page[ID] == nil
-           and S.c:_panel_state().brush == Brush.IDS[1]
+           and S.c:_panel_state().brush == "ballpoint"
            and S.c:_panel_state().size == "M",
            "prefs: unknown values are dropped and read as the defaults, bad places are "
            .. "dropped, the result encodes",
@@ -1959,8 +2383,8 @@ do
     local ARM2 = format("arm(0,0,1872,1404/0x00;%d,%d,%d,%d/0x20)", px, py, pw, ph)
     S:ev(hover_in(2000, "pen", 200, 200))
     local got = S:ev((down(2010, { { 200, 200 }, { 240, 200 } })))
-    expect("panel open: a stroke's panel update waits", got,
-           j(INK, INK, "append(p0 s1 pen) log"))
+    expect("panel open: a stroke's panel update shows at the pen-up", got,
+           j(INK, INK, "append(p0 s1 pen) disarm", pos, "log"))
     got = S:run("suspend")
     expect("suspend with the panel open: fsync, disarm, the place; the panel stays", got,
            "fsync(p0) disarm prefs(-,-,-,- last p=0)")
@@ -1969,19 +2393,35 @@ do
     got = S:run("resume", { prox = true, tool = "pen", touching = false })
     expect("resume with the pen in range: the canvas and the panel armed again", got, ARM2)
     got = S:ev(hover_out(60100, "pen"))
-    expect("then prox out shows the waiting panel update (nothing left to sync)", got,
-           j("disarm", pos, "hold(off)"))
+    expect("then prox out: nothing was left waiting", got, "hold(off)")
 
-    -- The same, but the pen leaves while the device sleeps.  An undo
-    -- first, so the new stroke's cleared Redo is a change to show.
+    -- A stroke the sleep cuts short: suspend paints nothing, so the
+    -- update it makes (its cleared Redo; an undo first) waits for the
+    -- resume and the pen's leave.  With the pen still in range at the
+    -- resume, the leave shows it.
     S:ev(three(S.K, 61000, LEFT3, -400, 0, 5, 20))
     got = S:ev(hover_in(62000, "pen", 200, 400))
-    append_all(got, S:ev((down(62010, { { 200, 400 } }))))
-    expect("panel open: prox in arms both rects; new ink clears Redo; the update waits",
-           got, j("hold(on)", ARM2, INK, "append(p0 s2 pen) log"))
+    append_all(got, S:ev(pen(62010, "TOUCH", 1, "P", 2000, "X", RX(200), "Y", RY(400))))
+    expect("panel open: prox in arms both rects; the pen goes down", got,
+           j("hold(on)", ARM2, INK))
     got = S:run("suspend")
-    expect("suspend: the stroke synced; the place unchanged, so no prefs", got,
-           "fsync(p0) disarm")
+    expect("suspend mid-stroke: the stroke recorded and synced; no panel painted", got,
+           "append(p0 s2 pen gap) log fsync(p0) disarm")
+    report(S.c.panel_stale == true, "the panel update the cut stroke made is waiting")
+    NOW = ms(90000)
+    got = S:run("resume", { prox = true, tool = "pen", touching = false })
+    expect("resume with the pen in range: armed again, the update still waiting", got,
+           ARM2)
+    got = S:ev(hover_out(90100, "pen"))
+    expect("the leave shows the waiting update, then releases the hold", got,
+           j("disarm", pos, "hold(off)"))
+
+    -- The same, but the pen leaves while the device sleeps: the resume's
+    -- resync schedules the leave, which shows it.
+    S:ev(three(S.K, 91000, LEFT3, -400, 0, 5, 20))
+    S:ev(hover_in(92000, "pen", 200, 600))
+    S:ev(pen(92010, "TOUCH", 1, "P", 2000, "X", RX(200), "Y", RY(600)))
+    S:run("suspend")
     NOW = ms(120000)
     got = S:run("resume", { prox = false, touching = false })
     append_all(got, S:ev({ { timer = ms(120000 + LEAVE_MS) } }))
@@ -2004,7 +2444,8 @@ do
            .. "arms the panel's new rect",
            got, j("disarm", seq({ { op = "panel", layout = L } }),
                   format("arm(0,0,1872,1404/0x00;%d,%d,%d,%d/0x20)", px, py, pw, ph),
-                  INK, "append(p0 s1 pen) log"))
+                  INK, "append(p0 s1 pen) disarm", seq({ { op = "panel", layout = L } }),
+                  "log"))
     local rec = decode_last(S)
     report(rec.rot == 1, "the record keeps the rotation mode at pen-down", num(rec.rot))
     S:check("rotation in range")
@@ -2357,8 +2798,9 @@ end
 do
     -- The stroke eraser's reach at its edge, in all four directions: fine
     -- lines 13 px from the eraser's centre are inside eraser rmin 12 plus
-    -- the line's 1.35 px radius, lines 14 px away are not.
-    local W1 = live_session()
+    -- the line's 1.35 px radius, lines 14 px away are not.  Fine is
+    -- chosen: the default brush's radius follows pressure.
+    local W1 = live_session({ prefs = { brush = "fine" } })
     local cx, cy = 900, 700
     local t = 0
     for _, dir in ipairs({ { -1, 0 }, { 1, 0 }, { 0, -1 }, { 0, 1 } }) do
@@ -2452,6 +2894,429 @@ do
     report(rec.rot == 0 and rec.gap == 0, "a rotation mid-stroke: the record keeps mode 0",
            num(rec.rot))
     S:check("rotation mid-stroke")
+end
+
+------------------------------------------------------------------------
+-- Ghost debt (the idle washer's)
+------------------------------------------------------------------------
+
+-- Only the listed ops, as tokens: what a check is about, whatever else
+-- the list holds.
+local function only(cmds, keep)
+    local t = {}
+    for _, c in ipairs(cmds) do
+        if keep[c.op] then t[#t + 1] = fmt(c) end
+    end
+    return concat(t, " ")
+end
+
+local function expect_only(label, cmds, want, keep)
+    local got = only(cmds, keep)
+    report(got == want, label,
+           got == want and "" or ("\n  got:  " .. got .. "\n  want: " .. want))
+end
+
+local DEBT_KEEP = { washer_debt = true, fsync = true, rotation_hold = true,
+                    append = true, panel = true }
+
+do
+    -- Area erases by the rubber: nothing at each pen-up, one charge for
+    -- the whole visit at the leave, after its fsync.
+    local S = live_session({ prefs = { brush = "marker" } })
+    S:ev((visit(0, "pen", { { 400, 400 }, { 800, 400 } })))
+    report(S.debt == 0, "ghost debt: ink is not charged", num(S.debt))
+    local got = S:ev(hover_in(1000, "rubber", 500, 380))
+    local at_up = 0
+    for i = 0, 2 do
+        local lst = S:ev((down(1010 + 100 * i, { { 500 + 100 * i, 380 },
+                                                  { 500 + 100 * i, 420 } }, 500)))
+        at_up = at_up + #ops(lst, "washer_debt")
+        append_all(got, lst)
+    end
+    report(at_up == 0 and S.debt == 0,
+           "ghost debt: an area erase charges nothing at its pen-up (the pen is in range)")
+    append_all(got, S:ev(hover_out(1400, "rubber")))
+    expect_only("ghost debt: three area erases in one visit are one charge of 3, at the leave",
+                got, "hold(on) append(p0 s2 eraser) append(p0 s3 eraser) append(p0 s4 eraser)"
+                     .. " fsync(p0) hold(off) debt(3)", DEBT_KEEP)
+    S:check("ghost debt: rubber")
+end
+
+do
+    -- The tip in Erase mode is an area erase too; Write is not.
+    local S = live_session({ prefs = { mode = "erase" } })
+    local got = S:ev((visit(0, "pen", { { 400, 400 }, { 800, 400 } })))
+    expect_only("ghost debt: the tip in Erase mode charges one at the leave", got,
+                "hold(on) append(p0 s1 eraser) fsync(p0) hold(off) debt(1)", DEBT_KEEP)
+    S:check("ghost debt: tip erase")
+end
+
+do
+    -- A stroke erase charges when it removed strokes, not when it hit
+    -- nothing.
+    local W1 = live_session({ prefs = { brush = "ballpoint" } })
+    three_lines(W1, 0)
+    local S = session_on(W1.lines[0], { prefs = { mode = "stroke_erase" } })
+    local got = S:ev((visit(1000, "pen", { { 900, 650 }, { 900, 750 } })))
+    expect_only("ghost debt: a stroke erase that removed a stroke charges one at the leave",
+                got, "hold(on) append(p0 x4[2]) fsync(p0) hold(off) debt(1)", DEBT_KEEP)
+    got = S:ev((visit(2000, "pen", { { 100, 1000 }, { 150, 1000 } })))
+    expect_only("ghost debt: a stroke erase that hit nothing charges nothing", got,
+                "hold(on) hold(off)", DEBT_KEEP)
+    S:check("ghost debt: stroke erase")
+end
+
+do
+    -- Undo and redo by fingers charge in their own list, at the touch's
+    -- end; one with nothing to undo charges nothing.
+    local S = live_session()
+    S:ev((visit(0, "pen", { { 200, 300 }, { 400, 300 } })))
+    local got = S:ev(three(S.K, 1000, LEFT3, -400, 0, 5, 20))
+    expect_only("ghost debt: a finger undo charges one at the swipe's end", got,
+                "append(p0 u1) fsync(p0) debt(1)", DEBT_KEEP)
+    got = S:ev(three(S.K, 2000, RIGHT3, 400, 0, 5, 20))
+    expect_only("ghost debt: a finger redo charges one", got,
+                "append(p0 r1) fsync(p0) debt(1)", DEBT_KEEP)
+    got = S:ev(three(S.K, 3000, RIGHT3, 400, 0, 5, 20))
+    expect_only("ghost debt: a redo with nothing to redo charges nothing", got, "", DEBT_KEEP)
+
+    -- Undo and Redo by pen taps charge at the leave, together.
+    S:long_press(4000, 900, 700)
+    local pos = format("panel(%d,%d)", S.layout.x, S.layout.y)
+    local ux, uy = S:button("undo")
+    local rx, ry = S:button("redo")
+    got = S:ev(hover_in(6000, "pen", ux, uy))
+    local lst = S:ev((down(6010, { { ux, uy } })))
+    append_all(lst, S:ev((down(6100, { { rx, ry } }))))
+    report(#ops(lst, "washer_debt") == 0 and S.debt == 2,
+           "ghost debt: pen taps on Undo and Redo charge nothing while the pen hovers",
+           num(S.debt))
+    append_all(got, lst)
+    append_all(got, S:ev(hover_out(6200, "pen")))
+    expect_only("ghost debt: the pen's Undo and Redo are one charge of 2 at the leave", got,
+                j("hold(on) append(p0 u1)", pos, "append(p0 r1)", pos,
+                  "fsync(p0) hold(off) debt(2)"), DEBT_KEEP)
+    S:check("ghost debt: undo and redo")
+end
+
+do
+    -- The panel: opening and dragging charge nothing; each close charges
+    -- one (Close by finger or pen, a flick, the pen taking a palm's long
+    -- press back); Refresh charges nothing (it washes).
+    local S = live_session()
+    local got = S:long_press(0, 900, 700)
+    local tx, ty = S:button("title")
+    append_all(got, S:ev(finger(S.K, 1000, tx, ty, tx + 100, ty + 50, 5, 40)))
+    report(#ops(got, "washer_debt") == 0 and #ops(got, "panel") > 1,
+           "ghost debt: opening and dragging the panel charge nothing")
+    got = S:tap_button("close", 2000)
+    expect_only("ghost debt: the Close button charges one, after the hide", got,
+                "panel(hide) debt(1)", DEBT_KEEP)
+
+    S:long_press(3000, 900, 700)
+    tx, ty = S:button("title")
+    got = S:ev(finger(S.K, 4000, tx, ty, tx + 400, ty, 4, 10))
+    report(only(got, DEBT_KEEP):match("panel%(hide%) debt%(1%)$") ~= nil,
+           "ghost debt: a flick charges one, after the hide", only(got, DEBT_KEEP))
+
+    S:long_press(5000, 900, 700)
+    local cx, cy = S:button("close")
+    got = S:ev((visit(6000, "pen", { { cx, cy } })))
+    expect_only("ghost debt: a pen tap on Close charges one at the leave", got,
+                "hold(on) panel(hide) hold(off) debt(1)", DEBT_KEEP)
+
+    -- A palm rests past the long press, then the pen arrives over it.
+    got = S:ev(S.K.frame(7000, { { 0, id = tid(), x = 900, y = 700 } }))
+    append_all(got, S:ev({ { timer = ms(7000 + base_cfg.longpress_us / 1000) } }))
+    append_all(got, S:ev(hover_in(7900, "pen", 300, 300)))
+    append_all(got, S:ev(S.K.frame(7950, { { 0, id = -1 } })))
+    local before_leave = #ops(got, "washer_debt")
+    append_all(got, S:ev(hover_out(8000, "pen")))
+    report(before_leave == 0 and only(got, DEBT_KEEP):match("panel%(hide%) .*hold%(off%) debt%(1%)$")
+           ~= nil,
+           "ghost debt: the pen taking a palm's panel back charges one, at its leave",
+           only(got, DEBT_KEEP))
+
+    S:long_press(9000, 900, 700)
+    got = S:tap_button("refresh", 10000)
+    report(#ops(got, "washer_debt") == 0 and not S.c.pn:is_open(),
+           "ghost debt: Refresh closes the panel and charges nothing")
+    report(S.debt == 4, "ghost debt: four closes, four units", num(S.debt))
+    S:check("ghost debt: panel")
+end
+
+do
+    -- What the pen left owed goes out at suspend and at close, with the
+    -- pen still in range.
+    local S = live_session({ prefs = { rubber = "area" } })
+    S:ev(hover_in(0, "rubber", 500, 500))
+    S:ev((down(10, { { 500, 500 }, { 540, 500 } }, 500)))
+    local got = S:run("suspend")
+    expect_only("ghost debt: suspend charges what the hovering pen erased", got,
+                "fsync(p0) debt(1)", DEBT_KEEP)
+    S:run("resume", { prox = true, tool = "rubber", touching = false })
+    S:ev((down(100, { { 500, 600 }, { 540, 600 } }, 500)))
+    got = S:run("close")
+    expect_only("ghost debt: close charges it too", got,
+                "fsync(p0) hold(off) debt(1)", DEBT_KEEP)
+    S:check("ghost debt: suspend and close")
+end
+
+do
+    -- A stroke that ink going dead cuts short is charged at the leave, like
+    -- any other.
+    local S = live_session({ prefs = { mode = "erase" } })
+    S:ev(hover_in(0, "pen", 300, 300))
+    local evs = down(10, { { 300, 300 }, { 330, 300 }, { 360, 300 } })
+    S:ev(slice(evs, 1, 9))
+    local got = S:run("set_ink_live", false)
+    report(#ops(got, "washer_debt") == 0 and S.debt == 0,
+           "ghost debt: an erase cut by ink going dead charges nothing yet")
+    S:ev(slice(evs, 10))
+    got = S:ev(hover_out(100, "pen"))
+    expect_only("ghost debt: it is charged at the leave", got,
+                "fsync(p0) hold(off) debt(1)", DEBT_KEEP)
+    S:check("ghost debt: ink dead")
+end
+
+------------------------------------------------------------------------
+-- The Refresh button
+------------------------------------------------------------------------
+
+local SETTLE_MS = base_cfg.refresh_settle_us / 1000
+local WASH_KEEP = { panel = true, publish = true, wash = true, disarm = true,
+                    washer_debt = true }
+
+-- A session on a page with ink, the panel open by a long press at t_ms.
+local function refresh_session(t_ms, o)
+    local S = live_session(o)
+    S:ev((visit(0, "pen", { { 200, 300 }, { 400, 300 } })))
+    S:long_press(t_ms, 900, 700)
+    return S
+end
+
+-- The time the finger lifts in a tap_button at t_ms, as the Session
+-- stamps it (the lift's event time plus its latency).
+local function lift_ms(t_ms) return t_ms + 60 + 0.5 end
+
+do
+    report(base_cfg.refresh_settle_us > 0 and SETTLE_MS < base_cfg.palm_grace_us / 1000,
+           "refresh: the settle wait is set, and shorter than the palm grace",
+           num(SETTLE_MS) .. " ms")
+    local S = refresh_session(1000)
+    local got = S:tap_button("refresh", 2000)
+    expect_only("refresh by finger: the panel hides, its paint is published, no wash yet",
+                got, "disarm panel(hide) publish(paint)", WASH_KEEP)
+    local sch = ops(got, "schedule")
+    report(#sch > 0 and sch[#sch].delay_us == base_cfg.refresh_settle_us,
+           "refresh by finger: the timer is asked for the settle wait",
+           #sch > 0 and num(sch[#sch].delay_us) or "none")
+    got = S:ev({ { timer = ms(lift_ms(2000) + SETTLE_MS - 50) } })
+    expect("refresh by finger: an early timer asks for the rest of the wait", got,
+           "schedule(50000)", SHOW_TIMER)
+    got = S:ev({ { timer = ms(lift_ms(2000) + SETTLE_MS) } })
+    expect("refresh by finger: the wait over, a disarm and one wash", got, "disarm wash",
+           SHOW_TIMER)
+    got = S:ev({ { timer = ms(lift_ms(2000) + 5000) } })
+    report(S.washes == 1 and S.debt == 0 and #got == 0,
+           "refresh by finger: one wash, nothing charged, nothing after", seq(got))
+    S:check("refresh by finger")
+end
+
+do
+    -- By the pen tip: the pen still hovers, so the wait starts at its leave,
+    -- however long it stays, writing included.
+    local S = refresh_session(1000)
+    local x, y = S:button("refresh")
+    local got = S:ev(hover_in(2000, "pen", x, y))
+    append_all(got, S:ev((down(2010, { { x, y } }))))
+    expect_only("refresh by pen: the panel hides and its paint is published at the tip's lift",
+                got, "disarm panel(hide) publish(paint)", WASH_KEEP)
+    report(#ops(got, "schedule") == 0, "refresh by pen: no wait starts with the pen here",
+           seq(got, {}))
+    got = S:ev({ { timer = ms(2500) } })
+    append_all(got, S:ev((down(3000, { { 600, 900 }, { 700, 900 } }))))
+    append_all(got, S:ev({ { timer = ms(4000) } }))
+    report(#ops(got, "wash") == 0 and #ops(got, "ink") > 0,
+           "refresh by pen: no wash while the pen hovers and writes", seq(got))
+    got = S:ev(prox_out(5000, "pen"))
+    append_all(got, S:ev({ { timer = ms(5000 + LEAVE_MS) } }))
+    expect("refresh by pen: the leave starts the wait", got,
+           j("schedule(150000) fsync(p0) hold(off)", "schedule(" .. num(base_cfg.refresh_settle_us) .. ")"),
+           SHOW_TIMER)
+    got = S:ev({ { timer = ms(5000 + LEAVE_MS + SETTLE_MS) } })
+    expect("refresh by pen: the wash, a settle wait after the leave", got,
+           "disarm wash", SHOW_TIMER)
+    report(S.washes == 1, "refresh by pen: one wash", num(S.washes))
+    S:check("refresh by pen")
+end
+
+do
+    -- A clock that moves on every read, as the glue's does: the leave
+    -- starts the wash's wait from its own reading, which the same timer
+    -- call must not take for realtime stepping back (the real-UI harness
+    -- found the wash landing at the leave).
+    local S = refresh_session(1000)
+    local tick = 0
+    S.c.now_rt_us = function()
+        tick = tick + 1
+        return NOW + tick
+    end
+    local x, y = S:button("refresh")
+    S:ev(hover_in(2000, "pen", x, y))
+    S:ev((down(2010, { { x, y } })))
+    local got = S:ev(prox_out(2100, "pen"))
+    append_all(got, S:ev({ { timer = ms(2100 + LEAVE_MS) } }))
+    report(#ops(got, "wash") == 0 and #ops(got, "rotation_hold") == 1,
+           "refresh by pen, a ticking clock: the leave runs and starts the wait, no wash",
+           seq(got, {}))
+    got = S:ev({ { timer = ms(2100 + LEAVE_MS + SETTLE_MS + 1) } })
+    expect("refresh by pen, a ticking clock: the wash after the wait", got, "disarm wash",
+           SHOW_TIMER)
+    S:check("refresh with a ticking clock")
+end
+
+do
+    -- The wait counts from the glue's publish, not from the list that asked
+    -- for it: the glue paints and publishes after the controller has built
+    -- the list, and KOReader's scheduler reads a coarse clock, so the timer
+    -- the list asked for can come due before a settle wait has passed since
+    -- the publish.  (The real-UI harness saw 149.8 ms.)
+    local S = refresh_session(1000)
+    S:tap_button("refresh", 2000)
+    local t_pub = lift_ms(2000) + 20
+    local got = S:run("published", ms(t_pub))
+    report(#got == 0 and S.c.wash_at == ms(t_pub) + base_cfg.refresh_settle_us,
+           "refresh: a publish 20 ms after the list moves the wash's deadline with it",
+           seq(got, {}))
+    got = S:ev({ { timer = ms(lift_ms(2000) + SETTLE_MS) } })
+    expect("refresh: the timer the list asked for finds 20 ms left, and asks for them", got,
+           "schedule(20000)", SHOW_TIMER)
+    got = S:ev({ { timer = ms(t_pub + SETTLE_MS - 1) } })
+    expect("refresh: an early timer 1 ms short of the settle after the publish: no wash",
+           got, "schedule(1000)", SHOW_TIMER)
+    got = S:ev({ { timer = ms(t_pub + SETTLE_MS) } })
+    expect("refresh: the wash a settle wait after the glue's publish", got, "disarm wash",
+           SHOW_TIMER)
+    -- With nothing waiting, a publish moves nothing.
+    S:run("published", ms(t_pub + 1000))
+    report(S.c.wash_at == nil and not S.c.wash_wanted,
+           "refresh: a publish with no wash waiting changes nothing")
+    -- With the pen here the leave starts the wait, whatever the publish says.
+    S:long_press(4000, 900, 700)
+    local x, y = S:button("refresh")
+    S:ev(hover_in(5000, "pen", x, y))
+    S:ev((down(5010, { { x, y } })))
+    S:run("published", ms(5100))
+    report(S.c.wash_at == nil and S.c.wash_wanted,
+           "refresh: a publish with the pen here leaves the wait to its leave")
+    got = S:ev(hover_out(5200, "pen"))
+    append_all(got, S:ev({ { timer = ms(5200 + LEAVE_MS + SETTLE_MS) } }))
+    report(#ops(got, "wash") == 1, "refresh: the pen's leave then washes once", seq(got, {}))
+    S:check("refresh from the publish")
+end
+
+do
+    -- By finger, then the pen arrives inside the wait: the wash waits for
+    -- its leave (deferred, not cancelled).
+    local S = refresh_session(1000)
+    S:tap_button("refresh", 2000)
+    local got = S:ev(hover_in(lift_ms(2000) + 50, "pen", 600, 600))
+    append_all(got, S:ev({ { timer = ms(lift_ms(2000) + SETTLE_MS) } }))
+    report(#ops(got, "wash") == 0, "refresh then the pen: no wash while it is in range",
+           seq(got))
+    got = S:ev(hover_out(3000, "pen"))
+    report(#ops(got, "wash") == 0, "refresh then the pen: none at the leave either",
+           seq(got))
+    got = S:ev({ { timer = ms(3000 + LEAVE_MS + SETTLE_MS) } })
+    expect("refresh then the pen: the wash a settle wait after the pen's leave", got,
+           "disarm wash", SHOW_TIMER)
+    S:check("refresh then the pen")
+end
+
+do
+    -- A paint inside the wait starts it again: an undo, a rotation, the
+    -- panel reopened.
+    local S = refresh_session(1000)
+    S:tap_button("refresh", 2000)
+    local t_undo = 2070 + 6 * 20
+    S:ev(three(S.K, 2070, LEFT3, -400, 0, 5, 20))
+    local got = S:ev({ { timer = ms(lift_ms(2000) + SETTLE_MS) } })
+    report(#ops(got, "wash") == 0 and #ops(got, "schedule") == 1,
+           "refresh: an undo inside the wait restarts it; the early timer asks again",
+           seq(got, {}))
+    got = S:ev({ { timer = ms(t_undo + 0.5 + SETTLE_MS) } })
+    expect("refresh: the wash a settle wait after the undo's paint", got, "disarm wash",
+           SHOW_TIMER)
+
+    S:long_press(4000, 900, 700)
+    S:tap_button("refresh", 5000)
+    NOW = ms(lift_ms(5000) + 100)
+    S:run("set_rotation", 1)
+    got = S:ev({ { timer = ms(lift_ms(5000) + SETTLE_MS) } })
+    report(#ops(got, "wash") == 0, "refresh: a rotation inside the wait restarts it",
+           seq(got, {}))
+    got = S:ev({ { timer = ms(lift_ms(5000) + 100 + SETTLE_MS) } })
+    expect("refresh: the wash a settle wait after the rotation", got, "disarm wash",
+           SHOW_TIMER)
+    S:check("refresh restarted")
+end
+
+do
+    -- Dropped: by a page shown inside the wait (no wash rides a turn), by
+    -- ink going dead, by suspend and by close.
+    local S = refresh_session(1000)
+    S:tap_button("refresh", 2000)
+    local got = S:ev(finger(S.K, 2070, 1400, 700, 900, 700, 3, 20))
+    append_all(got, S:loaded(1))
+    report(#ops(got, "washer_charge") == 1, "refresh then a turn: the turn is shown",
+           seq(got))
+    got = S:ev({ { timer = ms(lift_ms(2000) + SETTLE_MS) } })
+    append_all(got, S:ev({ { timer = ms(5000) } }))
+    report(#ops(got, "wash") == 0 and S.washes == 0,
+           "refresh then a turn: the turn drops the wash", seq(got))
+
+    S:long_press(6000, 900, 700)
+    S:tap_button("refresh", 7000)
+    S:run("set_ink_live", false)
+    S:run("set_ink_live", true)
+    got = S:ev({ { timer = ms(lift_ms(7000) + SETTLE_MS) } })
+    report(#ops(got, "wash") == 0, "refresh then a widget on top: dropped", seq(got))
+
+    S:long_press(8000, 900, 700)
+    S:tap_button("refresh", 9000)
+    S:run("suspend")
+    S:run("resume", { prox = false, touching = false })
+    got = S:ev({ { timer = ms(lift_ms(9000) + SETTLE_MS) } })
+    report(#ops(got, "wash") == 0, "refresh then suspend: dropped", seq(got))
+
+    S:long_press(10000, 900, 700)
+    S:tap_button("refresh", 11000)
+    got = S:run("close")
+    append_all(got, S:ev({ { timer = ms(lift_ms(11000) + SETTLE_MS) } }))
+    report(#ops(got, "wash") == 0 and S.washes == 0, "refresh then close: dropped",
+           seq(got))
+    S:check("refresh dropped")
+end
+
+do
+    -- After a failed write the button still washes: it writes nothing.
+    local S = refresh_session(1000)
+    S.fail_op = "append"
+    S:ev((visit(1500, "pen", { { 200, 600 }, { 400, 600 } })))
+    report(S.failed, "refresh after io_error: the session has failed")
+    S:long_press(2500, 900, 700)
+    S:tap_button("refresh", 3500)
+    local got = S:ev({ { timer = ms(lift_ms(3500) + SETTLE_MS) } })
+    expect("refresh after io_error: still one wash", got, "disarm wash", SHOW_TIMER)
+    -- Realtime stepping back inside the wait counts as the wait being over,
+    -- as it does for the leave.
+    S:long_press(5000, 900, 700)
+    S:tap_button("refresh", 6000)
+    got = S:ev({ { timer = ms(1000) } })
+    expect("refresh: realtime stepped back past the wait washes", got, "disarm wash",
+           SHOW_TIMER)
+    S:check("refresh after io_error")
 end
 
 ------------------------------------------------------------------------
