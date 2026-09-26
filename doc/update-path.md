@@ -314,6 +314,37 @@ device-tree change as undeployed — the Wi-Fi power-sequence delay
 
 ## Glass notes (what the first kexecs on the PineNote taught, 2026-09-02)
 
+### Teardown hardening — 2026-09-26 source, host-tested
+
+The current helper stops the reader, then the optional
+`pinenote-book-state-device` authority through Shepherd before disabling
+Wi-Fi. It checks the authority's runtime directory was removed, rather
+than treating a stopped parent as proof its children and mounts are gone.
+An absent or already stopped service stays that way.
+
+Both `/` and an exactly mounted `/data` must be the original filesystems
+and read-only before handoff; the helper checks mount and superblock flags.
+A failed remount refuses the trial. An absent `/data` mount is supported
+for the QEMU fixture; a directory named `/data` is not a mounted partition.
+This closes the old behavior that merely logged a busy data filesystem
+and continued toward kexec.
+
+Refusal recovery hands the armed watchdog back first, unloads the candidate,
+restores changed mounts before restarting writers, and restores only
+previously running services. Failed restoration is named in `last-trial`;
+it can leave a service stopped and must not be reported as full recovery.
+Executable host tests cover service-stop failures, surviving runtime state,
+busy/changed/read-only mounts and partial restoration. These are modeled
+interfaces, not a new QEMU or hardware result.
+
+The **target generation's helper** performs the trial. The improved helper
+therefore applies on the first update targeting it. A rollback to an older
+generation still runs the older helper: manually stop the note authority
+first on those paths and retain the existing preflight checks. The on-device
+manual workaround in the September 11/26 records remains valid evidence.
+
+### Initial kexec observations
+
 Three kexecs hung identically before the fourth booted; each hang cost
 a power-cycle (the kexec'd kernel stalls before its serial driver is
 up, so serial-BREAK sysrq cannot reach it — the debug cable carries no

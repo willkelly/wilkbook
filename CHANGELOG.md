@@ -24,6 +24,32 @@ this lineage. **Unreleased** above it collects what has landed since.
 
 ## Unreleased
 
+- **Notebook edge cases are fixed in source.** Panel taps cannot turn into ink
+  across a proximity dropout, night-mode pages use one framebuffer pass, and
+  automatic washes wait while the pen hovers without keeping AutoSuspend
+  awake. Refresh retires only its acknowledged debt; later charges survive.
+  Native-reader and interaction tests pass; panel validation remains owed.
+  Pen-up logs now identify brush, size and span count for backlog diagnosis.
+- **Manuals now have installed-corpus and real-reader acceptance.** Native
+  KOReader renders and navigates representative man and Info content. The
+  generation-23 shelf covers 711 of 732 untranslated man identities and 25 of
+  53 Info manuals; omissions are recorded explicitly. Long Info command lines
+  can still wrap with display hyphens, so code-example fidelity is not signed
+  off. The converter is unchanged.
+- **Generation trials refuse unsafe handoffs.** The target helper now stops
+  the optional note authority and requires its runtime cleanup, then verifies
+  `/` and mounted `/data` are read-only. Refusals restore prior mounts and
+  running services and record incomplete recovery. Executable host tests pass;
+  QEMU and device qualification remain. Older targets still need the manual
+  authority stop, including rollback.
+- **Configuration checks cover the current reader.** The audit now runs in
+  Guile and checks the shipping broker and direct-display defaults, with
+  mutation tests and executable Lua parser fixtures. The proposed durable
+  settings API is documented; the general backend and settings UI remain work.
+- **Page-turn campaigns retain complete evidence.** Full reader logs are
+  transported with size/hash checks, and failed capture or analysis fails the
+  campaign. Reports distinguish refresh requests from visible results and
+  identify missing context and clock uncertainty.
 - **The emergency sleep banner understands the direct reader's framebuffer.**
   When KOReader misses suspend preparation, the broker now reads the pixel
   format and stride instead of assuming four bytes per pixel. Host tests cover

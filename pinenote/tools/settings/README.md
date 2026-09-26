@@ -13,8 +13,8 @@ their checkout; the Lua fixture defaults to the current directory. Requires
 Guile 3 and Lua 5.1+ or LuaJIT (substitute `luajit` for `lua`). No Guix
 evaluation, builds, store reads, Python, device files or network access.
 
-The root `settings-check` target should run these three commands, replacing
-its two Python invocations. `koreader-profile-check` remains the seed writer
+The root `make settings-check` target runs these three checks (using LuaJIT).
+`koreader-profile-check` remains the seed writer
 and serialization gate; this audit does not duplicate that implementation.
 
 ## What is checked

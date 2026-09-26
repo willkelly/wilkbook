@@ -479,8 +479,8 @@ own run later.
 ## Follow-ups from the generation-23 review (2026-09-26)
 
 These were found by the fit, logic and performance reviewers after
-generation 23 was deployed. None blocks it. The code was left as it runs on
-the device, and each item is for a later generation.
+generation 23 was deployed. The list below describes that deployed source.
+The batch fixes following it are host-tested and await a later generation.
 
 **Washes with the pen nearby:**
 - **An idle wash can land while the pen hovers.** Hover is not activity (so
@@ -531,20 +531,44 @@ the device, and each item is for a later generation.
 - Find the cause of the tens-of-milliseconds backlogs, perhaps with
   `getrusage` fault counts around each stroke.
 
+### Batch corrections, 2026-09-26 (offline)
+
+- Panel-owned contacts retain ownership through repeated proximity dropouts,
+  including tails outside the panel; they cannot become ink mid-contact.
+- Night-mode pages use single-pass inverted framebuffer writes. The pinned
+  blitter cannot directly invert BB8 into RGB565, so a clipped off-screen
+  conversion precedes the inverted copy for mismatched formats. Native
+  KOReader tests cover both rotations and inverted panel Close/full repaint.
+- Proximity holds automatic washer operations without generating hover
+  activity for AutoSuspend. Panel-pen page charges wait until leave;
+  close/suspend/pending Refresh retain them without an immediate bundled wash.
+- Refresh takes a debt receipt and retires only that receipt after successful
+  publish and a successful full-refresh ioctl acknowledgement. Charges made
+  after the receipt survive, including when debt saturates. Failed or missing
+  acknowledgement, cancellation and teardown keep debt. **Ioctl acceptance
+  is not measured physical wash completion.** The device observer is one-shot
+  with a one-second timeout; older device targets keep debt conservatively.
+- Window close and internal-error paths release holds and observers. Pen-up
+  timing now names brush, size and emitted span count for backlog comparisons.
+
+The remaining debt weighting/coverage, explanatory UI and event-backlog
+investigation above are still open. No hardware latency improvement is claimed.
+
 ## Housekeeping found while planning (not the notebook)
 
 These are tracked here until each lands somewhere permanent.
 
-- **Kexec teardown gap.** CLAUDE.md's kexec lesson now says so. The
-  teardown stops only `reader-session` and only logs a failed read-only
-  remount of `/data`, after Wi-Fi is off. The fix is to stop the
-  book-state authority and refuse the kexec when the real `/data` will
-  not go read-only. It changes the shared update path, so it takes a
-  review.
-- **A test that cannot fail.** The 14 negated pipelines in
-  `pinenote/tools/update-path/test-static.sh` pass whatever they find,
-  because `set -e` ignores a pipeline that starts with `!`. Line 50 is
-  already violated.
+- **Kexec teardown gap: fixed in source, runtime qualification owed.**
+  The 2026-09-26 helper stops the optional book-state authority after the
+  reader, requires runtime cleanup, and refuses if `/` or the real `/data`
+  cannot become read-only. Executable host tests cover refusal and partial
+  restoration. Older target helpers still require the manual authority
+  stop; rollback runs the target's helper (`doc/update-path.md`).
+- **Ineffective negative assertions: fixed in source.** The negated greps
+  in `pinenote/tools/update-path/test-static.sh` did not cause `set -e` to
+  exit on a forbidden match. Checked rejection assertions and positive
+  controls replace them; the obsolete blanket `/data` ban is replaced by
+  the mount-inspection/reversible-remount boundary.
 - **An unregistered driver finding.** hrdl's `GLOBAL_REFRESH` does not
   flush pending deferred-io damage, and the comments in `device.lua`
   assume it does. It wants a `quirk:` test and a note in

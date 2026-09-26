@@ -191,7 +191,8 @@ Guix store and `$(ARTIFACTS)`.
 **Language direction (operator decision, 2026-09-26).** Keep Python
 available, including as a sandboxed book language. Prefer Guile and Guix
 for build tooling and system scripts, and Lua for KOReader integration.
-Write new tooling in those languages. Existing Python, shell and Lua
+Prefer these languages for new build/system scripts and KOReader
+integration. Existing Python, shell and Lua
 system tools are migration work, not a reason to remove Python from the
 image or to combine a focused bug fix with an unrelated rewrite. When
 replacing a tool, preserve its executable checks and documented interface.
@@ -632,16 +633,16 @@ gitignored `build/`, or the reader's static address.
   `wlan0.conf`. The teardown now remounts `/data` read-only after `/`
   (the bail-out puts it back) — proven by two kexecs on generation 19.
   When a kexec'd boot loses something only a sleep reveals, check what
-  was mounted where before suspecting the radio. **The remount fails if
-  anything still holds `/data` open for writing, and the teardown only
-  logs that failure, after Wi-Fi is off.** The teardown stops only
-  `reader-session`. On the `book-state-device-reader` flavor, once the
-  note feature is activated (its marker present), the authority keeps its
-  SQLite database open read-write while idle, so the remount is expected
-  to fail there. That is inferred from the source, not observed: the
-  2026-09-11 session stopped the authority by hand first. Do the same
-  before every trial on that flavor until the teardown handles it
-  (`doc/notebook.md`, housekeeping).
+  was mounted where before suspecting the radio. **Older helpers only log
+  a failed data remount and stop only `reader-session`.** The opt-in note
+  authority keeps SQLite writable while idle, so the September 11/26
+  sessions stopped it manually. The 2026-09-26 source helper now stops that
+  authority, checks its runtime cleanup, and refuses unless `/` and the
+  mounted `/data` become read-only; failure restores prior mounts/services
+  and records incomplete restoration. This is host-tested, with runtime
+  qualification owed. A trial uses the TARGET's helper, so keep manually
+  stopping the authority for older targets, including rollback
+  (`doc/update-path.md`, "Teardown hardening").
 - **The UART capture drops ~25 bytes every 150–250 at 1.5 Mbaud, and it
   is the adapter, not termios** (2026-09-04, measured from the two
   generation-16 captures): `uboot-pick-slot.sh` has always set the port

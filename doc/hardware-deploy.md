@@ -360,6 +360,15 @@ or persistent activation marker for this conversational grant.
 
 ### Every update
 
+**2026-09-26 source hardening (host-tested; runtime qualification owed):**
+new target helpers stop the optional note authority after stopping KOReader,
+require its runtime cleanup, and refuse handoff unless `/` and the mounted
+`/data` are read-only. Refusal restores prior mounts/services and records
+any incomplete restoration. See `doc/update-path.md`, "Teardown hardening".
+For an older target helper, including rollback, stop the note authority
+manually as before: the target's helper, not the running generation's,
+owns the trial.
+
 ```
 make deploy DEVICE=pinenote-os2 [FLAVOR=reader] [KEEP=5]
 ```
