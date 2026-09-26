@@ -15,12 +15,27 @@ local Quiesce = require("broker_quiesce")
 ffi.cdef[[
 int open(const char*, int, ...); int close(int); int fsync(int); long read(int, void*, unsigned long);
 long write(int, const void*, unsigned long); int ioctl(int, unsigned long, ...);
+long pwrite(int, const void*, unsigned long, long);
 int mkfifo(const char*, unsigned int); int poll(struct pollfd*, unsigned long, int);
 int getpid(void); struct pollfd { int fd; short events, revents; };
 struct input_id { unsigned short bustype, vendor, product, version; };
 struct uinput_user_dev { char name[80]; struct input_id id; unsigned int ff_effects_max;
  int absmax[64]; int absmin[64]; int absfuzz[64]; int absflat[64]; };
 struct input_event { long tv_sec, tv_usec; unsigned short type, code; int value; };
+struct broker_fb_bitfield { uint32_t offset, length, msb_right; };
+struct broker_fb_var {
+ uint32_t xres, yres, xres_virtual, yres_virtual, xoffset, yoffset;
+ uint32_t bits_per_pixel, grayscale;
+ struct broker_fb_bitfield red, green, blue, transp;
+ uint32_t nonstd, activate, height, width, accel_flags, pixclock;
+ uint32_t left_margin, right_margin, upper_margin, lower_margin;
+ uint32_t hsync_len, vsync_len, sync, vmode, rotate, colorspace, reserved[4];
+};
+struct broker_fb_fix {
+ char id[16]; unsigned long smem_start; uint32_t smem_len, type, type_aux, visual;
+ uint16_t xpanstep, ypanstep, ywrapstep; uint32_t line_length;
+ unsigned long mmio_start; uint32_t mmio_len, accel; uint16_t capabilities, reserved[2];
+};
 ]]
 local C = ffi.C
 local O_RDONLY, O_WRONLY, O_RDWR, O_NONBLOCK = 0, 1, 2, 0x800
@@ -172,11 +187,42 @@ local function cleanup_display()
     run("/run/current-system/profile/bin/pinenote-ebc-refresh >/dev/null 2>&1")
     if switched then sleep_ms(3000); write_value(wf, saved) end
 end
-local function fallback_banner()
+local function framebuffer_layout(fd)
+    local var, fix = ffi.new("struct broker_fb_var[1]"), ffi.new("struct broker_fb_fix[1]")
+    if C.ioctl(fd, 0x4600, var) ~= 0 or C.ioctl(fd, 0x4602, fix) ~= 0 then
+        return nil, "framebuffer info ioctl failed"
+    end
+    local v, f = var[0], fix[0]
+    local function channel(field, offset, length)
+        return field.offset == offset and field.length == length and field.msb_right == 0
+    end
+    local bpp
+    if v.bits_per_pixel == 16 and channel(v.red, 11, 5)
+        and channel(v.green, 5, 6) and channel(v.blue, 0, 5) then bpp = 2
+    elseif v.bits_per_pixel == 32 and channel(v.red, 16, 8)
+        and channel(v.green, 8, 8) and channel(v.blue, 0, 8) then bpp = 4 end
+    -- Only the packed truecolor layouts used by our fbdev drivers. Reject
+    -- alpha, palettes, nonstandard pixels, rotation and wrapped scanout rather
+    -- than treating a bits-per-pixel value as a complete format description.
+    if not bpp or not ffi.abi("le") or f.type ~= 0 or f.visual ~= 2
+        or v.transp.length ~= 0 or v.grayscale ~= 0 or v.nonstd ~= 0
+        or v.rotate ~= 0 or v.vmode ~= 0 then return nil, "unsupported framebuffer layout" end
+    local w, h, stride = tonumber(v.xres), tonumber(v.yres), tonumber(f.line_length)
+    -- Bound allocation and arithmetic even for corrupt geometry. This is a
+    -- small emergency banner, not a general-purpose framebuffer renderer.
+    if w == 0 or h == 0 or v.xres_virtual > 16384 or v.yres_virtual > 16384
+        or v.xoffset + w > v.xres_virtual or v.yoffset + h > v.yres_virtual
+        or v.xres_virtual * bpp > stride
+        or (v.yoffset + h - 1) * stride + (v.xoffset + w) * bpp > f.smem_len then
+        return nil, "malformed framebuffer geometry"
+    end
+    return { width = w, height = h, stride = stride, bpp = bpp,
+             base = tonumber(v.yoffset) * stride + tonumber(v.xoffset) * bpp }
+end
+local function render_banner(fd, layout)
     -- Deliberately simple and independent of KOReader: a white top band with
     -- large bitmap text. The wake event makes KOReader repaint its prior UI;
     -- cleanup_display's GC16 pass prevents a stale optical remnant.
-    write_value("/sys/module/rockchip_ebc/parameters/no_off_screen", "1")
     local glyphs = {
         S={"1111","1000","1000","1111","0001","0001","1111"},
         U={"1001","1001","1001","1001","1001","1001","1111"},
@@ -185,35 +231,49 @@ local function fallback_banner()
         N={"1001","1101","1101","1011","1011","1001","1001"},
         D={"1110","1001","1001","1001","1001","1001","1110"},
     }
-    local text, scale, stride, height = "SUSPEND", 8, 7488, 96
-    local row = ffi.new("uint8_t[?]", stride)
-    local fb = io.open("/dev/fb0", "r+b")
-    if fb then
-        for y = 0, height - 1 do
-            ffi.fill(row, stride, 0xff)
-            local gy = math.floor((y - 16) / scale) + 1
-            if gy >= 1 and gy <= 7 then
-                local x0 = 32
-                for index = 1, #text do
-                    local bits = glyphs[text:sub(index, index)][gy]
-                    for column = 1, 4 do
-                        if bits:sub(column, column) == "1" then
-                            local px = x0 + ((index - 1) * 5 + column - 1) * scale
-                            for sx = 0, scale - 1 do
-                                local off = (px + sx) * 4
-                                row[off], row[off+1], row[off+2], row[off+3] = 0, 0, 0, 0
-                            end
-                        end
+    local text, scale, height = "SUSPEND", 8, math.min(96, layout.height)
+    local bytes = layout.width * layout.bpp
+    local row = ffi.new("uint8_t[?]", bytes)
+    for y = 0, height - 1 do
+        ffi.fill(row, bytes, 0xff)
+        local gy = math.floor((y - 16) / scale) + 1
+        if gy >= 1 and gy <= 7 then
+            local x0 = 32
+            for index = 1, #text do
+                local bits = glyphs[text:sub(index, index)][gy]
+                for column = 1, 4 do
+                    if bits:sub(column, column) == "1" then
+                        local px = x0 + ((index - 1) * 5 + column - 1) * scale
+                        local count = math.min(scale, layout.width - px)
+                        if count > 0 then ffi.fill(row + px * layout.bpp, count * layout.bpp, 0) end
                     end
                 end
             end
-            if y >= height - 4 then ffi.fill(row, stride, 0) end
-            fb:seek("set", y * stride); fb:write(ffi.string(row, stride))
         end
-        fb:close()
-        local fd = C.open("/dev/fb0", O_RDWR); if fd >= 0 then C.fsync(fd); C.close(fd) end
+        if y >= 92 then ffi.fill(row, bytes, 0) end
+        local done = 0
+        while done < bytes do
+            local wrote = tonumber(C.pwrite(fd, row + done, bytes - done,
+                layout.base + y * layout.stride + done))
+            if wrote > 0 then done = done + wrote
+            elseif wrote == 0 or ffi.errno() ~= 4 then return false, "framebuffer write failed" end
+        end
+    end
+    if C.fsync(fd) ~= 0 then return false, "framebuffer sync failed" end
+    return true
+end
+local function fallback_banner()
+    write_value("/sys/module/rockchip_ebc/parameters/no_off_screen", "1")
+    -- Query and write through one descriptor; reopening could target a new
+    -- framebuffer after a driver rebind. A missing banner must not veto sleep.
+    local fd = C.open("/dev/fb0", O_RDWR)
+    if fd < 0 then log("fallback banner could not open framebuffer")
     else
-        log("fallback banner could not open framebuffer")
+        local layout, err = framebuffer_layout(fd)
+        local ok = false
+        if layout then ok, err = render_banner(fd, layout) end
+        if not ok then log("fallback banner skipped or incomplete: %s", tostring(err)) end
+        if C.close(fd) ~= 0 then log("fallback banner framebuffer close failed") end
     end
     write_value("/dev/kmsg", "<3>WILKBOOK: KOReader missed suspend preparation deadline; fallback sleep frame")
 end
