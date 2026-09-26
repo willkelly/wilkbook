@@ -66,6 +66,23 @@ function MixedRouter.install(input, pen_src, touch_src)
     -- suppressed.
     local touch_slot = 0
 
+    -- A consumer that swallows touch events (the notebook) swallows the
+    -- ABS_MT_SLOT changes too, and the kernel will not repeat one while
+    -- the slot is unchanged: once touch flows here again, a finger in the
+    -- kernel's current slot would land in whichever slot this last saw.
+    -- So the consumer starts its own tracking from getTouchSlot (where
+    -- this reading of the stream stands), follows ABS_MT_SLOT in the
+    -- events it swallows, and hands the slot it tracked back through
+    -- setTouchSlot, after Input:resetState(), at every switch.  It does
+    -- not use EVIOCGABS(ABS_MT_SLOT) when this pair exists: the kernel's
+    -- slot can be ahead of the stream by events still queued.
+    input.getTouchSlot = function()
+        return touch_slot
+    end
+    input.setTouchSlot = function(_, slot)
+        if type(slot) == "number" then touch_slot = slot end
+    end
+
     local function switch_slot(handler, ev, slot)
         -- Synthesize the ABS_MT_SLOT event the kernel deduplicated;
         -- upstream's setupSlotData does the rest (adds the slot to the

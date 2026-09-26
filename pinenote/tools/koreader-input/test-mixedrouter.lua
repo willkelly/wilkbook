@@ -9,7 +9,9 @@ feeds synthetic evdev streams through the same handlers Input:waitEvent
 dispatches to (EV_KEY -> handleKeyBoardEv, EV_ABS/EV_SYN ->
 handleTouchEv).  Each scenario runs twice: without the router (upstream
 behavior, including the pen-hover tap-capture bug) and with the REPO's
-mixedrouter.lua installed.
+mixedrouter.lua installed.  A last, router-only section covers the
+touch-slot resync a touch consumer (the notebook) needs when it hands
+touch back.
 
 Usage: luajit test-mixedrouter.lua /path/to/bundle/lib/koreader \
            /path/to/repo/.../device/pinenote/mixedrouter.lua
@@ -660,6 +662,82 @@ for _, sc in ipairs(scenarios) do
             fail = fail + 1
         end
     end
+end
+
+------------------------------------------------------------------------
+-- Touch-slot resync (router only): getTouchSlot / setTouchSlot.
+--
+-- While the notebook consumes touch, the router never sees the kernel's
+-- ABS_MT_SLOT changes, and the kernel will not repeat one while its slot
+-- is unchanged.  So after the notebook lets touch through again, the next
+-- finger in the kernel's current slot arrives with no ABS_MT_SLOT at all
+-- and is routed to whichever slot the router last saw.  The notebook
+-- reads the kernel's slot (EVIOCGABS on ABS_MT_SLOT) and hands it back
+-- with setTouchSlot, after Input:resetState().
+------------------------------------------------------------------------
+
+local function check(ok, label, msg)
+    print(string.format("%s: %s: %s", ok and "PASS" or "FAIL", label, msg))
+    if not ok then fail = fail + 1 end
+end
+
+do
+    clock_us = 2000000
+    local input = makeInput(true)
+    check(type(input.getTouchSlot) == "function"
+          and type(input.setTouchSlot) == "function",
+          "resync: the router installs getTouchSlot/setTouchSlot", "")
+    check(input:getTouchSlot() == 0, "resync: the router starts on slot 0",
+          tostring(input:getTouchSlot()))
+    feed(input, {
+        frame(TOUCH, { { EV_ABS, ABS_MT_SLOT, 5 },
+                       { EV_ABS, ABS_MT_TRACKING_ID, 12 },
+                       { EV_ABS, ABS_MT_POSITION_X, 300 },
+                       { EV_ABS, ABS_MT_POSITION_Y, 400 } }),
+        frame(TOUCH, { { EV_ABS, ABS_MT_TRACKING_ID, -1 } }),
+    })
+    check(input:getTouchSlot() == 5,
+          "resync: getTouchSlot follows the ABS_MT_SLOT the router saw",
+          tostring(input:getTouchSlot()))
+    input:setTouchSlot(nil)
+    input:setTouchSlot("2")
+    check(input:getTouchSlot() == 5, "resync: setTouchSlot ignores a non-number",
+          tostring(input:getTouchSlot()))
+end
+
+-- The kernel moved to slot 2 while the notebook consumed touch; the router
+-- still believes slot 0.  One finger then lands in kernel slot 2.
+local function afterConsumedSession(resync)
+    clock_us = 2000000
+    local input = makeInput(true)
+    input:resetState()
+    if resync then input:setTouchSlot(2) end
+    local gestures = feed(input, {
+        frame(TOUCH, { { EV_ABS, ABS_MT_TRACKING_ID, 90 },
+                       { EV_ABS, ABS_MT_POSITION_X, 500 },
+                       { EV_ABS, ABS_MT_POSITION_Y, 700 } }),
+    })
+    local at0, at2 = snapshot(input, 0), snapshot(input, 2)
+    for _, g in ipairs(feed(input, {
+        frame(TOUCH, { { EV_ABS, ABS_MT_TRACKING_ID, -1 } }),
+    })) do
+        gestures[#gestures + 1] = g
+    end
+    return gestures, at0, at2
+end
+
+do
+    local g, at0, at2 = afterConsumedSession(false)
+    check(at0.id == 90 and at2.id == nil,
+          "resync control: without setTouchSlot the finger lands in KOReader slot 0",
+          string.format("slot 0: %s | slot 2: %s", snapToString(at0), snapToString(at2)))
+    print(string.format("      gestures: %s", streamToString(g)))
+    g, at0, at2 = afterConsumedSession(true)
+    check(at2.id == 90 and at2.x == 500 and at2.y == 700 and at0.id == nil,
+          "resync: after setTouchSlot(2) the finger lands in slot 2, as the kernel has it",
+          string.format("slot 0: %s | slot 2: %s", snapToString(at0), snapToString(at2)))
+    check(count(g, "tap", 500, 700) == 1 and count(g, "tap") == 1,
+          "resync: the resynced finger still taps at (500,700)", streamToString(g))
 end
 
 if fail == 0 then

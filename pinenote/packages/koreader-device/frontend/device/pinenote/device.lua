@@ -155,6 +155,259 @@ local function findEbcCard(sysfs_base)
     end
 end
 
+-- The two rockchip_ebc drivers share the platform-driver name and the
+-- GLOBAL_REFRESH number but not DRM command 0x03: hrdl's direct driver
+-- registers RECT_HINTS there, wilkbook's shipping driver REFRESH_BARRIER,
+-- and DRM dispatches on the command number alone (issue #42).  The
+-- direct driver's fingerprint is `default_hint`, the module default of
+-- the hint plane RECT_HINTS writes; the shipping driver never registers
+-- it.  The suspend broker's barrier probe is the mirror image
+-- (`refresh_waveform`, shipping only).  `make ebc-ioctl-roster-check`
+-- pins both against each driver's module_param registrations.
+--
+-- path is only ever passed by the koreader-input host harness.
+local DEFAULT_HINT_PATH = "/sys/module/rockchip_ebc/parameters/default_hint"
+local function isDirectEbc(path)
+    local f = io.open(path or DEFAULT_HINT_PATH, "r")
+    if not f then return false end
+    f:close()
+    return true
+end
+
+-- DRM_IOCTL_ROCKCHIP_EBC_RECT_HINTS on the direct driver only:
+-- _IOW('d', 0x43, struct drm_rockchip_ebc_rect_hints /* 16 bytes */).
+local DRM_RECT_HINTS = 0x40106443
+-- The plane default reading renders through, and what every owner call
+-- restores, is the module's default_hint as the running system set it
+-- (pinenote-ebc-direct-params writes it before reader-session starts),
+-- read once at init.  Every owner call writes that same value back as the
+-- default, so neither an arm nor a KOReader that died armed can change
+-- what the next start reads, and a value the service or a lab set before
+-- KOReader started is kept rather than overwritten (one set under a
+-- running KOReader lasts until its next owner call).  Unreadable, it
+-- falls back to the service's own value: Y4 -> GL16, no REDRAW.
+local HINT_READING_FALLBACK = 32
+
+-- The module parameter as a hint byte, or nil when it is absent or not
+-- one.  path is only ever passed by the koreader-input host harness.
+local function readDefaultHint(path)
+    local f = io.open(path or DEFAULT_HINT_PATH, "r")
+    if not f then return nil end
+    local s = f:read("*l")
+    f:close()
+    local v = tonumber(s and s:match("^%s*(%d+)%s*$"))
+    if v and v <= 255 then return v end
+    return nil
+end
+
+local function u32le(v)
+    v = v % 2^32
+    return string.char(v % 256, math.floor(v / 256) % 256,
+                       math.floor(v / 65536) % 256,
+                       math.floor(v / 16777216) % 256)
+end
+
+-- The RECT_HINTS byte layout, kept byte-identical to the ebc-lab's
+-- pinned packers (pinenote/tools/ebc-lab/ebclib.lua): the koreader-input
+-- harness compares the two over a set of vectors.
+--   struct drm_rockchip_ebc_rect_hints (16 bytes): u8 set_default_hint,
+--     u8 default_hint, u8 pad[2], u32 num_rects, u64 rect_hints (the
+--     caller patches the pointer in; it is zero here);
+--   struct drm_rockchip_ebc_rect_hint (24 bytes): u8 hints, u8 pad[7],
+--     then a drm_mode_rect of s32 x1, y1, x2, y2 with x2/y2 EXCLUSIVE.
+local function packRectHintsHeader(set_default, default_hint, num_rects)
+    return string.char(set_default and 1 or 0, (default_hint or 0) % 256, 0, 0)
+        .. u32le(num_rects)
+        .. string.rep("\0", 8)
+end
+
+local function packRectHint(hint, x, y, w, h)
+    return string.char(hint % 256) .. string.rep("\0", 7)
+        .. u32le(x) .. u32le(y) .. u32le(x + w) .. u32le(y + h)
+end
+
+-- The owner of the direct driver's hint plane: the one place that arms the
+-- notebook's DU rectangle and the one place that takes it away again.
+--
+-- Hints are copied when the fbdev damage worker blits, on a kworker after
+-- the fsync that published the damage has returned, so a hint governs
+-- whichever paint is blitted while it is set, not the paint that asked
+-- for it.  Paint that does not know about the rectangle (dialogs, the
+-- screensaver, washes) would render thresholded inside it, so every
+-- refresh*Imp calls guard() before it publishes, and guard() returns the
+-- plane to the reading hint when the refresh reaches an armed rectangle.
+-- Ink is exempt because it publishes through PineNote:publishNow(), not
+-- through a refresh*Imp.
+--
+-- Every call sets the plane default as well (set_default_hint memsets the
+-- whole plane and rewrites the module's default_hint), so the plane never
+-- depends on what an earlier arm left behind, and a KOReader that dies
+-- armed leaves nothing a later reset() cannot clear.
+--
+-- A no-op unless the driver is the direct one: on the shipping driver
+-- command 0x03 is REFRESH_BARRIER.
+--
+-- opts: ioctl = function(request, arg) -> ret[, errno] (nil: no card),
+--       is_direct = bool, bb = function() -> Screen.bb (read per call:
+--       the framebuffer may replace its bb, never cache it),
+--       reading_hint = the plane default (nil: HINT_READING_FALLBACK).
+local HintOwner = {}
+HintOwner.__index = HintOwner
+
+-- What a failed reset leaves recorded: the plane is unknown (a crashed
+-- KOReader may have left DU on it), so the whole panel counts as armed.
+local PLANE_UNKNOWN = { { x = 0, y = 0, w = 2^31 - 1, h = 2^31 - 1, hint = 0 } }
+
+-- NaN and the infinities pass a type check but not string.char, and an
+-- arm runs inside the input hook, where an error takes KOReader down.
+local function finite(v)
+    return type(v) == "number" and v == v and v > -math.huge and v < math.huge
+end
+
+local function newHintOwner(opts)
+    return setmetatable({
+        _ioctl = opts.ioctl,
+        _bb = opts.bb,
+        _reading = opts.reading_hint or HINT_READING_FALLBACK,
+        _live = opts.is_direct == true and opts.ioctl ~= nil,
+        _armed = nil,       -- the rects as armed, or nil
+        _refused = false,   -- a failed arm stops arming until reset()
+        _failing = false,   -- log one line per streak of failed calls
+    }, HintOwner)
+end
+
+function HintOwner:_submit(rects, label)
+    local n = rects and #rects or 0
+    -- uint64_t[2]: 8-aligned, so the pointer is a plain store into [1].
+    local arg = ffi.new("uint64_t[2]")
+    ffi.copy(arg, packRectHintsHeader(true, self._reading, n), 16)
+    if n > 0 then
+        local parts = {}
+        for i = 1, n do
+            local r = rects[i]
+            parts[i] = packRectHint(r.hint, r.x, r.y, r.w, r.h)
+        end
+        local blob = table.concat(parts)
+        -- Anchored on the owner: the header holds only its address, which
+        -- the garbage collector cannot see.
+        self._rect_buf = ffi.new("uint8_t[?]", #blob)
+        ffi.copy(self._rect_buf, blob, #blob)
+        arg[1] = ffi.cast("uintptr_t", self._rect_buf)
+    end
+    local ret, errno = self._ioctl(DRM_RECT_HINTS, arg)
+    self._rect_buf = nil
+    ret = tonumber(ret) or -1
+    if ret < 0 then
+        if not self._failing then
+            logger.warn(string.format("[pn-hint] %s failed: ret=%d errno=%s",
+                label, ret, tostring(errno)))
+        end
+        self._failing = true
+        return false
+    end
+    self._failing = false
+    return true
+end
+
+--- Arm physical rects {x, y, w, h, hint}, applied in order over a plane
+-- reset to the reading hint (a later rect wins where two overlap).  Returns
+-- true when the driver took them.
+function HintOwner:arm(rects)
+    if not self._live or self._refused then return false end
+    local armed = {}
+    for i, r in ipairs(rects or {}) do
+        if type(r) ~= "table" or not (finite(r.x) and finite(r.y)
+           and finite(r.w) and finite(r.h) and finite(r.hint)) then
+            logger.warn("[pn-hint] arm refused: malformed rect " .. i)
+            return false
+        end
+        local x1, y1 = math.floor(r.x), math.floor(r.y)
+        armed[i] = { x = x1, y = y1, hint = r.hint % 256,
+                     w = math.ceil(r.x + r.w) - x1,
+                     h = math.ceil(r.y + r.h) - y1 }
+    end
+    if #armed == 0 then return self:disarm() end
+    if not self:_submit(armed, "arm") then
+        -- The plane may hold part of the request; keep guarding it as if
+        -- armed, and refuse to arm again until reset(), so a caller that
+        -- retries per pen report cannot turn one failure into 360 ioctls
+        -- a second.  Ink then publishes at the plane default: GL16,
+        -- slower but correct.
+        self._armed = armed
+        self._refused = true
+        return false
+    end
+    self._armed = armed
+    logger.info(string.format("[pn-hint] arm %d rect(s), first %d,%d,%d,%d:0x%02x",
+        #armed, armed[1].x, armed[1].y, armed[1].w, armed[1].h, armed[1].hint))
+    return true
+end
+
+function HintOwner:_restore()
+    if not self:_submit(nil, "disarm") then
+        -- Still armed as far as anyone knows, so guards retry.
+        self._armed = self._armed or PLANE_UNKNOWN
+        return false
+    end
+    self._armed = nil
+    logger.info("[pn-hint] disarm")
+    return true
+end
+
+--- Return the plane to the reading hint if anything is armed.
+function HintOwner:disarm()
+    if not self._live or not self._armed then return true end
+    return self:_restore()
+end
+
+--- Return the plane to the reading hint unconditionally, and allow arming
+-- again after a failed arm.  The notebook calls it once per process,
+-- which clears a rectangle a crashed KOReader left armed.
+function HintOwner:reset()
+    if not self._live then return true end
+    if not self:_restore() then return false end
+    self._refused = false
+    return true
+end
+
+--- True while the plane may hold anything but the reading hint: after an arm,
+-- and after a failed arm or disarm, until a disarm succeeds.
+function HintOwner:is_armed()
+    return self._armed ~= nil
+end
+
+--- The refresh-layer guard.  x, y, w, h are LOGICAL and unbounded, as a
+-- refresh*Imp receives them.  Disarms when the refresh reaches any armed
+-- rect whose hint is not the plane default (the notebook arms 0x00 over
+-- the canvas and 0x20, the shipped default, over its panel; with another
+-- default a refresh over the panel disarms too, which is the safe side).
+-- Returns true when the refresh reached one, and so a disarm was
+-- attempted.
+function HintOwner:guard(x, y, w, h)
+    local armed = self._armed
+    if not armed then return false end
+    local bb = self._bb and self._bb()
+    -- Geometry it cannot place counts as a hit: disarming is always safe,
+    -- while a missed disarm renders dialog text thresholded.
+    if bb and x and y and w and h then
+        x, y, w, h = bb:getBoundedRect(x, y, w, h)
+        if w <= 0 or h <= 0 then return false end
+        local px, py, pw, ph = bb:getPhysicalRect(x, y, w, h)
+        local hit = false
+        for _, r in ipairs(armed) do
+            if r.hint ~= self._reading
+               and px < r.x + r.w and r.x < px + pw
+               and py < r.y + r.h and r.y < py + ph then
+                hit = true
+                break
+            end
+        end
+        if not hit then return false end
+    end
+    self:disarm()
+    return true
+end
+
 local function firstExistingDir(candidates)
     for _, path in ipairs(candidates) do
         local f = io.open(path .. "/uevent", "r")
@@ -224,16 +477,47 @@ local function adjustTouchEvent(ev, touch, min_x, max_x, min_y, max_y)
     return false
 end
 
+-- The w9013's grid is 11.2x the panel's, and the notebook shapes pressure
+-- and speed from the unrounded position, so the digitizer value stays on
+-- the event as raw_value.  The clamp keeps the last digitizer unit on the
+-- panel: 20966 * 1872/20966 rounds to 1872, one past the last pixel.
+local function adjustPenEvent(ev, sx, sy, w, h)
+    if ev.type ~= C.EV_ABS then return false end
+    local scale, last
+    if ev.code == C.ABS_X then
+        scale, last = sx, w - 1
+    elseif ev.code == C.ABS_Y then
+        scale, last = sy, h - 1
+    else
+        return false
+    end
+    ev.raw_value = ev.value
+    local v = math.floor(ev.value * scale + 0.5)
+    ev.value = v < 0 and 0 or (v > last and last or v)
+    return true
+end
+
 -- Keep one coordinate space for the lifetime of a touch or pen contact.
 -- Rotation while a contact is down is deferred until the gesture detector
 -- has consumed the lift; only the newest pending orientation matters.
 -- Pen hover does not increment contact_count, so it cannot pin rotation.
+--
+-- A consumer that takes pen and touch away from the gesture detector (the
+-- notebook) never raises contact_count, so it holds rotation through
+-- input.wilkbook_hold_rotation instead, and collects what arrived meanwhile
+-- with input:takePendingRotation() when its hold ends: while it consumes,
+-- no touch event reaches the flush below.
 local function installGyroHandler(input)
     local pending_rotation
+    local function held(this)
+        if this.gesture_detector.contact_count > 0 then return true end
+        local hold = this.wilkbook_hold_rotation
+        return hold ~= nil and hold(this) == true
+    end
     local misc_handler = input.handleMiscEv
     input.handleMiscEv = function(this, ev)
         if ev.wilkbook_gsensor and ev.code == 71 then
-            if this.gesture_detector.contact_count > 0 then
+            if held(this) then
                 pending_rotation = ev.value
                 return nil
             end
@@ -242,10 +526,18 @@ local function installGyroHandler(input)
         return misc_handler(this, ev)
     end
 
+    -- The raw orientation (0..3), not an Event: the caller runs it through
+    -- handleGyroEv, which also honours the sensor lock and inhibitInput.
+    input.takePendingRotation = function()
+        local rotation = pending_rotation
+        pending_rotation = nil
+        return rotation
+    end
+
     local touch_handler = input.handleTouchEv
     input.handleTouchEv = function(this, ev)
         local events = touch_handler(this, ev)
-        if pending_rotation ~= nil and this.gesture_detector.contact_count == 0 then
+        if pending_rotation ~= nil and not held(this) then
             local rotation = this:handleGyroEv({ value = pending_rotation })
             pending_rotation = nil
             if rotation then
@@ -255,6 +547,17 @@ local function installGyroHandler(input)
         end
         return events
     end
+end
+
+-- The notebook's input seam: registered once, last in the chain, so a
+-- consumer sees pen X/Y scaled (raw_value kept), touch mirrored and the
+-- gyro translated.  Input has no way to unregister an adjust hook, and a
+-- plugin is instantiated per ReaderUI and per FileManager, so a hook
+-- registered by a plugin would stack another closure on every book open.
+-- Plugins set and clear input.wilkbook_consumer instead.
+local function consumerHook(input, ev)
+    local consumer = input.wilkbook_consumer
+    if consumer then consumer(input, ev) end
 end
 
 local PineNote = Generic:extend{
@@ -350,29 +653,59 @@ function PineNote:init()
     -- moment of the call instead of waiting out the deferred-io timer:
     -- repaint duration stops racing the flush period (the measured
     -- cause of the portrait double-refresh), and pen strokes stop
-    -- waiting 0-50 ms for the timer.
+    -- waiting up to defio_delay_ms (250 ms) for the timer.
     --
     -- Note what this does NOT order: the commit blit runs on a kworker
-    -- after fsync returns.  "The wash paints the new page" is
-    -- guaranteed by the DRIVER, not here -- the global-refresh ioctl
-    -- drains the deferred-io flush and the damage worker into
-    -- ctx->final before arming the wash (see the forward-port patch's
-    -- ioctl_trigger_global_refresh).
+    -- after fsync returns.  On the old shipping driver "the wash paints
+    -- the new page" was guaranteed by the DRIVER, not here: its
+    -- global-refresh ioctl drained the deferred-io flush and the damage
+    -- worker into ctx->final before arming the wash (the forward-port
+    -- patch's ioctl_trigger_global_refresh).  hrdl's direct driver, which
+    -- the reader flavor now ships, does not drain: its
+    -- ioctl_trigger_global_refresh only sets the GLOBAL_REFRESH work item
+    -- and wakes the refresh thread, so damage still waiting out
+    -- defio_delay_ms can reach the panel after the wash, as a partial
+    -- pass.  That is an unregistered driver finding (doc/notebook.md,
+    -- "Housekeeping"); whether it shows on glass is unchecked.
     --
     -- So publish() belongs ONLY on the partial paths.  It was originally
     -- also called before every global refresh, on the reasoning that it
     -- starts the flush earlier and covers kernels without the drain.  That
-    -- was wrong on glass (2026-08-04): the deferred-io flush makes the
-    -- driver partial-refresh the damage, which is a full visible paint, and
-    -- the wash then paints the same content again -- "render, flash, render
-    -- again" on rotation and on opening the menu.  The drain is part of the
-    -- forward-port patch, which this image always carries, so relying on it
-    -- costs nothing and saves an entire pass.
+    -- was wrong on glass (2026-08-04, the old driver): the deferred-io
+    -- flush makes the driver partial-refresh the damage, which is a full
+    -- visible paint, and the wash then paints the same content again --
+    -- "render, flash, render again" on rotation and on opening the menu.
     local function publish()
-        if self.screen and self.screen.fd and self.screen.fd ~= -1 then
-            C.fsync(self.screen.fd)
+        self:publishNow()
+    end
+    -- The notebook's DU rectangle (HintOwner above).  Each refresh*Imp
+    -- below guards BEFORE it publishes or washes: the blit that samples the
+    -- hints runs after the fsync, so a disarm after it could come too late.
+    local hint_ioctl
+    if drm_fd ~= -1 then
+        hint_ioctl = function(request, arg)
+            local ret = C.ioctl(drm_fd, request, arg)
+            if ret < 0 then return ret, ffi.errno() end
+            return ret
         end
     end
+    local is_direct = isDirectEbc()
+    local reading_hint = is_direct and readDefaultHint() or nil
+    logger.info("PineNote: hint plane " .. (not is_direct
+        and "absent (not the direct driver); RECT_HINTS refused"
+        or (hint_ioctl and "owned" or "unreachable (no card)")))
+    if is_direct then
+        logger.info(string.format("PineNote: reading hint %d%s",
+            reading_hint or HINT_READING_FALLBACK,
+            reading_hint and "" or " (default_hint unreadable; fallback)"))
+    end
+    local hint_owner = newHintOwner{
+        ioctl = hint_ioctl,
+        is_direct = is_direct,
+        bb = function() return self.screen.bb end,
+        reading_hint = reading_hint,
+    }
+    self.hint_owner = hint_owner
     -- Flash intents wash the panel only when they cover at least this
     -- fraction of it.  Tunable via the G_reader_settings key
     -- "pinenote_flash_area_fraction" so the optics harness can sweep it
@@ -394,6 +727,7 @@ function PineNote:init()
         "PineNote: flash_area_fraction=%.2f", flash_area_fraction))
     local function flash_policy(intent)
         return function(_, x, y, w, h, d)
+            hint_owner:guard(x, y, w, h)
             if not screen_area then
                 local size = self.screen:getRawSize()
                 screen_area = size.w * size.h
@@ -420,24 +754,29 @@ function PineNote:init()
         end
     end
     self.screen.refreshPartialImp = function(_, x, y, w, h, d)
+        hint_owner:guard(x, y, w, h)
         trace("partial", "partial", x, y, w, h, d)
         publish()
     end
     self.screen.refreshUIImp = function(_, x, y, w, h, d)
+        hint_owner:guard(x, y, w, h)
         trace("ui", "partial", x, y, w, h, d)
         publish()
     end
     self.screen.refreshFastImp = function(_, x, y, w, h, d)
+        hint_owner:guard(x, y, w, h)
         trace("fast", "partial", x, y, w, h, d)
         publish()
     end
     self.screen.refreshA2Imp = function(_, x, y, w, h, d)
+        hint_owner:guard(x, y, w, h)
         trace("a2", "partial", x, y, w, h, d)
         publish()
     end
     self.screen.refreshFlashUIImp = flash_policy("flashui")
     self.screen.refreshFlashPartialImp = flash_policy("flashpartial")
     self.screen.refreshFullImp = function(_, x, y, w, h, d)
+        hint_owner:guard(x, y, w, h)
         trace("full", "global", x, y, w, h, d)
         -- Same reason as flash_policy's global branch: the ioctl publishes
         -- for us, and an fsync first costs a whole extra visible pass.
@@ -478,6 +817,9 @@ function PineNote:init()
     }
 
     local devs = findInputDevices()
+    -- Every ev.src is one of these paths, so a consumer tells sources apart
+    -- by comparing against them.
+    self.input_devices = devs
     if devs.pen then self.input:open(devs.pen, "w9013 pen digitizer") end
     if devs.touch then self.input:open(devs.touch, "cyttsp5 touchscreen") end
     -- The power key belongs to the platform-controls broker; KOReader must not
@@ -590,10 +932,11 @@ function PineNote:init()
             self.input, devs.pen, devs.touch)
     end
     -- On top of both: never feed the gesture detector a slot it cannot
-    -- identify.  Upstream's Input:resetState() (run by inhibitInput(false)
-    -- after every crengine re-render, i.e. after every pinch-to-font-size)
-    -- forgets a finger that is still on the glass; its next delta-only
-    -- frame would otherwise become a ghost contact that crashes the next
+    -- identify.  Upstream's Input:resetState() (run by inhibitInput(true)
+    -- as every crengine re-render starts, i.e. on every pinch-to-font-size)
+    -- forgets a finger that is still on the glass; its first delta-only
+    -- frame after inhibitInput(false) restores input would otherwise
+    -- become a ghost contact that crashes the next
     -- two-finger pan (glass, 2026-09-02; mechanism and offline repro in
     -- slotguard.lua / test-slotguard.lua).
     if devs.touch then
@@ -604,6 +947,7 @@ function PineNote:init()
     -- event with src = originating device node, so no cross-device
     -- state (like the old pen-proximity boolean) is needed:
     --  * pen: scale digitizer units (20966x15725) to screen pixels,
+    --    keeping the digitizer value as raw_value (adjustPenEvent),
     --    unconditionally — the mixed handler only consumes plain ABS
     --    in the pen slot, so touch is unaffected;
     --  * touchscreen: mirror its inverted MT axes, then neutralize its legacy
@@ -619,7 +963,7 @@ function PineNote:init()
     --    events pass through to event_map.
     local BTN_TOOL_RUBBER = 0x141
     local evdev = require("ffi/input_evdev")
-    local pen_scale_x, pen_scale_y
+    local pen_scale_x, pen_scale_y, pen_w, pen_h
     local touch_min_x, touch_max_x, touch_min_y, touch_max_y
     if devs.touch then
         touch_min_x, touch_max_x = evdev.absinfo(devs.touch, C.ABS_MT_POSITION_X)
@@ -643,6 +987,7 @@ function PineNote:init()
         if max_x and max_x > 0 and max_y and max_y > 0 then
             pen_scale_x = screen_w / max_x
             pen_scale_y = screen_h / max_y
+            pen_w, pen_h = screen_w, screen_h
             logger.info(string.format(
                 "PineNote: pen axes %dx%d -> screen %dx%d (scale %.4f/%.4f)",
                 max_x, max_y, screen_w, screen_h, pen_scale_x, pen_scale_y))
@@ -652,12 +997,8 @@ function PineNote:init()
     end
     self.input:registerEventAdjustHook(function(_, ev)
         if ev.src == devs.pen then
-            if pen_scale_x and ev.type == C.EV_ABS then
-                if ev.code == C.ABS_X then
-                    ev.value = math.floor(ev.value * pen_scale_x + 0.5)
-                elseif ev.code == C.ABS_Y then
-                    ev.value = math.floor(ev.value * pen_scale_y + 0.5)
-                end
+            if pen_scale_x then
+                adjustPenEvent(ev, pen_scale_x, pen_scale_y, pen_w, pen_h)
             end
         elseif ev.src == devs.touch then
             adjustTouchEvent(ev, devs.touch,
@@ -677,6 +1018,21 @@ function PineNote:init()
         translateGyroEvent(ev, devs.gsensor)
     end)
     installGyroHandler(self.input)
+    -- Keep this the last hook registered (consumerHook above).
+    self.input:registerEventAdjustHook(consumerHook)
+end
+
+--- Publish pending fbdev damage now: the fsync every refresh*Imp's
+-- publish() runs, untraced and unguarded.  For ink, which publishes once
+-- per pen report (~360 Hz; a trace line each would flood the log) and is
+-- the one paint the armed DU rectangle exists for.  Returns true when the
+-- fsync ran and succeeded.
+function PineNote:publishNow()
+    local screen = self.screen
+    if screen and screen.fd and screen.fd ~= -1 then
+        return C.fsync(screen.fd) == 0
+    end
+    return false
 end
 
 
@@ -836,5 +1192,12 @@ PineNote._installGyroHandler = installGyroHandler
 PineNote._syncGyroState = syncGyroState
 PineNote._mirrorTouchMTPosition = mirrorTouchMTPosition
 PineNote._adjustTouchEvent = adjustTouchEvent
+PineNote._adjustPenEvent = adjustPenEvent
+PineNote._consumerHook = consumerHook
+PineNote._isDirectEbc = isDirectEbc
+PineNote._readDefaultHint = readDefaultHint
+PineNote._newHintOwner = newHintOwner
+PineNote._packRectHintsHeader = packRectHintsHeader
+PineNote._packRectHint = packRectHint
 
 return PineNote

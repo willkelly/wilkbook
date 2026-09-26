@@ -14,7 +14,11 @@
 -- Imp our device.lua assigns still exists as a base method there.  Then
 -- hold our own side to the publish-on-call contract: every assigned Imp
 -- body must call publish() before returning (checked textually against
--- our file -- we own its formatting).
+-- our file -- we own its formatting).  Every Imp must also run the hint
+-- owner's guard FIRST: the notebook's DU rectangle is sampled when the
+-- damage worker blits, after the fsync, so a disarm placed after the
+-- publish could miss the paint it was for.  Ink publishes through the
+-- untraced, unguarded PineNote:publishNow(), which is the single fsync.
 local koreader_dir = assert(arg[1], "arg1: koreader bundle dir")
 local device_lua = assert(arg[2], "arg2: repo device.lua")
 
@@ -71,21 +75,25 @@ end
 -- 4. Publish-on-call, per Imp -- an aggregate count would let one Imp
 -- drop publish() while another gains a call.  We own device.lua's
 -- formatting, so hold each assignment to its exact shape:
---   * PARTIAL Imps are trace-then-publish, nothing between:
+--   * PARTIAL Imps are guard, then trace-then-publish, nothing between:
 --       self.screen.refreshXImp = function(...)
+--           hint_owner:guard(x, y, w, h)
 --           trace(...)
 --           publish()
---   * flash_policy-valued Imps route through flash_policy.
+--   * flash_policy-valued Imps route through flash_policy, whose returned
+--     function guards before either branch (asserted below).
+local GUARD = "hint_owner:guard%(x, y, w, h%)"
 for _, name in ipairs(ours) do
     local fn_shape = "self%.screen%." .. name ..
-        "%s*=%s*function[^\n]*\n%s*trace%([^\n]*\n%s*publish%(%)"
+        "%s*=%s*function[^\n]*\n%s*" .. GUARD ..
+        "\n%s*trace%([^\n]*\n%s*publish%(%)"
     local policy_shape = "self%.screen%." .. name ..
         "%s*=%s*flash_policy%("
     -- refreshFullImp is a global path and is asserted separately below;
     -- it must NOT publish.
     if name ~= "refreshFullImp" then
         check(src:find(fn_shape) ~= nil or src:find(policy_shape) ~= nil,
-            string.format("%s publishes on call (or routes via flash_policy)",
+            string.format("%s guards, then publishes on call (or routes via flash_policy)",
                 name))
     end
 end
@@ -100,11 +108,16 @@ end
 -- The ioctl drains deferred-io into ctx->final itself
 -- (flush_delayed_work + flush_work in ioctl_trigger_global_refresh), so
 -- the wash still provably paints what userspace had written.
-check(src:find("self%.screen%.refreshFullImp%s*=%s*function[^\n]*\n" ..
+check(src:find("self%.screen%.refreshFullImp%s*=%s*function[^\n]*\n%s*" ..
+        GUARD .. "\n" ..
         "%s*trace%([^\n]*\n[^\n]*\n[^\n]*\n%s*global_refresh%(%)") ~= nil
-      or src:find("self%.screen%.refreshFullImp%s*=%s*function[^\n]*\n" ..
+      or src:find("self%.screen%.refreshFullImp%s*=%s*function[^\n]*\n%s*" ..
+        GUARD .. "\n" ..
         "%s*trace%([^\n]*\n%s*global_refresh%(%)") ~= nil,
-    "refreshFullImp reaches global_refresh without an intervening publish()")
+    "refreshFullImp guards, then reaches global_refresh without an intervening publish()")
+check(src:find("local function flash_policy%(intent%)\n" ..
+        "%s*return function%(_, x, y, w, h, d%)\n%s*" .. GUARD) ~= nil,
+    "flash_policy guards before either branch")
 
 -- Structural guard: no publish() call anywhere between a global trace and
 -- its global_refresh().  Comments may sit between them; a call may not.
@@ -136,6 +149,24 @@ no_publish_between('trace%("full", "global"(.-)global_refresh%(%)',
 -- publish-on-call for pen strokes and page turns.
 check(src:find('trace%(intent, "partial"[^\n]*\n%s*publish%(%)') ~= nil,
     "flash_policy partial branch is trace/publish")
+
+-- publishNow: the one fsync.  The Imps' publish() delegates to it, and
+-- it carries neither the trace (ink publishes ~360 times a second) nor
+-- the guard (ink is what the armed rectangle is for).
+local now_body = src:match("\nfunction PineNote:publishNow%(%)\n(.-)\nend\n")
+check(now_body ~= nil, "device.lua defines PineNote:publishNow()")
+if now_body then
+    check(now_body:find("C%.fsync%(screen%.fd%)") ~= nil,
+        "publishNow fsyncs the framebuffer fd")
+    check(now_body:find("trace%(") == nil and now_body:find("guard%(") == nil,
+        "publishNow is untraced and unguarded")
+end
+local fsyncs = 0
+for _ in src:gmatch("C%.fsync%(") do fsyncs = fsyncs + 1 end
+check(fsyncs == 1, string.format(
+    "device.lua has exactly one fsync call site (%d)", fsyncs))
+check(src:find("local function publish%(%)\n%s*self:publishNow%(%)\n%s*end") ~= nil,
+    "the Imps' publish() delegates to publishNow")
 
 -- 6. The wash fd must come from the RESOLVED EBC card, never from a
 -- hardcoded index.  On the direct-mode image card0 is the panfrost GPU,
