@@ -514,9 +514,11 @@ gitignored `build/`, or the reader's static address.
   always-on fixed regulators, with no PMIC involvement. `vcc_3v3_pmu`
   really is off-in-suspend; it simply never had any bearing on this
   sensor. The old contradiction came from conflating the GPIO pad's
-  supply with the supply of the thing driving it. Still open, and now
-  the only surviving candidate: whether the PMU can latch the edge with
-  `pmuio1`/`pmuio2` down (alive-domain detection).
+  supply with the supply of the thing driving it. The electrical sequence
+  remains open: the 2026-09-26 schematic review also found a cover-driven
+  path to the PMIC SLEEP pin, so rail restoration before GPIO detection
+  is an alternative to alive-domain detection with the pad rails down.
+  Neither sequence is measured (`doc/power-management.md`).
   `doc/artifacts/pinenote-input-clocks-20260824/`. Auto-suspend makes
   **SSH to the reader intermittent** — write `enabled=0` to
   **`/data/wilkbook/autosuspend.conf`** before working on it
