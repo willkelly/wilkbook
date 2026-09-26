@@ -36,6 +36,8 @@ struct broker_fb_fix {
  uint16_t xpanstep, ypanstep, ywrapstep; uint32_t line_length;
  unsigned long mmio_start; uint32_t mmio_len, accel; uint16_t capabilities, reserved[2];
 };
+struct broker_timespec { long tv_sec, tv_nsec; };
+int clock_gettime(int, struct broker_timespec*);
 ]]
 local C = ffi.C
 local O_RDONLY, O_WRONLY, O_RDWR, O_NONBLOCK = 0, 1, 2, 0x800
@@ -64,6 +66,18 @@ local function write_value(path, value)
 end
 local function sleep_ms(ms) C.poll(nil, 0, ms) end
 local function run(command) return os.execute(command) == 0 end
+
+-- MONOTONIC measures awake intervals; BOOTTIME also advances during suspend.
+-- Neither steps when SNTP sets the wall clock. Linux provides both clocks;
+-- fail explicitly rather than quietly falling back to realtime on an error.
+local CLOCK_MONOTONIC, CLOCK_BOOTTIME = 1, 7
+local clock_value = ffi.new("struct broker_timespec[1]")
+local function clock_seconds(id)
+    assert(C.clock_gettime(id, clock_value) == 0, "broker clock_gettime failed")
+    return tonumber(clock_value[0].tv_sec) + tonumber(clock_value[0].tv_nsec) / 1e9
+end
+local function awake_now() return clock_seconds(CLOCK_MONOTONIC) end
+local function suspend_now() return clock_seconds(CLOCK_BOOTTIME) end
 
 local RTC_SETTLE = 20
 local config = { enabled = true, charging = false, backstop = BACKSTOP, rtc_settle = RTC_SETTLE }
@@ -174,6 +188,9 @@ local function gadget_restore(saved)
     if saved and saved ~= "" then write_value("/sys/kernel/config/usb_gadget/pinenote-acm/UDC", saved) end
 end
 local function arm_rtc()
+    -- Absolute alarm values belong to the RTC's own epoch, not either of
+    -- the interval clocks. The timesync RTC-write race is still uncoordinated
+    -- (pinenote/tools/platform-controls/README.md); monotonic timers do not fix it.
     local path = "/sys/class/rtc/rtc0/wakealarm"
     write_value(path, "0")
     local now = tonumber(read_line("/sys/class/rtc/rtc0/since_epoch") or "0")
@@ -309,14 +326,14 @@ local function suspend_transaction(fallback)
         cleanup_display(); return false, "deep suspend unavailable"
     end
     run("/run/current-system/profile/bin/sync")
-    local started = os.time()
+    local started = suspend_now()
     if not write_value("/sys/power/state", "mem") then
         write_value("/sys/class/rtc/rtc0/wakealarm", "0")
         gadget_restore(gadget); cleanup_display(); frontlight_restore(lights)
         if had_wifi then restore_wifi() end
         return false, "kernel refused suspend"
     end
-    local slept = os.time() - started
+    local slept = suspend_now() - started
     -- A button wake leaves the one-shot backstop armed unless it is cancelled;
     -- otherwise it fires later while the reader is awake.  Clear it for both
     -- button and RTC wakes before performing the remaining resume repairs.
@@ -325,7 +342,8 @@ local function suspend_transaction(fallback)
     end
     gadget_restore(gadget); cleanup_display(); frontlight_restore(lights)
     if had_wifi then restore_wifi() end
-    log("resumed after %ds", slept)
+    log("resumed after %.3fs", slept)
+    -- Duration-based attribution remains a heuristic, not a wake-source read.
     return true, slept >= config.backstop - 5 and "rtc" or "button"
 end
 
@@ -348,12 +366,24 @@ local function emit(fd, code)
     end
 end
 local function input_name(n) return read_line("/sys/class/input/event" .. n .. "/device/name") end
+-- Check clock availability before acquiring devices or changing power state.
+awake_now(); suspend_now()
 local inputs = {}
 for n = 0, 31 do
     local name = input_name(n)
     if name == "rk805 pwrkey" or name == "gpio-keys" then
         local fd = C.open("/dev/input/event" .. n, bit.bor(O_RDONLY, O_NONBLOCK))
-        if fd >= 0 then inputs[#inputs + 1] = { fd = fd, power = name == "rk805 pwrkey" } end
+        if fd >= 0 then
+            -- EVIOCSCLOCKID: press/release durations must not inherit evdev's
+            -- default realtime timestamps and turn a clock step into a tap.
+            local clock_id = ffi.new("int[1]", CLOCK_MONOTONIC)
+            if C.ioctl(fd, 0x400445a0, clock_id) == 0 then
+                inputs[#inputs + 1] = { fd = fd, power = name == "rk805 pwrkey" }
+            else
+                log("cannot select monotonic input clock: event%d; physical trigger disabled", n)
+                C.close(fd)
+            end
+        end
     end
 end
 -- On PineNote hardware rk805 pwrkey and gpio-keys always exist.  QEMU virt
@@ -368,9 +398,12 @@ C.mkfifo(REQUEST, 384) -- 0600; EEXIST is expected after restart.
 local request_fd = C.open(REQUEST, bit.bor(O_RDWR, O_NONBLOCK)); assert(request_fd >= 0, "cannot open request FIFO")
 write_value(READY, tostring(C.getpid()) .. "\n")
 
-local grace_until = os.time() + POWER_GRACE
+local grace_until = awake_now() + POWER_GRACE
+local function power_tap_allowed(held)
+    return held >= 0 and held <= 1000 and awake_now() >= grace_until
+end
 local protocol = Protocol.new{
-    now = os.time, ack_timeout = ACK_TIMEOUT,
+    now = awake_now, ack_timeout = ACK_TIMEOUT,
     can_prepare = function(trigger)
         local allowed, reason = suspend_allowed()
         if not allowed then
@@ -385,7 +418,7 @@ local protocol = Protocol.new{
     emit_wakeup = function()
         log("emitting KEY_WAKEUP")
         emit(uinput, KEY_WAKEUP)
-        grace_until = os.time() + POWER_GRACE
+        grace_until = awake_now() + POWER_GRACE
     end,
     suspend = function(fallback, request_id, trigger)
         log("transaction start trigger=%s request=%s fallback=%s",
@@ -429,13 +462,13 @@ while true do
                     if item.value == 1 then press_ms = ms
                     elseif item.value == 0 and press_ms then
                         local held = ms - press_ms; press_ms = nil
-                        if held >= 0 and held <= 1000 and os.time() >= grace_until then
+                        if power_tap_allowed(held) then
                             local accepted, reason = protocol:physical_request("power")
                             log("power tap held_ms=%.3f accepted=%s detail=%s",
                                 held, tostring(accepted), tostring(reason))
                         else
-                            log("power release ignored held_ms=%.3f grace_remaining=%d",
-                                held, math.max(0, grace_until - os.time()))
+                            log("power release ignored held_ms=%.3f grace_remaining=%.3f",
+                                 held, math.max(0, grace_until - awake_now()))
                         end
                     end
                 elseif not input.power and item.type == EV_SW and item.code == SW_LID and item.value == 1 then

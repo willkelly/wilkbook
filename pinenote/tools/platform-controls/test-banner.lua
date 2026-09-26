@@ -40,6 +40,7 @@ end
 function C.fsync(fd) assert(fd == 42); return fault == "sync" and -1 or 0 end
 function C.close(fd) assert(fd == 42); closed = closed + 1; return fault == "close" and -1 or 0 end
 function C.poll() return 0 end
+function C.clock_gettime(_, value) value[0].tv_sec, value[0].tv_nsec = 100, 0; return 0 end
 local helpers = dofile("broker-fixture.lua")(path, {
     io = fake_io,
     os = setmetatable({ execute = function(cmd) return cmd:find(" status ", 1, true) and 1 or 0 end }, { __index = os }),

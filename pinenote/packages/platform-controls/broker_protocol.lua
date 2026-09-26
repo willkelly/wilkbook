@@ -1,4 +1,6 @@
 -- Pure state machine for the production suspend broker.
+-- `now` is monotonic awake time, in seconds: WAIT_READY and RTC settle are
+-- awake deadlines. Suspend-inclusive elapsed time belongs to the transaction.
 local Protocol = {}
 Protocol.__index = Protocol
 
