@@ -185,6 +185,14 @@ the kernel derivation (seconds) before `make kernel` (a real cross-build).
 Cross-builds target `aarch64-linux-gnu`; everything writes only to the
 Guix store and `$(ARTIFACTS)`.
 
+**Language direction (operator decision, 2026-09-26).** Keep Python
+available, including as a sandboxed book language. Prefer Guile and Guix
+for build tooling and system scripts, and Lua for KOReader integration.
+Write new tooling in those languages. Existing Python, shell and Lua
+system tools are migration work, not a reason to remove Python from the
+image or to combine a focused bug fix with an unrelated rewrite. When
+replacing a tool, preserve its executable checks and documented interface.
+
 **Prove it offline, in ladder order** (`doc/testing.md`): host tool suites
 → static Guix builds → source inspection → QEMU virt → mock helpers →
 hardware. Stop at the first failure. A change that only touches host tools
