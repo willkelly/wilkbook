@@ -1,0 +1,81 @@
+profile	/gnu/store/9ns0jahhhy2q82q1r3r5fcf4mn6mc571-profile
+shelf	/gnu/store/qgz9gwiiamspffc61wc1gxdh8kl9ciys-pinenote-manuals
+manifest-sha256	6279370ea1630cd9fe2e7459bdf5f7d7e5073ca03714656c24968914589ca636
+man-layout	index-entries=711	page-chapters=686	aliases=25
+book	man	all-sections	711	7d083ec6c9a57091fe36b28e7b8332edc510fd64550424a1580c53b4971a54b3
+book	info	bash	132	ba8b8a95ed0bf9435799d51e6b7d8d345f8eb3650da7f28f61ec39abf0aaea0f
+book	info	coreutils	246	3b8227dc32c70d919d17c7e2d57cfd8821a1e78110c42aa3b2c136613d429319
+book	info	diffutils	113	d0e02272c4a4766915ee490c660b2d73cd65a19c372a05196d01d02de21b58bf
+book	info	find	146	b5457b253a53d3785a10d45f45ebd127f995504e50aa923f057c020e31b54df2
+book	info	find-maint	20	df6a3de7f3e4d4791b6dbf7a6a028594862cf8dc30da0f8d320c09d8e4a40b27
+book	info	gawk	467	31a51ae326c9e743cd3e20f7e00ecff4ced0d39cab6775f8baea1e00699bafdf
+book	info	gawkinet	41	eddc4f11c84e325051c34be0940c47c742fbb85a4925f8a5eef92b24c9db57fc
+book	info	gawkworkflow	48	f6ebbb3bf9dfa0d88bc42648f0c73efdc780e2f198ee71456501e67fc6769507
+book	info	grep	31	e6e9d41e91086ebbc47446a07e8c206d63610792ca6278d274b828f00a00e895
+book	info	guile	777	13affc49d76178f8a862cf3bb80cfbd8ff99ece1e8c9a323c54a05a050e01ceb
+book	info	gzip	10	64c08da22126c45909dae6582a20a180982aa9720ff0802a8af33e030511355f
+book	info	inetutils	51	229273fd86135fbaf7c5c652b122cd7d30a368cc29233a3cf7e45bc5cbdfdda1
+book	info	info-stnd	25	b3605b626efb3e5b4a7918ce4fde496db5f76872da777e74b1cbd90406053478
+book	info	libext2fs	42	fba0cb42a16014e91da51c2fd0079a9a65991963794f90643ddb2407262e2947
+book	info	lzip	14	d25cad547fcd4ed15c549f1710673dc77e0dc80222496073c8027e86067f6514
+book	info	nano	24	56681165e4c52ac0034fef82d600a7a3548cc2fec487f2b2e087dd77a28a8e60
+book	info	pm-gawk	16	1075ac927c90378c960305896714ac06889986e55c3068c9214db40f4c8a0bda
+book	info	r5rs	86	011fae82c0e9cf62377b168be535b326e9deeaaeb6a89386df82f889f5f3d40c
+book	info	sed	64	95e7f3a1c01b31bce5eb354ef36443f8eb09ecca4418f86a1ba08ab48811f0e3
+book	info	tar	206	049fb3ebee6f54587d9e6550aedb05606e25efc8d9245e95f89888ee29b254d0
+book	info	texi2any_api	123	7b25eb3be8d08a71532ce113cba6039829239903ebbbe90a1de98d390902717b
+book	info	texi2any_internals	282	4c48467835b6aab4a2408287565e2f1f209d23681fab9c93ed75edf689c62603
+book	info	texinfo	390	7a1e08b71988687927d902d08f17bfc9952ce3874414456258693fc3a1524024
+book	info	wget	51	3cd3e7c9d869a4fedc5788813b30efebd607cacc2eed75344e23c47f5e1571cb
+book	info	which	9	ac006654c72591b63a5a13895a77f36b2336a7048a4c3e674a018cde3221c270
+omitted	info:fibers
+omitted	info:gnutls-guile
+omitted	info:guile-avahi
+omitted	info:guile-gcrypt
+omitted	info:guile-git
+omitted	info:guile-library
+omitted	info:guile-ssh
+omitted	info:guix
+omitted	info:guix-cookbook
+omitted	info:guix-cookbook.de
+omitted	info:guix-cookbook.es
+omitted	info:guix-cookbook.fr
+omitted	info:guix-cookbook.it
+omitted	info:guix-cookbook.ko
+omitted	info:guix-cookbook.pt_BR
+omitted	info:guix-cookbook.ru
+omitted	info:guix-cookbook.sk
+omitted	info:guix-cookbook.sv
+omitted	info:guix-cookbook.zh_CN
+omitted	info:guix.de
+omitted	info:guix.es
+omitted	info:guix.fr
+omitted	info:guix.it
+omitted	info:guix.pt_BR
+omitted	info:guix.ru
+omitted	info:guix.zh_CN
+omitted	info:libunistring
+omitted	info:shepherd
+omitted	man:gc.3
+omitted	man:halt.8
+omitted	man:herd.1
+omitted	man:moduli.5
+omitted	man:reboot.8
+omitted	man:scp.1
+omitted	man:sftp-server.8
+omitted	man:sftp.1
+omitted	man:shepherd.1
+omitted	man:ssh-add.1
+omitted	man:ssh-agent.1
+omitted	man:ssh-copy-id.1
+omitted	man:ssh-keygen.1
+omitted	man:ssh-keyscan.1
+omitted	man:ssh-keysign.8
+omitted	man:ssh-pkcs11-helper.8
+omitted	man:ssh-sk-helper.8
+omitted	man:ssh.1
+omitted	man:ssh_config.5
+omitted	man:sshd.8
+omitted	man:sshd_config.5
+summary	man=732	info=53	included=736	omitted=49	localized-man=697	info-auxiliary=29
+PASS: profile corpus reconciled with shelf manifest, indexes, NCX and Info node counts

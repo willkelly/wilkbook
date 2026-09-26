@@ -1,0 +1,34 @@
+PASS: census rejects missing-book
+PASS: census rejects wrong-count
+PASS: census rejects omissions
+MANUALS: PASS: man-toc painted, dark-samples=3748
+MANUALS: PASS: TOC selection: Section 1 — User commands
+MANUALS: PASS: visible text: apropos(1)
+MANUALS: PASS: man-index painted, dark-samples=10917
+MANUALS: PASS: visible text: apropos
+MANUALS: PASS: hit-tested internal link target page=21
+MANUALS: PASS: Back restored page=1
+MANUALS: PASS: TOC selection: apropos(1)
+MANUALS: PASS: visible text: SYNOPSIS
+MANUALS: PASS: man-page painted, dark-samples=10882
+MANUALS: PASS: man next/previous page
+MANUALS: result:ok:man
+MANUALS: PASS: info-toc painted, dark-samples=6550
+MANUALS: PASS: TOC selection: 1 Introduction
+MANUALS: PASS: visible text: stream editor
+MANUALS: PASS: info-prose painted, dark-samples=6600
+MANUALS: PASS: TOC selection: 2.1 Overview
+MANUALS: PASS: visible text: sed SCRIPT INPUTFILE
+MANUALS: PASS: visible text: s/hello/world/g
+MANUALS: PASS: info-example painted, dark-samples=9851
+MANUALS: PASS: TOC selection: 2.2 Command-Line Options
+MANUALS: PASS: visible text: --version
+MANUALS: PASS: visible text: copyright notice
+MANUALS: PASS: info-table painted, dark-samples=10622
+MANUALS: PASS: TOC selection: 2 Running sed
+MANUALS: PASS: visible text: --version
+MANUALS: PASS: hit-tested internal link target page=6
+MANUALS: PASS: Back restored page=4
+MANUALS: result:ok:info
+PASS: actual reader rejects wrong book for Info matrix
+PASS: installed manuals acceptance; evidence: /tmp/opencode/manuals-acceptance-final

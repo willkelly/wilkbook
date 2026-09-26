@@ -5,9 +5,15 @@ Issue #17. The reader image already ships `man-db` and `info-reader` out of
 completely unreachable: the device has no terminal, no user shell, and
 exactly one application on screen. This is how that corpus becomes books.
 
-**Status: nothing here has been rendered by KOReader.** Everything below is
-established host-side. See "What is not verified" at the end before you
-quote any of it.
+**Status (2026-09-26): the shelf has run on glass, and now has a native
+KOReader acceptance matrix.** The August 26 session opened the real
+538-document man book: 30.3 s cold, 1.7 s cached (record below). The new
+offline gate checks the realized generation-23 profile against its shelf,
+then renders the real man book and `sed` Info manual in native KOReader.
+It finds **49 missing manual identities** in the installed profile and
+records them explicitly; the shelf is not complete. Representative Info
+prose/examples/definition-table and TOC/link/Back navigation are now
+exercised; whole-corpus typography and panel behaviour are not.
 
 ## Shape
 
@@ -16,12 +22,14 @@ pinenote/packages/manuals/manuals.py     the converter (discovery, man, info, EP
 pinenote/packages/manuals/build-manuals.py   its CLI
 pinenote/packages/manuals.scm            (pinenote-manuals PACKAGES) -> a store dir of EPUBs
 pinenote/services/manuals.scm            the service + configuration record
-pinenote/tools/manuals/                  the rung-1 host gate (make manuals-check)
+pinenote/tools/manuals/                  converter gate + native acceptance/census
 ```
 
 `pinenote-reader.scm` names its package list once (`%pinenote-reader-packages`)
-and hands the same list to the profile and to the shelf, so the shelf
-describes the software that is actually on the device.
+and hands the same list to the profile and to the shelf. However, Guix also
+adds service packages and propagated inputs to the final system profile;
+their documentation is absent from that explicit shelf input list. The
+September 26 census below measures this difference.
 
 ## The corpus, measured
 
@@ -155,14 +163,13 @@ corpus". That was not measured, and it is wrong in the direction that
 matters: `mandoc -O man=#%N.%S` linkifies only **mdoc** `.Xr` macros, and
 this corpus is overwhelmingly **man(7)**, where a cross reference is plain
 text that mandoc never turns into a link at all. So the single book
-currently buys a *small measured* number of working links, at an
-*unmeasured* cost — first-open parse time and `.cr3` cache size for a
-538-document EPUB on an RK3566, which §8 lists as unknown.
+currently buys a *small measured* number of working links. Its cost was
+unmeasured when this decision was written; the August 26 session below
+subsequently measured first-open time and `.cr3` cache size on the RK3566.
 
-The decision stands, because the cost is unmeasured rather than known-bad
-and splitting later is a small change in `man_book`. But it stands on
-weaker evidence than the earlier wording implied, and the honest way to
-make it strong is to *earn* the hypertext: post-process man(7)'s
+The decision stands, with a substantial cold-open cost and a fast cached
+open. Splitting later is a small change in `man_book`. One way to improve
+the hypertext is to post-process man(7)'s
 `<b>name</b>(section)` into a link whenever `name.section` is in
 `known_pages`. That is filed rather than done here.
 
@@ -173,10 +180,11 @@ cross reference inside it would be a same-file anchor.
 Texinfo manuals are one book each, split into a new XHTML at every level-1
 node so a large manual (guile is ~3 MiB of text) is a spine of chapters.
 
-**The cost of the single man book is not measured.** What a 1.87 MiB,
-538-document EPUB costs to open the first time on an RK3566 is unknown — no
-hardware and no QEMU run is part of this work. Splitting is a small change
-in `man_book` if it turns out to matter.
+**The August 26 hardware measurement is 30.3 s cold / 1.7 s cached** for
+the then-current 538-document book. The generation-23 book checked offline
+below is larger (686 page documents plus six section indexes); it has no
+new RK3566 timing measurement. Do not transfer either book's count or
+timing to the other.
 
 ### 6. Copied into the library, not symlinked
 
@@ -266,37 +274,101 @@ Applied to the real corpus rather than fixtures, all 25 books came out with
 zero malformed XHTML, zero links to a missing document or anchor, and zero
 elements outside the reviewed set.
 
-## What is NOT verified
+## Native acceptance and installed-profile census, 2026-09-26
 
-- **No KOReader has opened any of these books.** Not on hardware, not under
-  rung 4v (`qemu-virt-visual`). Typography, page-turn behaviour, TOC
-  usability, link following, first-open parse time and cache size are all
-  unknown.
+Replay instructions and the exact omission list are in
+`pinenote/tools/manuals/README.md`; bounded evidence is in that tool's
+`evidence/2026-09-26/`. No new image, QEMU boot or hardware session was
+needed: these system outputs were already realized locally.
+
+| Input | Identity |
+| --- | --- |
+| System (generation 23, book-state-device-reader) | `/gnu/store/x3qqz8r52pdh7jzghzfj8l44gfrqkncb-system` |
+| Final system profile | `/gnu/store/9ns0jahhhy2q82q1r3r5fcf4mn6mc571-profile` |
+| Shelf referenced by that system's manuals service | `/gnu/store/qgz9gwiiamspffc61wc1gxdh8kl9ciys-pinenote-manuals` |
+| Native KOReader v2026.03 | `/gnu/store/11jrzxbvx4cn4m4ryhllr5a1w93zr1a0-koreader-bin-2026.03` |
+
+The independent Guile census checks names against the man section indexes
+(aliases included), manifest counts against those indexes and Info NCX
+entries, and included Info counts against nodes in the profile's compressed
+source files. It hashes all 26 books and the manifest. It does not reuse
+the Python converter's discovery logic. Exact exceptions are reviewed in
+`profile-omissions.txt`; a newly missing item or a stale exception fails.
+
+| Corpus category | Profile | Shelf / classification |
+| --- | ---: | --- |
+| Untranslated man identities | 732 | 711 included: 686 page chapters + 25 alias index entries |
+| Missing man identities | 21 | 16 OpenSSH, four Shepherd, one libgc (`gc(3)`) |
+| Info manuals, split files grouped | 53 | 25 included, 28 missing |
+| Missing Info manuals | 28 | 11 untranslated service/propagated manuals + 17 translated Guix/cookbook manuals |
+| Localized man files | 697 | Outside the converter's untranslated-man policy |
+| Info auxiliary files | 29 | Directory indexes and images; not independent manuals |
+
+The service/propagated omissions are **coverage gaps**, not an assertion
+that these documents are unwanted. Info discovery does not itself filter
+translations. Images still use the converter's ASCII fallback rather than
+embedding the source pictures. `share/doc` remains out of scope.
+
+The actual ReaderUI, PluginLoader, TOC Menu, ReaderLink, crengine and SDL
+framebuffer run at 1404×1872 / 227 dpi, with fresh private settings, caches
+and copied books. The Lua controller invokes the real TOC selection
+callback; links are found in the rendered page and coordinate-hit-tested
+before following them. Assertions check destination and restored page,
+visible page text and nonblank painted pixels. Screenshots were inspected.
+
+| Acceptance row | Actual book / operation | Result |
+| --- | --- | --- |
+| Man index | Section 1 list, names and one-liners | Pass |
+| Man page | `apropos(1)` NAME, SYNOPSIS, description; next/previous page | Pass |
+| Man navigation | TOC selection; index link to `apropos(1)`; Back to index | Pass |
+| Info prose | `sed`, “1 Introduction”, reflowed paragraph | Pass |
+| Info examples | “2.1 Overview”, monospace command examples | Rendered; wrapping caveat below |
+| Info definition table | “2.2 Command-Line Options”, `--version` term and indented definition | Pass |
+| Info navigation | Nested TOC entries; “2 Running sed” link to options; Back | Pass |
+| Negative controls | Missing book, wrong manifest count, stale/unreviewed omissions, wrong book in real reader | Rejected as expected |
+
+Two limits became concrete during this run:
+
+- The installed `sed(1)` source is itself a fallback saying “unable to
+  create a proper manual page”; the EPUB faithfully contains that stub.
+  The substantive man check uses `apropos(1)` instead. This is an input
+  limitation, not evidence of converter loss.
+- Long command examples wrap and can acquire display hyphens (for example
+  `output.txt` across a line/page boundary). The short substitution example
+  is legible and the option table retains its term/definition layout, but
+  this is **not full code-example fidelity sign-off**. The screenshots
+  retain the problem; neither converter CSS nor reader defaults were
+  changed during acceptance work.
+
+## What remains unverified
+
+- **Most books and pages have not been visually inspected.** The native
+  matrix covers one substantive man page/index and selected `sed` Info
+  content, not every manual, alias, cross-section reference, large table,
+  image fallback, font size or orientation. Info/navigation on the physical
+  reader remains outside the recorded August 26 hardware measurement.
 - **The element whitelist is a contract, not a rendering test.** It says the
   converter has not started emitting markup outside a reviewed list; it does
   not say crengine lays that list out well.
-- **The reader flavor's own shelf has never been built** — only computed.
-  The derivation builds for smaller package lists, natively and cross, and
-  the converter has been run over the reader's exact corpus by hand at the
-  same versions; the flavor's own `pinenote-manuals.drv` has not been
-  realized, because that pulls the whole cross-built profile with it.
-- **The staging one-shot has never run on the device**, or in QEMU. Its
-  branches are exercised host-side against a fake library, but nothing has
-  proven that shepherd starts it in the right order on a real boot, or that
-  `/data` is mounted when it does.
-- The corpus census is from **one workstation's store** at one Guix
-  generation. A different channel state resolves different versions and
-  therefore a different page count.
+- **The new native run does not exercise Shepherd staging or fbdev/EBC.**
+  Staging did run on the device August 26; its exceptional branches remain
+  host-tested. Native SDL proves the reader/document boundary without
+  establishing refresh quality, touch feel, device latency or recovery.
+- The current census is for **one identified system profile**, not every
+  flavor/channel state. The 2026-08-24 census above is historical and has
+  different versions/counts. No fixture is being counted as installed
+  coverage in the September run.
 
 ## Next steps, if someone picks this up
 
-1. Point rung 4v at the shelf: boot `qemu-virt-visual`, open
-   `Manual pages.epub`, screendump the section index and one page, follow a
-   cross reference. That is the cheapest thing that would turn most of the
-   list above from unverified into verified.
-2. Measure first-open time and `.cr3` cache size for the man book on glass,
-   and split per section if it is bad.
-3. Consider a KOReader plugin only if navigation turns out to want something
+1. Decide how the shelf should include service-added and propagated
+   documentation; rerun the census without simply waiving new omissions.
+2. Address long code-example wrapping/hyphenation, then extend the real-reader
+   matrix to another Info manual and image/large-table cases.
+3. Measure the larger current man book and clean-stop cache preservation on
+   glass during an already-planned reader session. The old cold/cached
+   timings are established, not an outstanding first measurement.
+4. Consider a KOReader plugin only if navigation turns out to want something
    the file browser plus the TOC cannot do. It was not needed for this: the
    shelf *is* the discovery surface, and the per-section index chapters are
    the browsable list the issue asked for.

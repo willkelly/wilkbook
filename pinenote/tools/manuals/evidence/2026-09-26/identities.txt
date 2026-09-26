@@ -1,0 +1,16 @@
+system	/gnu/store/x3qqz8r52pdh7jzghzfj8l44gfrqkncb-system
+profile	/gnu/store/9ns0jahhhy2q82q1r3r5fcf4mn6mc571-profile
+shelf	/gnu/store/qgz9gwiiamspffc61wc1gxdh8kl9ciys-pinenote-manuals
+service	/gnu/store/7ay0k85902n95frlxl2az78zwykww2zx-shepherd-pinenote-manuals.go
+native-reader	/gnu/store/11jrzxbvx4cn4m4ryhllr5a1w93zr1a0-koreader-bin-2026.03
+shelf-derivation	/gnu/store/z1ayn1q2876ppzb3r7qgpavl38r76a06-pinenote-manuals.drv
+converter-source	/gnu/store/m52zxa9gjlhk371ar5ysjij3f20z0g6m-pinenote-manuals-source
+mode	SDL offscreen; 1404x1872 at 227 dpi; fresh profiles
+a189ca83623153f2a1b048c7bc04eba1fca76068bd9705dc71296d26292613cc  /gnu/store/11jrzxbvx4cn4m4ryhllr5a1w93zr1a0-koreader-bin-2026.03/lib/koreader/reader.lua
+3b8e852f98ec1db7903c7f13486a5f8e705c5697440417b21b6e3a0c184c43c7  /gnu/store/11jrzxbvx4cn4m4ryhllr5a1w93zr1a0-koreader-bin-2026.03/lib/koreader/libs/libkoreader-cre.so
+3cbd016cd367789b40167fbbca2a04d3865d646f65c1072429ac8783ea3e2e74  /gnu/store/m52zxa9gjlhk371ar5ysjij3f20z0g6m-pinenote-manuals-source/manuals.py
+0e2892257e5ba081792fa4ffc00930ce301c06f15b3b5a0d8b86a2f4fdb8bc78  /gnu/store/m52zxa9gjlhk371ar5ysjij3f20z0g6m-pinenote-manuals-source/build-manuals.py
+defc98f1d4f4464d1c3bf5dffc5fa48591c333a009d3eb38c6b988f9e0f0598c  /tmp/opencode/wilkbook-batch-manuals-acceptance/pinenote/tools/manuals/manualacceptance.koplugin/main.lua
+ace88444d83a1a5646a3fc78021d60c3570628c4f838ee5d4abd38dcb2c1b7ce  /tmp/opencode/wilkbook-batch-manuals-acceptance/pinenote/tools/manuals/corpus-check.scm
+5b50f1d6ef1445bc98d6a19dd76c59af17d37beaaeaf7a72f642d2dc669013f7  /tmp/opencode/wilkbook-batch-manuals-acceptance/pinenote/tools/manuals/acceptance.scm
+94429a4b0e6d6dfd44734645905e0583173f1ef01fe2eca44f5c7444c1a9eaa8  /tmp/opencode/wilkbook-batch-manuals-acceptance/pinenote/tools/manuals/profile-omissions.txt
