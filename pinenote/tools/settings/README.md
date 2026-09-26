@@ -1,75 +1,74 @@
-# settings — the configuration coupling gate
+# settings — configuration coupling audit
 
-    make settings-check
+From the repository root:
 
-Rung 1 (`doc/testing.md`): text analysis of the tree, python3 stdlib only.
-No Guix evaluation, no build, no store read, no device.
+```sh
+guile --no-auto-compile -s pinenote/tools/settings/check-settings.scm
+guile --no-auto-compile -s pinenote/tools/settings/test-check-settings.scm
+lua pinenote/tools/settings/test-broker-config.lua
+```
 
-## What it is for
+Each accepts an optional repository root. The Scheme commands default to
+their checkout; the Lua fixture defaults to the current directory. Requires
+Guile 3 and Lua 5.1+ or LuaJIT (substitute `luajit` for `lua`). No Guix
+evaluation, builds, store reads, Python, device files or network access.
 
-The same knob is declared in several places at once — a Guix
-service-configuration record field, a Lua daemon's `opt` table, a `.conf`
-key, an argv flag, a build-time module-parameter string, a host tool that
-models the shipped stack — and nothing connects the copies. Issue #12's
-inventory found 63 operator-reachable knobs across five naming systems.
-This gate asserts the copies still agree, so a change to one of them
-cannot silently leave the others behind.
+The root `settings-check` target should run these three commands, replacing
+its two Python invocations. `koreader-profile-check` remains the seed writer
+and serialization gate; this audit does not duplicate that implementation.
 
-Six couplings are checked:
+## What is checked
 
-| gate | what must agree |
+| scope | observations |
 |---|---|
-| record ↔ daemon | every Guix record default equals its Lua `opt` twin (15 pairs across `autosuspend`, `ddr-boost`, `timesync`) |
-| shipped EBC parameters | the three build-time copies of the `rockchip_ebc` parameter set — `ebc.scm`'s modprobe options, `firmware.scm`'s `set_parameter` script, `firmware.scm`'s modprobe options — agree key by key |
-| waveform literals | every runtime **self-heal** path restores the *shipped* `refresh_waveform`, and the three concurrent writers agree on the GC16 wash transient |
-| KOReader seeds | the dead `reader-session.scm` seed is a value-identical subset of the winning `pinenote-reader.scm` seed (the 2026-08-05 class) |
-| host model ↔ shipped | `ebc-replay.c`'s `policy_ship()`, which says it models the deployed stack, actually does — including what its usage banner tells an operator the device does |
-| runtime `.conf` keys | one boolean grammar; one meaning per key name; every runtime knob has a record field that can express it in a system declaration; and the two persistent (p7) override files share one directory |
+| Shipping suspend | Reader selects platform-controls, not the retired autosuspend service. Broker initial/reload defaults, timing constants, config path order, key roster, boolean grammar, numeric ranges, obsolete `idle`, and the absence of a Guix configuration record. |
+| Shipping display | Reader selects direct params; exactly `temp_override=22` and `default_hint=32` are written through sysfs. No reintroduced modprobe/set_parameter copies or QEMU assertions of the retired `refresh_waveform` node. Profile and device-layer flash fraction both default to `0.98`. |
+| Existing record/daemon couplings | All fifteen original pairs: five legacy autosuspend, two DDR boost, eight timesync (including negated charging policy and the known store-path/PATH `hwclock` difference). |
+| Legacy display compatibility | Old autosuspend and reader-session waveform self-heal (`6`), GC16 wash transient (`4`) and idlewasher legacy branch. The original forward-port waveform enum, replay policy, zero initialization and 250-ms banner are **retired-driver** checks; they do not describe the direct driver's production defaults. Replay's flash fraction still matches the live reader layer. |
+| Config inventory | Legacy/boost key rosters, no-file defaults, boolean expressions, persistent paths, unmodeled record fields, and DMC's first-match selector/default-off/whitespace grammar. |
 
-## The debt register
+The checked values are an explicit source inventory in `audit.scm`, not
+runtime defaults imported by the product. Both ends of a coupling are
+pinned, so even coordinated changes require an intentional inventory update.
+The direct driver's native hint and the service's optics override are
+different layers, not an accidental divergence.
 
-`check-settings.py` passes on today's tree **and** records the drift that
-is in it, one row per divergence in `DEBT_REGISTER`.
+## Known inconsistencies versus regressions
 
-This is a debt register, not an exemption mechanism:
+`DEBT` annotations describe inherited observations: mixed case-sensitive
+boolean grammars, runtime-only keys without records, the timesync fallback
+path, and DMC whitespace handling. Different `enabled` defaults in different
+files are intentional and file-scoped; their inconsistent parsing still
+needs migration. `doc/configuration.md` §11 records exact current behavior.
 
-* a divergence **not** in the register is a hard `FAIL` — new drift is a
-  bug, and adding a row to silence it is the wrong repair;
-* a row that stops matching, because the drift was **paid off**, is also
-  a `FAIL` (`stale debt-register entry`) and must be deleted. The
-  register can therefore only shrink.  A row owns a SPECIFIC divergence,
-  not a site: if the drift at a registered site changes, the gate fails
-  with `DIVERGENCE CHANGED` rather than absorbing it as old inventory.
-  The first version of this gate matched on the site id alone, so new
-  drift at a known-bad site passed silently -- caught in review;
-* each row names the issue-#12 step expected to retire it.
+A debt annotation owns an **exact value/cardinality**, not a blanket
+exemption for that site. Changed debt or a paid-off absence fails with
+`DEBT CHANGED/stale inventory`. Retire the annotation when fixing the source;
+do not expand it to excuse a new regression. The summary counts observations,
+not distinct bugs (one inherited difference may have two pinned operands).
 
-Issue #12 step 1 asks for a check that goes red against today's tree. A
-permanently-red check is worse than no check — it trains people to ignore
-it, and `make check-host` has to stay `EXIT=0` for CI to mean anything —
-so the redness is captured as inventory instead. The count in the summary
-line is the finding: it should only ever go down.
+## Tests and limits
 
-## Why there is a mutation suite
+The Guile suite reads the source spans actually extracted, then independently
+removes and changes **every observed member**. Negative assertions get
+planted positive fixtures, with an obligation for every new absence rule.
+It also checks missing source files, malformed defaults/tables, duplicates,
+and comments pretending to supply missing sites. Tests mutate in-memory
+source fixtures; an empty scratch directory exercises the real I/O failure
+path. No copy of the whole checkout or subprocess per mutation is needed.
 
-    python3 pinenote/tools/settings/test-check-settings.py
+The Lua suite extracts and executes only the broker's config declarations
+and `reload_config`, with virtual read-only files. It tests booleans (including
+case and unrecognized tokens), numeric boundaries, fractional/exponential
+values, the existing unbounded backstop, missing files, duplicates, unknown
+keys, obsolete idle, last-writer precedence and removal restoring defaults.
+It never loads the broker's FFI, display, clocks or event loop. This avoids
+coupling to unrelated broker work.
 
-A gate that reads sources as text fails characteristically: a pattern
-stops matching, every comparison silently has nothing to compare, and it
-reports a green it did not earn. `pinenote/tools/timesync` records the
-same lesson inside its own cross-check ("unescaped, every one of these
-matches nothing and the whole cross-check passes vacuously").
-
-So every extractor here treats "site not found" as a `FAIL`, and the
-self-test breaks **one coupling at a time** in a scratch copy of the tree
-and requires the gate to reject that copy naming that coupling. It also
-proves the two properties that keep the register honest: an unlisted
-divergence fails, and paying off a listed one fails too.
-
-## Overlap with `timesync-check`
-
-`pinenote/tools/timesync/test-timesync.lua` already cross-checks its own
-service record against its daemon. That is deliberate duplication: the
-suite belongs with the daemon it tests, and this gate is the single
-register that covers the whole tree. If they ever disagree, believe
-neither and read the sources.
+This is a narrow source audit, not a complete Scheme/Lua/C parser or a proof
+of hardware behavior. Extractors require their sites and cardinality; Scheme
+defaults use Guile's reader without evaluation. A small comment lexer keeps
+prose out of code observations; unsupported block-comment forms fail rather
+than guessing. Source refactors may require extractor changes and new
+fixtures. Whole-project syntax, service serialization and runtime behavior
+outside configuration belong to their existing suites.
