@@ -1,13 +1,16 @@
 --[[--
 PineNote pen scribbler: the D8 latency floor instrument.
 
-Reads the Wacom digitizer (w9013 stylus) directly from evdev, draws ink
-into /dev/fb0, and publishes each event batch with one fsync -- the same
-publish-on-call seam KOReader's page turns use.  Nothing else sits in
-the path: no toolkit, no compositor, no app.  What the 240 fps camera
-measures over this tool is the kernel+driver+fbdev floor, and the tool's
-own log gives the software half (last-event timestamp to fsync-return)
-so the glass half can be attributed by subtraction.
+Reads the Wacom digitizer (w9013 stylus) directly from evdev, writes ink
+into /dev/fb0 with write(), and ends each event batch with one fsync.
+write() queues damage at once, bypassing the deferred-io timer, so this
+is not the path a KOReader canvas would take (draw into the mmap,
+publish every input batch); ink drawn by KOReader is unmeasured
+(doc/status.md 2026-09-26).  Nothing else sits in the path: no toolkit,
+no compositor, no app.  What the 240 fps camera measures over this tool
+is the kernel+driver+fbdev floor, and the tool's own log gives the
+software half (last-event timestamp to fsync-return) so the glass half
+can be attributed by subtraction.
 
 This deliberately draws ONLY black ink.  A latency instrument needs a
 mark, not a paint program; black-on-anything is visible on camera and
@@ -231,11 +234,12 @@ local function plot_into(rows, x, y)
 end
 
 -- Write the collected ink as black pixel runs: one seek+write per
--- contiguous run, then a single fsync to publish the whole batch
--- through the deferred-io path.  fh is an io file opened "r+b"; sync
--- is called with no arguments after the writes.  Returns the number of
--- runs written (the harness pins coalescing and offsets through a fake
--- fh).
+-- contiguous run, then a single fsync.  Each write() queues its damage
+-- at once, not through the deferred-io timer; a KOReader canvas would
+-- draw into the mmap and depend on the fsync instead.  fh is an io
+-- file opened "r+b"; sync is called with no arguments after the
+-- writes.  Returns the number of runs written (the harness pins
+-- coalescing and offsets through a fake fh).
 local function write_ink_rows(fh, rows, sync)
     local runs = 0
     for y, xs in pairs(rows) do

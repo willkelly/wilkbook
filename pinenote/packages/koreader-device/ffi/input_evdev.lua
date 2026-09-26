@@ -8,7 +8,9 @@ frontend/device/input.lua. Reads `struct input_event` from
 /dev/input/event* nodes with poll(2). No device grabbing.
 
 Also exposes `absinfo()` so device targets can query digitizer axis
-ranges (EVIOCGABS) for coordinate scaling.
+ranges (EVIOCGABS) for coordinate scaling, and `keystate()` so they can
+re-read which keys and tools are down (EVIOCGKEY) after a gap in the
+event stream.
 --]]
 
 local ffi = require("ffi")
@@ -47,6 +49,11 @@ local ENODEV = 19
 local function EVIOCGABS(abs)
     return 0x80184540 + abs
 end
+
+-- EVIOCGKEY(len): _IOC(READ, 'E', 0x18, len), with len = KEY_CNT (0x300)
+-- bits = 96 bytes: READ(2)<<30 | 96<<16 | 'E'(0x45)<<8 | 0x18
+local EVIOCGKEY_96 = 0x80604518
+local KEY_BYTES = 96
 
 local input = {
     is_ffi = true,
@@ -114,7 +121,8 @@ function input.setRequiredDevice(path)
     required_paths[path] = true
 end
 
---- Query an absolute axis range; returns min, max (or nil on failure).
+--- Query an absolute axis; returns min, max, current value (or nil on
+-- failure).  For ABS_MT_SLOT the value is the kernel's current slot.
 function input.absinfo(path, abs_code)
     local fd = open_fds[path]
     local transient = false
@@ -133,8 +141,46 @@ function input.absinfo(path, abs_code)
     if ret ~= 0 then
         return nil
     end
-    return info.minimum, info.maximum
+    return info.minimum, info.maximum, info.value
 end
+
+--- Which of `codes` (EV_KEY codes) are down right now: {[code] = bool},
+-- or nil on failure.
+--
+-- Always on a transient fd, never on the one this backend reads: EVIOCGKEY
+-- flushes the calling client's queued EV_KEY events (evdev.c
+-- __evdev_flush_queue), so on our own fd it would delete transitions that
+-- waitForEvent has not returned yet.  The snapshot is "now", so events
+-- still queued on our fd with an earlier ev.time are older than it.
+function input.keystate(path, codes)
+    local fd = C.open(path, bit.bor(C.O_RDONLY, C.O_CLOEXEC))
+    if fd == -1 then
+        return nil
+    end
+    local bits = ffi.new("uint8_t[?]", KEY_BYTES)
+    local ret = C.ioctl(fd, EVIOCGKEY_96, bits)
+    C.close(fd)
+    -- EVIOCGKEY answers the byte count it copied, not 0.
+    if ret < 0 then
+        return nil
+    end
+    return input.decodeKeyState(bits, codes)
+end
+
+--- The bit test keystate() applies to an EVIOCGKEY buffer (split out so
+-- the host harness can check it without an evdev node).
+function input.decodeKeyState(bits, codes)
+    local state = {}
+    for _, code in ipairs(codes) do
+        if code >= 0 and code < KEY_BYTES * 8 then
+            state[code] = bit.band(bits[bit.rshift(code, 3)],
+                                   bit.lshift(1, bit.band(code, 7))) ~= 0
+        end
+    end
+    return state
+end
+
+input.EVIOCGKEY_96 = EVIOCGKEY_96
 
 -- Read buffer, shared across calls (64 events per read is plenty)
 local EV_BUF_LEN = 64

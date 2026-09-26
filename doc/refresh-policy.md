@@ -758,6 +758,11 @@ probes carry these measurements: `fsync-publish.lua`, `fsync-band.lua`.
 Also observed: an idle-start pipeline floor of ~132–140 ms from damage to
 first frame (commit + EPD power-up + LUT + temperature read) that bounds
 page-turn latency from EBC-idle regardless of the publish path.
+*(Noted 2026-09-26: these are the old shipping driver's figures. The probes
+have not been re-run on the direct driver, the product since generation 7;
+on it D8 filmed the whole path, nib to first visible ink, at ~20 ms in FAST
+and ~40–60 ms in NORMAL through GL16 on the study image — `doc/status.md`
+2026-08-26 part 8.)*
 
 **Hardware-proven end to end, 2026-08-01** (first boot of the deployed
 publish-on-call image; full record in `doc/status.md`): the sweep

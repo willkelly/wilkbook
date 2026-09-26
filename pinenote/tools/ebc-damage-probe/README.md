@@ -110,7 +110,11 @@ timer path vs write+fsync, write-end to first EBC IRQ. Hardware-run
 mean timer wait. The residual ~135 ms is the idle-start pipeline floor
 (commit blit + EPD power-up + LUT + temperature read before the first
 frame), which full-screen A/Bs cannot see because a governor-paced ~40-100 ms
-fill spans the timer window and both paths flush mid-write.
+fill spans the timer window and both paths flush mid-write. These numbers are
+the old shipping driver's (the 7.0.11 reader) and were not re-run on the direct
+driver, where D8 filmed nib to first ink at ~20 ms in FAST and ~40-60 ms in
+NORMAL through GL16 on the study image
+(`doc/artifacts/pinenote-d8-pen-latency-20260826/`).
 
 Measured 2026-07-30, portrait, 24 C:
 

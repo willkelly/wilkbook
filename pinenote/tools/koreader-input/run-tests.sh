@@ -45,11 +45,29 @@
 #                               pins over the bundle's verbatim files,
 #                               so a KOReader upgrade that moves any
 #                               link fails loudly.
+#   * test-notebook-*.lua    -- the pen notebook (doc/notebook.md), ten
+#                               suites: the pure modules of
+#                               plugins/notebook.koplugin (geom, input,
+#                               journal, brush, panel, controller) against
+#                               synthetic event streams and, when the
+#                               gitignored captures in
+#                               pinenote/tools/pen/build/ exist, the
+#                               2026-09-26 real pen captures; render
+#                               (nb_surface on the bundle's Blitbuffer);
+#                               fs (nb_fs's syscalls on a scratch dir);
+#                               plugin (main.lua headless, with
+#                               device.lua's seam); and device
+#                               (device.lua's notebook support: the hint
+#                               owner, the raw pen value, the consumer
+#                               hook).
 #
 # Usage: run-tests.sh [/gnu/store/...-koreader-bin-...]
 #
 # The bundle is resolved (in order) from: $1, $KOREADER_BUNDLE, or
-# `guix build -L <repo> koreader-bin` (native, cached -- seconds).
+# `guix build -L <repo> -e '(@ (pinenote packages koreader) koreader-bin)'`
+# (native, cached -- seconds).  The bare package-name form loaded every
+# module in the repo, and a test group's output landed in the captured
+# path (2026-09-26).
 set -eu
 
 tool_dir=$(cd "$(dirname "$0")" && pwd)
@@ -57,7 +75,8 @@ repo_root=$(cd "$tool_dir/../../.." && pwd)
 
 bundle=${1:-${KOREADER_BUNDLE:-}}
 if [ -z "$bundle" ]; then
-  bundle=$(guix build -L "$repo_root" koreader-bin | tail -n 1)
+  bundle=$(guix build -L "$repo_root" \
+    -e '(@ (pinenote packages koreader) koreader-bin)' | tail -n 1)
 fi
 
 luajit=$bundle/lib/koreader/luajit
@@ -139,6 +158,17 @@ run_case test-continuous-gesture-cost.lua \
   "$tool_dir/test-continuous-gesture-cost.lua" "$koreader" "$koreader_device"
 run_case test-rotation-decision.lua "$tool_dir/test-rotation-decision.lua" \
   "$koreader" "$device_lua"
+
+notebook=$koreader_device/plugins/notebook.koplugin
+for part in geom input journal brush panel controller render fs; do
+  run_case "test-notebook-$part.lua" "$tool_dir/test-notebook-$part.lua" \
+    "$koreader" "$notebook"
+done
+run_case test-notebook-plugin.lua "$tool_dir/test-notebook-plugin.lua" \
+  "$koreader" "$notebook" "$device_lua"
+run_case test-notebook-device.lua "$tool_dir/test-notebook-device.lua" \
+  "$koreader" "$device_lua" "$repo_root/pinenote/tools/ebc-lab/ebclib.lua" \
+  "$koreader_device/ffi/input_evdev.lua"
 
 # Required-device loss is a poll/HUP contract, independent of input-event
 # payloads. Exercise both registrations and an optional node independently.

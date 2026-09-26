@@ -13,8 +13,10 @@ Two layers, both run under the koreader-bin bundle's own luajit:
     registration contract (a disabled plugin registers nothing), the
     setDirty("all","full") wash calls, the GC16 sysfs flip + scheduled
     restore against a fake sysfs file, the duplicate-copy load sentinel,
-    and onCloseWidget teardown (timer unscheduled, GC16 never left
-    active).
+    onCloseWidget teardown (timer unscheduled, GC16 never left
+    active), and chargePageTurn, the notebook's page-turn entry point
+    (the debt_max turn washes; a disabled or closed washer charges
+    nothing).
 
 NOT covered here (the residual gap, stated precisely): UIManager's real
 scheduler/paint loop and the PageUpdate/PosUpdate emission by
@@ -529,6 +531,44 @@ report(leftovers == 0, "onCloseWidget unschedules this instance's tasks",
 report(#UIManager.event_hook.InputEvent == 0,
        "onCloseWidget unregisters the InputEvent hook (hook wrapper)",
        #UIManager.event_hook.InputEvent .. " hook(s)")
+
+-- 2d. chargePageTurn, the notebook's entry point, at the SHIPPED defaults.
+-- Notebook turns never reach onPageUpdate, and calling the core directly
+-- would retire the debt at debt_max and drop the wash it returns; the
+-- method goes through _apply, so the 60th turn washes.
+for _, key in ipairs({ "idlewasher_debt_min", "idlewasher_debt_max",
+                       "idlewasher_idle_s", "idlewasher_deepclean_idle_s" }) do
+    settings[key] = nil
+end
+fake_now = 100
+local nb = IdleWasher:new{}
+report(type(IdleWasher.chargePageTurn) == "function"
+       and rawget(nb, "chargePageTurn") == nil
+       and nb.core.debt_max == Core.DEFAULTS.debt_max,
+       "chargePageTurn: a class method; the washer runs the default debt_max",
+       "debt_max=" .. tostring(nb.core.debt_max))
+local washes0 = UIManager:washes()
+local bundled0 = log_grep("[idlewasher] bundled wash (debt max)")
+for _ = 1, Core.DEFAULTS.debt_max - 1 do nb:chargePageTurn() end
+report(UIManager:washes() == washes0 and nb.core.debt == Core.DEFAULTS.debt_max - 1,
+       "chargePageTurn: 59 notebook turns accrue debt without a wash",
+       string.format("debt=%d washes=+%d", nb.core.debt, UIManager:washes() - washes0))
+nb:chargePageTurn()
+report(UIManager:washes() == washes0 + 1 and nb.core.debt == 0
+       and log_grep("[idlewasher] bundled wash (debt max)") == bundled0 + 1,
+       "chargePageTurn: the 60th notebook turn fires the bundled wash",
+       string.format("debt=%d washes=+%d", nb.core.debt, UIManager:washes() - washes0))
+nb:onCloseWidget()
+local sched0 = #UIManager.scheduled
+nb:chargePageTurn()
+report(UIManager:washes() == washes0 + 1 and #UIManager.scheduled == sched0,
+       "chargePageTurn: a closed washer (core gone) charges nothing", "")
+settings.idlewasher_enabled = false
+local nb_off = IdleWasher:new{}
+nb_off:chargePageTurn()
+report(nb_off.core == nil and UIManager:washes() == washes0 + 1
+       and #UIManager.scheduled == sched0,
+       "chargePageTurn: a disabled washer charges nothing", "")
 
 os.remove(wf_path)
 

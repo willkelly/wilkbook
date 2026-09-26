@@ -6,10 +6,13 @@ Drives two ioctls on hrdl's rockchip_ebc:
   DRM_IOCTL_ROCKCHIP_EBC_MODE        query/set NORMAL|FAST (+redraw_delay)
   DRM_IOCTL_ROCKCHIP_EBC_RECT_HINTS  set the default pixel hint
 
-Pen work wants FAST with hint byte 0 (Y1 depth + THRESHOLD, REDRAW
-off); reading wants NORMAL with the driver default 160 (Y4 + THRESHOLD
-+ REDRAW).  Numbers and struct layouts come from the swap patch's
-include/uapi/drm/rockchip_ebc_drm.h and are pinned by the harness --
+Pen ink wants hint byte 0 (Y1 depth + THRESHOLD, REDRAW off -> the DU
+slot), in NORMAL: a DU-hinted region was pen-class by blinded feel, and
+whole-screen DU was not told apart from FAST (doc/status.md
+2026-09-26).  Reading wants NORMAL with hint 32 (Y4 -> GL16, no
+REDRAW), the product boot value; the driver default is 160 (Y4 +
+THRESHOLD + REDRAW).  Numbers and struct layouts come from the swap
+patch's include/uapi/drm/rockchip_ebc_drm.h and are pinned by the harness --
 including the generator itself against the hardware-proven
 GLOBAL_REFRESH constant 0xC0016440.
 

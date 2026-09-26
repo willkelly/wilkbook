@@ -88,11 +88,25 @@ nowhere near enough. `DRIVER_MODE_FAST` reaches **~11.7 ms to first
 motion**, and it is structurally unavailable in 3WIN/LUT mode: it needs
 the driver to own per-frame phase bytes.
 
+**Update 2026-09-26:** the ~11.7 ms above was a one-frame estimate. D8
+filmed the pen at 240 fps on the study image (`doc/status.md` 2026-08-26
+part 8): FAST put first ink ~20 ms after the nib (17–25 ms, two strikes)
+and was fully dark ~100 ms after that; NORMAL through the default GL16
+route took ~40–60 ms to first ink and ~250–290 ms more to fully dark,
+and the operator said it "feels pretty much the same to write on". On
+generation 21 a region hinted DU through `RECT_HINTS` in NORMAL was
+pen-class by blinded feel beside GL16 on the same screen, and
+whole-screen DU could not be told apart from FAST (`doc/status.md`
+2026-09-26, no camera, so no number); on that evidence a pen canvas does
+not need FAST's whole-screen mode switch. The ~290 ms floor in the table
+is the old shipping driver's LUT path, which stopped being the product
+path at the embrace (generation 7).
+
 ## What the swap buys, beyond FAST mode
 
 | | |
 |---|---|
-| `DRIVER_MODE_FAST` | ~11.7 ms to first motion (1-bit, visible smear) |
+| `DRIVER_MODE_FAST` | ~11.7 ms to first motion (1-bit, visible smear); measured since: ~20 ms to first ink (D8, 2026-08-26, see above) |
 | **85 Hz** | needs `SDCLK_DIV=0`, direct-mode-only — **100 %** of the waveform's authored rate |
 | phase buffer 2 bits/px | **~6× less DDR** (56 vs 335 MB/s) — cheaper on our one confirmed failure mode |
 | per-pixel state | no areas, no queue, no `split_area_limit` — **area-collision bugs cease to exist as a class** |
@@ -1024,6 +1038,22 @@ not from scratch:
 | `DRM_IOCTL_ROCKCHIP_EBC_MODE` | driver mode (NORMAL/FAST/…) and `set_redraw_delay` at runtime — the lever P5 would have KOReader wrap around pen-down/pen-up |
 | `redraw_delay` (module param; also via the MODE ioctl) | periodic top-up drive of REDRAW-hinted pixels; ships 0 = off (P2a) |
 
+**Two rows above, corrected 2026-09-26.** A sysfs write to `default_hint`
+changes only the module parameter's variable. The driver reads it at
+probe, where it seeds the hint plane
+(`linux-pinenote-7.1-hrdl-direct-mode.patch`, the
+`memset(ebc->hints_ioctl, default_hint …)` in probe), and `RECT_HINTS`
+with `set_default_hint` overwrites both. So a sysfs write takes effect at
+the next probe — `pinenote-ebc-direct-params` reaches the hint plane
+only because it runs before the CLUT rebind — and a runtime change goes
+through `set_default_hint` (`rect-hints.lua --default`, `ebc-mode.lua
+--hint`). The MODE row's pen-down/pen-up wrap is superseded: entering
+FAST queues a full-screen GC16 refresh that redraws the page as dithered
+1-bit, so a per-stroke switch would flash the whole page. A DU-hinted
+region in NORMAL (the `RECT_HINTS` row) was pen-class by blinded feel
+beside GL16, and whole-screen DU in NORMAL was not told apart from FAST
+(`doc/status.md` 2026-09-26; see P5).
+
 What has NO knob, and therefore needs code: the defio flush window
 (cause 1 — port our `defio_delay_ms` `.fbdev_probe` wrapper and a
 publish-on-call equivalent) and the wash class (cause 3 — a driver or
@@ -1101,6 +1131,17 @@ pen-down rendering, stroke capture on top of it. #20's capture, storage
 and vectorization work is **independent of all of the above** and can
 proceed in parallel from day one — it needs no panel.
 
+**Update 2026-09-26:** the pen-canvas design under discussion draws ink
+through a per-region hint in NORMAL, not a mode switch, and glass
+supports it by blinded feel. On generation 21 a region hinted DU through
+`RECT_HINTS`, beside GL16 on the same screen, was called much faster in 2
+of 2 blinded split arms, and whole-screen DU was not told apart from FAST
+(`doc/status.md` 2026-09-26). FAST is whole-screen and redraws the page
+as dithered 1-bit on entry. There is no camera number for DU in NORMAL.
+Still unmeasured: ink drawn by KOReader (which has no hint or mode
+plumbing), the gray settle after pen-up, and DC balance and ghosting over
+long sessions. #20's stroke capture is unstarted.
+
 ## §7. A question on the record, not a plan: does this need to be in the kernel?
 
 **Status: question. Explicitly not being acted on** (operator, 2026-08-25).
@@ -1165,6 +1206,15 @@ Everything in P3, plus: whether FAST mode's 1-bit output and visible
 smear are acceptable for ink in practice; whether 85 Hz is stable on this
 panel; and whether the 6×-lower DDR fetch actually removes the starvation
 margin or merely moves it.
+
+**Update 2026-09-26:** in D8 (2026-08-26, study image; `doc/status.md`
+2026-08-26 parts 7–8) the operator called FAST "absolutely insane" and
+said NORMAL "feels pretty much the same to write on"; on generation 21
+whole-screen DU in NORMAL could not be told apart from FAST by blinded
+feel (`doc/status.md` 2026-09-26). On that evidence ink does not depend
+on FAST being acceptable. Nobody has judged FAST's 1-bit output and smear
+as ink, and the DC balance and ghosting of FAST or DU ink over long
+sessions are still unmeasured.
 
 ## Bail-out criteria
 

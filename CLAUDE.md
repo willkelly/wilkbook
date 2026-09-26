@@ -125,6 +125,12 @@ code review — before a single reboot. That's the standard.
   decisions with recommendations, the six steps with their offline
   proofs, and the bail-out. Read before touching anything
   direct-related.
+- `doc/notebook.md` — the pen notebook (2026-09-26, proof of concept
+  built and host-tested, not on glass): paper-and-pen with a floating
+  panel on long press, DU ink through a per-region hint, pressure brushes,
+  multi-finger undo, an append-only stroke journal on `/data`, its module
+  map and offline proofs, and the generation-22 session that first runs
+  it.
 - `doc/driver-findings-report.md` — the community-facing writeup of driver
   bugs the host tools found.
 - `doc/upstream-register.md` — the standing list of what we owe the
@@ -349,8 +355,10 @@ gitignored `build/`, or the reader's static address.
   caveat: a bound unattached USB gadget aborts suspend on 7.1.8 —
   registered); **idle power is at parity** (155.3 vs 156.9 mA; real
   turns at 20/min add ~59 mA at ~41.5 frames/turn — the untuned hint
-  is a power cost too). Page-turn injection trap: KEY 158 advances
-  (KOReader's labels are inverted on this stack). **The decision was
+  is a power cost too); **D8 (pen latency) passed 2026-08-26** on the
+  study image, 240 fps camera: ~20 ms nib to first ink in FAST,
+  ~40–60 ms in NORMAL through GL16. Page-turn injection trap: KEY 158
+  advances (KOReader's labels are inverted on this stack). **The decision was
   taken 2026-09-02: tentatively EMBRACED by both operators, barring
   new information** — the embrace sweep (the `reader` flavor moves to
   the direct kernel, the scaffolding is deleted, one shipping image) is
@@ -360,6 +368,13 @@ gitignored `build/`, or the reader's static address.
   2026-09-03 and merged to main the same day (PR #64, the sync of
   everything exercised; `doc/status.md`). The `reader` flavor IS the
   direct kernel now; S3–S5 (deleting the scaffolding) are not started.
+  On 2026-09-26 (generation 21) a region hinted DU (`0x00`) through
+  `RECT_HINTS` in NORMAL was pen-class by blinded feel beside GL16, and
+  whole-screen DU was not told apart from FAST; on that evidence a pen
+  canvas does not need FAST's whole-screen mode switch. No camera timed
+  it, so there is no DU-in-NORMAL number, and ink drawn by KOReader (no
+  drawing feature, no hint plumbing) is unmeasured. The digitizer
+  reports at ~360 Hz (2.77 ms median; `doc/status.md` 2026-09-26).
 - **Update path — on glass since 2026-09-02.** os2 carries an image
   with the guix importer daemon, kexec, the `wilkbook-generation`
   helper, first-boot root growth and the signing-key ACL; from there
@@ -596,7 +611,16 @@ gitignored `build/`, or the reader's static address.
   `wlan0.conf`. The teardown now remounts `/data` read-only after `/`
   (the bail-out puts it back) — proven by two kexecs on generation 19.
   When a kexec'd boot loses something only a sleep reveals, check what
-  was mounted where before suspecting the radio.
+  was mounted where before suspecting the radio. **The remount fails if
+  anything still holds `/data` open for writing, and the teardown only
+  logs that failure, after Wi-Fi is off.** The teardown stops only
+  `reader-session`. On the `book-state-device-reader` flavor, once the
+  note feature is activated (its marker present), the authority keeps its
+  SQLite database open read-write while idle, so the remount is expected
+  to fail there. That is inferred from the source, not observed: the
+  2026-09-11 session stopped the authority by hand first. Do the same
+  before every trial on that flavor until the teardown handles it
+  (`doc/notebook.md`, housekeeping).
 - **The UART capture drops ~25 bytes every 150–250 at 1.5 Mbaud, and it
   is the adapter, not termios** (2026-09-04, measured from the two
   generation-16 captures): `uboot-pick-slot.sh` has always set the port

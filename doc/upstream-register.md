@@ -1355,3 +1355,24 @@ behavior, and verify the control-escaping fix/options. Wrapper fixes and
 cross-language regression tests are in progress; do not claim upstream is fixed
 because our wrapper rejects or escapes an input. The standing send gate above
 still applies.
+
+## 27. KOReader: `Blitbuffer:invertRect`'s Lua fallback raises on a full-width BB8 rect
+
+**Status: needs-work; not sent.** Found offline on 2026-09-26 by the pen
+notebook's surface review (`doc/notebook.md`).
+
+**Evidence:** in `ffi/blitbuffer.lua` (KOReader 2026.03, line 1609), the
+full-width branch of the Lua fallback loops `for i = 1, self.stride*h do`.
+`self.stride` is a `size_t` cdata, so the product is 64-bit cdata, and LuaJIT
+raises "'for' limit must be a number". The other bit depths use
+`self.pixel_stride`, a plain number, and are unaffected. The RGB24 case shares
+the branch; it is inferred from the code, not run. The path is reached only
+with the C blitter disabled (`dev_no_c_blitter`), so no shipped PineNote
+configuration hits it; the notebook's `nb_surface.lua` avoids the path in that
+mode anyway.
+
+**For:** KOReader (koreader-base `ffi/blitbuffer.lua`). **Form:** a one-line
+fix (`tonumber(self.stride)*h`) with a minimal reproduction.
+**Before sending:** reproduce against current upstream, and check whether the
+same `size_t` arithmetic appears in other Lua fallbacks. The standing send gate
+above still applies.

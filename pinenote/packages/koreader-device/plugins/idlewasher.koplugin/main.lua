@@ -219,6 +219,15 @@ function IdleWasher:_onPosUpdate(pos, pageno)
     end
 end
 
+-- Turns that ReaderPaging/ReaderRolling never see (the notebook's) pay the
+-- same debt.  Through _apply, not the core: the core only RETURNS the
+-- bundled wash at debt_max, and _apply is what fires it.  A class method,
+-- not an event handler, so it exists on a disabled washer too, where there
+-- is no core and a turn costs nothing.
+function IdleWasher:chargePageTurn()
+    if self.core then self:_apply(self.core:on_page_turn(now_s())) end
+end
+
 -- The dispatcher-exposed manual deep clean (gesture-assignable).
 function IdleWasher:_onIdleWasherDeepClean()
     logger.info("[idlewasher] deep clean requested (dispatcher)")

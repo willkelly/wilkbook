@@ -26,7 +26,8 @@ What it does, from the patches alone (no kernel build, no device):
      against the driver(s) that code is declared to run on, and reports
      what the same command number means on the OTHER driver;
   4. requires the suspend broker to reach the shipping-only barrier only
-     through its driver probe;
+     through its driver probe, and KOReader's hint owner to reach the
+     direct-only RECT_HINTS only through its own;
   5. carries a positive control: the barrier literal, declared for both
      drivers, MUST be rejected -- otherwise the checker is not looking.
 
@@ -66,6 +67,10 @@ ROSTER = [
      r"local REQUEST = (0x[0-9A-Fa-f]+)", "REFRESH_BARRIER", {"shipping"}),
     ("pinenote/packages/koreader-device/frontend/device/pinenote/device.lua",
      r"local DRM_GLOBAL_REFRESH = (0x[0-9A-Fa-f]+)", "GLOBAL_REFRESH", {"shipping", "direct"}),
+    # The notebook's hint owner; it refuses to run unless the direct
+    # driver's fingerprint is present (check 4c below).
+    ("pinenote/packages/koreader-device/frontend/device/pinenote/device.lua",
+     r"local DRM_RECT_HINTS = (0x[0-9A-Fa-f]+)", "RECT_HINTS", {"direct"}),
     ("pinenote/services/reader-session.scm",
      r"C\.ioctl\(card, (0x[0-9A-Fa-f]+), arg\)", "GLOBAL_REFRESH", {"shipping", "direct"}),
     ("pinenote/tools/ebc-lab/test-ebc-lab.lua",
@@ -74,6 +79,7 @@ ROSTER = [
      r"lib\.(?P<name>MODE|RECT_HINTS|PHASE_SEQUENCE|ZERO_WAVEFORM)_IOCTL == (?P<lit>0x[0-9A-Fa-f]+)", None, {"direct"}),
 ]
 BROKER = "pinenote/packages/platform-controls/pinenote-power-broker.lua"
+DEVICE_LUA = "pinenote/packages/koreader-device/frontend/device/pinenote/device.lua"
 
 failures = 0
 
@@ -359,6 +365,26 @@ def main():
         ok("no_off_screen is registered by BOTH drivers (not a fingerprint; the 2026-09-02 trap)")
     else:
         bad("no_off_screen registration changed; re-read the fingerprint argument")
+
+    # 4c. the mirror image for device.lua's hint owner: RECT_HINTS shares
+    #     command 0x03 with the shipping driver's barrier, so the owner runs
+    #     only when a parameter registered by the direct driver ALONE is
+    #     present, and init hands that probe's answer to the owner.
+    device = read(DEVICE_LUA)
+    probe = re.search(r'local DEFAULT_HINT_PATH = "/sys/module/rockchip_ebc/parameters/(\w+)"', device)
+    probe = probe.group(1) if probe and re.search(
+        r'local function isDirectEbc\(path\)\s*local f = io\.open\(path or DEFAULT_HINT_PATH, "r"\)',
+        device) else None
+    if probe in direct_params and probe not in shipping_params:
+        ok("%s: fingerprint parameter `%s' is registered by the direct driver only" % (DEVICE_LUA, probe))
+    else:
+        bad("%s: fingerprint parameter %r must be direct-only (shipping: %s, direct: %s)"
+            % (DEVICE_LUA, probe, probe in shipping_params, probe in direct_params))
+    if ("local is_direct = isDirectEbc()" in device
+            and re.search(r"newHintOwner\{\s*ioctl = hint_ioctl,\s*is_direct = is_direct,", device)):
+        ok("%s: the hint owner is gated on that fingerprint" % DEVICE_LUA)
+    else:
+        bad("%s: the hint owner must take is_direct from isDirectEbc()" % DEVICE_LUA)
 
     # 5. positive control
     barrier = rosters["shipping"]["REFRESH_BARRIER"]

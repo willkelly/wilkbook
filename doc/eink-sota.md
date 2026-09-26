@@ -585,7 +585,13 @@ task demands — a visible stylus actually *improves* latency
 discrimination). rM2's famous ~21 ms is past diminishing returns; our
 A2's 157 ms playback overshoots the budget but ink is visible from the
 first darkening phases, well before completion (inference — measurable
-on the rig). Prediction is optional garnish, not required. The portable
+on the rig). (Measured since: on hrdl's direct driver, the product
+driver from generation 7, which has no A2 slot and no area queue, D8
+filmed ~20 ms nib to first ink in FAST and ~40–60 ms in NORMAL at GL16
+on the study image — `doc/status.md` 2026-08-26 part 8; on generation
+21 a DU-hinted region in NORMAL was pen-class by blinded feel, no
+camera — `doc/status.md` 2026-09-26.)
+Prediction is optional garnish, not required. The portable
 pen pattern (from Onyx/Microsoft/rM2, §1.3.20): wet strokes as small
 stroke-following DU/A2 rects with binarized pixels, an exclusion-rect
 input gate (pairs with our mixedrouter work), and a post-lift GC16-class

@@ -1,6 +1,8 @@
 -- Host regression coverage for the cyttsp5 MT-axis normalization in the
 -- PineNote adapter.  The five points are measured against the static target
--- card in physical TOP mode; no input device or panel is needed here.
+-- card in physical TOP mode; no input device or panel is needed here.  The
+-- w9013 pen scaling (raw value kept, axis maxima clamped onto the panel)
+-- is pinned at the end.
 local koreader_dir = assert(arg[1], "arg1: koreader bundle dir (lib/koreader)")
 local device_lua_path = assert(arg[2], "arg2: path to pinenote device.lua")
 
@@ -134,6 +136,48 @@ local unavailable = { src = TOUCH, type = EV_ABS, code = ABS_MT_POSITION_X, valu
 report(not adjust(unavailable, TOUCH, nil, nil, MIN_Y, MAX_Y)
        and unavailable.value == 1757,
        "unavailable X range leaves coordinates unchanged", tostring(unavailable.value))
+
+-- The pen: the w9013's advertised ranges scaled to the panel the way
+-- device.lua's init computes them (screen size / axis maximum).  The
+-- rounding is the one the hook has always used; what the helper adds is
+-- the raw digitizer value and the clamp, because each axis maximum
+-- rounds to one past the last pixel.
+local adjust_pen = PineNote._adjustPenEvent
+report(type(adjust_pen) == "function", "device.lua exports pen adjust helper",
+       tostring(type(adjust_pen)))
+local ABS_Y, ABS_PRESSURE = 1, 24
+local PEN_MAX_X, PEN_MAX_Y, PANEL_W, PANEL_H = 20966, 15725, 1872, 1404
+local SX, SY = PANEL_W / PEN_MAX_X, PANEL_H / PEN_MAX_Y
+local pen_cases = {
+    -- label, code, raw, expected px
+    { "raw X 0", ABS_X, 0, 0 },
+    { "raw Y 0", ABS_Y, 0, 0 },
+    { "raw X 20966 (axis max) clamps to 1871", ABS_X, 20966, 1871 },
+    { "raw Y 15725 (axis max) clamps to 1403", ABS_Y, 15725, 1403 },
+    { "raw X 10483 rounds as before", ABS_X, 10483, 936 },
+    { "raw Y 7000 rounds as before", ABS_Y, 7000, math.floor(7000 * SY + 0.5) },
+}
+for _, case in ipairs(pen_cases) do
+    local label, code, raw, want = unpack(case)
+    local ev = { src = PEN, type = EV_ABS, code = code, value = raw }
+    local unclamped = math.floor(raw * (code == ABS_X and SX or SY) + 0.5)
+    report(adjust_pen(ev, SX, SY, PANEL_W, PANEL_H)
+           and ev.value == want and ev.raw_value == raw,
+           "pen " .. label,
+           string.format("raw=%d px=%d (unclamped %d) raw_value=%s",
+                         raw, ev.value, unclamped, tostring(ev.raw_value)))
+end
+local pen_other = {
+    { "pen pressure", { src = PEN, type = EV_ABS, code = ABS_PRESSURE, value = 4095 } },
+    { "pen BTN_TOUCH", { src = PEN, type = EV_KEY, code = BTN_TOUCH, value = 1 } },
+}
+for _, case in ipairs(pen_other) do
+    local label, ev = case[1], case[2]
+    report(not adjust_pen(ev, SX, SY, PANEL_W, PANEL_H)
+           and ev.value == (label == "pen pressure" and 4095 or 1)
+           and ev.raw_value == nil,
+           label .. " is unchanged and carries no raw_value", tostring(ev.value))
+end
 
 if fail == 0 then
     print("RESULT: ok")

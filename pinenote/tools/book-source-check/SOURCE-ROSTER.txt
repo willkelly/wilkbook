@@ -13,6 +13,17 @@ pinenote/packages/koreader-device/frontend/device/pinenote/suspend_policy.lua
 pinenote/packages/koreader-device/plugins/idlewasher.koplugin/_meta.lua
 pinenote/packages/koreader-device/plugins/idlewasher.koplugin/idlewasher_core.lua
 pinenote/packages/koreader-device/plugins/idlewasher.koplugin/main.lua
+pinenote/packages/koreader-device/plugins/notebook.koplugin/_meta.lua
+pinenote/packages/koreader-device/plugins/notebook.koplugin/main.lua
+pinenote/packages/koreader-device/plugins/notebook.koplugin/nb_brush.lua
+pinenote/packages/koreader-device/plugins/notebook.koplugin/nb_config.lua
+pinenote/packages/koreader-device/plugins/notebook.koplugin/nb_controller.lua
+pinenote/packages/koreader-device/plugins/notebook.koplugin/nb_fs.lua
+pinenote/packages/koreader-device/plugins/notebook.koplugin/nb_geom.lua
+pinenote/packages/koreader-device/plugins/notebook.koplugin/nb_input.lua
+pinenote/packages/koreader-device/plugins/notebook.koplugin/nb_journal.lua
+pinenote/packages/koreader-device/plugins/notebook.koplugin/nb_panel.lua
+pinenote/packages/koreader-device/plugins/notebook.koplugin/nb_surface.lua
 pinenote/packages/koreader.scm
 pinenote/tools/book-protocol/book-protocol.scm
 pinenote/tools/book-protocol/book-protocol/blocking-io.scm

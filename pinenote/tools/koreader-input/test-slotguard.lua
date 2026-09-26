@@ -7,8 +7,8 @@ gesturedetector.lua the way pinenote/device.lua does (handleMixedTouchEv
 killed KOReader on the PineNote during pinch-to-font-size:
 
     pinch -> one finger lifts (pinch emitted) -> ReaderRolling re-renders:
-    Input:inhibitInput(true) (the still-down finger's frames are dropped)
-    -> inhibitInput(false) -> Input:resetState() wipes every slot table
+    Input:inhibitInput(true) -> Input:resetState() wipes every slot table
+    (and the still-down finger's frames are dropped) -> inhibitInput(false)
     -> the still-down finger's next DELTA-ONLY frame lands in an empty
     table (no id, no x) -> the next finger pairs with that ghost ->
     the two-finger pan calls Contact:getPath() on it ->
@@ -293,9 +293,9 @@ local function pinchThenResetThenGhost(input)
     -- Finger B lifts: the pinch is emitted here, finger A is still down.
     go({ frame(TOUCH, { { EV_ABS, ABS_MT_SLOT, 1 }, { EV_ABS, ABS_MT_TRACKING_ID, -1 } }) })
     -- ReaderRolling re-renders for the new font size.
-    input:inhibitInput(true)
+    input:inhibitInput(true)   -- -> Input:resetState(): slot tables wiped
     go({ frame(TOUCH, { { EV_ABS, ABS_MT_SLOT, 0 }, { EV_ABS, ABS_MT_POSITION_X, 900 } }) }) -- dropped
-    input:inhibitInput(false)  -- -> Input:resetState(): slot tables wiped
+    input:inhibitInput(false)  -- input restored
     -- Finger A, still down, moves on Y only: neither its id nor X is re-sent.
     go({ frame(TOUCH, { { EV_ABS, ABS_MT_SLOT, 0 }, { EV_ABS, ABS_MT_POSITION_Y, 720 } }) })
     -- The next pinch: finger C lands complete and pans.

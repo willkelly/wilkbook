@@ -70,9 +70,13 @@ GC16/GL16 ~596 ms. Use those for anything about *this* device. The INIT row is
 not on the same basis at all — our RESET is 87 phases (~1.37 s at 28 °C).
 
 E Ink's own bracketing rule: enter A2 through a DU-to-white transition,
-exit A2 through white → GC16. The driver's `prepare_prev_before_a2`
-parameter handles the entry half; the exit half is userland policy
-(global refresh ioctl).
+exit A2 through white → GC16. The old shipping driver's
+`prepare_prev_before_a2` parameter handled the entry half; the exit half
+was userland policy (global refresh ioctl). The direct driver, the
+product since generation 7, has no A2 slot and no such parameter (§8;
+`pinenote/services/ebc-direct.scm`), so on it the rule applies only to
+session-only lab tables such as `wbf-clut --class-source=DU:A2`
+(`doc/status.md` 2026-08-26 part 9).
 
 Cross-vendor UX convergence (Kobo/Kindle/PocketBook/Boox): partials in a
 GL16-class mode while reading, with a **counter- or area-based full

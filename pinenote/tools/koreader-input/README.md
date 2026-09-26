@@ -63,6 +63,25 @@ The host suite runs entirely on the workstation — no device or KOReader UI:
    warning with its preceding frames and catching a throw mid-frame.
    `luajit replay-evdev.lua KOREADER_DIR MIXEDROUTER touch=CAPTURE`
    (host luajit needs the Lua 5.2 `table.pack` shim it carries).
+9. **`test-notebook-*.lua`** — the pen notebook (`doc/notebook.md`,
+   `plugins/notebook.koplugin`).
+   - One suite per module: geom, input, journal, brush, panel,
+     controller, render, fs.
+   - `test-notebook-plugin.lua` wires `main.lua` to a recording UIManager
+     and KOReader's real `Input:waitEvent` chain.
+   - `test-notebook-device.lua` covers `device.lua`'s hint owner and
+     input seams.
+   - Where the gitignored 2026-09-26 captures exist in
+     `../pen/build/captures-20260926/`, the operator's real handwriting
+     replays end to end; elsewhere those checks print one fixed skip
+     line.
+
+   Two instruments sit beside them, outside the gate:
+   - `notebook-replay.lua` renders a raw Stylus capture to PNG:
+     `luajit notebook-replay.lua KOREADER_DIR PLUGIN_DIR CAPTURE OUT.png [brush] [size] [mode]`;
+   - `notebook-realui/run-real-ui-test.sh` drives a real offscreen
+     KOReader with the plugin and writes screenshots to
+     `$NOTEBOOK_REAL_UI_SHOTS`.
 
 **The bug** (hardware-observed 2026-07-05, mechanism in
 `mixedrouter.lua`'s header): upstream `Input` keeps ONE global

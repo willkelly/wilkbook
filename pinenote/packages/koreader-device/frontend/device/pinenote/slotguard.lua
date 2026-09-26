@@ -17,16 +17,16 @@ On the PineNote this happened on glass (2026-09-02) during pinch-to-font
 -size, and reproduces deterministically offline
 (pinenote/tools/koreader-input/test-slotguard.lua).  The mechanism is
 upstream's own: a pinch emits on the FIRST finger's lift, ReaderRolling
-re-renders for the new size and calls Input:inhibitInput(true) -- the
-still-down finger's frames are dropped -- then inhibitInput(false) calls
-Input:resetState(), which wipes every slot table and forgets every
-contact.  The finger still on the glass then reports delta-only frames
-(the kernel re-sends neither its tracking id nor an unchanged axis) into
-a fresh, empty table: a ghost contact with no id and no position.  The
-next finger to land pairs with the ghost as its two-finger buddy, the
-safety nets copy the positionless table, and the next two-finger pan
-crashes.  The "recorded an initial_tev out of order" warnings that
-precede every such crash are the same defect, survived.
+re-renders for the new size and calls Input:inhibitInput(true), which
+calls Input:resetState(): every slot table is wiped and every contact
+forgotten, and the still-down finger's frames are dropped until
+inhibitInput(false) restores input.  The finger still on the glass then
+reports delta-only frames (the kernel re-sends neither its tracking id
+nor an unchanged axis) into a fresh, empty table: a ghost contact with no
+id and no position.  The next finger to land pairs with the ghost as its
+two-finger buddy, the safety nets copy the positionless table, and the
+next two-finger pan crashes.  The "recorded an initial_tev out of order"
+warnings that precede every such crash are the same defect, survived.
 
 This guard closes the crash independently of upstream: at each
 SYN_REPORT, before the frame reaches the detector, any slot whose table

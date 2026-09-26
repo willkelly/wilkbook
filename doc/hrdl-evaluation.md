@@ -81,6 +81,14 @@ check out. Four corrections, most consequential first:
    transitions -- **a Y4 GL16/GC16 transition cannot be aborted in his
    driver either.**
 
+   *[Measured 2026-08-26, superseding the one-frame estimate above: D8,
+   on the direct-mode study image with a 240 fps camera, put first ink
+   ~20 ms after the nib in FAST (17–25 ms, two strikes), fully dark
+   ~100 ms after that; NORMAL through GL16 took ~40–60 ms to first ink
+   (`doc/artifacts/pinenote-d8-pen-latency-20260826/`). On 2026-09-26,
+   generation 21, whole-screen DU in NORMAL could not be told apart from
+   FAST by blinded feel, with no camera (`doc/status.md` 2026-09-26).]*
+
 4. **§3.2's "not separable" list is too broad.** Three items are
    independent of `custom_wf.bin`, the NEON blitters and direct mode: the
    clock reclock (above); the **work-item drain gate** (he stops folding

@@ -1,0 +1,46 @@
+pen-1.bin: strokes=156
+  pen-down reports: n=24709 median=2.77 ms (~360 Hz) p10=2.66 p90=2.90 ms in-stroke=68.9 s
+  hover reports:    n=18699 median=2.77 ms (~361 Hz) p10=2.57 p90=2.97 ms in-stroke=52.6 s
+  axis events: {'X': 38936, 'Y': 38970, 'TILT_X': 2248, 'TILT_Y': 2472, 'DISTANCE': 9106, 'PRESSURE': 18833}
+pen-2.bin: strokes=29
+  pen-down reports: n=6236 median=2.77 ms (~360 Hz) p10=2.68 p90=2.87 ms in-stroke=17.4 s
+  hover reports:    n=2027 median=2.77 ms (~361 Hz) p10=2.54 p90=2.94 ms in-stroke=5.6 s
+  axis events: {'X': 7788, 'Y': 7649, 'TILT_X': 727, 'TILT_Y': 557, 'DISTANCE': 1183, 'PRESSURE': 5757}
+pen-3.bin: strokes=86
+  pen-down reports: n=13144 median=2.77 ms (~360 Hz) p10=2.65 p90=2.91 ms in-stroke=36.7 s
+  hover reports:    n=13864 median=2.77 ms (~361 Hz) p10=2.57 p90=2.98 ms in-stroke=39.5 s
+  axis events: {'X': 23912, 'Y': 24377, 'TILT_X': 845, 'TILT_Y': 657, 'DISTANCE': 6422, 'PRESSURE': 12840, '40': 1}
+pen-4.bin: strokes=106
+  pen-down reports: n=12490 median=2.77 ms (~360 Hz) p10=2.64 p90=2.92 ms in-stroke=34.9 s
+  hover reports:    n=10369 median=2.77 ms (~361 Hz) p10=2.55 p90=2.96 ms in-stroke=28.8 s
+  axis events: {'PRESSURE': 12067, 'X': 20076, 'Y': 20948, 'TILT_X': 795, 'TILT_Y': 709, 'DISTANCE': 5394}
+pen-5.bin: strokes=58
+  pen-down reports: n=7839 median=2.77 ms (~360 Hz) p10=2.65 p90=2.91 ms in-stroke=21.9 s
+  hover reports:    n=5764 median=2.77 ms (~361 Hz) p10=2.55 p90=2.97 ms in-stroke=16.1 s
+  axis events: {'PRESSURE': 7329, 'X': 11511, 'Y': 12419, 'TILT_X': 480, 'DISTANCE': 2945, 'TILT_Y': 439}
+
+Software path per arm (scribble lag_ms: last event timestamp -> fsync returned):
+  arm 1: batches=24856 median=0.7 p95=1.4 max=23.1
+  arm 2: batches=6264 median=0.7 p95=1.5 max=6.0
+  arm 3: batches=13222 median=0.7 p95=1.3 max=3.5
+  arm 4: batches=12831 median=0.7 p95=1.4 max=7.0
+  arm 5: batches=8496 median=0.7 p95=1.4 max=8.1
+
+Washes (frame-clock.lua --wash, EBC frame IRQs in a 2.5 s window):
+  arm 1: frames=47 span=576.7ms
+  arm 2: frames=47 span=582.2ms
+  arm 3: frames=47 span=576.9ms
+  arm 5: frames=192 span=2284.6ms
+  arm 4: none (FAST entry's own global refresh; mode log: mode=0 dither=2 redraw_delay=0 mode=1 dither=2 redraw_delay=0 )
+
+Raw capture SHA-256 (captures not committed; they are the operator's handwriting):
+  101f3c6b09089d96ab02ba72bb7da1dfba47ac8b4699df2d108b3507771012bc  pen-1.bin
+  7634b440bf06254c129b437e048c5759c5f6cbbc29ded6d7bf65b690de442e99  pen-2.bin
+  c3f7d27031c5002172d90094129137f8cde30baa9791a5dc2206fec7f211ab0f  pen-3.bin
+  11b2d61ed8a72b01dc6049588020357f30bb4b5284e15b111d983bd8397838dc  pen-4.bin
+  f83dd6ebd855a573c3b08ed296054d73af82940025f8b9fab8f5e3f7b8a6844e  pen-5.bin
+  9ac2e5b82df56d16834e4bb77b0b800a19b2f70ffec30f84b0fdbace41c7c829  arm-1.log
+  9c1ba6b650434fc7c67bf821493ebbecd8836a5bbaddf4f003b2e4daccaf273d  arm-2.log
+  02288b7f0c7e39a321507d457edfa196abecb000ffdf193a7dd9f2ff3df5eeed  arm-3.log
+  1753bc29e521e8e238bf80450c9a37fe26b466e4355aa4c5c53296016d622333  arm-4.log
+  c97f457e17954ef382b5d7d3bb69af6f30ab45aaff556b47aec8f0216edf1ddb  arm-5.log
