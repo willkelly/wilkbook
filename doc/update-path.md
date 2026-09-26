@@ -8,6 +8,14 @@ generations on one device by 2026-09-04, the QEMU rig alongside ("Proof
 ladder" and "Glass notes" below). `doc/status.md` is the truth; this
 page is the design and what the glass taught.
 
+**Attended cable-free trial period (2026-09-11):** wkelly can explicitly
+authorize a session without UART using **`I invoke the trial!!`**. The operator
+remains at the device for panel checks and button/menu recovery; the existing
+trial/health/promote flow applies. Scope and expiration are in `CLAUDE.md`,
+with the procedure in `doc/hardware-deploy.md` under "Cable-free trial period".
+This does not make watchdog recovery hands-off: without a watcher it can boot
+os1, and a kexec still cannot qualify a new device tree.
+
 ## Goal
 
 Update os2 remotely, hands-off, in minutes, with rollback — while os1

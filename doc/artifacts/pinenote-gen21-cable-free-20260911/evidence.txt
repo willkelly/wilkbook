@@ -1,0 +1,74 @@
+# Selected command output; section labels added, reader address redacted.
+
+# Offline gates
+PIN kernel-output=/gnu/store/334ljs8qa7ww8vlg9gpv428bh8yjd1nx-linux-pinenote-book-execution-test-7.1.8-pinenote
+PIN gvisor-source-output=/gnu/store/djgy782a5fjmsfkr6hzff3g953r60c86-gvisor-source-built-20260831.0
+SYSTEM-DERIVATION /gnu/store/6d0sijg85xlqnr5548pdmp3xdwzck2y6-system.drv
+PASS: realized experimental system closure is pinned, canonical, and device-only
+
+# Source and target Image hashes
+5435c84efda8fbed092ac22becfde2cb1a3d82298a3549cfbdfebf6d4cbca2f9  /boot/gen-20/Image
+5435c84efda8fbed092ac22becfde2cb1a3d82298a3549cfbdfebf6d4cbca2f9  /gnu/store/iv1div034ka7qaa05rqm4vlr6g5lzsxs-system/kernel/Image
+
+# Deploy, host UTC start 2026-09-12T04:25:56Z, end 2026-09-12T04:26:46Z, exit 0
+sh pinenote/tools/deploy/deploy.sh "pinenote-os2" "book-state-device-reader" "5"
+== 1/7 build: pinenote-book-state-device-reader (cross, aarch64-linux-gnu)
+   /gnu/store/iv1div034ka7qaa05rqm4vlr6g5lzsxs-system
+== 2/7 transfer: only what root@pinenote-os2 is missing (the guix copy algorithm over OpenSSH)
+   21 of 490 store paths missing on the device
+== 3/7 add
+wilkbook-generation: generation 21: payload staged in /boot/gen-21
+wilkbook-generation: extlinux menu: 7 generation(s), DEFAULT gen-20
+   generation 21
+== trial: kexec into generation 21 (DEFAULT unchanged; the ssh link dies at the helper's Wi-Fi off, before the kexec)
+   trial> wilkbook-generation: trial boot of generation 21: DEFAULT is unchanged; a power-cycle returns to it
+   trial> wilkbook-generation: machine model "Pine64 PineNote v1.2" -> generation DTB
+   trial> wilkbook-generation: NOTE: the running kernel was kexec'd; its device tree is the last cold boot's, not gen-20's -- a device-tree change is proven only by a cold boot
+   trial> Timeout, server [reader address] not responding.
+== waiting for the new generation to answer ssh
+== health
+current_system=/gnu/store/iv1div034ka7qaa05rqm4vlr6g5lzsxs-system
+booted_generation=21
+broker_ready=true
+reader_started=true
+health=ok
+== promote
+wilkbook-generation: extlinux menu: 7 generation(s), DEFAULT gen-21
+promoted generation 21
+wilkbook-generation: generation 10 is pinned; kept
+wilkbook-generation: generation 16 is pinned; kept
+nothing to prune
+DEPLOY OK -- generation 21 is DEFAULT (/gnu/store/iv1div034ka7qaa05rqm4vlr6g5lzsxs-system)
+
+# Postflight mounts and generation ledger
+/dev/mmcblk0p6 ext4 rw,relatime
+/dev/disk/by-partlabel/data ext4 rw,relatime
+gen-10  /gnu/store/ildcv9alm0isv2yfzmywba2i3mlhgcl9-system  [pinned]
+gen-16  /gnu/store/8czi9ry1z0gph24n5yls7iiy83y4n0b8-system  [pinned]
+gen-17  /gnu/store/8gg44r7adziazhn1ng3hwhd6r0z1jr3d-system
+gen-18  /gnu/store/rkw61vxxzifrqwz407gf751w70afignb-system
+gen-19  /gnu/store/8zcb8zq9x92sag30m68b6jww86xd1nq7-system
+gen-20  /gnu/store/7wyr4smys53jgf2cjrif0mm94n9cg11p-system
+gen-21  /gnu/store/iv1div034ka7qaa05rqm4vlr6g5lzsxs-system  [promoted]  [booted]
+
+# Packaged authority log: startup, operator save and recovery
+2026-09-12 04:25:36 BOOK_STATE_DEVICE: stopped after bounded cleanup
+2026-09-12 04:26:29 BOOK_STATE_DEVICE: ready socket=/run/wilkbook-book-state/control.sock database=/data/wilkbook/book-state/book-state-v1.sqlite
+2026-09-12 04:31:15 BOOK_STATE_DEVICE: accepted exact KOReader peer pid=605
+2026-09-12 04:31:18 BOOK_STATE_DEVICE: opened fixed-note version=4 present=#t
+2026-09-12 04:31:29 BOOK_STATE_DEVICE: saved fixed-note version=5 bytes=43
+2026-09-12 04:31:32 BOOK_STATE_DEVICE: closed fixed-note version=5
+2026-09-12 04:31:52 BOOK_STATE_DEVICE: accepted exact KOReader peer pid=605
+2026-09-12 04:31:54 BOOK_STATE_DEVICE: opened fixed-note version=5 present=#t
+2026-09-12 04:31:58 BOOK_STATE_DEVICE: closed fixed-note version=5
+
+# KOReader environment, restored suspend config, final health/default/boot ID
+EXT_FONT_DIR=/run/current-system/profile/share/fonts/local;/data/fonts
+enabled=1
+current_system=/gnu/store/iv1div034ka7qaa05rqm4vlr6g5lzsxs-system
+booted_generation=21
+broker_ready=true
+reader_started=true
+health=ok
+DEFAULT gen-21
+06f2d463-0f31-4a46-86b8-209ee35b1d65

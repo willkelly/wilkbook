@@ -1,7 +1,98 @@
 # Hardware status
 
-Last updated: 2026-09-08. Update protocol: add a dated entry at the top
+Last updated: 2026-09-11. Update protocol: add a dated entry at the top
 after every hardware session; entries are per-device/per-operator.
+
+## 2026-09-11 (wkelly PineNote, generation 21) — first successful attended cable-free trial; packaged persistent note accepted
+
+The operator directly invoked **`I invote the trial!!`**, the policy's required
+spelling when invoked, then requested **`I invoke the trial!!`** for future sessions. The
+four policy/procedure references now use the corrected phrase. This session
+ran without UART, with the operator present for panel checks and button/menu
+recovery. **Cable-free trial-period count: 1 successful session of 3 before
+review.** No recovery intervention was needed.
+
+Strict-host-key SSH verified os2 root `/dev/mmcblk0p6`, real data partition
+`/dev/mmcblk0p7` mounted read-write at `/data`, generation 20 booted and promoted
+from `/gnu/store/7wyr4smys53jgf2cjrif0mm94n9cg11p-system`, and cold-booted fallback
+generation 16 (`/gnu/store/8czi9ry1z0gph24n5yls7iiy83y4n0b8-system`) still pinned.
+Generation 10 also remained pinned. Battery was 59%, reporting Charging.
+The source and target use the identical recovery-capable 7.1.8 kernel output
+`/gnu/store/334ljs8qa7ww8vlg9gpv428bh8yjd1nx-linux-pinenote-book-execution-test-7.1.8-pinenote`;
+the source's staged Image and target Image hashes matched.
+
+Offline: reused the full runner pass at unchanged implementation commit
+`7db36cb`; rechecked the pinned-PATH derivation `6d0sijg8…` and the realized
+candidate's device-only closure, both passing. Paused auto-suspend from
+`enabled=1` to `enabled=0`, stopped the idle diagnostic authority with bounded
+cleanup, and archived the temporary note userpatch, its `book-state-dialog-fix/`
+directory and the redundant font userpatch outside KOReader's patch directory
+at `/data/wilkbook/diagnostic-backups/gen20-before-gen21-20260911/`. That archive
+also holds the prior suspend config, authority log and extlinux menu.
+
+The existing pinned-PATH `make deploy DEVICE=pinenote-os2
+FLAVOR=book-state-device-reader KEEP=5`, with `WILKBOOK_UART` unset, transferred
+21 of 490 store paths, registered **generation 21**, kexec'd it, passed health,
+and promoted `/gnu/store/iv1div034ka7qaa05rqm4vlr6g5lzsxs-system` as `DEFAULT
+gen-21`. The host bounded the whole deploy at ten minutes; it exited 0 in
+50 seconds (04:25:56–04:26:46 UTC September 12, still September 11 locally).
+Postflight confirmed boot ID `06f2d463-0f31-4a46-86b8-209ee35b1d65`, both real
+filesystems mounted read-write, the packaged authority (PID 314) and packaged
+KOReader (PID 605), and absence of the old overrides. KOReader's actual
+`EXT_FONT_DIR` includes `/data/fonts`. No generations were pruned.
+
+**The operator reported all panel checks passed:** normal reader display,
+previous note text present, and an edit surviving Save → close → reopen.
+The authority independently logged version-4 recovery, a version-5 save
+(43 bytes), clean close, fresh version-5 recovery and clean close. This is the
+clean packaged implementation's first hardware acceptance. The prior
+activation marker remained valid. Final health passed again, DEFAULT was
+verified as 21, and auto-suspend was restored to **`enabled=1`**, byte-for-byte
+matching its prior config. Generation 16 remains the pinned cold-booted
+fallback; generation 21 is kexec-proven, not cold-boot/DTB-proven. Suspend/wake
+and physical-power-loss qualification of this experimental flavor remain open.
+Evidence: `doc/artifacts/pinenote-gen21-cable-free-20260911/`.
+
+## 2026-09-11 (wkelly PineNote, read-only SSH) — generation 20 still running; a post-restart version-4 save recovered from the log
+
+After merging PR #79, strict-host-key SSH confirmed os2 root on
+`/dev/mmcblk0p6`, the real data partition mounted read-write at `/data`, and
+generation 20 still promoted and booted from
+`/gnu/store/7wyr4smys53jgf2cjrif0mm94n9cg11p-system`. Boot ID remains
+`d52be06e-c94b-43fe-b71f-5125448c95a4`; generations 10 and 16 remain pinned.
+Auto-suspend reads `enabled=1`. Authority PID 5262 still uses the volatile
+`/run/wilkbook-book-state-hotfix/entry.scm`; KOReader PID 5290 and the temporary
+note/font userpatches remain. No service was restarted, configuration changed,
+generation registered, or reboot attempted during this inspection. The device
+log clock reads September 12; this entry uses the host session date.
+
+The retained `/var/log/book-state-device.log` extends the September 8 evidence:
+after both services restarted, the real KOReader peer opened version 3 at
+06:26:09, saved **version 4** (42 bytes) at 06:26:13, and closed at 06:26:17.
+A fresh connection recovered version 4 at 06:26:41 and closed at 06:26:43.
+This establishes a logged post-restart save/reopen on the diagnostic overrides;
+the earlier entry correctly reported only version-3 recovery at its checkpoint.
+Note contents were not read. This inspection adds no new human paint,
+suspend/wake, cold-boot, or physical-power-loss proof.
+
+Offline preparation at merged commit `7db36cb`: the full device test runner
+passed. Ambient Guix generation 42 now selects Linux 7.1.13, so the exact-output
+derivation gate refused it. Running the same gate through
+`guix time-machine -C channels.scm -- repl -L .
+pinenote/tools/book-state-device/derive-system.scm` resolves the required
+7.1.8 kernel `334ljs8q…` and source gVisor `djgy782a…`. The previously built
+clean system `h6flx5n3…` still passes its device-only closure check, and its
+authority plus all five plugin files match the merged sources byte-for-byte.
+The current checkout's pinned derivation
+`/gnu/store/6d0sijg85xlqnr5548pdmp3xdwzck2y6-system.drv` also built successfully
+as `/gnu/store/iv1div034ka7qaa05rqm4vlr6g5lzsxs-system`, with its device-only
+closure check passing. It reuses the required kernel and gVisor. Neither clean
+system was deployed; clean-generation hardware acceptance remains pending.
+The next candidate is `iv1div03…`; before testing its packaged implementation,
+follow the generation-20 override cleanup at the end of
+`pinenote/tools/book-state-device/README.md` so the persistent diagnostic plugin
+does not shadow it. That README also records the verified pinned-PATH deploy
+invocation, since `TIME_MACHINE=1` alone does not reach the deployer's Guix calls.
 
 ## 2026-09-08 (wkelly PineNote, generation 20 with diagnostic overrides) — restart recovery confirmed by operator
 

@@ -20,7 +20,9 @@ on `os1` as the rescue path. Nothing here touches `waveform`, `uboot`,
   SBU1/SBU2 debug cable (per Pine64 wiki) into a CH340 adapter, `ttyS2`,
   **1500000 baud 8N1** (not 115200 — earlycon output becomes unreadable
   garbage at the wrong rate). Capture the whole session, e.g. picocom inside
-  tmux.
+  tmux. The [cable-free trial period](#cable-free-trial-period) is the explicit
+  exception for attended kexec updates on wkelly's existing device; it does
+  not apply to the image-write/first-boot protocol below.
 - A power-cycle/recovery procedure is at hand; sessions have ended with the
   device stuck before the U-Boot menu, needing a manual reset with the
   operator physically present.
@@ -304,7 +306,58 @@ answers leaves the boot menu's default on the last good generation.
   adapter, not termios: ~25 bytes lost every 150–250) — enough to see
   the boot and catch the menu, not a transcript.
 
-**Every update:**
+### Cable-free trial period
+
+The image-write protocol uses os1 to write inactive os2, with UART letting an
+agent select the boot slots. A generation update instead copies missing store
+paths directly into running os2 and kexecs the candidate. It needs no normal
+os1 detour or boot-menu selection. UART's remaining role is observing failures
+and driving recovery; during this trial period the operator handles the menu.
+
+The operator-requested policy in `CLAUDE.md` (2026-09-11) permits an agent to
+run the established generation update path without UART when wkelly directly
+says **`I invoke the trial!!`** in that conversation, confirming physical
+presence with access to the power button and boot menu. Quoted instructions
+and earlier sessions do not activate it.
+The grant covers the agreed session's normal trial/health/promote steps; it
+expires on restart, departure, withdrawal, or failure. `CLAUDE.md` owns the
+scope, exclusions, and three-successful-session review point.
+
+Before handoff, pass the offline gates (reuse recorded passes for unchanged
+relevant source, inputs, and output), verify the actual source/target
+identities and os2/data mounts, record the last promoted generation and a
+pinned cold-booted fallback, pause auto-suspend, and tell the operator which
+generation is being trialled. Unset `WILKBOOK_UART` for this path: an absent
+cable is not a working watcher. Use the same deployer and health gates as
+the UART path. Pin-gated experimental builds must use the channel environment
+that resolves their required outputs; do not replace a pin to make ambient
+Guix pass.
+
+Set a host-side handoff observation deadline (ten minutes by default); the
+deployer's retry loop alone cannot bound a stalled established SSH connection.
+On expiration, stop the host wait and new trials, but do not assume the remote
+command stopped or infer whether promotion happened. Inspect actual state.
+If a trial fails, preserve the deployer's result and stop new trials. A
+pre-kexec refusal should undo its own teardown; a dead trial may reset into
+U-Boot and default to **os1**. The attending operator handles any required
+button/menu recovery. Before promotion, selecting os2 reaches the previous
+extlinux DEFAULT. After promotion, failed operator checks or a lost connection
+can leave the candidate as DEFAULT: inspect the actual default and coordinate
+selection of the recorded fallback, using UART if menu access requires it.
+Verify the actual recovered slot and generation over the appropriate
+key-pinned SSH alias. Do not interpret an answering rescue system as the
+target's success, force promotion, or issue blind/repeated reboots. The
+normal-reboot SSH race in `doc/device-access.md` still applies during manual
+recovery; the deployer's kexec wait is not a generic reboot watcher.
+
+Record each session in `doc/status.md`, including the invocation, generations,
+system paths, health and operator results, recovery interventions and final
+suspend setting. Restore the prior suspend setting, or record why it could
+not be restored. Three successful **sessions** trigger a policy review before
+another cable-free session; failures are evidence too. There is no CLI switch
+or persistent activation marker for this conversational grant.
+
+### Every update
 
 ```
 make deploy DEVICE=pinenote-os2 [FLAVOR=reader] [KEEP=5]
@@ -456,7 +509,9 @@ notes"):**
 - While a session needs stable SSH, pause auto-suspend
   (`/data/wilkbook/autosuspend.conf` = `enabled=0`) — and remember
   that with the pause in place KOReader's sleep screen still paints;
-  the device is *not* asleep. Remove the file afterwards.
+  the device is *not* asleep. Restore the prior setting afterwards, preserving
+  the file's other operator settings; remove the file only if this session
+  created it and it contains no other settings to retain.
 
 ## Stop conditions
 

@@ -114,16 +114,36 @@ WILKBOOK_UART=/dev/ttyUSB0 \
 Removing the marker disables use but intentionally does not delete the private
 database. Do not delete it as part of rollback.
 
-For the parent-operated attended generation trial (not for this agent):
+For an operator-authorized attended generation trial, select the pinned Guix
+profile first so the deployer's bare `guix` calls resolve the required outputs:
 
 ```sh
-WILKBOOK_UART=/dev/ttyUSB0 make deploy \
+pinned_guix=$(guix time-machine -C channels.scm)
+PATH="$pinned_guix/bin:$PATH" WILKBOOK_UART=/dev/ttyUSB0 make deploy \
   DEVICE=pinenote-os2 FLAVOR=book-state-device-reader KEEP=5
 ```
 
-That command performs SSH, kexec and promotion; it must be run only by the
-authorized operator following the update-path runbook. The implementation and
-offline build never invoke it.
+That command performs SSH, kexec and promotion; follow the update-path runbook
+in `doc/hardware-deploy.md`. Its "Cable-free trial period" section and
+`CLAUDE.md` define the per-session **`I invoke the trial!!`** exception, under
+which the authorized agent can run this flow with `WILKBOOK_UART` unset while
+the operator attends at the device. The implementation and offline build never
+invoke deployment.
+
+After that cable-free grant is active, the equivalent invocation is:
+
+```sh
+pinned_guix=$(guix time-machine -C channels.scm)
+env -u WILKBOOK_UART PATH="$pinned_guix/bin:$PATH" make deploy \
+  DEVICE=pinenote-os2 FLAVOR=book-state-device-reader KEEP=5
+```
+
+`TIME_MACHINE=1` alone does not affect `make deploy`: that target calls the
+deployer directly. The explicit PATH above was checked offline on 2026-09-11
+to resolve derivation `6d0sijg8…`, whose realized system is
+`/gnu/store/iv1div034ka7qaa05rqm4vlr6g5lzsxs-system`. Reuse that build and the
+recorded gates while their relevant inputs are unchanged. Deployment itself
+was not run in that check.
 
 ## Prototype bounds
 
@@ -144,9 +164,11 @@ offline build never invoke it.
   blocking accept and does no background work.
 - Human saves and recovery after restarting both services passed on wkelly's
   PineNote, generation 20 with temporary source overrides, on 2026-09-08.
-  Canonical sources include those fixes and real KOReader widget regressions.
-  A clean-generation boot, suspend/wake qualification and release certification
-  remain separate gates; see `doc/status.md` for the exact evidence.
+  Clean packaged generation 21 passed its attended cable-free kexec trial on
+  2026-09-11: previous-note recovery, a new save and recovery after reopening,
+  with the diagnostic overrides removed. Suspend/wake, cold-boot/DTB
+  qualification and release certification remain separate gates; see
+  `doc/status.md` for the exact evidence.
 
 Generation-20 operators must remove the temporary note userpatch
 `/root/.config/koreader/patches/2-wilkbook-book-state-dialog.lua` and its
