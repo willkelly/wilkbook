@@ -512,7 +512,9 @@ notes"):**
   `log`), runs the helper that ships in os2's promoted system inside a
   chroot, and unmounts. Then reboot and choose "Boot OS2 (part 6)" at
   the U-Boot menu; extlinux boots the promoted generation with no
-  further key. **Not yet run on os1.** (kdump is not the tool for our
+  further key. **Run on os1 2026-09-26** (wkelly's device): `list`,
+  `log`, then `demote` and `promote 23`, which left `extlinux.conf`
+  byte-identical (`doc/status.md`). (kdump is not the tool for our
   hangs: a core stalled in a bus access never panics, so no crash
   kernel would fire; the watchdog reset plus os1 is the failsafe on
   this SoC.)
