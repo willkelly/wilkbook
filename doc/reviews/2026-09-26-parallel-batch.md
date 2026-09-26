@@ -69,7 +69,15 @@ and performance. The first-slice review found no new blockers and produced two
 corrections: narrower language-policy wording, and an executable fix for the
 pre-existing RTC alarm left armed when deep suspend is unavailable. Parent
 review also required terminal socket EOF before Workbench preview eligibility.
-Final-batch verdicts are recorded after review completion.
+The final project-fit review confirmed the scope and evidence boundaries. It
+found a stale root Makefile hash (caught and fixed by parent capsule preparation
+too), a hardcoded test temporary-directory parent (changed to honor `TMPDIR`),
+and two stale statements (updated). The final performance/clarity review found
+no blockers. It confirmed that night-mode conversion is repaint-only (about
+5 MiB temporary storage for a full RGB565 page), washer holds park rather than
+poll, and neither broker nor teardown adds steady-state polling. These are
+source/host-test conclusions, not measured ARM performance. Final logic review
+is recorded below when complete.
 
 ## Next acceptance sequence
 

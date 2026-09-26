@@ -57,7 +57,8 @@
 
 ;; Exercise the I/O boundary too: a missing tree must not turn negative-only
 ;; rules into successes. No source is ever read from the real tree as fallback.
-(let ((dir (mkdtemp "/tmp/opencode/settings-empty-XXXXXX")))
+(let ((dir (mkdtemp (string-append (or (getenv "TMPDIR") "/tmp")
+                                  "/settings-empty-XXXXXX"))))
   (dynamic-wind
     (lambda () #t)
     (lambda ()

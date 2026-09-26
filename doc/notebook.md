@@ -570,8 +570,8 @@ These are tracked here until each lands somewhere permanent.
   controls replace them; the obsolete blanket `/data` ban is replaced by
   the mount-inspection/reversible-remount boundary.
 - **An unregistered driver finding.** hrdl's `GLOBAL_REFRESH` does not
-  flush pending deferred-io damage, and the comments in `device.lua`
-  assume it does. It wants a `quirk:` test and a note in
+  flush pending deferred-io damage. This batch corrected the misleading
+  `device.lua` comments; it still wants a `quirk:` test and a note in
   `doc/driver-findings-report.md`.
 - **`KEY_SLEEP` from the pen receiver.** Outside the notebook, a `ws8100`
   long press on its third input sends `KEY_SLEEP`. `device.lua`'s shared
