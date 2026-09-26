@@ -41,7 +41,13 @@ sudo -n chroot "$mnt" /bin/sh -c "test -x $helper" ||
   { echo "REFUSE: no generation helper on os2 ($helper) -- pre-update-path image?" >&2; exit 1; }
 for d in proc sys dev; do sudo -n mount --bind "/$d" "$mnt/$d"; done
 # The helper reads /proc/cmdline for the [booted] mark; os1's has no gnu.system=, so none is marked.
-sudo -n chroot "$mnt" "$helper" "$what" "$@"
+# It shells out to ls, readlink, ln, mkdir, cp and mv, which inside the
+# Guix root live only in a system profile; sudo's Debian PATH has none of
+# them, and without them the ledger reads as empty.  So it runs with the
+# promoted system's profile as PATH (env and chroot named by path, since
+# that PATH means nothing on os1).
+prof=/var/guix/profiles/system/profile
+sudo -n /usr/bin/env PATH="$prof/bin:$prof/sbin" /usr/sbin/chroot "$mnt" "$helper" "$what" "$@"
 if [ "$opt" = rw ]; then
   echo "DEFAULT changed on os2. Reboot and choose \"Boot OS2 (part 6)\" at the U-Boot menu (or let uboot-pick-slot.sh)."
 fi
