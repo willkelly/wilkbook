@@ -58,6 +58,8 @@
       (loop (+ index 1)))))
 
 (define (owner-control-eof! control)
+  ;; The caller must feed every received byte before reporting actual socket EOF.
+  ;; Process exit, EAGAIN, timeout or local socket closure is not that observation.
   (require-live! control)
   (unless (and (clean? control) (string-null? (pending control)))
     (reject! control 'eof-without-clean))
@@ -86,6 +88,8 @@
        (not (terminal control))))
 
 (define (owner-control-cleanup-complete? control)
+  ;; Disposal evidence, not a final stream verdict. A later invalid receipt can
+  ;; still poison this state; successful preview additionally requires EOF.
   (and (not (poisoned? control)) (clean? control)
        (if (terminal control) #t #f)))
 
@@ -94,6 +98,8 @@
   ;; the accepted idle candidate form, disposable authority/store cleanup, and
   ;; the still-current saved source/version/activation CAS. Never issue a ticket
   ;; merely because this predicate returned true.
-  (and (owner-control-cleanup-complete? control) (ready? control)
+  ;; A waited owner may leave unread trailing bytes. Require terminal drain so
+  ;; those bytes are validated before this predicate can authorize success.
+  (and (owner-control-cleanup-complete? control) (eof? control) (ready? control)
        (stopped? control) (not (early? control))
        (equal? (terminal control) '(exit . 0))))

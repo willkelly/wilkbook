@@ -14,10 +14,20 @@ permanently retire that instance.
 
 - `owner-control-can-deliver?` gates authored frames on readiness and lifetime.
 - `owner-control-cleanup-complete?` requires clean plus a terminal process result.
+  It reports disposal evidence, not a final verdict on the receipt stream; later
+  malformed bytes poison it.
 - `owner-control-preview-eligible?` additionally requires requested stop,
-  readiness, no observed premature termination and exit zero. This is necessary
+  readiness, no observed premature termination, exit zero and observed socket
+  EOF. Clean plus exit zero alone cannot authorize success while trailing bytes
+  may remain unread. This is necessary
   execution evidence only: it does not grant a preview ticket or prove authority,
   SQLite, disposable-store or aggregate service cleanup.
+
+Feed every received byte through `owner-control-feed!` before reporting actual
+socket EOF with `owner-control-eof!`. Process exit, EAGAIN, timeout and local
+socket closure do not prove terminal drain. Exit and EOF may be observed in
+either order; both are required for successful preview eligibility. Keep the
+future caller's drain within its existing cleanup observation deadline.
 
 The module performs no I/O, launch, timing or source evaluation. A future
 coordinator owns those operations and cannot recover a failed cleanup by
@@ -32,5 +42,6 @@ guile --no-auto-compile -L pinenote/tools/book-workbench-device \
 ```
 
 The SRFI-64 suite tests fragmentation/coalescing, premature termination, terminal
-result ordering, malformed/duplicate receipts and permanent failure. It needs
+result/EOF ordering, delayed trailing bytes, malformed/duplicate receipts and
+permanent failure. It needs
 only Guile's standard modules. It neither executes a sandbox nor builds anything.

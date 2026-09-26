@@ -232,8 +232,12 @@ request/reply to one fresh coordinator epoch and request ID. No persistent
    concurrently under one total bound, or budget both sequential 12-second
    waits explicitly. A single-owner grace copied from the note service is not
    a two-owner service-stop proof.
-3. Observe each owner's exact `clean\n` and terminal wait status. Zero exit is
-   additionally necessary for successful preview; nonzero with proved cleanup
+3. Observe each owner's exact `clean\n` and terminal wait status. For successful
+   preview, additionally require zero exit and drain the receipt socket to actual
+   EOF, validating every received byte. Exit may precede unread trailing bytes;
+   clean plus exit alone is not a final stream verdict. EAGAIN, timeout and local
+   closure are not EOF evidence. Bound this drain by the same cleanup observation
+   deadline. Nonzero with proved cleanup
    is contained execution failure. Missing cleanup is a terminal coordinator
    failure, never an ordinary failed-preview receipt permitting another run.
 4. Complete/join each authority's admitted worker, suppress retired completions,
@@ -422,8 +426,12 @@ boundary before porting the full session loop or touching Guix services.
 accepts bytevector fragments of `ready\n` and `clean\n`, records stop intent and
 waited terminal status separately, prohibits authored delivery before readiness
 or after stop/termination, and distinguishes cleanup from preview eligibility.
-It handles wait-before-final-socket-drain and clean-before-ready preparation
-failure. Invalid input permanently retires the receipt state. Prefix checking
+Preview eligibility requires observed socket EOF as well as successful exit:
+the caller feeds every received byte before reporting actual EOF, so delayed
+trailing bytes can poison the state before it permits success. Cleanup alone
+reports disposal evidence, not a final receipt-stream verdict. It handles
+wait-before-final-socket-drain and clean-before-ready preparation failure.
+Invalid input permanently retires the receipt state. Prefix checking
 retains at most six bytes; this is stricter fail-fast validation than Python's
 32-byte accumulation, with the same valid wire records.
 
@@ -441,11 +449,14 @@ guile --no-auto-compile -L pinenote/tools/book-workbench-device \
   pinenote/tools/book-workbench-device/test-owner-control.scm
 ```
 
-The initial host run passed **54 assertions**, including every split boundary
-of coalesced receipts, nonzero/signal outcomes, unsolicited termination,
-incomplete EOF, duplicate/trailing records and permanent failure. This is a
-protocol-consumer proof only, not a fresh v16/runtime proof. Parent owns the
-three adversarial reviews for the complete batch.
+The initial host run passed 54 assertions. The terminal-drain regression exposed
+three premature-success cases in that implementation. Requiring EOF fixes them;
+the expanded gate passes **88 assertions**, including every split boundary of
+coalesced receipts, both exit/EOF orderings, delayed trailing bytes, nonzero/signal
+outcomes, unsolicited termination, incomplete EOF, duplicate/trailing records
+and permanent failure. This is a protocol-consumer proof only, not a fresh
+v16/runtime proof. Parent owns the three adversarial reviews for the complete
+batch.
 
 ## 10. On-device qualification matrix and remaining choices
 
