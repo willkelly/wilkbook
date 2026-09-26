@@ -164,11 +164,16 @@
 ;;; optics campaign's two validated settings ship here:
 ;;;
 ;;;   default_hint 32   Y4 through the GL16 slot, no REDRAW -- the measured
-;;;                     reading route (status part 10: the live hint sweep;
-;;;                     the A2/dither routes are retired for text, and the
-;;;                     driver's own default of 64 is dithered mono).  The
-;;;                     variable is read per damage, so a sysfs write
-;;;                     applies immediately.
+;;;                     reading route (status 2026-08-26 parts 9-10: the
+;;;                     hint sweep; the A2/dither routes, run through a
+;;;                     session-only A2-in-DU lab table, are retired for
+;;;                     text).  The driver's own default is 160,
+;;;                     Y4|THRESHOLD|REDRAW (hrdl-direct-mode.patch:1721).
+;;;                     The variable is read only at probe, where it seeds
+;;;                     the hint plane (:5566), so this write must land
+;;;                     before the CLUT rebind; at runtime, RECT_HINTS
+;;;                     set_default_hint rewrites the plane and the
+;;;                     variable (:2148-2153).
 ;;;   temp_override 22  STOPGAP for the warm-biased boundary read (parts
 ;;;                     11/16: the thermistor reads exactly the 24-27 bin
 ;;;                     boundary while the ghost U-curve bottoms one bin

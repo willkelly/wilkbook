@@ -349,8 +349,10 @@ gitignored `build/`, or the reader's static address.
   caveat: a bound unattached USB gadget aborts suspend on 7.1.8 —
   registered); **idle power is at parity** (155.3 vs 156.9 mA; real
   turns at 20/min add ~59 mA at ~41.5 frames/turn — the untuned hint
-  is a power cost too). Page-turn injection trap: KEY 158 advances
-  (KOReader's labels are inverted on this stack). **The decision was
+  is a power cost too); **D8 (pen latency) passed 2026-08-26** on the
+  study image, 240 fps camera: ~20 ms nib to first ink in FAST,
+  ~40–60 ms in NORMAL through GL16. Page-turn injection trap: KEY 158
+  advances (KOReader's labels are inverted on this stack). **The decision was
   taken 2026-09-02: tentatively EMBRACED by both operators, barring
   new information** — the embrace sweep (the `reader` flavor moves to
   the direct kernel, the scaffolding is deleted, one shipping image) is
@@ -360,6 +362,13 @@ gitignored `build/`, or the reader's static address.
   2026-09-03 and merged to main the same day (PR #64, the sync of
   everything exercised; `doc/status.md`). The `reader` flavor IS the
   direct kernel now; S3–S5 (deleting the scaffolding) are not started.
+  On 2026-09-26 (generation 21) a region hinted DU (`0x00`) through
+  `RECT_HINTS` in NORMAL was pen-class by blinded feel beside GL16, and
+  whole-screen DU was not told apart from FAST; on that evidence a pen
+  canvas does not need FAST's whole-screen mode switch. No camera timed
+  it, so there is no DU-in-NORMAL number, and ink drawn by KOReader (no
+  drawing feature, no hint plumbing) is unmeasured. The digitizer
+  reports at ~360 Hz (2.77 ms median; `doc/status.md` 2026-09-26).
 - **Update path — on glass since 2026-09-02.** os2 carries an image
   with the guix importer daemon, kexec, the `wilkbook-generation`
   helper, first-boot root growth and the signing-key ACL; from there

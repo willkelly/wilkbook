@@ -364,24 +364,40 @@ sweep is the display track's next work item.
 **Handwriting is a product direction, not a feature**: continuous
 note-taking, then drawn UIs inside books, then handwritten code that
 executes. That ordering matters because each stage needs the previous
-one's latency. The current LUT-path floor is ~290 ms nib-to-ink
-(132–140 ms software + A2's 157 ms); handwriting needs the ~11.7 ms
-class, which only hrdl's direct-mode rework reaches (`DRIVER_MODE_FAST`).
+one's latency. The old shipping driver's LUT path, the product until
+generation 7, had a ~290 ms nib-to-ink floor (132–140 ms software +
+A2's 157 ms). On hrdl's direct driver, the product since, D8 filmed
+~20 ms nib to first ink in FAST and ~40–60 ms in NORMAL through GL16
+(2026-08-26, the study image, 240 fps camera). On 2026-09-26
+(generation 21) a region hinted DU in NORMAL was pen-class by blinded
+feel beside GL16, and whole-screen DU could not be told apart from
+FAST; on that evidence a pen canvas does not need FAST's whole-screen
+mode switch (`doc/status.md` 2026-09-26). No camera has timed DU in
+NORMAL, and ink drawn by KOReader is unmeasured: it has no drawing
+feature and no hint plumbing, so its partial refreshes, `a2` and
+`fast` included, render at GL16.
 
 - [ ] **The direct-mode experiment** (`doc/direct-mode-adoption.md`).
-      Status: compiles and links in our kernel package with
-      `pinenote_defconfig`; CLUT compiler byte-identical in C
-      (`wbf-clut`); nothing has ever run. Carried by a temporary
-      `reader-direct` flavor that is SCAFFOLDING, not a product line:
-      **we ship one image.** The gate is embrace-or-reject on glass —
-      embrace means the reader flavor moves to the direct kernel and the
-      scaffolding is deleted; reject means the same deletion and the
-      shipping driver stays. Either way the next tag is `reader`, singular.
+      Status: **tentatively embraced** by both operators 2026-09-02,
+      after the ladder ran on glass from 2026-08-25 (D8, pen latency,
+      2026-08-26; the numbers are above); the `reader` flavor has
+      carried the direct driver since generation 7 (2026-09-03), and
+      the rest of the embrace sweep (S3–S5) is not started
+      (`doc/status.md`, `doc/embrace-sweep-plan.md`). The experiment
+      was carried by a temporary `reader-direct` flavor that was
+      SCAFFOLDING, not a product line, and sweep S2 deleted it: **we
+      ship one image.** The gate was embrace-or-reject on glass —
+      embrace means the reader flavor moves to the direct kernel and
+      the scaffolding is deleted; reject means the same deletion and
+      the shipping driver stays. Either way the next tag is `reader`,
+      singular.
 - [ ] **Stroke capture** (#20): capture, storage, vectorization —
       independent of the panel path, rung-1 testable, can start any time.
       The digitizer is proven capable: 12-bit pressure, ±90° tilt, hover,
       at 11.2× panel resolution, all confirmed emitted on glass
-      (2026-08-24).
+      (2026-08-24). It reports every 2.77 ms median (~360 Hz),
+      pen-down and hovering alike (2026-09-26,
+      `doc/artifacts/pinenote-du-canvas-feel-20260926/stats.txt`).
 - [ ] **The settings book** (`doc/configuration.md` §5): settings as a
       real document with plugin-supplied live regions — the first
       instance of the drawn-UIs-in-books machinery, arriving early

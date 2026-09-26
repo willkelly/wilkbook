@@ -242,8 +242,9 @@ section stays as the replay procedure.**
   window under test **larger than that** needs the patience raised past the
   window (sed `stable<400` up, e.g. 1300 for a 1000 ms window) or rows
   alias into their neighbors and read 0 frames.
-- The idle-start pipeline floor is ~132–140 ms damage→first-frame; do not
-  read it as publish latency.
+- On the old shipping driver (2026-08-01) the idle-start pipeline floor was
+  ~132–140 ms damage→first-frame; do not read it as publish latency. It has
+  not been re-measured on the direct driver.
 - Start the optics injector BEFORE reader-session (KOReader enumerates
   input once, at init), and expect `QUIT` to restart the reader: destroying
   a held input device is the required-device-loss path, by design.
