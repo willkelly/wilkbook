@@ -8,8 +8,8 @@
   idle-washer debt, and a pressure default.
 - On generation 23 the operator confirmed the flicker-free panel, pen taps
   on the panel, two-finger undo and redo, an idle wash, and suspend/wake.
-  Refresh, a KOReader restart and a cold boot are still owed (see "Glass
-  sessions").
+  It also cold-booted. Refresh and a KOReader restart are still owed (see
+  "Glass sessions").
 - Design agreed with the operator the same day.
 - It passes every host suite, including a replay of the operator's real
   pen captures from `doc/status.md` 2026-09-26.
@@ -374,10 +374,11 @@ trials (`doc/status.md`).
     suspend/wake works.
   - **The idle wash also passed**, the operator seeing the second of the
     two that fired (`debt=60`, 23:09:53).
+  - **A cold boot passed** (operator-run, UART waived). It was the first
+    cold boot of the kernel generations 20–23 share.
   - **Still owed:**
     - Refresh. The log shows none, and Refresh logs nothing of its own;
     - a KOReader restart. None happened on the boot;
-    - a cold boot (step 10). The operator has waived UART for it.
 
 The plan the first session followed is kept below; its deploy steps are
 done.

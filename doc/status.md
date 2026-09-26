@@ -109,12 +109,31 @@ pen-ups on it.
     no restart or crash after the trial's teardown at 22:31:28.
   - The operator's report said only "koreader restart !?!?". What they
     meant is not yet known.
-- **A cold boot: not done.**
-  - The boot ID is unchanged since the deploy, so generations 22 and 23 are
-    still kexec-only.
-  - The operator said "we can cold boot without uart". CLAUDE.md's policy
-    lists cold boots as still needing UART, so this is an operator waiver.
-    It is recorded here and has not been used yet.
+- **A cold boot: passed**, at about 23:17, by the operator without UART.
+  - The operator waived UART for it ("we can cold boot without uart"),
+    since CLAUDE.md's policy lists cold boots as still needing it. The
+    operator powered off, picked os2 at the U-Boot menu by hand, and
+    extlinux booted its DEFAULT.
+  - Read over ssh at 3 min uptime:
+    - boot `34742c60…`;
+    - `gnu.system=` names `x3qqz8r5…`, and the ledger shows 23
+      `[promoted] [booted]`;
+    - no `initcall_blacklist` on the command line, so this was not a
+      kexec;
+    - root on p6, and the real `/data` (p7) mounted read-write with no
+      journal recovery;
+    - all three services running.
+  - The kernel log showed only the known boot pattern: the EBC's first
+    probe fails at `custom_wf.bin` and the rebind at 8.3 s succeeds. It
+    also had `dwc3 … failed to enable ep0out`, which every boot since
+    2026-09-08 has logged.
+  - **What it proves:**
+    - Generation 23's system boots from cold.
+    - It is the **first cold boot of kernel `334ljs8q`**, which
+      generations 20–23 share and which had only been kexec'd.
+  - **What it does not prove:** a new device tree. The loaded
+    `rk3566-pinenote-v1.2.dtb` (`e0530087…`) is byte-identical to
+    generations 16 and 18's, both cold-booted already.
 
 The new Ball default cannot be seen on this device. `prefs.json` names the
 brush the operator chose on generation 22 (`brushpen`), and a default applies
@@ -126,10 +145,10 @@ only where no brush was ever chosen.
 - Battery 86 %. No recovery was needed.
 - **Cable-free count:**
   - Both trials passed health and promotion.
-  - The generation-22 checks passed, and so did six of generation 23's
-    nine.
-  - Refresh, a KOReader restart and a cold boot remain. So by the policy's
-    definition this session does not yet count as a success.
+  - The generation-22 checks passed, and so did seven of generation 23's
+    nine, the cold boot included.
+  - Refresh and a KOReader restart remain. So by the policy's definition
+    this session does not yet count as a success.
   - It becomes the second of three once those pass, or if the operator
     narrows the agreed checks.
 

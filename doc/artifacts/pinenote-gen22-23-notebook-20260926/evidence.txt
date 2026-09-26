@@ -43,3 +43,17 @@ From /var/log/reader-session.log ([idlewasher] lines and the full global refresh
 Suspend cycles (dmesg): entry 535.68 s / exit 544.46 s; entry 1052.92 s / exit 1056.68 s.
 Reader process: pid 606, elapsed 38:35 at uptime ~2320 s, so no KOReader restart on this boot.
 Notebook pen-ups on this boot: 122 (22:37:22 to 23:09:08).
+
+## Generation 23 cold boot (operator-run, no UART; read over ssh at 178 s uptime, 23:20:26Z)
+boot_id=34742c60-1c39-4ea3-9e79-5f532e9cc4a8  root=/dev/mmcblk0p6  /data=/dev/disk/by-partlabel/data ext4 rw
+cmdline: root=PNGuixRoot gnu.system=/gnu/store/x3qqz8r52pdh7jzghzfj8l44gfrqkncb-system ... irqchip.gicv3_nolpi=1 fw_devlink=off fbcon=map:1
+  (no initcall_blacklist=rockchip_grf_init: not a kexec)
+ledger: gen-23 x3qqz8r5… [promoted] [booted]; extlinux DEFAULT gen-23, FDT /boot/gen-23/rk3566-pinenote-v1.2.dtb
+DTB sha256 prefix: gen-23 e0530087f39abdfa = gen-16 = gen-18 (both previously cold-booted)
+kernel: gens 20-23 all 334ljs8q (…-linux-pinenote-book-execution-test-7.1.8-pinenote); /boot/gen-20/Image = /boot/gen-23/Image (5435c84efda8fbed)
+[    3.290306] EXT4-fs (mmcblk0p6): mounted filesystem ... r/w with ordered data mode.
+[    7.900459] EXT4-fs (mmcblk0p7): mounted filesystem ... r/w with ordered data mode.
+[    2.756591] rockchip-ebc fdec0000.ebc: probe with driver rockchip-ebc failed with error -22   (known first probe)
+[    8.318474] rockchip_ebc_probe start                                                          (the rebind)
+[    8.417631] dwc3 fcc00000.usb: failed to enable ep0out   (also on every boot in /var/log/messages since 2026-09-08)
+services: reader-session, pinenote-book-state-device, pinenote-platform-controls running since 23:17:37-39

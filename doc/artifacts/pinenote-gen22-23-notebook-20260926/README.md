@@ -10,7 +10,7 @@ redacted as `[reader address]`.
 | `deploy-gen23.log` | `make deploy` 22→23: the same steps; nothing pruned. |
 | `notebook-penup-gen22-20260926.log` | All 218 `[notebook] pen-up` lines from `/var/log/reader-session.log`, generation 22. |
 | `touch-five-fingers-20260926.bin` | The raw `cyttsp5` evdev stream (`/dev/input/event6`, 24-byte aarch64 `input_event` records, 2150 events) of a 60 s capture: five-finger holds and swipes with the notebook open, on generation 22. |
-| `evidence.txt` | Excerpts: the note authority log for the `25cea98` check, the first pen-up lines, the deploy postflights, the touch-error check, the auto-suspend bytes, and generation 23's idle washes. |
+| `evidence.txt` | Excerpts: the note authority log for the `25cea98` check, the first pen-up lines, the deploy postflights, the touch-error check, the auto-suspend bytes, generation 23's idle washes, and its cold boot. |
 
 SHA-256:
 
