@@ -132,9 +132,13 @@ rescue script.**
   power with `/` and `/data` mounted read-write. That is the same crash
   CLAUDE.md's kexec lesson describes, and there it once left `/data` on the
   library placeholder. The operator wants a short hold (longer than a tap)
-  to open a shutdown menu instead. An assessment of the hold path is under
-  way (power-key handling, the PMIC's hard cut, boot recovery, data at
-  risk).
+  to open a shutdown menu instead. The hold path has since been assessed
+  (`doc/power-management.md`, "Holding the power button is a power cut").
+  - One device read, over ssh on this boot: the RK817's register 0xF7 is
+    `0x06`, so the hard cut is **6 s** and powers off, not 10 s as the
+    docs had said.
+  - 0xF6, the last power-off's cause, read `0x08` after os1's power-off.
+    Undecoded.
 
 **Generation 23 now has two cold boots** (`34742c60…` and `69ac9f1e…`).
 At the operator's word it was pinned on boot `69ac9f1e…` (`wilkbook-generation

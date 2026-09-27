@@ -77,6 +77,120 @@ offline tests, and only reads an explicit allowlist.  It never reads
 waveform or VCOM calibration data and never writes sysfs, procfs,
 debugfs, or tracefs.
 
+## Holding the power button is a power cut (assessed 2026-09-27)
+
+The operator's everyday shutdown will be holding the power button
+(`doc/status.md` 2026-09-26 late). They want a short hold, longer than a
+tap, to open a shutdown menu instead. This section records what a hold
+does today, what it risks, and the options.
+- **How it was assessed:** four source readers, a synthesis and an
+  adversarial check, read-only, without the device. The key source lines
+  were re-checked by hand.
+- **One device read:** the PMIC register below.
+
+**What a hold does today.**
+- **The broker ignores a hold.** It records the press and acts only on a
+  release within 1000 ms, a tap, which suspends
+  (`pinenote/packages/platform-controls/pinenote-power-broker.lua`, the
+  `KEY_POWER` handler). No timer runs while the button is down, and
+  KOReader never opens the power key. That was the 2026-08-04 decision: "a
+  long hold is left to the PMIC hard power-off" (`doc/status.md`).
+- **The RK817 cuts power after 6 s.** The PMIC cuts power when the hold
+  reaches its long-press time.
+  - On 2026-09-27 register 0xF7 (`RK817_PWRON_KEY`) read `0x06` through
+    the named regmap `/sys/kernel/debug/regmap/0-0020/registers`.
+  - Bits 5:4 = 0 select 6 s, and bit 6 = 0 selects power-off rather than
+    restart (Rockchip U-Boot, `include/power/rk8xx_pmic.h`).
+  - The docs' "10-second hold" was never measured. Ten seconds also works,
+    being longer.
+- **Nothing syncs or unmounts first.** `/` and `/data` are read-write at
+  the cut: the crash in CLAUDE.md's kexec lesson, on every such shutdown.
+
+**What is at risk**, most likely and most costly first:
+1. **`/data` on the library placeholder at the next os2 boot.**
+   - Every hold leaves p7 needing journal recovery. `/data` mounts through
+     the udev symlink `/dev/disk/by-partlabel/data` with `mount-may-fail?
+     #t` (`pinenote/systems/pinenote-reader.scm`).
+   - After the kexec into generation 18, recovery lost that link and the
+     boot ran on the placeholder (`doc/status.md` 2026-09-04).
+   - **After a hold and a cold boot this is inferred, not observed.** The
+     mount path cannot tell a kexec from a cold boot. The generation-18
+     case is the only one seen among all the pre-generation-19 kexec boots
+     that left p7 dirty.
+   - When it happens, book-state, the notebook and the library seed all
+     refuse to start on the placeholder, so nothing is written to the wrong
+     place. The library is empty, and Wi-Fi does not return after a sleep,
+     until the next clean boot.
+2. **KOReader's reading position, highlights and bookmarks** since its
+   last save: a book open, a suspend, or the 15-minute auto-save. This
+   covers both partitions: `KO_HOME` is on `/`.
+3. **An acknowledged note save can roll back.** book-state uses SQLite
+   `synchronous = FULL` with `journal_mode = DELETE`
+   (`pinenote/tools/book-state/book-state.scm`). SQLite documents that pair
+   as not durable across power loss; `EXTRA` is. Saves stay atomic.
+4. **Notebook strokes** since the pen last left range. A torn tail is cut
+   off on open.
+5. **The log's last seconds**, which end in NUL bytes.
+
+Two more consequences:
+- A cut also leaves p7 dirty for os1, which mounts it as its `/home`.
+- Plugging in USB powers the PMIC on, and U-Boot's default is os1.
+
+**Options.**
+- **(a) A short hold opens a shutdown menu** (the operator's ask). The
+  assessment found three constraints:
+  - The broker's uinput device sends only `KEY_SLEEP` and `KEY_WAKEUP`,
+    and its banner has glyphs for six letters. Asking KOReader for a menu
+    therefore needs a new handshake message.
+  - Suspend runs synchronously in the broker's only loop, and after a wake,
+    Wi-Fi restore can block that loop for 5 + 15 s. The hold timer must run
+    outside it, or a hold on a sleeping reader is missed.
+  - For a button still held near the cut, `fsfreeze -f /data` (or sysrq
+    `u`) at about 4 s leaves p7 clean even with SQLite open; `sync` does
+    not.
+
+  The broker is rpedde's code, and this reverses the 2026-08-04 decision,
+  so it needs their review.
+- **(b) A `/data` mount that survives a dirty partition.**
+  - Find p7 by its sysfs `PARTNAME=data` (as the Wi-Fi one-shot does),
+    fsck the kernel's node, mount it, and show a failure on the panel
+    instead of falling back to the placeholder.
+  - Add a real-`/data` check to the deploy health check.
+  - It is our code. Rung 4d (`make qemu-data-check`) with a dirty fixture
+    can reproduce the race. It cannot rule it out, since it runs under
+    emulation.
+- **(c) Lose less on a cut:** a shorter KOReader auto-save, `synchronous =
+  EXTRA`, `commit=1` on `/data`.
+- **(d) Docs:** the 6 s correction, and KOReader's Power off as the clean
+  shutdown. Done 2026-09-27.
+
+**The assessment's recommendation.**
+1. Do (b) first. Any cut leaves p7 dirty whatever else is built: a flat
+   battery, a panic, or a forced hold.
+2. Then (a), with rpedde's review.
+3. Then (c).
+
+Until then, the clean shutdown is KOReader's Power off. It unmounted
+`/data` cleanly on rpedde's device (2026-08-31) and was used on generation
+23 (2026-09-26). The other way is to tap to sleep before holding, since
+suspend syncs first.
+
+**The cheapest device check for risk 1** needs no UART:
+1. After a hold, pick os2 at the U-Boot menu directly. Going through os1
+   would replay p7's journal first.
+2. `findmnt /data` must show p7.
+3. `grep -a` the boot's messages for `recovering journal`, `incorrect ext4
+   checksum` and `Can't lookup blockdev`.
+
+One clean pass does not prove the race absent.
+
+**Open questions.**
+- 0xF6 (`RK817_OFF_SOURCE`) read `0x08` after the operator powered off
+  os1. U-Boot's committed captures print `off=0x04`, the long-press cut.
+  Its bit table is in the datasheet, which has not been read.
+- What started the suspend logged at 00:04:09 on 2026-09-27.
+- Whether an armed RTC alarm powers the board on.
+
 ## Open question: the cover wakes it, and it should not (2026-08-09)
 
 **Observation, on glass:** opening the cover wakes the device from ultra
