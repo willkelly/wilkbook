@@ -24,6 +24,11 @@ this lineage. **Unreleased** above it collects what has landed since.
 
 ## Unreleased
 
+- **Update health now requires the real data partition.** A failed `/data`
+  mount, a read-only filesystem, or the wrong partition blocks promotion.
+  The check uses the mounted device's kernel identity rather than a udev
+  symlink. A stopped reader's historical log no longer counts as running.
+  Host failure-path checks pass; this follow-up is not yet deployed.
 - **The QEMU page-turn campaign works with the current reader image again.**
   It activates the virtual display, opens a deterministic test book rather
   than tapping the file manager, and validates the complete reader log.
