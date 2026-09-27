@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 """Guard the baseline's scoring conventions without model dependencies."""
 import importlib.util
+import json
 from pathlib import Path
+import subprocess
+import sys
+import tempfile
 import unittest
 
 spec = importlib.util.spec_from_file_location("summary", Path(__file__).with_name("summarize-images.py"))
@@ -35,6 +39,28 @@ class Metrics(unittest.TestCase):
         rows = [dict(truth="One word.", prediction="one word .")]
         self.assertGreater(scores(rows)["cer"], 0)
         self.assertEqual(summary.lexical_score(rows)["wer"], 0)
+
+    def test_shared_comparison_recomputes_denominators(self):
+        def result(rows):
+            return dict(model="fixture", rows=rows, all_lines=scores(rows),
+                        median_line_seconds=1, peak_process_rss_mib=1)
+        first = dict(sample="01", truth="abc", prediction="abc", seconds=1,
+                     image_sha256="image-one", label_sha256="label-one")
+        second = dict(sample="02", truth="d", prediction="X", seconds=1,
+                      image_sha256="image-two", label_sha256="label-two")
+        with tempfile.TemporaryDirectory() as d:
+            a, b = Path(d) / "a.json", Path(d) / "b.json"
+            a.write_text(json.dumps(result([first, second])))
+            b.write_text(json.dumps(result([first])))
+            command = [sys.executable, str(Path(__file__).with_name("summarize-images.py")), str(a), str(b)]
+            self.assertNotEqual(subprocess.run(command, capture_output=True).returncode, 0)
+            comparison = subprocess.check_output(command + ["--shared"], text=True)
+            self.assertIn("Omitted: 02.", comparison)
+            self.assertIn("0.00%", comparison)
+            self.assertNotIn("25.00%", comparison)
+            first["image_sha256"] = "different-image"
+            b.write_text(json.dumps(result([first])))
+            self.assertNotEqual(subprocess.run(command + ["--shared"], capture_output=True).returncode, 0)
 
 
 if __name__ == "__main__":

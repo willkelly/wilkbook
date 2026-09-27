@@ -24,6 +24,11 @@ this lineage. **Unreleased** above it collects what has landed since.
 
 ## Unreleased
 
+- **Pen trajectories have a measured recognition baseline.** A local OnlineHTR
+  LSTM run on the 19 comparable lines has fewer character errors and lower
+  workstation latency than the image baselines, but more whole-word errors
+  after case/punctuation are ignored. The model has 245,074 parameters;
+  personalization and tablet inference remain untested (`doc/handwriting-baseline.md`).
 - **The first local handwriting baseline is measured.** Microsoft TrOCR Small
   and Base read the completed sampler's 20 ink-only lines on a workstation,
   with 11.69% and 9.72% raw character error respectively. Numbers, punctuation

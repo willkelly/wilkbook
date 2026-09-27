@@ -45,6 +45,54 @@ standard image processor, greedy decoding, float32 CPU inference and eight
 threads. Subsequent tuning on these lines makes them development data; use new
 writing for the next independent evaluation.
 
+## Local trajectory baseline
+
+`evaluate-trajectories.py` runs the released English IAM-OnDB checkpoint from
+[OnlineHTR](https://github.com/PellelNitram/OnlineHTR), Martin Lellep's independent
+implementation of Carbune et al.'s Google paper. It imports the upstream model,
+preprocessor and greedy CTC decoder unchanged. Inputs are the collection's
+`inkml/line-*.inkml`; embedded truth annotations never enter model features.
+Our adapter negates logical-panel Y (upstream expects Y increasing upward),
+converts milliseconds to seconds, and preserves original stroke order and
+pen-up gaps. Pressure and tilt remain in the archive but this four-channel
+model does not consume them.
+
+Use a separate virtual environment: the upstream preprocessor uses NumPy's
+`alltrue`, removed in NumPy 2. Download and unpack the author's
+[released weights](https://lellep.xyz/blog/online-htr.html#the-model-weights)
+under `build/`; the archive SHA-256 and selected checkpoint are recorded in
+`doc/handwriting-baseline.md`. The lowest upstream validation-loss checkpoint
+is selected, independently of our labels.
+
+```sh
+git clone https://github.com/PellelNitram/OnlineHTR.git \
+  pinenote/tools/handwriting/build/OnlineHTR
+git -C pinenote/tools/handwriting/build/OnlineHTR checkout \
+  a80693a2d278b16f91332a4d17e0bb47863cc183
+python3 -m venv pinenote/tools/handwriting/build/trajectory-venv
+pinenote/tools/handwriting/build/trajectory-venv/bin/python -m pip install \
+  torch==2.8.0 --index-url https://download.pytorch.org/whl/cpu
+pinenote/tools/handwriting/build/trajectory-venv/bin/python -m pip install \
+  numpy==1.26.4 pandas==2.2.3 scipy==1.14.1 lightning==2.4.0 \
+  torchmetrics==1.4.3 hydra-core==1.3.2 rich==13.9.4 GitPython==3.1.43
+pinenote/tools/handwriting/build/trajectory-venv/bin/python \
+  pinenote/tools/handwriting/evaluate-trajectories.py COLLECTION \
+  pinenote/tools/handwriting/build/OnlineHTR UNPACKED_MODEL_DIR NEW_OUTPUT
+python3 pinenote/tools/handwriting/summarize-images.py --shared \
+  SMALL_OUTPUT/results.json BASE_OUTPUT/results.json NEW_OUTPUT/results.json \
+  > SHARED_COMPARISON.md
+make -C pinenote/tools/handwriting trajectory-input-check image-metrics-check
+```
+
+The runner refuses changed upstream source, malformed channels, reversed time,
+zero-height ink, nonfinite features or preprocessing that drops stroke
+boundaries. It saves predictions before opening transcription files, then
+checks their consistency with InkML annotations and reports characters outside
+the checkpoint's alphabet. The shared comparison explicitly omits line 20 and
+recomputes accuracy and median latency over the same 19 lines for every model;
+image/label hashes must match. Peak RSS remains each original process's
+high-water mark. No cloud recognizer or training is involved.
+
 ## Copy-and-write sampler
 
 Generate five pages of four prompts: everyday prose, Workbench-like requests,

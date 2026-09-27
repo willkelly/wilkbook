@@ -1,4 +1,4 @@
-.PHONY: check image-metrics-check
+.PHONY: check image-metrics-check trajectory-input-check
 check:
 	luajit -e 'assert(loadfile("export-line.lua"))'
 	luajit test-sample.lua
@@ -8,3 +8,6 @@ check:
 # Pure Python scoring checks; no model download or ML dependencies.
 image-metrics-check:
 	python3 test-image-metrics.py
+
+trajectory-input-check:
+	python3 test-trajectory-input.py

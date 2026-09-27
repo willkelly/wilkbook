@@ -64,8 +64,10 @@ completed sampler supplies 20 image lines and 19 trajectory-compatible lines.
 The older scribbles are not accuracy evidence. The read-only host exporter
 and collection recipe are in `pinenote/tools/handwriting/README.md`.
 [The first local TrOCR baseline](handwriting-baseline.md) measures Small/Base
-at 11.69%/9.72% raw character error on those 20 lines. Model choice remains
-open, and recognition is not in the drawing path.
+at 11.69%/9.72% raw character error on those 20 lines. A subsequent 19-line
+trajectory run with the small OnlineHTR LSTM measured 7.14% raw character error,
+but worse word-content error than TrOCR Base (23.08% vs 10.77% on the shared
+lines). Model choice remains open, and recognition is not in the drawing path.
 
 ### Fixed paper and the handwriting sampler (2026-09-26)
 

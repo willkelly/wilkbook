@@ -78,6 +78,94 @@ for independent confirmation. Keep Small as the inexpensive baseline; compare
 another recognition family and preprocessing on an explicit development set
 before spending a hardware session on deployment.
 
+## First trajectory baseline (same day)
+
+**Trajectories are now tested:** the released English checkpoint from
+[Martin Lellep's OnlineHTR](https://github.com/PellelNitram/OnlineHTR), an
+independent implementation of Carbune et al. (2020), *Fast multi-language
+LSTM-based online handwriting recognition*. This is not Google's production
+recognizer or its trained weights. It is a small three-layer, bidirectional
+LSTM with 64 hidden units per direction, trained on IAM-OnDB, with greedy CTC
+decoding and no language model. Total: **245,074 parameters**.
+
+### Input and reproducibility
+
+- Upstream commit `a80693a2d278b16f91332a4d17e0bb47863cc183`, imported unchanged.
+  Its model, transform, tokenizer and decoder sources were diff-checked against
+  the checkpoint's recorded training commit
+  `fb3eee853eb7437fd55ea5a03f674ddbf528f932`: identical.
+- [Author's download page](https://lellep.xyz/blog/online-htr.html#the-model-weights)
+  resolves to Google Drive file `1_F9B18_tMtWAsvkRvPRgme0RDxOBgSWb`.
+  Archive SHA-256:
+  `d54f092929cd2290f2330981f33d058faa852e95dde5e7ea3b5e4824d45233fa`.
+  The upstream selector chooses `epoch=000699_step=0000106400_val_loss=0.2650.ckpt`
+  by lowest upstream validation loss, not by our sampler performance. Checkpoint
+  SHA-256: `f906a239e1cf769c269f8f991ec1062ef5c4d53df403e1272966b58b0ea7ef44`.
+- InkML preserves original stroke order. The adapter discards truth annotations
+  from model input, negates screen Y to the training convention (upward Y),
+  converts milliseconds to seconds and keeps pen-up time gaps. The upstream
+  transform normalizes line height, chooses per-stroke sample counts at 20
+  points per normalized path-length unit, interpolates uniformly in time, then
+  derives `dx, dy, dt, stroke-start`. Pressure and tilt are not model channels.
+- Every input stroke boundary survived preprocessing; no line was rejected or
+  silently dropped. Source timestamps were monotonic, with no equal adjacent
+  timestamps or stationary multi-point strokes. Area-erased line 20 was excluded
+  as planned. The checkpoint alphabet lacks **`$`**; that character cannot be
+  recognized by this release. It remains in the reference and counts as an error.
+- Same CPU, eight threads, float32, separate process, one shape-only warmup.
+  Python 3.11.14, PyTorch 2.8.0+cpu, NumPy 1.26.4, pandas 2.2.3,
+  SciPy 1.14.1, Lightning 2.4.0, torchmetrics 1.4.3. No retraining,
+  beam search, word list or sample-specific normalization.
+
+### Fair comparison: the shared 19 lines
+
+All image rates and median times below are recalculated on lines 01–19, not
+copied from the earlier 20-line table. Hashes match the same images and labels.
+There are 672 reference characters, 127 whitespace words and 130 lexical tokens.
+
+| Measure | TrOCR Small | TrOCR Base | OnlineHTR trajectories |
+|---|---:|---:|---:|
+| Raw CER | 12.05% | 9.97% | **7.14% (48/672)** |
+| Raw WER | 57.48% | 54.33% | **26.77% (34/127)** |
+| Secondary lexical WER | 14.62% | **10.77%** | 23.08% (30/130) |
+| Exact lines, raw | 0/19 | 0/19 | **2/19** |
+| Exact lines, lexical | 8/19 | **10/19** | 4/19 |
+| Median line time | 0.122 s | 0.851 s | **0.030 s** |
+| Peak process RSS | 651.8 MiB | 2537.5 MiB | **424.9 MiB** |
+
+The trajectory result has fewer character edits and much better punctuation
+spacing, while the image models recover more whole words after punctuation
+and case are ignored. Do not declare an overall accuracy winner from raw CER
+alone. The trajectory model preserved the deliberately absent terminal period
+and some words both TrOCR variants missed, but also produced character-level
+misspellings within otherwise correct phrases. Numbers remain weak. The erased
+final line was not tested, so there is no trajectory result for its confirmed
+spelling slip.
+
+Its parameters occupy about **0.935 MiB in float32** (arithmetic from parameter
+count), versus about 235 MiB for TrOCR Small. The 424.9 MiB process peak includes
+PyTorch/Lightning and other Python libraries, plus checkpoint loading; it is
+not an ARM inference requirement. At roughly 30 ms/line on this workstation,
+this is a plausible compact model family to investigate for the tablet. No
+tablet timing, export or quantization has been tested.
+
+### Next experiment
+
+Keep this frozen, unadapted result. A small trajectory model with inspectable
+training code makes writer adaptation practical to investigate, but benefit
+from a few onboarding sheets is not yet measured. Before requesting new sheets,
+define the adaptation procedure and a separate fresh evaluation set. The
+existing 19 lines can become development data; they must not be used both to
+fine-tune and to claim an independent improvement. Broader pretrained coverage
+(especially numbers/symbols) and a stronger sequence model remain candidates.
+
+The source/adaptation opportunity here is distinct from the production-quality
+offline APIs: [Google ML Kit digital ink](https://developers.google.com/ml-kit/vision/digital-ink-recognition)
+supports stroke-based offline recognition on Android and iOS, not a documented
+Linux SDK. Its accuracy is not represented by this independent implementation.
+The Microsoft/InkFM leads below remain relevant research, with no additional
+released trajectory weights established during this search.
+
 ## Microsoft Research and related work
 
 - **[TrOCR](https://www.microsoft.com/en-us/research/publication/trocr-transformer-based-optical-character-recognition-with-pre-trained-models/)**
@@ -101,7 +189,7 @@ before spending a hardware session on deployment.
   not Microsoft. It studies full-page online ink segmentation, recognition
   and classification. Relevant trajectory/page-understanding research, but
   the reviewed paper did not establish an immediately usable released model
-  for this host comparison. The planned trajectory baseline remains open.
+  for this host comparison. The trajectory run above uses OnlineHTR instead.
 
 ## Replay and evidence
 
@@ -111,4 +199,10 @@ Private run directory:
 full side-by-side `comparison.md`, scores, logs, dependency versions and hashes.
 The committed metric tests cover edit operations, Unicode, corpus weighting,
 literal spelling/punctuation and the explicitly lossy secondary measure.
+Trajectory evidence is under
+`pinenote/tools/handwriting/build/trajectory-evaluation-20260927/`: the full
+three-model 19-line comparison, predictions, results, dependency versions,
+upstream feature/CTC contract check and run log. Adapter tests pin Y orientation,
+time units, stroke order, label isolation and malformed-input refusals; the
+shared-comparison test pins recomputed denominators and mismatched-hash refusal.
 No tablet changes or hardware session were needed.
