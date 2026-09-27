@@ -2653,6 +2653,53 @@ do
     UIManager:fire_due()
 end
 
+-- Template lifecycle through the production shell: preflight, page failure,
+-- blank page, reopening and switching to an ordinary notebook.
+do
+    local w = H15.reopen()
+    local id, n, dir = w.session.id, w.c.page_n, w.nb.dir
+    UIManager:close(w)
+    UIManager:fire_due()
+    memfs.put(dir .. "/backgrounds.conf", "wilkbook-backgrounds-v1 1872 1404\n" .. n .. "\n" .. (n+1) .. "\n")
+    memfs.put(dir .. "/background-" .. n .. ".pgm", "P5\n1872 1404\n255\n" .. string.char(85):rep(W*H))
+    w = H15.reopen()
+    report(w and w.paper and w.paper:getPixel(0,0):getColor8().a == 85,
+           "template open loads the declared physical paper")
+    local old = w.paper
+    local commands = {}
+    w.c:_turn(1, commands)
+    report(commands[#commands].op == "load_page" and commands[#commands].page == n+1,
+           "template test requests the next page through normal navigation")
+    w:_run(commands)
+    report(w.c.page_n == n and w.paper == old,
+           "missing next background leaves the current page and paper intact")
+    UIManager:fire_due()
+    for _, msg in ipairs(shown_messages) do UIManager:close(msg) end
+    memfs.put(dir .. "/background-" .. (n+1) .. ".pgm", "P5\n1872 1404\n255\n" .. string.char(170):rep(W*H))
+    commands = {}
+    w.c:_turn(1, commands)
+    w:_run(commands)
+    report(w.c.page_n == n+1 and w.paper:getPixel(0,0):getColor8().a == 170,
+           "successful turn replaces paper before the new page is rendered")
+    commands = {}
+    w.c:_turn(1, commands)
+    w:_run(commands)
+    report(w.c.page_n == n+2 and w.paper == nil,
+           "page beyond the template has blank paper")
+    commands = {}
+    w.c:_turn(-2, commands)
+    w:_run(commands)
+    w:_switch("new")
+    report(w.session.id ~= id and w.paper == nil,
+           "switching to an ordinary notebook releases template paper")
+    w:_switch("id", id)
+    report(w.paper and w.paper:getPixel(0,0):getColor8().a == 85,
+           "switching back restores template paper")
+    UIManager:close(w)
+    UIManager:fire_due()
+    report(w.paper == nil, "close releases template paper")
+end
+
 if fail == 0 then
     print("RESULT: ok")
 else

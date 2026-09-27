@@ -24,6 +24,12 @@ this lineage. **Unreleased** above it collects what has landed since.
 
 ## Unreleased
 
+- **A copy-and-write handwriting sampler is available in source.** It generates
+  a five-page EPUB and matching notebook paper with 20 prompts and ruled spaces.
+  The notebook gains a separate background layer: erasing restores the printed
+  paper, and ink stays aligned through page changes and rotation. Host tests and
+  native EPUB rendering pass; the reader change is not deployed or glass-tested.
+  Each writing area can be exported independently for labelled recognition tests.
 - **Handwriting evaluation can use notebook snapshots.** A read-only host tool
   exports one labelled page as InkML using the notebook's actual undo/erase
   replay and orientation mapping. It rejects ambiguous or damaged samples.

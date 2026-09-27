@@ -9,7 +9,7 @@ local function record(a, tool, rot, gap)
         {{t=1000,rawx=0,rawy=0,p=100,tx=-2,ty=3},
          {t=2000,rawx=20966,rawy=15725,p=200,tx=4,ty=-5}}, gap, {0,0,1871,1403})
 end
-local function export(records, label, tail)
+local function export(records, label, tail, region)
     local lines = {}
     for _, r in ipairs(records) do lines[#lines + 1] = J.encode(r) end
     local files = {
@@ -19,7 +19,7 @@ local function export(records, label, tail)
     return Sample.export(root, id, 0, label or "Read & compare <two> lines.\n", function(path)
         assert(files[path], "unexpected file: " .. path)
         return files[path]
-    end)
+    end, region)
 end
 local n = 0
 local function check(ok, text) assert(ok, text); n=n+1; print("PASS: " .. text) end
@@ -47,4 +47,23 @@ check(not pcall(export,{record(1)},"two\nlines"), "refuses multiline transcripti
 check(not pcall(export,{record(1)},""), "refuses empty truth")
 check(not pcall(export,{record(1)},nil,""), "refuses incomplete tail without repairing source")
 check(not pcall(export,{record(1)},nil,"\nbad\n"), "refuses damaged records")
+local function dot(a, rawx, rawy, rot)
+    return J.stroke_record(a, Brush.style("fine", "M", "pen", C), rot or 0, 1000,
+        {{t=1000,rawx=rawx,rawy=rawy,p=100,tx=0,ty=0}}, false, {0,0,1871,1403})
+end
+local dots = { dot(1, 2000, 2000), dot(2, 2000, 8000) }
+local region = { x=100, y=100, w=200, h=200 }
+x = export(dots, nil, nil, region)
+check(x:find('xml:id="a1"',1,true) and not x:find('xml:id="a2"',1,true),
+      "writing-area export keeps one whole stroke and excludes the next line")
+check(x:find('source-region">100 100 200 200',1,true), "crop provenance recorded")
+check(not pcall(export, dots, nil, nil, {x=179,y=100,w=200,h=200}),
+      "refuses even a brush edge crossing a crop boundary")
+check(not pcall(export, dots, nil, nil, {x=900,y=900,w=20,h=20}), "refuses empty region")
+check(not pcall(export, dots, nil, nil, {x=0,y=0,w=2000,h=20}), "refuses out-of-panel crop")
+check(not pcall(export, dots, nil, nil, {x=0.5,y=0,w=100,h=20}), "refuses fractional crop")
+x = export({dot(1, 2000, 2000, 1), dot(2, 8000, 2000, 1)}, nil, nil,
+           {x=1100,y=100,w=200,h=200})
+check(x:find('xml:id="a1"',1,true) and not x:find('xml:id="a2"',1,true),
+      "sampler portrait crop follows recorded mode through physical coordinates")
 print(string.format("PASS: %d sample-export assertions", n))

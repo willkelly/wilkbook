@@ -64,6 +64,41 @@ the current scribbles are not accuracy evidence. The read-only host exporter
 and collection recipe are in `pinenote/tools/handwriting/README.md`. No model
 has been selected, and recognition is not in the drawing path.
 
+### Fixed paper and the handwriting sampler (2026-09-26)
+
+Operator-approved scope: a simple notebook template; orient the device by hand.
+The five-page, 20-line sampler pairs each printed prompt with a ruled writing
+area. `pinenote/tools/handwriting/make-sampler.scm` generates the EPUB and a fresh
+notebook from the same artwork; its README has generation, installation and
+labelled-region export instructions. **Implemented and host-tested, not deployed
+or glass-accepted.** The actual native KOReader renders the EPUB as five pages.
+
+Paper is an immutable physical-pixel layer below the journal. Live area erasing
+restores paper; replay, undo and stroke erasing start from that same paper.
+Rotation keeps ink and background aligned in panel coordinates, while controls
+can turn; this does not rotate existing writing upright. The `nb_background`
+loader reads `backgrounds.conf` (`wilkbook-backgrounds-v1 W H`, then one signed
+page number per line) and exactly sized `background-N.pgm` assets (P5, 8-bit
+gray, canonical `P5\nW H\n255\n` header). It refuses mismatched geometry and
+declared missing/corrupt pages before replacing the current page. Undeclared
+pages and notebooks without a manifest stay blank. Only the current background
+is retained (~2.6 MB on PineNote), with a second during page-load preflight.
+Assets are loaded on page changes, never while stamping a pen report.
+
+The stroke format is unchanged. Keep backgrounds with copied notebooks; older
+generations ignore them, so use a background-capable reader for this sampler.
+There is no reader-side importer or template picker yet: install the generated
+new directory once while the notebook is closed. The reusable layer can later
+hold a rendered book-page snapshot, but EPUB anchoring, repagination and book
+annotation UI remain separate work.
+
+Offline proof: full KOReader input suite, 36 dedicated background assertions
+(real BB8/RGB16, both blitters, all rotations/night mode, erase/replay and region
+clipping), plugin page-load/refusal/switch/close coverage, and labelled-region
+export tests. On glass still owed: readability, drawing across a rule, erasing,
+undo, page turns, close/reopen and orientation. DU ink policy is unchanged;
+the physical appearance of restoring gray paper with the eraser is unmeasured.
+
 ## What it is
 
 The operator's brief, 2026-09-26:
@@ -161,6 +196,7 @@ module talks to KOReader.
 | `nb_panel` | The floating panel's layout, hit testing, drag and flick. |
 | `nb_controller` | The session state machine. It composes the above and emits a command list; it does no IO. |
 | `nb_surface` | Spans into Blitbuffers: page buffer, framebuffer alias, blit with rotation matched. |
+| `nb_background` | Optional fixed physical paper, strict geometry and declared-page loading; independent of ink. |
 | `nb_fs` | The filesystem over ffi: one `write(2)` per append, fsync, atomic rename. |
 | `main.lua` | The KOReader shell: menu entry, the notebook window, the command executor, panel painting. |
 

@@ -2,6 +2,7 @@
 -- Replay is the notebook's own implementation, including undo/stroke erase.
 local J = require("nb_journal")
 local G = require("nb_geom")
+local Brush = require("nb_brush")
 local M = {}
 
 local function xml(s)
@@ -9,7 +10,7 @@ local function xml(s)
              :gsub('"', "&quot;"):gsub("'", "&apos;"))
 end
 
-function M.export(root, id, page_n, transcript, read)
+function M.export(root, id, page_n, transcript, read, region)
     assert(type(page_n) == "number" and page_n == math.floor(page_n), "page must be an integer")
     transcript = transcript:gsub("\r?\n$", "")
     assert(#transcript > 0 and not transcript:find("[%z\1-\31]"), "transcript must be one nonempty text line")
@@ -34,13 +35,43 @@ function M.export(root, id, page_n, transcript, read)
     -- nb_controller records its KOReader rotation mode, not the oppositely
     -- directed Blitbuffer rotation consumed by the geometry functions.
     local bb_rotation = G.bb_rotation(rotation)
-    local samples, t0 = {}, nil
-    for i, stroke in ipairs(page.strokes) do
+    if region then
+        local w, h = G.logical_size(bb_rotation, cfg.W, cfg.H)
+        for _, key in ipairs({ "x", "y", "w", "h" }) do
+            local v = region[key]
+            assert(type(v) == "number" and v == math.floor(v), "region must use integer pixels")
+        end
+        assert(region.x >= 0 and region.y >= 0 and region.w > 0 and region.h > 0
+            and region.x + region.w <= w and region.y + region.h <= h,
+            "region outside logical panel")
+    end
+    local strokes = {}
+    for _, stroke in ipairs(page.strokes) do
+        -- Validate the whole page even when selecting one line: an eraser or
+        -- a different orientation outside the crop may affect its meaning.
         local r = stroke.rec
         assert(r.tool == "pen" and r.comp ~= "white",
                "area erase requires raster recognition; do not export hidden ink")
         assert(r.rot == rotation, "mixed writing orientations; use one orientation per labelled line")
         assert(r.gap == 0, "contact dropout in sample; collect a clean line")
+        local keep = true
+        if region then
+            local x0, y0, x1, y1 = Brush.bbox(stroke.style, stroke.points)
+            x0, y0 = G.to_logical(bb_rotation, cfg.W, cfg.H, x0, y0)
+            x1, y1 = G.to_logical(bb_rotation, cfg.W, cfg.H, x1, y1)
+            x0, x1 = math.min(x0, x1), math.max(x0, x1)
+            y0, y1 = math.min(y0, y1), math.max(y0, y1)
+            local rx1, ry1 = region.x + region.w - 1, region.y + region.h - 1
+            keep = x0 <= rx1 and x1 >= region.x and y0 <= ry1 and y1 >= region.y
+            assert(not keep or (x0 >= region.x and x1 <= rx1 and y0 >= region.y and y1 <= ry1),
+                   "stroke crosses writing-area boundary; choose an unambiguous region")
+        end
+        if keep then strokes[#strokes + 1] = stroke end
+    end
+    assert(#strokes > 0, "writing area has no active ink")
+    local samples, t0 = {}, nil
+    for i, stroke in ipairs(strokes) do
+        local r = stroke.rec
         samples[i] = J.samples(r)
         for _, p in ipairs(samples[i]) do
             assert(p.rawx >= 0 and p.rawx <= cfg.abs_x_max and p.rawy >= 0 and p.rawy <= cfg.abs_y_max,
@@ -65,7 +96,11 @@ function M.export(root, id, page_n, transcript, read)
         '    <channel name="TY" type="integer"/>',
         '  </traceFormat>',
     }
-    for i, stroke in ipairs(page.strokes) do
+    if region then
+        out[#out + 1] = string.format('  <annotation type="source-region">%d %d %d %d</annotation>',
+                                     region.x, region.y, region.w, region.h)
+    end
+    for i, stroke in ipairs(strokes) do
         local points = {}
         for k, p in ipairs(samples[i]) do
             local physical = stroke.points[k]

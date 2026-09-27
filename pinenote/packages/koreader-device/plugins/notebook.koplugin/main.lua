@@ -77,6 +77,7 @@ end
 _G.__wilkbook_notebook_loaded = true
 
 local Blitbuffer = require("ffi/blitbuffer")
+local Background = require("nb_background")
 local CenterContainer = require("ui/widget/container/centercontainer")
 local Device = require("device")
 local Font = require("ui/font")
@@ -265,8 +266,13 @@ local function prepare(plugin, how, id, prefs)
     if not lines then
         return nil, T(_("Notebook: cannot read page %1 (%2)."), n, lerr)
     end
+    local backgrounds, berr = Background.open(nb, cfg)
+    if not backgrounds then return nil, berr end
+    local paper, perr = backgrounds:load(n)
+    if perr then return nil, perr end
     return { cfg = cfg, store = store, nb = nb, id = id, page_n = n,
-             page = replay(lines, cfg, id, n), prefs = prefs }
+             page = replay(lines, cfg, id, n), prefs = prefs,
+             backgrounds = backgrounds, paper = paper }
 end
 
 ------------------------------------------------------------------------
@@ -370,6 +376,9 @@ end
 -- A new controller on session s: at the first open, and for every
 -- notebook opened from the panel (the old one closed first).
 function NotebookWindow:_start(s)
+    if self.paper then self.paper:free() end
+    self.backgrounds, self.paper = s.backgrounds, s.paper
+    s.paper = nil -- ownership transferred to the window
     self.session, self.nb = s, s.nb
     self.cfg, self.store = s.cfg, s.store
     -- A refused arm stays refused until reset(); an open is the natural
@@ -621,10 +630,10 @@ function EXEC.ink(self, cmd)
         hint:arm(self.hint_wanted)
     end
     local t0 = mono_us()
-    Surface.ink(self.page_bb, cmd, nil)
+    Surface.ink(self.page_bb, cmd, nil, self.paper)
     -- The open panel is painted over the canvas; the page buffer holds
     -- what is under it, the framebuffer shows the panel.
-    Surface.ink(self.fb, cmd, self.panel_phys)
+    Surface.ink(self.fb, cmd, self.panel_phys, self.paper)
     self.c:note_timing("stamp", mono_us() - t0)
 end
 
@@ -712,13 +721,17 @@ function EXEC.load_page(self, cmd)
     local n = cmd.page
     local lines, err = self.nb:page_lines(n)
     if not lines then return self:_run(self.c:page_loaded(n, nil, err)) end
+    local paper, perr = self.backgrounds:load(n)
+    if perr then return self:_run(self.c:page_loaded(n, nil, perr)) end
     local page = replay(lines, self.cfg, self.session.id, n)
+    if self.paper then self.paper:free() end
+    self.paper = paper
     self:_run(self.c:page_loaded(n, page))
 end
 
 function EXEC.render_page(self, cmd)
     Surface.render_page(self.page_bb, cmd.page, cmd.strokes, self.cfg,
-                        cmd.region)
+                        cmd.region, self.paper)
 end
 
 -- A physical rect as the logical Geom covering the same pixels.
@@ -1178,6 +1191,10 @@ function NotebookWindow:onCloseWidget()
     if self.page_bb then
         self.page_bb:free()
         self.page_bb = nil
+    end
+    if self.paper then
+        self.paper:free()
+        self.paper = nil
     end
 end
 
