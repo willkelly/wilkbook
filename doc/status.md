@@ -17,7 +17,8 @@ zero bad/ignored records or recorded contact gaps. All writing used mode 1.
 The eraser strokes are page 4 actions 132–134, confined to the final line.
 Twenty ink-only line images preserve the actual erasing; 19 trajectory exports
 are usable, with the corrected final line refused rather than resurrecting ink.
-Labels remain provisional pending transcription review; no recognizer was run.
+Labels were visually reviewed; the operator confirmed both outstanding
+transcription questions, finalizing the evaluation labels. No recognizer was run.
 
 Private snapshot and derived handwriting remain in gitignored
 `pinenote/tools/handwriting/build/collection-20260927/`. No handwritten sample
