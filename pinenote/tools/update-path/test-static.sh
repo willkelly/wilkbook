@@ -117,8 +117,8 @@ echo "PASS: deployer promotes only after health, cross-builds, sends only the mi
 # PineNote at the helper's Wi-Fi off) and nothing closes the TCP connection;
 # without keepalives the client hangs forever (2026-09-02).
 harness="$here/../../scripts/qemu/run-virt-update-flow.sh"
-# three trials: the forced refusal (3b), B, and the rollback to A
-[ "$(grep -c '^vm_trial "wilkbook-generation trial' "$harness")" -eq 3 ]
+# Four trials: missing-image refusal, busy-data refusal, B, and rollback to A.
+[ "$(grep -c '^vm_trial "wilkbook-generation trial' "$harness")" -eq 4 ]
 reject -q '^vm "wilkbook-generation trial' "$harness"
 grep -q 'ServerAliveInterval=5 -o ServerAliveCountMax=2' "$harness"
 grep -q 'timeout 120 ssh' "$harness"
@@ -130,6 +130,7 @@ echo "PASS: every trial ssh carries keepalives and a timeout, so a kexec cannot 
 grep -q 'stale SYSTEM_B or ROOTFS' "$harness"
 grep -q 'cmp -s "$tree_helper" "$shipped"' "$harness"
 [ "$(grep -c 'sed "s/^/        trial> /"' "$harness")" -eq 3 ]
+grep -Fq "sed 's/^/        busy-data> /'" "$harness"
 echo "PASS: the rig refuses a generation whose helper is not the tree's and keeps each trial's output"
 # The rig forces one refusal (B's Image moved away -> kexec -l fails after the
 # teardown) and requires the guest back on the same boot, health passing, the
