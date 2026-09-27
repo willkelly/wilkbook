@@ -26,9 +26,11 @@ capture and storage half of stroke capture #20.
 **Recognition direction (2026-09-27):** the operator agreed to begin with
 [contextual decoding](handwriting-design.md), using book-provided language,
 scope and symbol resources, and to retain continual learning as the eventual
-system. That record proposes an ink-linked correction/review sheet and records
-the open UI choices. Recognition and correction UI remain unimplemented in
-the notebook; the host experiment history below is not device qualification.
+system. The operator also accepted its ink-linked correction/review direction,
+explicitly including ghosting, flashing and draw speed. That record describes
+the rendering approach and open UI choices. Recognition and correction UI
+remain unimplemented in the notebook; the host experiment history below is
+not device qualification.
 
 The operator finds ink responsiveness good and current ghosting/refresh
 acceptable; charcoal (#83) can bring its own performance investigation.

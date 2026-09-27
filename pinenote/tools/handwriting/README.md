@@ -11,7 +11,7 @@ sampler generator creates an EPUB and a fresh notebook with fixed paper.
 
 Architecture and sequencing decisions are in
 [`doc/handwriting-design.md`](../../../doc/handwriting-design.md): contextual
-decoding first, book resource packs, correction records/UI proposal and the
+decoding first, book resource packs, correction records/UI direction and the
 eventual continual-learning system. Those are design direction, separate from
 the executable experiments below.
 

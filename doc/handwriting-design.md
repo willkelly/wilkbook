@@ -5,8 +5,10 @@ sequencing below: **begin with contextual decoding**, while designing for an
 eventual continual-learning system. Recognition is derived, editable content
 backed by preserved ink. Books can supply context, examples and executable
 language helpers. This is a design direction, not a deployed notebook feature.
-The correction UI in §7 is a **proposal for discussion and prototyping**, not
-an accepted interaction design or a hardware result.
+The operator subsequently accepted §7 as the **correction UI direction**, with
+ghosting, flashing and draw speed explicitly part of the requirements. Exact
+layout, rendering policy and performance budgets still need prototyping and
+panel qualification; agreement on the design is not a hardware result.
 
 Related records:
 
@@ -17,6 +19,8 @@ Related records:
   [Workbench integration](workbench-device-integration.md): existing authority,
   sandbox and renderer boundaries to reuse; no recognition join exists yet.
 - [Configuration](configuration.md): sparse, durable preferences direction.
+- [Refresh policy](refresh-policy.md): display evidence and measurement history;
+  the notebook record describes the current direct-driver UI/hint integration.
 
 ## 1. Decisions and motivation
 
@@ -48,6 +52,9 @@ Related records:
 8. **Correction is a first-class workflow.** The target remains dependable
    recognition with little proofreading. Current evidence warrants a usable
    correction path; a pleasant editor cannot substitute for recognition quality.
+9. **E-ink behavior is part of correction usability.** Ghosting, flashing,
+   input-to-visible latency and drawing cost must be assessed alongside accuracy
+   and correction effort. A functionally correct desktop mockup is insufficient.
 
 Why this sequence: Gemma's code-image experiment read all 16 Python lines
 exactly, but the four Scheme blocks exposed punctuation, quoting and structure
@@ -250,11 +257,15 @@ train on every error from the qualification set, then reuse that set as an
 independent test. Evaluate all predeclared variants and seeds rather than
 promoting the most favorable small development result.
 
-## 7. Correction UI proposal
+## 7. Correction UI direction
+
+**Operator-approved direction, 2026-09-27**, including the requirement to
+consider ghosting, flashing and draw speed. The rendering approach below is
+the proposed implementation of that requirement; detailed choices remain open.
 
 ### Goal and entry point
 
-**Keep writing as paper-and-pen; review derived text when asked.** Propose a
+**Keep writing as paper-and-pen; review derived text when asked.** Use a
 `Review text` action in the notebook's existing floating panel, initially for
 the current block or page. A review surface has explicit selection/editing
 semantics so normal pen strokes and existing undo/navigation gestures do not
@@ -360,6 +371,78 @@ Provider failure/offline operation must still allow manual correction.
   modes in the first device prototype.
 - Exact acceptance/export wording, unresolved-region serialization and how to
   measure acceptable review effort with the operator.
+- Measured latency/ghosting/flash budgets and the best refresh policy for the
+  actual correction surfaces; qualify the rendering approach below on glass.
+
+### E-ink interaction and rendering requirements
+
+The correction UI must remain comfortable through a whole block of repeated
+edits, not just look clean when first opened. **Ghosting** is residue persisting
+after a refresh settles; **settling** is the transient development of a new
+image. Measure these separately from flashes and input lag. Reducing flashing
+by allowing unreadable punctuation residue is not a successful tradeoff.
+
+**Stable, event-driven presentation:**
+
+- Keep candidate buttons and the keyboard in stable positions. Reserve space
+  for status text; update it at meaningful state changes rather than animate a
+  spinner, pulse a selection, blink a caret or stream tokens onto the panel.
+  A steady caret/outline and static busy indicator are the starting design.
+- Prefer discrete block/crop changes over animated scrolling or zooming.
+  Preserve the user's viewport during edits where possible. Indent, split/join
+  and long-line changes still need correct re-layout, without animated reflow.
+- Selecting, applying and undoing a reading should produce prompt local
+  feedback without waiting for another inference or scope pass. Expensive
+  inference, parsing and training must not occupy the input/render path.
+  Later proposals can be batched when ready without moving active targets.
+
+**Draw the final state once:** reuse the notebook panel's off-screen composition
+pattern. Cache the unchanged ink crop and text layout where useful, invalidate
+affected regions, and publish the composed result without an intermediate
+erase-to-white or a page painted over and then under the panel. Coalesce
+changes from the same action; avoid an acknowledgement paint followed by a
+redundant identical result paint. Preserve actual edits and input events even
+when superseded render requests can be coalesced. Measure cache memory and
+invalidation correctness along with the rendering speedup.
+
+| Interaction | Starting redraw policy to validate |
+| --- | --- |
+| Select another span | Restore the old outline and draw the new outline/candidate area; retain unchanged ink and text |
+| Apply or undo a reading | Re-layout affected text and dependent controls, compose once, publish changed regions |
+| Type punctuation or move the caret | Local editor/feedback damage; no periodic blink or full-page repaint |
+| Open/close keyboard, magnify ink, change block | One composed transition; larger damage is expected, an automatic clearing flash is not required for every transition |
+| Background inference completes | Stable, batched proposal update; no per-token paints or unsolicited viewport changes |
+
+Dirty rectangles are an optimization intent, not proof of the driver's physical
+update area. Audit actual publish/refresh requests and their visible effect.
+When replacing glyphs, repaint their old footprint as well as the new one;
+minimal damage must not leave stale text or outlines in the framebuffer.
+
+**Use the existing refresh owner:** the KOReader host owns display policy,
+not the book or recognition helper. Start with the current grayscale-safe UI
+path (GL16 in the notebook's direct-driver integration) for antialiased text,
+ink crops and keyboard surfaces. Do not place a grayscale review surface under
+the canvas's DU hint. Review entry/exit, overlays, rotation and failures must
+restore the correct hint ownership. Binary-only feedback could later use a
+bounded DU region if its whole target region and transitions qualify; it is
+not justification for a whole-screen FAST switch. The waveform name alone
+does not establish latency or ghosting quality.
+
+Reuse the existing explicit Refresh and idle-washer/debt machinery. Account
+for correction interactions once at the responsible owner, avoid duplicate
+wash requests or charges, and observe the existing active-input/proximity
+guards and debt-ceiling behavior. Do not introduce a clearing wash on every
+tap, candidate change or block acceptance, or claim that a GL16 repaint clears
+wash debt. If concentrated edits make a region hard to read before idle cleanup,
+explicit Refresh must remain reachable without losing correction state.
+Any more aggressive cleanup policy needs evidence from the repeated-edit test.
+
+Defer optional finishing work while interacting, but do not assume queued
+optical work can always be cancelled once it starts. In the current direct
+driver, renewed DU ink may wait behind in-flight GL16 on those pixels. Include
+immediate return from review to writing (and a rewrite pad if implemented) in
+the acceptance sequence. Driver scheduling/refresh changes remain separate
+from the initial review UI implementation.
 
 ## 8. External inference and placement
 
@@ -389,8 +472,9 @@ manual correction and retained ink remain usable when the service is absent.
    connect it during decoding and block reconciliation, including requests for
    missing alternatives. Start with a small declarative book resource pack.
 3. **Correction prototype alongside the decoder.** First exercise saved code
-   blocks and the proposed review sheet off-device, with the real Lua renderer
-   where practical. Capture literal corrections distinctly from content edits.
+   blocks and the agreed review-sheet direction off-device, with the real Lua
+   renderer where practical. Capture literal corrections distinctly from
+   content edits.
 4. **Cheap personalization.** Activate vocabulary and example retrieval from
    confirmed records. Measure cross-book/domain effects and reversibility.
 5. **Scheduled continual training.** With enough clean, session-separated
@@ -413,7 +497,31 @@ plain text correction; do not hide poor recognition behind selective review.
 
 Host checks should cover revision races, selection/alignment, literal-versus-
 content labels, rollback, persistence, unavailable providers and incomplete
-math. Only after those pass should an attended panel session assess legibility,
-stylus targets, refresh behavior, reopen/suspend and operator effort. The
-architecture decisions are agreed; provider algorithms, model/adapter choices,
-UI details and adoption thresholds still require evidence.
+math. Add paint/refresh traces and composed-frame checks: no intermediate
+blanking, unchanged regions stay unchanged, old glyph footprints are restored,
+idle UI generates no animation paints, stale callbacks cannot publish, and
+hint/debt ownership survives keyboard and review lifecycle transitions. Host
+measurements can establish layout/raster CPU time, allocations and publish
+counts, but cannot establish optical ghosting or perceived panel speed.
+
+Then use an attended panel sequence that repeatedly selects alternatives,
+changes punctuation, types, indents, undoes, opens/closes the keyboard, changes
+blocks, returns immediately to ink, pauses for cleanup, and suspends/reopens.
+Include night mode and supported orientations. Record the generation, display
+policy and panel temperature alongside:
+
+- Input-to-first-visible-feedback and input-to-readable-result latency,
+  including tail latency and rapid successive edits, separately from inference.
+- Layout/raster time, publish count, damaged area and refresh/wash requests
+  per action; distinguish logical actions, paints and actual optical passes.
+- Observed flashes and their triggers, and settling time.
+- Post-settle ghosting after repeated edits, especially quote/backquote/comma,
+  parentheses, caret and selection outlines; compare before/after cleanup.
+- Total review time, accidental taps and perceived responsiveness/comfort.
+
+Use camera/optical observation for visible timing and residue rather than
+equating a publish return or IRQ count with a readable frame. Establish
+acceptable budgets with the operator from the prototype; no sub-frame response,
+flash-free guarantee or numerical latency threshold is claimed by this design.
+The architecture and UI direction are agreed; provider algorithms, model/adapter
+choices, detailed layout/refresh policy and adoption thresholds require evidence.

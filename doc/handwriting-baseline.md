@@ -9,8 +9,9 @@ See "Gemma 4 E2B direct image recognition" below.
 
 The agreed next direction is [contextual decoding and correction](handwriting-design.md):
 book-provided language/scope/symbol resources first, with an eventual continual-
-learning system. That decision record also proposes the correction UI; this
-page retains the experimental evidence.
+learning system. That decision record also captures the agreed correction UI
+direction and its e-ink performance requirements; this page retains the
+experimental evidence.
 
 The following sections record the experiments in order. The initial TrOCR
 finding was **promising word recovery, insufficient literal transcription**:
