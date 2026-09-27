@@ -14,6 +14,7 @@ trajectory-input-check:
 
 candidate-check:
 	python3 test-ctc-candidates.py
+	python3 test-character-lm.py
 	python3 test-focused-candidates.py
 	python3 test-gemma-selector.py
 

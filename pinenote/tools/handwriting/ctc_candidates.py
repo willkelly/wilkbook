@@ -13,26 +13,46 @@ def logadd(a, b):
     return hi + math.log1p(math.exp(lo - hi))
 
 
-def beam_search(frames, alphabet, width=128, token_top_k=8):
+def beam_search(frames, alphabet, width=128, token_top_k=8,
+                language_model=None, alpha=0.0, beta=0.0):
     """Sum blank/nonblank alignment paths; index zero is CTC blank.
 
     Pruning makes log probabilities approximations, not calibrated confidence.
     Zero token_top_k disables token pruning (useful for exhaustive test oracles).
+    An optional incremental character LM ranks prefixes without changing their
+    CTC path sums. alpha weights natural-log LM scores; beta rewards characters.
+    EOS is scored before the last frame's beam pruning. LM state is retained
+    only for the active beam, and never advanced for a blank or collapsed repeat.
     """
     if width < 1 or token_top_k < 0:
         raise ValueError("invalid beam limits")
+    if not math.isfinite(alpha) or alpha < 0 or not math.isfinite(beta):
+        raise ValueError("invalid fusion weights")
+    if alpha and language_model is None:
+        raise ValueError("alpha requires a language model")
     beam = {(): (0.0, NEG)}
-    for frame in frames:
+    lm_states = {(): (language_model.start(), 0.0)} if language_model else {}
+    for frame_index, frame in enumerate(frames):
         if len(frame) != len(alphabet) + 1 or any(not math.isfinite(p) for p in frame):
             raise ValueError("invalid log-probability frame")
         labels = list(range(1, len(frame)))
         if token_top_k:
             labels = sorted(labels, key=lambda c: frame[c], reverse=True)[:token_top_k]
         next_beam = {}
+        next_lm = {}
 
         def add(prefix, blank=NEG, nonblank=NEG):
+            if blank == NEG and nonblank == NEG:
+                return
             pb, pn = next_beam.get(prefix, (NEG, NEG))
             next_beam[prefix] = logadd(pb, blank), logadd(pn, nonblank)
+            if language_model and prefix not in next_lm:
+                if prefix in lm_states:
+                    next_lm[prefix] = lm_states[prefix]
+                else:
+                    state, score = lm_states[prefix[:-1]]
+                    new_state, increment = language_model.extend(state, alphabet[prefix[-1] - 1])
+                    next_lm[prefix] = new_state, score + increment
 
         for prefix, (pb, pn) in beam.items():
             total = logadd(pb, pn)
@@ -46,10 +66,34 @@ def beam_search(frames, alphabet, width=128, token_top_k=8):
                     add(prefix + (c,), nonblank=pb + p)
                 else:
                     add(prefix + (c,), nonblank=total + p)
-        beam = dict(sorted(next_beam.items(), key=lambda item: logadd(*item[1]), reverse=True)[:width])
-    return [dict(text="".join(alphabet[i - 1] for i in prefix), ctc_logp=logadd(pb, pn))
-            for prefix, (pb, pn) in sorted(beam.items(), key=lambda item: logadd(*item[1]), reverse=True)
-            if logadd(pb, pn) != NEG]
+        def rank(item):
+            prefix, probabilities = item
+            score = logadd(*probabilities) + beta * len(prefix)
+            if language_model and alpha:
+                state, lm_score = next_lm[prefix]
+                if frame_index == len(frames) - 1:
+                    lm_score += language_model.finish(state)
+                score += alpha * lm_score
+            return score
+
+        beam = dict(sorted(next_beam.items(), key=rank, reverse=True)[:width])
+        if language_model:
+            lm_states = {prefix: next_lm[prefix] for prefix in beam}
+    candidates = []
+    for prefix, (pb, pn) in beam.items():
+        ctc_score = logadd(pb, pn)
+        if ctc_score == NEG:
+            continue
+        row = dict(text="".join(alphabet[i - 1] for i in prefix), ctc_logp=ctc_score)
+        if language_model or beta:
+            lm_score = 0.0
+            if language_model:
+                state, lm_score = lm_states[prefix]
+                lm_score += language_model.finish(state)
+            row.update(language_score=lm_score,
+                       combined_score=ctc_score + alpha * lm_score + beta * len(prefix))
+        candidates.append(row)
+    return sorted(candidates, key=lambda c: c.get('combined_score', c['ctc_logp']), reverse=True)
 
 
 def rerank(candidates, language_scores, weight=0.2):

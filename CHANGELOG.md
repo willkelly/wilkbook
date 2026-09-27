@@ -24,6 +24,11 @@ this lineage. **Unreleased** above it collects what has landed since.
 
 ## Unreleased
 
+- **A small character language model improves literal stroke recognition.** A
+  6.36 MiB character 6-gram reduces sampler character error to 5.21% (5.06%
+  with a length adjustment), versus 7.14% originally. Word fusion still has
+  lower word-content error, and the experimental Python character decoder is
+  slow (~0.85 s/line). Full results: `doc/handwriting-baseline.md`.
 - **Low-cost stroke decoding improves with pyctcdecode and KenLM.** An independent
   word trigram reduces shared-sampler character error from 7.14% to 5.65% and
   word-content error from 23.08% to 13.08%, adding 4.35 ms median host decoding.

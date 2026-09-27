@@ -88,6 +88,11 @@ stroke model to 5.65% CER / 13.08% lexical WER on the shared 19 lines, at
 4.35 ms median decoder-only host time and 124 MiB decoder-process peak RSS.
 It helps eight lines and harms four by character error; adaptation and
 on-device qualification remain unrun.
+A pruned 6.36 MiB character 6-gram then reaches 5.21% CER / 14.62% lexical WER
+(5.06% CER with a length adjustment), five exact shared lines. It improves
+literal fidelity and candidate coverage relative to word fusion, but the
+unoptimized Python decoder takes ~0.85 s/line and word fusion still has fewer
+lexical word errors. This remains an offline experiment, not a notebook feature.
 
 ### Fixed paper and the handwriting sampler (2026-09-26)
 

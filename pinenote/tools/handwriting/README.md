@@ -174,6 +174,49 @@ Times are **decoder-only**, and RSS belongs to that process, excluding the
 separate recognizer. The comparison script prints those times in its usual
 column, so retain this qualification when quoting the generated table.
 
+### Integrated character n-gram experiment
+
+`train-character-lm.py` reuses the **same detokenized WikiText-2 corpus** from
+the word-LM experiment. It encodes each Unicode character as a separate KenLM
+token (`U000020` for a literal space), preserving case and punctuation. It
+trains a modified-Kneser-Ney **6-gram**, pruning counts `0 0 1 1 2 2`, and builds
+a binary trie. No handwriting or references enter training.
+
+`ctc_candidates.beam_search` now optionally scores prefixes with this incremental
+LM. It keeps CTC alignment sums separate from the LM score, advances LM state
+only when a new character is emitted, adds EOS before the final beam pruning,
+and retains LM states only for the active beam. The combined score is:
+
+```
+CTC log probability + alpha * character-LM log probability + beta * character count
+```
+
+All scores use natural logs. There is no added unknown-word penalty: the model
+scores characters, including spaces. This experiment uses our Python prefix
+decoder (width 128, top eight nonblank frame labels plus repeats), not
+pyctcdecode's word-oriented LM interface. Its pruning and speed are not matched
+to pyctcdecode, so measured runtime is an implementation result, not a statement
+about the inherent cost of character versus word LMs.
+
+```sh
+python3 pinenote/tools/handwriting/train-character-lm.py \
+  WORD_LM_OUTPUT KENLM/build/bin NEW_CHARACTER_LM
+CTC_ENV/bin/python pinenote/tools/handwriting/evaluate-character-lm.py \
+  EMISSION_CAPTURE COLLECTION NEW_CHARACTER_LM NEW_CHAR_RUN --mode standard
+# All prespecified modes: none (0,0), light (.2,0), standard (.5,0), length (.5,.5).
+# Pairs above are (alpha,beta); run each into a NEW directory.
+CHAR_LM_BINARY=/absolute/path/NEW_CHARACTER_LM/char-6gram.binary \
+  CTC_ENV/bin/python pinenote/tools/handwriting/test-character-lm.py
+```
+
+The tests compare CTC path sums and fused text scores with exhaustive tiny
+alignment enumeration, verify zero-weight parity and EOS-sensitive pruning,
+and optionally compare incremental KenLM scoring with its full-sequence API.
+Each evaluator saves all hypotheses before reading labels, checks emission
+identity, and reports actual selection accuracy separately from candidate
+oracle coverage. Fixed weight comparisons on the existing 19 lines are
+development evidence, not an independently validated optimum.
+
 ### Plain CTC candidates and contextual selectors
 
 The trajectory runner's optional `--save-emissions` stores per-frame log

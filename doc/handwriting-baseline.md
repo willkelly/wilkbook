@@ -620,6 +620,97 @@ Private evidence: `pinenote/tools/handwriting/build/pyctcdecode-20260927/`.
 Runners: `train-ctc-word-lm.py`, `evaluate-pyctcdecode.py`; tests include a real
 package CTC check against exhaustive tiny alignment probabilities.
 
+## Character 6-gram: small-model integrated-search experiment
+
+The operator requested a cheap character n-gram comparison. This uses the
+**identical detokenized WikiText-2 training corpus** as the word LM above:
+17,556 paragraphs, now **10,317,120 character tokens**. No handwriting labels,
+sample prompts or recognizer retraining enter the model. Source corpus hash
+`bf172d62c224589acd353d0207f480ba7b49143af1208e658d1af931f2d1ddbc`
+is verified before training.
+
+### Model and decoder
+
+- Modified-Kneser-Ney **character 6-gram**, pruned with counts `0 0 1 1 2 2`:
+  retain all uni/bigrams, discard count-one tri/fourgrams, and discard counts
+  at most two for five/sixgrams. Same KenLM builder and Python binding as the
+  word experiment. Binary trie **6,671,503 bytes (6.36 MiB)**; estimation and
+  binary conversion took **1.36 s**, excluding tokenization.
+- Encode every Unicode code point as a `Uxxxxxx` token. Thus literal space is
+  `U000020`, distinct from KenLM's token separators; case, digits and punctuation
+  are not normalized away. All 81 recognizer characters occur in this LM.
+  It sees at most five preceding characters, not full-sentence semantics.
+- Extend the existing Python prefix decoder with incremental LM state. CTC
+  blank/nonblank alignment sums remain separate. A collapsed repeat or blank
+  adds **no** LM increment; a new character advances the LM once. Rank with
+  `CTC logp + alpha * LM logp + beta * character count`; convert KenLM base-10
+  scores to natural logs and include EOS before final-frame beam pruning.
+  Retain LM states only for the current beam, not all historical candidates.
+- Keep the prior search settings: width 128, eight nonblank frame labels plus
+  blank/prefix repeat, retain 32 final texts. This is **not pyctcdecode** and
+  does not use its score-gap/token-threshold pruning. It is a correctness-first
+  Python experiment, not a matched optimized-decoder benchmark.
+- Prespecified comparisons: no LM `(alpha,beta)=(0,0)`, light `(.2,0)`, standard
+  `(.5,0)`, and length-adjusted `(.5,.5)`. The same three weighted configurations
+  run once each; no parameter search after scoring. All outputs precede label
+  access in each run.
+
+### Results on the shared 19 lines
+
+| Decoder | Raw CER | Raw WER | Lexical WER | Exact lines | Median decoding | Decoder-process peak RSS |
+|---|---:|---:|---:|---:|---:|---:|
+| Python beam, no LM | 7.14% | 26.77% | 23.08% | 2/19 | 286 ms | 45.4 MiB |
+| Earlier pyctcdecode word LM | 5.65% | 22.83% | **13.08%** | 4/19 | **4.35 ms** | 124.1 MiB |
+| Character LM, light | 6.10% | 20.47% | 18.46% | 3/19 | 840 ms | 54.9 MiB |
+| Character LM, standard | **5.21%** | **16.54%** | 14.62% | **5/19** | 868 ms | 54.1 MiB |
+| Character LM, length-adjusted | **5.06%** | **16.54%** | 14.62% | **5/19** | 846 ms | 53.9 MiB |
+
+Standard fusion reduces **48 → 35 character edits**, improving ten lines and
+worsening one. The length adjustment reduces that to **34 edits**: its entire
+additional gain is one character on one numeric line, not evidence of a broadly
+better setting. Light weighting improves seven lines and harms two; the stronger
+settings improve literal fidelity while the word LM still recovers more lexical
+word content overall. The standard/length runs preserve both previously exact
+lines and add three more. One previously correct word changes incorrectly.
+
+The model is **smaller than the 23.1 MiB word LM**, but this implementation is
+much slower. The no-LM Python decoder already takes 286 ms versus pyctcdecode's
+35 ms no-LM control; adding character scoring raises that to about 0.85 s.
+Do not interpret the 4.35 ms versus 850 ms comparison as the inherent cost of
+word versus character language modeling. Times exclude the separately measured
+stroke inference and are one workstation pass; RSS is the decoder process,
+not an integrated recognizer or on-device measurement.
+
+Candidate coverage improves: standard and length-adjusted lists have a
+truth-assisted **2.38% CER oracle (16/672)** with **11/19 exact references
+available**, compared with 3.57% and 7/19 for word-LM search. These are retained
+list diagnostics only, not achieved recognition accuracy. `$` remains absent
+from the recognizer alphabet even though the character LM can represent it.
+
+### Correctness and interpretation
+
+Exhaustive tiny CTC alignment tests verify unchanged path marginalization and
+exactly-once character scoring, zero-weight parity, and EOS-sensitive pruning.
+The real KenLM incremental API agrees with its independent full-sequence scorer
+on synthetic text. All **19 no-LM top-32 lists match the previous beam run
+exactly**, including scores. An additional audit checks all 57 weighted winners:
+incremental LM scores agree with full-sequence scoring within 0.000019 nats;
+pruned CTC scores do not exceed exact forward probabilities (largest missing
+log-mass gap 0.0254 nats); combined scores reconstruct correctly.
+
+**Conclusion:** character-level fusion adds useful literal fidelity and
+candidate diversity with a small LM. It does not yet beat word fusion on
+word-content error, and the current decoder needs substantial optimization for
+the device track. Comparing a character/word combination or an improved selector
+on the richer candidates is justified; a gain is not established. Gemma vision
+remains the measured accuracy reference at 0.74% CER. These four runs are
+development evidence on the already examined sampler, not held-out validation.
+
+Private evidence: `pinenote/tools/handwriting/build/character-lm-20260927/`.
+Runners: `train-character-lm.py`, `evaluate-character-lm.py`; scoring adapter:
+`character_lm.py`; independent checks: `test-character-lm.py` and saved
+`score-audit.json`.
+
 ## Architecture assessment: recognition, decoding, then personalization
 
 At the operator's request, three independent agent reviews examined the linked
@@ -630,8 +721,9 @@ The assessment preceded the direct-vision experiment above; that result makes
 Gemma the accuracy reference while leaving the small-model recommendations as
 the CPU/memory-constrained device track.
 The subsequent pyctcdecode experiment now supplies an initial positive
-measurement for integrated word-LM decoding; the character-LM variant and
-writer adaptation remain proposals.
+measurement for integrated word-LM decoding. The character 6-gram experiment
+above subsequently improves character fidelity/candidate coverage with a
+smaller model but a slower decoder; writer adaptation remains untested.
 
 ### What the linked paper establishes
 
