@@ -56,7 +56,8 @@ pinenote/tools/book-state-device/derive-system.scm` passed the exact kernel
 `334ljs8q` and gVisor `djgy782a` pins and lowered
 `/gnu/store/9b3clfd0pxfrdz1s5dbr8miqjfpc10ww-system.drv` after the teardown
 review corrections.
-This is derivation evidence, not a realized system or closure check.
+These initial gates were derivation evidence; the later experimental-system
+realization and closure check are recorded under main reconciliation below.
 The shipping flavor also lowers successfully with
 `make TIME_MACHINE=1 reader-system-drv` to
 `/gnu/store/nnkw30n7hqc7mx40jsp5sj6yag7brwml-system.drv`.
@@ -114,6 +115,14 @@ root Makefile's source-map hash was recomputed. `os1-rescue-check` passed 75
 cases across sh/dash/bash; `update-path-check` and `time-machine-check` passed;
 a fresh source-capsule export and preparation passed.
 
+Continuation at merge `08510ff`: the pinned device derivation still resolves
+to `9b3clfd0…` above, and the experimental reader was then **built** as
+`/gnu/store/13cg7sg6waa3ahj3ivxhmkagia0kbwi1-system`.
+`pinenote/tools/book-state-device/check-system-closure.sh` passed on that exact
+output. The kernel and gVisor remained the pinned existing outputs; the build
+assembled updated KOReader, helpers, manuals and service/profile objects.
+This candidate is not a numbered device generation and has not been booted.
+
 The new hardware record also identifies held-button power cuts with writable
 filesystems and a requested short-hold shutdown menu under assessment. That
 is separate from the batch's kexec data-writer fix; os1's journal replay is
@@ -121,7 +130,7 @@ recovery evidence, not evidence of orderly shutdown.
 
 ### Remaining qualification
 
-1. Realize/check the candidate system closure using the pinned channel. Build
+1. The experimental candidate is realized and closure-checked above. Build
    matching QEMU A/B inputs and exercise update-flow success and refusal; run
    the full-log page-turn campaign against matching inputs.
 2. In an authorized attended generation session, verify the authority releases
