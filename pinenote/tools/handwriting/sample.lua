@@ -47,11 +47,10 @@ function M.export(root, id, page_n, transcript, read, region)
     end
     local strokes = {}
     for _, stroke in ipairs(page.strokes) do
-        -- Validate the whole page even when selecting one line: an eraser or
-        -- a different orientation outside the crop may affect its meaning.
+        -- Orientation/dropout validation remains page-wide. An area eraser
+        -- disjoint from an explicit crop cannot alter its pixels: test the
+        -- full brush box, not just the eraser's centerline, before excluding it.
         local r = stroke.rec
-        assert(r.tool == "pen" and r.comp ~= "white",
-               "area erase requires raster recognition; do not export hidden ink")
         assert(r.rot == rotation, "mixed writing orientations; use one orientation per labelled line")
         assert(r.gap == 0, "contact dropout in sample; collect a clean line")
         local keep = true
@@ -63,10 +62,16 @@ function M.export(root, id, page_n, transcript, read, region)
             y0, y1 = math.min(y0, y1), math.max(y0, y1)
             local rx1, ry1 = region.x + region.w - 1, region.y + region.h - 1
             keep = x0 <= rx1 and x1 >= region.x and y0 <= ry1 and y1 >= region.y
+            assert(not keep or (r.tool == "pen" and r.comp ~= "white"),
+                   "area erase requires raster recognition; do not export hidden ink")
             assert(not keep or (x0 >= region.x and x1 <= rx1 and y0 >= region.y and y1 <= ry1),
                    "stroke crosses writing-area boundary; choose an unambiguous region")
         end
-        if keep then strokes[#strokes + 1] = stroke end
+        if keep then
+            assert(r.tool == "pen" and r.comp ~= "white",
+                   "area erase requires raster recognition; do not export hidden ink")
+            strokes[#strokes + 1] = stroke
+        end
     end
     assert(#strokes > 0, "writing area has no active ink")
     local samples, t0 = {}, nil

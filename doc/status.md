@@ -3,6 +3,30 @@
 Last updated: 2026-09-26. Update protocol: add a dated entry at the top
 after every hardware session; entries are per-device/per-operator.
 
+## 2026-09-26 completed handwriting sampler (wkelly PineNote, generation 25, same session)
+
+Operator: **"filled it out. I erased a mistake with the eraser on the last
+page."** No further update, reboot or reader restart. This confirms the
+five-page writing/page-navigation task was usable on glass; no separate
+optical-quality or close/reopen acceptance was reported.
+
+Copied notebook `20260927T051718Z-d466ff` read-only to the host. SHA-256 manifests
+taken before and after transfer match, and all 12 copied files verify. Production
+replay finds 780 records: 777 pen strokes and three area-eraser strokes, with
+zero bad/ignored records or recorded contact gaps. All writing used mode 1.
+The eraser strokes are page 4 actions 132–134, confined to the final line.
+Twenty ink-only line images preserve the actual erasing; 19 trajectory exports
+are usable, with the corrected final line refused rather than resurrecting ink.
+Labels remain provisional pending transcription review; no recognizer was run.
+
+Private snapshot and derived handwriting remain in gitignored
+`pinenote/tools/handwriting/build/collection-20260927/`. No handwritten sample
+is committed. The on-device originals remain intact. Auto-suspend was read back
+as `enabled=1` and was not changed during collection. The preceding generation
+25 session now has operator completion of its agreed writing task as well as
+target health/promotion and recorded cleanup; specific eraser gray-restoration
+quality and reopen behavior are still unqualified.
+
 ## 2026-09-26 sampler deployment (wkelly PineNote, generation 24 → 25, cable-free) — promoted, writable first page open
 
 **Invocation:** the operator requested the update and loading the sampler, then

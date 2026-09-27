@@ -56,8 +56,10 @@ The optional `X Y W H` selects whole strokes in logical, upright coordinates;
 coordinates stay in that source space and the region is recorded in InkML.
 A stroke touching both sides of its boundary is refused, including its brush
 width. Choose a larger unambiguous region if needed, rather than silently
-cutting a letter. As with whole-page export, area-erased pages need raster
-recognition and are refused; undo and whole-stroke erase replay correctly.
+cutting a letter. Area erasing that intersects the selected region needs raster
+recognition and is refused; an eraser whose entire brush box is outside the
+region does not invalidate that line. Whole-page export still refuses any
+active area eraser. Undo and whole-stroke erase replay correctly.
 The printed prompts and rules never enter the stroke export.
 
 ## Collect a small evaluation set

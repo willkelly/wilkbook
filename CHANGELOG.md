@@ -28,8 +28,9 @@ this lineage. **Unreleased** above it collects what has landed since.
   a five-page EPUB and matching notebook paper with 20 prompts and ruled spaces.
   The notebook gains a separate background layer: erasing restores the printed
   paper, and ink stays aligned through page changes and rotation in host tests.
-  Native EPUB rendering passes; generation 25 is deployed on wkelly's PineNote
-  with the first writable page open. Operator interaction acceptance is pending.
+  Native EPUB rendering passes; the operator completed all five pages on
+  generation 25, including an eraser correction. The resulting corpus has 20
+  ink-only line images and 19 trajectory-compatible lines; erasing is preserved.
   Each writing area can be exported independently for labelled recognition tests.
 - **Handwriting evaluation can use notebook snapshots.** A read-only host tool
   exports one labelled page as InkML using the notebook's actual undo/erase

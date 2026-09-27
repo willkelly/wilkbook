@@ -47,8 +47,8 @@ check(not pcall(export,{record(1)},"two\nlines"), "refuses multiline transcripti
 check(not pcall(export,{record(1)},""), "refuses empty truth")
 check(not pcall(export,{record(1)},nil,""), "refuses incomplete tail without repairing source")
 check(not pcall(export,{record(1)},nil,"\nbad\n"), "refuses damaged records")
-local function dot(a, rawx, rawy, rot)
-    return J.stroke_record(a, Brush.style("fine", "M", "pen", C), rot or 0, 1000,
+local function dot(a, rawx, rawy, rot, tool)
+    return J.stroke_record(a, Brush.style("fine", "M", tool or "pen", C), rot or 0, 1000,
         {{t=1000,rawx=rawx,rawy=rawy,p=100,tx=0,ty=0}}, false, {0,0,1871,1403})
 end
 local dots = { dot(1, 2000, 2000), dot(2, 2000, 8000) }
@@ -66,4 +66,13 @@ x = export({dot(1, 2000, 2000, 1), dot(2, 8000, 2000, 1)}, nil, nil,
            {x=1100,y=100,w=200,h=200})
 check(x:find('xml:id="a1"',1,true) and not x:find('xml:id="a2"',1,true),
       "sampler portrait crop follows recorded mode through physical coordinates")
+local erased = {dot(1,2000,2000),dot(2,2000,8000,0,"eraser")}
+x = export(erased,nil,nil,region)
+check(x:find('xml:id="a1"',1,true) and not x:find('xml:id="a2"',1,true),
+      "eraser wholly outside a selected line does not discard unaffected ink")
+check(not pcall(export,erased), "whole-page export still refuses an area eraser")
+check(not pcall(export,{dot(1,2000,2000),dot(2,2000,2000,0,"eraser")},nil,nil,region),
+      "eraser inside a selected line refuses hidden-ink export")
+check(not pcall(export,{dot(1,2000,2000),dot(2,3400,2000,0,"eraser")},nil,nil,region),
+      "eraser center outside crop but brush overlapping it is refused")
 print(string.format("PASS: %d sample-export assertions", n))

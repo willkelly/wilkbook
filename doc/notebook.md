@@ -72,8 +72,10 @@ area. `pinenote/tools/handwriting/make-sampler.scm` generates the EPUB and a fre
 notebook from the same artwork; its README has generation, installation and
 labelled-region export instructions. **Deployed as generation 25 on wkelly's
 PineNote:** health passed, sampler page 0 opened through the normal notebook
-path, and pen-up/append/fsync logs show new writing. Operator appearance and
-interaction acceptance is still pending (`doc/status.md`). The actual native
+path, and the operator completed all five pages, including an eraser correction
+on the last. The collected journals replay without damaged records or recorded
+contact gaps. Specific appearance and reopen acceptance is still pending
+(`doc/status.md`). The actual native
 KOReader renders the EPUB as five pages.
 
 Paper is an immutable physical-pixel layer below the journal. Live area erasing
@@ -98,8 +100,9 @@ annotation UI remain separate work.
 Offline proof: full KOReader input suite, 36 dedicated background assertions
 (real BB8/RGB16, both blitters, all rotations/night mode, erase/replay and region
 clipping), plugin page-load/refusal/switch/close coverage, and labelled-region
-export tests. On glass still owed: readability, drawing across a rule, erasing,
-undo, page turns, close/reopen and orientation. DU ink policy is unchanged;
+export tests. The operator completed the sampler on glass; detailed checks of
+drawing across a rule, undo, close/reopen and orientation are still owed.
+DU ink policy is unchanged;
 the physical appearance of restoring gray paper with the eraser is unmeasured.
 
 ## What it is
