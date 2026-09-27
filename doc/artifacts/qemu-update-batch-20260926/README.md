@@ -63,6 +63,17 @@ Boot IDs: `f549aca2-d608-43a5-8509-551d773d8ff1` →
 
 ## Evidence and limits
 
+**Final merge qualification:** `busy-data-result.log` records the extended
+suite against the same A/B inputs: **48 checks passed**. An unrelated guest
+process held `/data/update-busy.txt` open writable while the production helper
+attempted a trial. Linux returned EBUSY; the helper refused, unloaded the
+candidate, retained original mount IDs/modes and the writer/data hash, restored
+reader health and kept extlinux DEFAULT at A. After releasing the holder, the
+normal trial/promotion/rollback/prune sequence passed. The fixture checks the
+actual extlinux default because A has no `/boot/gen-default` until its first
+explicit promotion (the first version of the added assertion incorrectly
+required that optional ledger file and stopped before the good trial).
+
 `result.log` preserves the harness output from its boot announcement through
 its final verdict, with CRLF line endings normalized; host package-download
 and disk-preparation output is omitted.
@@ -73,8 +84,8 @@ Console SHA-256: `5ad3bf5b2ee2f9c7b50b4e5e7002a18464110a9326b4256dfb433e63ed47a5
 These temporary paths are replay/debug aids, not committed evidence files.
 
 The guest is the plain reader composition, not the experimental note-authority
-composition. Actual note-authority shutdown, deliberate busy-data refusal,
-mount-replacement refusal, EBC quiescence, Wi-Fi teardown and RK3566 watchdog
+composition. Actual note-authority shutdown (subsequently exercised by the
+23→24 device trial), mount-replacement refusal, EBC quiescence, Wi-Fi teardown and RK3566 watchdog
 recovery are not proven by this run. Failure-path host tests cover modeled
 authority/mount cases separately. The waveform partition was zero-filled;
 this is update-mechanism acceptance, not display or calibration acceptance.

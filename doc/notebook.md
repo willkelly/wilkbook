@@ -11,6 +11,10 @@
   It also cold-booted twice, and is pinned. Refresh and a KOReader restart
   passed after the cold boots (see "Glass sessions").
 - Design agreed with the operator the same day.
+- Generation 24's batch fixes passed basic drawing/Refresh/close-reopen,
+  rotation, night mode, >45 s hover without automatic wash, and persisted
+  strokes after a real KOReader process restart (operator, 2026-09-26).
+  Contact-dropout and debt-ceiling edge cases still have only host coverage.
 - It passes every host suite, including a replay of the operator's real
   pen captures from `doc/status.md` 2026-09-26.
 

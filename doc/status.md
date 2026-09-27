@@ -3,6 +3,42 @@
 Last updated: 2026-09-26. Update protocol: add a dated entry at the top
 after every hardware session; entries are per-device/per-operator.
 
+## 2026-09-26 final batch checks (wkelly PineNote, generation 24, same boot) — rotation, night mode, hover, restart persistence and fallback suspend
+
+No additional kexec or cold boot. System remains
+`/gnu/store/13cg7sg6waa3ahj3ivxhmkagia0kbwi1-system`, boot
+`7d56208a-02f4-4a1c-9386-ef61cd7d0859`.
+
+- Operator: "Rotation works and night mode works." They then confirmed the
+  requested pen hover longer than 45 seconds did not trigger an automatic wash.
+- With permission, the agent paused suspend, stopped and restarted
+  `reader-session`; the operator reopened the notebook and confirmed the
+  latest strokes were intact.
+- For fallback, the agent stopped the reader again and restored suspend to
+  its prior `enabled=1`. The operator tapped Power. Broker logs show
+  `fallback=true` at 03:33:17 UTC (2026-09-27), followed by interrupt quiescence,
+  `resumed after 10.925s`, and `transaction complete ok=true detail=button`.
+  A second tap before the acknowledgement deadline was correctly rejected as
+  `request already pending`. This is an actual missed-reader-acknowledgement
+  suspend, not an inferred fallback from a normal sleep.
+- Operator: "slept and woke but banner remains (in notebook, not sure if it
+  matters)". The agent restarted the reader; the operator subsequently said
+  "banner cleared when I opened a book". Record that redraw-dependent result:
+  immediate banner removal on wake was not observed, and readability/clipping
+  was not separately confirmed. The stopped reader could not consume the
+  broker's wake event; a GC16 wash alone does not restore the overwritten pixels.
+- Reader health passed after restoration. The original suspend file was
+  compared byte-for-byte and read back as `enabled=1`. Backup retained under
+  `/data/wilkbook/diagnostic-backups/gen24-final-acceptance-20260926/`.
+
+Remaining targeted observations: contact-dropout tails, debt-ceiling/page
+buttons, full RTC-backstop classification and detailed fallback typography.
+No independent timing measurement was made of the broker's BOOTTIME interval.
+The operator also clarified that the notebook currently contains mostly
+scribbles: useful capture/replay inputs, not a labelled handwriting-recognition
+accuracy corpus. Readable samples with exact transcriptions are still needed.
+Evidence: `doc/artifacts/pinenote-gen24-batch-20260926/final-acceptance.log`.
+
 ## 2026-09-26 deployment (wkelly PineNote, generation 23 → 24, cable-free) — batch candidate healthy, promoted and operator-accepted
 
 **Invocation and scope.** The operator requested the PR and deployment, then

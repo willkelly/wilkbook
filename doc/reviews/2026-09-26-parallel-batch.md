@@ -172,19 +172,24 @@ identities: `doc/status.md`; evidence: `doc/artifacts/pinenote-gen24-batch-20260
    A menu-trigger experiment still needs the antecedent coverage absent from
    this campaign.
 2. The actual authority composition's normal handoff passed on 23 → 24.
-   Deliberate busy-data refusal and restoration in a real service composition
-   remain runtime checks. Older rollback targets retain the manual-stop
-   requirement; retain the pinned fallback.
-3. Basic notebook drawing, Refresh and close/reopen passed on generation 24.
-   Remaining on the panel: panel-owned contact/dropout tails, night-mode full repaint and
-   panel Close in both rotations, hover longer than the idle-wash threshold,
-   page buttons near the debt ceiling, successful Refresh followed by new ink,
-   KOReader process restart and targeted suspend/resume edge cases. Log brush/size/span/backlog
+   The final QEMU run added a real writable data-file holder: the helper refused
+   Linux's busy-data remount, unloaded the kernel, retained original mount
+   identities/modes and the holder, restored health and kept DEFAULT. Releasing
+   the holder allowed the good trial and rollback; **48 checks passed**.
+   This uses the plain-reader composition, alongside the actual authority's
+   successful hardware shutdown. Older rollback targets retain the manual-stop
+   requirement. Evidence: `doc/artifacts/qemu-update-batch-20260926/busy-data-result.log`.
+3. Notebook drawing, Refresh, close/reopen, rotation, night mode, a >45 s hover
+   without automatic wash, and process-restart persistence passed on generation
+   24 by operator report. Remaining: panel-owned contact/dropout tails,
+   page buttons near the debt ceiling, successful Refresh followed by new ink
+   and targeted suspend/resume edge cases. Log brush/size/span/backlog
    observations; ioctl acceptance alone does not prove wash completion.
-4. Power-button/cover suspend/wake passed by operator report. Separately
-   exercise forced fallback suspend, RGB565 banner clipping and cleanup,
-   RTC wake/settle and BOOTTIME accounting; the basic check did not distinguish
-   the acknowledged path from fallback.
+4. Power-button/cover suspend/wake passed by operator report. A later stopped-
+   reader test logged `fallback=true`, slept and woke successfully; the banner
+   remained until the operator opened a book after reader restoration. Immediate
+   cleanup is not claimed. Detailed clipping/typography and full RTC-backstop
+   accounting remain unqualified; the logged short suspend interval was 10.925 s.
    Active RTC writes still require separate race coordination; monotonic timers
    do not solve that race.
 5. Open representative man and Info pages, use TOC/link/Back on the tablet and
@@ -195,3 +200,9 @@ Workbench W1 (the Guile authority-channel slice) and the durable settings
 backend are subsequent implementation tasks, not part of panel acceptance for
 this batch. Cover electrical measurements remain deferred until tied to a
 specific wake-control or suspend change.
+
+The normal hardware path and actual-kernel busy-data refusal are now covered.
+With green full host CI and the existing reviews, the batch can merge with
+the remaining narrow observations above tracked as follow-up qualification.
+Shutdown/data-mount changes, notebook polish and handwriting-recognition
+experiments proceed in subsequent branches rather than expanding this PR.
