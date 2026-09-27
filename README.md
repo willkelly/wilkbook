@@ -75,7 +75,7 @@ yourself exactly which kind of insane you are:
   reflash. The protocol is paranoid — hash before, hash after,
   refuse-rather-than-guess — but at the bottom of it all it is still
   you, root, and a block device. **YOU FLASH AT YOUR OWN RISK.**
-- **SOMETIMES THE ONLY WAY OUT IS THE 10-SECOND POWER HOLD.** Real
+- **SOMETIMES THE ONLY WAY OUT IS THE 6-SECOND POWER HOLD.** Real
   sessions have ended with the device wedged before U-Boot, waiting on a
   human thumb to perform the ancient rite of forced power-off.
   Supervised procedures literally *budget one per sitting*. It is a
