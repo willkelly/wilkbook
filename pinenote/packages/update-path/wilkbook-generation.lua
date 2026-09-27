@@ -540,16 +540,23 @@ commands["last-trial"] = function()
 end
 
 function commands.health(flag, expected)
+    local data_ready, data_reason = L.data_health(read_file("/proc/self/mountinfo"), function(dev)
+        return read_file("/sys/dev/block/" .. dev .. "/uevent")
+    end)
     local report = {
         current_system = readlink("/run/current-system"),
         broker_ready = exists(READY),
-        reader_started = run("herd status reader-session 2>/dev/null | grep -q 'running'"),
+        reader_started = service_state("reader-session") == "running",
+        data_ready = data_ready,
+        data_reason = data_reason,
     }
     local gens = profile_generations()
     print("current_system=" .. tostring(report.current_system))
     print("booted_generation=" .. tostring(booted_number(gens)))
     print("broker_ready=" .. tostring(report.broker_ready))
     print("reader_started=" .. tostring(report.reader_started))
+    print("data_ready=" .. tostring(report.data_ready))
+    print("data_reason=" .. report.data_reason)
     if flag == "--expect" then
         local ok, why = L.health_ok(report, expected)
         print("health=" .. (ok and "ok" or ("FAIL: " .. why)))
