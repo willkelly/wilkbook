@@ -3,7 +3,7 @@
 Last updated: 2026-09-26. Update protocol: add a dated entry at the top
 after every hardware session; entries are per-device/per-operator.
 
-## 2026-09-26 deployment (wkelly PineNote, generation 23 → 24, cable-free) — batch candidate healthy and promoted; operator acceptance pending
+## 2026-09-26 deployment (wkelly PineNote, generation 23 → 24, cable-free) — batch candidate healthy, promoted and operator-accepted
 
 **Invocation and scope.** The operator requested the PR and deployment, then
 directly said **`I invoke the trial!!`**. This was an attended cable-free trial
@@ -49,13 +49,24 @@ busy-data refusal remains unrun in a real service composition.
   generation 23 remains pinned. Generation 24 is **kexec-only and not pinned**;
   this trial does not qualify its device tree.
 
-**Cleanup and outstanding operator checks:** the original auto-suspend file
+**Cleanup and operator checks:** the original auto-suspend file
 was restored byte-for-byte and read back as **`enabled=1`** on the new boot.
 Backup: `/data/wilkbook/diagnostic-backups/gen23-before-batch-gen24-20260926/`.
-Panel/notebook, persistence/restart and suspend/fallback checks are awaiting
-the operator. This is not yet the third successful trial-period session:
-the recorded count stays at two completed sessions until acceptance is done.
-The third success requires the policy review before a new cable-free session.
+The operator then reported all three requested checks passed:
+1. Open a book and turn pages — "Works!"
+2. Open the notebook, check existing strokes, draw, Refresh, close and reopen
+   — "Works!"
+3. Power-button tap suspend/wake and the cover — "works!"
+
+These are operator observations; no cycle count or timing was measured.
+KOReader process-restart persistence, contact-dropout/night-mode/hover edge
+cases, forced fallback rendering, RTC accounting and deliberate busy-data
+refusal remain separate checks; the three answers do not certify those.
+Health/promotion, agreed operator checks and cleanup are now complete:
+**this is the third successful cable-free trial-period session.** New
+cable-free sessions are paused until the operator reviews the record and
+decides whether to continue or revise the policy. No policy change is implied
+by the successful checks.
 Evidence: `doc/artifacts/pinenote-gen24-batch-20260926/`.
 
 ## 2026-09-26 later (wkelly PineNote, generation 23, SSH inspection) — idle authority and root writers observed

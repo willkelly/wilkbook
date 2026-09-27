@@ -27,5 +27,10 @@ The new target helper stopped the authority itself; no manual authority stop
 was used. Successful handoff exercised its runtime-cleanup and mounted-data
 read-only gates. No deliberate refusal or fault was injected. Root remains
 best-effort; absence of journal recovery does not prove clean-root kexec.
-This is kexec-only, not DTB qualification. Operator panel, notebook/persistence
-and suspend checks remain pending; see `doc/status.md` for the living record.
+This is kexec-only, not DTB qualification. The operator subsequently confirmed
+all three requested checks: reading/page turns; notebook existing strokes,
+drawing, Refresh and close/reopen; power-button/cover suspend/wake. No cycle
+count or timing was measured. Process-restart persistence and targeted
+notebook/broker edge cases remain unqualified. This completes the third
+successful cable-free session; new sessions await the operator's policy
+review. See `doc/status.md` for the living record.

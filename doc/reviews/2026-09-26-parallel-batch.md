@@ -160,8 +160,10 @@ the target helper automatically stopped the authority (bounded cleanup logged),
 passed its runtime/data gates, kexec'd, passed health and promoted. Postflight
 found the real data mount and all four services running, with no journal
 recovery in dmesg. Generation 23 remains the pinned recovery target;
-auto-suspend was restored to `enabled=1`. Operator acceptance remains pending,
-so this is not yet a completed third trial-period session. Hardware truth and
+auto-suspend was restored to `enabled=1`. The operator subsequently accepted
+reading/page turns, existing notebook strokes, drawing/Refresh/close/reopen,
+and power-button/cover suspend/wake. This completes the third trial-period
+session; new cable-free sessions await the operator's policy review. Hardware truth and
 identities: `doc/status.md`; evidence: `doc/artifacts/pinenote-gen24-batch-20260926/`.
 
 1. Plain-reader QEMU update-flow and full-log page-turn capture have passed.
@@ -171,13 +173,16 @@ identities: `doc/status.md`; evidence: `doc/artifacts/pinenote-gen24-batch-20260
    Deliberate busy-data refusal and restoration in a real service composition
    remain runtime checks. Older rollback targets retain the manual-stop
    requirement; retain the pinned fallback.
-3. On the panel: panel-owned contact/dropout tails, night-mode full repaint and
+3. Basic notebook drawing, Refresh and close/reopen passed on generation 24.
+   Remaining on the panel: panel-owned contact/dropout tails, night-mode full repaint and
    panel Close in both rotations, hover longer than the idle-wash threshold,
    page buttons near the debt ceiling, successful Refresh followed by new ink,
-   close/reopen, KOReader restart and suspend/resume. Log brush/size/span/backlog
+   KOReader process restart and targeted suspend/resume edge cases. Log brush/size/span/backlog
    observations; ioctl acceptance alone does not prove wash completion.
-4. Exercise broker acknowledged and fallback suspend, RGB565 banner clipping
-   and cleanup, power/cover inputs, RTC wake/settle, and BOOTTIME accounting.
+4. Power-button/cover suspend/wake passed by operator report. Separately
+   exercise forced fallback suspend, RGB565 banner clipping and cleanup,
+   RTC wake/settle and BOOTTIME accounting; the basic check did not distinguish
+   the acknowledged path from fallback.
    Active RTC writes still require separate race coordination; monotonic timers
    do not solve that race.
 5. Open representative man and Info pages, use TOC/link/Back on the tablet and
