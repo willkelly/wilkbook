@@ -134,8 +134,12 @@ The next continuation built matching plain-reader QEMU A/B inputs and passed
 the existing update-flow suite: **40 checks**, including load refusal/recovery,
 trial/health/promotion, rollback and pin/prune. Both kexecs reproduced the busy
 root remount and passed the strict mounted-data gate. Evidence and proof limits:
-`doc/artifacts/qemu-update-batch-20260926/`. Device inspection was blocked at
-host SSH-agent signing; no device settings changed.
+`doc/artifacts/qemu-update-batch-20260926/`. The initial device inspection was
+blocked at host SSH-agent signing. After the operator unlocked the agent, SSH
+inspection confirmed generation 23's idle writable authority database and
+root log/cache writers. Auto-suspend was paused and restored byte-for-byte to
+`enabled=1`; no deployment or service restart ran. The per-device record is in
+`doc/status.md`.
 
 1. The experimental candidate is realized and closure-checked, and plain-reader
    QEMU update-flow has passed. The actual note-authority composition and

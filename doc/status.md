@@ -3,6 +3,42 @@
 Last updated: 2026-09-26. Update protocol: add a dated entry at the top
 after every hardware session; entries are per-device/per-operator.
 
+## 2026-09-26 later (wkelly PineNote, generation 23, SSH inspection) — idle authority and root writers observed
+
+The operator granted exclusive SSH access; after unlocking the host SSH agent,
+inspection authenticated on the existing cold boot
+`6caf4f3c-4c06-439f-88aa-8acec877a8cf`. No trial, deployment, service restart or
+power cycle ran in this session.
+
+- Root was `/dev/mmcblk0p6`; `/data` was an exact ext4 mount resolving to
+  `/dev/mmcblk0p7`. Both were read-write.
+- Current system remained
+  `/gnu/store/x3qqz8r52pdh7jzghzfj8l44gfrqkncb-system`, kernel release 7.1.8.
+  Generation 23 was `[promoted] [booted] [pinned]`; both `gen-default` and
+  extlinux DEFAULT named 23. Generations 10, 16 and 18 remained pinned.
+- Reader (PID 470), note authority (307), platform broker (428) and orientation
+  bridge (430) were all running. The authority's idle writable fd 15 named
+  `/data/wilkbook/book-state/book-state-v1.sqlite`; its control runtime directory
+  existed. The idle database writer is now observed, not merely source-inferred.
+- Shepherd PID 1 held writable descriptors for the reader, authority, broker,
+  orientation and DDR-boost logs, plus `/var/log/{secure,debug,messages}`.
+  nscd held writable cache descriptors under `/var/db/nscd` and deleted files
+  under `/var/run/nscd`; dhcpcd held its writable PID file. `findmnt -T` mapped
+  representative log, nscd and dhcpcd paths to p6. This was an fd snapshot, not
+  a complete writable-mapping inventory or a remount experiment.
+- The checked dmesg signatures showed no ext4 recovery/error, WARNING, BUG,
+  Oops or unbalanced-runtime-PM match. No panel acceptance was attempted.
+
+**Cleanup:** auto-suspend was paused from `enabled=1` to `enabled=0`, then its
+original configuration was restored byte-for-byte and read back as `enabled=1`
+on the same boot. Backup retained at
+`/data/wilkbook/diagnostic-backups/batch-inspection-20260926/`.
+The batch candidate remains unbooted; this inspection qualifies neither its
+automatic authority teardown nor its refusal recovery. Root-writer quiescence
+remains separate work (`doc/update-path.md`). Local transcripts:
+`/tmp/opencode/wilkbook-batch-live-inspection.log` and
+`/tmp/opencode/wilkbook-batch-live-cleanup.log` (temporary, not committed).
+
 ## 2026-09-26 late (wkelly PineNote, os1 detour, no UART) — the touch controller's config read (#82); the os1 rescue script (PR #51) fixed and run; generation 23 cold-booted twice
 
 **Posture.** The operator ran every power cycle by hand, with UART waived

@@ -347,6 +347,14 @@ successful root remount and failed-handoff recovery in QEMU with persistent
 writable descriptors/mappings before hardware qualification. Stopping two
 named services is not a complete root-writer strategy.
 
+The generation-23 SSH inspection on 2026-09-26 confirmed idle writable fds in
+the real device composition: the note authority's database on p7, Shepherd's
+service/system logs on p6, nscd cache files and dhcpcd's PID file. The matching
+plain-reader QEMU update run also reproduced a busy root remount on both
+successful kexecs. These observations ground the follow-up; neither inventories
+all writable mappings nor proves a reversible shutdown sequence. See
+`doc/status.md` and `doc/artifacts/qemu-update-batch-20260926/`.
+
 Refusal recovery hands the armed watchdog back first, unloads the candidate,
 restores changed mounts before restarting writers, verifies the original
 mount identities and modes even when no remount was attempted, and restores only
