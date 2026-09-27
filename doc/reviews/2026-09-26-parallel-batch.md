@@ -62,10 +62,10 @@ The shipping flavor also lowers successfully with
 `make TIME_MACHINE=1 reader-system-drv` to
 `/gnu/store/nnkw30n7hqc7mx40jsp5sj6yag7brwml-system.drv`.
 
-QEMU update-flow was not rerun: cached system inputs contain older helpers and
-the harness correctly requires both generations to match the current helper.
-New matching A/B inputs must be built first. No device was contacted, deployed
-or rebooted for this batch.
+At initial batch completion, QEMU update-flow could not reuse cached systems:
+they contained older helpers and the harness requires exact-current helpers.
+Matching A/B inputs were subsequently built and the run passed, as recorded
+below. No device was deployed or rebooted for this batch.
 
 ## Review
 
@@ -130,9 +130,17 @@ recovery evidence, not evidence of orderly shutdown.
 
 ### Remaining qualification
 
-1. The experimental candidate is realized and closure-checked above. Build
-   matching QEMU A/B inputs and exercise update-flow success and refusal; run
-   the full-log page-turn campaign against matching inputs.
+The next continuation built matching plain-reader QEMU A/B inputs and passed
+the existing update-flow suite: **40 checks**, including load refusal/recovery,
+trial/health/promotion, rollback and pin/prune. Both kexecs reproduced the busy
+root remount and passed the strict mounted-data gate. Evidence and proof limits:
+`doc/artifacts/qemu-update-batch-20260926/`. Device inspection was blocked at
+host SSH-agent signing; no device settings changed.
+
+1. The experimental candidate is realized and closure-checked, and plain-reader
+   QEMU update-flow has passed. The actual note-authority composition and
+   deliberate busy-data refusal remain separate runtime checks; run the full-log
+   page-turn campaign against matching inputs too.
 2. In an authorized attended generation session, verify the authority releases
    its SQLite/runtime resources and a failed data remount refuses handoff with
    prior services restored. Use the target helper's identity; older rollback
