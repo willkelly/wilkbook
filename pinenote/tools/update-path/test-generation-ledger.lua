@@ -60,14 +60,44 @@ check(table.concat(no_set, ",") == "1,3", "prune: no pinned set behaves as befor
 check(L.pin_path(16) == "/boot/gen-16/pinned", "pin_path: the marker lives in the generation's own payload directory", L.pin_path(16))
 
 -- 5. Health predicate.
-local ok1 = L.health_ok({ current_system = S, broker_ready = true, reader_started = true }, S)
+local ok1 = L.health_ok({ current_system = S, broker_ready = true, reader_started = true, data_ready = true }, S)
 local ok2, why2 = L.health_ok({ current_system = "/gnu/store/other-system", broker_ready = true, reader_started = true }, S)
 local ok3, why3 = L.health_ok({ current_system = S, broker_ready = false, reader_started = true }, S)
 local ok4, why4 = L.health_ok({ current_system = S, broker_ready = true, reader_started = false }, S)
-check(ok1 == true, "health: expected system + broker + reader is ok")
+check(ok1 == true, "health: expected system + broker + reader + data is ok")
 check(ok2 == false and why2:find("expected", 1, true), "health: a different running system fails", why2)
 check(ok3 == false and why3:find("broker", 1, true), "health: broker not ready fails", why3)
 check(ok4 == false and why4:find("reader", 1, true), "health: reader not started fails", why4)
+local ok5, why5 = L.health_ok({ current_system = S, broker_ready = true, reader_started = true }, S)
+check(ok5 == false and why5:find("data", 1, true), "health: missing data evidence fails", why5)
+local ok6, why6 = L.health_ok({ current_system = S, broker_ready = true, reader_started = true, data_ready = false, data_reason = "wrong partition" }, S)
+check(ok6 == false and why6 == "wrong partition", "health: data failure retains its diagnosis", why6)
+
+local mount = "21 20 179:7 / /data rw,relatime shared:2 - ext4 /dev/mmcblk0p7 rw,errors=remount-ro\n"
+local function data(text, uevent)
+    return L.data_health(text, function(dev)
+        assert(dev == "179:7", "sysfs lookup must use the mount's device number")
+        return uevent
+    end)
+end
+check(data(mount, "MAJOR=179\nMINOR=7\nPARTNAME=data\n"), "data: kernel identity works without a udev symlink")
+check(data(mount:gsub("/dev/mmcblk0p7", "/dev/disk/by-partlabel/data"), "PARTNAME=data\n"), "data: source aliases do not affect identity")
+for name, text in pairs({
+    placeholder = "20 1 179:6 / / rw - ext4 /dev/root rw\n",
+    stacked = mount .. mount,
+    subtree = mount:gsub(" / /data", " /books /data"),
+    tmpfs = mount:gsub(" %- ext4 ", " - tmpfs "),
+    mount_ro = mount:gsub("rw,relatime", "ro,relatime"),
+    super_ro = mount:gsub("rw,errors", "ro,errors"),
+    malformed = "21 20 179:7 / /data rw\n",
+}) do
+    check(not data(text, "PARTNAME=data\n"), "data: refuses " .. name)
+end
+check(not data(nil, "PARTNAME=data\n"), "data: unreadable mountinfo fails")
+check(not data(mount, nil), "data: missing sysfs identity fails")
+check(not data(mount, "PARTNAME=os1\n"), "data: wrong GPT partition fails")
+check(not data(mount, "OTHER_PARTNAME=data\n"), "data: partial key does not match")
+check(not data(mount, "PARTNAME=data-backup\n"), "data: partial name does not match")
 
 -- 6. Booted system from a command line.
 check(L.booted_system("root=PNGuixRoot gnu.system=" .. S .. " gnu.load=" .. S .. "/boot rw") == S, "booted_system reads gnu.system= off the command line")

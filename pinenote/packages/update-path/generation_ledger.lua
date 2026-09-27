@@ -121,7 +121,40 @@ function M.pin_path(number)
     return M.gen_dir(number) .. "/pinned"
 end
 
--- report: { current_system = S, broker_ready = bool, reader_started = bool }
+-- Inspect the exact mount, not a directory on root or a by-partlabel symlink
+-- whose creation can race ext4 journal recovery. sysfs identifies the mounted
+-- block device by the kernel's major:minor pair. read_uevent is injected so
+-- these checks can exercise real mountinfo shapes without touching a device.
+function M.data_health(mountinfo, read_uevent)
+    if not mountinfo then return false, "cannot read mountinfo" end
+    local found
+    for line in mountinfo:gmatch("[^\n]+") do
+        local dev, root, point, opts = line:match("^%d+ %d+ (%d+:%d+) (%S+) (%S+) (%S+)")
+        if point == "/data" then
+            if found then return false, "stacked mounts at /data" end
+            local fs, super = line:match(" %- (%S+) %S+ (%S+)")
+            found = { dev = dev, root = root, opts = opts, fs = fs, super = super }
+        end
+    end
+    if not found then return false, "/data is not mounted" end
+    if found.root ~= "/" or found.fs ~= "ext4" then
+        return false, "/data is not a whole ext4 filesystem"
+    end
+    local function writable(opts)
+        return opts and ("," .. opts .. ","):find(",rw,", 1, true)
+            and not ("," .. opts .. ","):find(",ro,", 1, true)
+    end
+    if not writable(found.opts) or not writable(found.super) then
+        return false, "/data is not read-write"
+    end
+    local uevent = read_uevent(found.dev)
+    if not uevent or not ("\n" .. uevent):find("\nPARTNAME=data\n", 1, true) then
+        return false, "/data is not the GPT data partition"
+    end
+    return true, "ext4 data partition mounted read-write"
+end
+
+-- report also requires data_ready; missing evidence fails closed.
 function M.health_ok(report, expected_system)
     if report.current_system ~= expected_system then
         return false, string.format("running %s, expected %s",
@@ -129,6 +162,7 @@ function M.health_ok(report, expected_system)
     end
     if not report.broker_ready then return false, "platform-controls broker not ready" end
     if not report.reader_started then return false, "reader-session not started" end
+    if report.data_ready ~= true then return false, report.data_reason or "data partition not ready" end
     return true, "ok"
 end
 
