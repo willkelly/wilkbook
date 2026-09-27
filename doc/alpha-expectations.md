@@ -128,8 +128,12 @@ sleep instead of occasionally needing a manual toggle.
   gesture, alongside the power button, the RTC backstop, and the
   charger. Waking is a single short press. **If a press ever fails to
   wake it, note the time and tell the operator before force-restarting
-  it** — a stuck device carries forensic evidence that a 10-second
-  power-hold destroys.
+  it** — a stuck device carries forensic evidence that a forced power-off
+  (holding the button 6 s) destroys.
+- **To shut down, use KOReader's Power off.** Holding the power button
+  for 6 s is a power cut, not a shutdown. It leaves `/` and `/data`
+  unclean, and a reading position, a note or the last notebook strokes
+  saved in the last moments can be lost (`doc/power-management.md`).
 
 ## Known not-working (told to you rather than discovered by you)
 
@@ -209,7 +213,7 @@ sleep instead of occasionally needing a manual toggle.
 
 Three kinds of report, in descending urgency:
 
-1. **It won't wake / it needed a 10-second hold** — timestamp, what you
+1. **It won't wake / it needed a forced power-off** — timestamp, what you
    were doing, don't force it off until asked (see above).
 2. **Display artifacts** — flashes on ordinary turns, two-part draws,
    residue that builds up page over page: describe or photograph.
