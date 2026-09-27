@@ -158,7 +158,27 @@ Two more consequences:
   - Add a real-`/data` check to the deploy health check.
   - It is our code. Rung 4d (`make qemu-data-check`) with a dirty fixture
     can reproduce the race. It cannot rule it out, since it runs under
-    emulation.
+     emulation.
+
+  **Follow-up implementation (after PR #87, not deployed):** the reader now
+  declares `/run/wilkbook-data-device` as its mount source. A Guile one-shot
+  resolves exactly one kernel `DEVTYPE=partition`, `PARTNAME=data`, checks
+  that its kernel-named `/dev` node is a block device, and creates that
+  ephemeral symlink. It waits at most twenty attempts for device discovery;
+  duplicate names are a refusal. The filesystem service explicitly depends
+  on the resolver, then retains Guix's existing fsck and mount/unmount logic.
+  Failed resolution removes a stale link and leaves the existing diagnostic
+  library visible; it does not select an arbitrary disk or format anything.
+  `wilkbook-generation health --expect` independently checks the mounted
+  device's sysfs identity, whole-filesystem ext4 mount and read-write flags,
+  so a recovery-placeholder boot cannot be promoted. Source:
+  `pinenote/lib/data-device.scm`, `pinenote/services/data-device.scm`.
+  The rebuilt image passed **54 QEMU checks**, including a host-killed VM,
+  an observed data-journal replay on the next boot without os1, preservation
+  of a synced baseline, and a tmpfs-overmount health failure followed by
+  restoration. Evidence and failed fixture attempts:
+  `doc/artifacts/qemu-data-recovery-20260926/`. This is VM proof, not a new
+  physical-device shutdown qualification.
 - **(c) Lose less on a cut:** a shorter KOReader auto-save, `synchronous =
   EXTRA`, `commit=1` on `/data`.
 - **(d) Docs:** the 6 s correction, and KOReader's Power off as the clean

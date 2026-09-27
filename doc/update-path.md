@@ -96,7 +96,10 @@ not eligible for promotion. Reader health uses Shepherd's current state,
 ignoring historical "running" text. These are observations, not a write probe
 or a guarantee against failures that occur after the check. Host tests execute
 the actual health command and the data predicate; VM/image qualification of
-this follow-up remains separate from generation 24's evidence.
+this follow-up is recorded separately from generation 24's evidence in
+`doc/artifacts/qemu-data-recovery-20260926/`: the rebuilt image passed a real
+VM power cut, observed data-journal recovery and a tmpfs-overmount negative
+control, then completed the update/rollback flow (54 checks).
 
 The transfer is guix's own signed nar stream — `guix archive --export`
 piped through plain OpenSSH into `guix archive --import` on the reader,

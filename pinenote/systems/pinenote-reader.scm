@@ -22,6 +22,7 @@
   #:use-module (pinenote services update-path)
   #:use-module (pinenote services dmc)
   #:use-module (pinenote services library)
+  #:use-module (pinenote services data-device)
   #:use-module (pinenote services manuals)
   #:use-module (pinenote services frontlight)
   #:use-module (pinenote services ddr-boost)
@@ -186,7 +187,8 @@ root ALL=(ALL) ALL
                 ;; on the A.2.5 first boot, 2026-07-11), and sshd then fatals on
                 ;; every connection: "/var/empty must be owned by root and not
                 ;; group or world-writable".  Re-assert ownership at activation.
-                (simple-service 'wilkbook-build-marker etc-service-type
+                 (service pinenote-data-device-service-type)
+                 (simple-service 'wilkbook-build-marker etc-service-type
                                 (list `("wilkbook-build"
                                         ,(plain-file "wilkbook-build"
                                                      (insecure-build-marker)))))
@@ -308,8 +310,8 @@ over the serial console.  See doc/install.md in the wilkbook repository.
     (kernel-arguments (append pinenote-reader-kernel-arguments
                               '("fbcon=map:1")))
     ;; The persistent data partition at /data: the library lives in
-    ;; /data/books and survives os2 reflashes.  Addressed by GPT partlabel
-    ;; (the PineNote community convention; same key pinenote-wifi uses) --
+    ;; /data/books and survives os2 reflashes. Resolved from the kernel's GPT
+    ;; PARTNAME before Guix fsck/mount, independent of a successful udev probe --
     ;; no per-device identifiers in the image.  mount-may-fail? so a
     ;; system without the partition (QEMU virt) still boots.  The wifi
     ;; one-shot's own ro mount of the same fs coexists fine -- this rw
@@ -317,7 +319,8 @@ over the serial console.  See doc/install.md in the wilkbook repository.
     (file-systems
      (cons (file-system
              (mount-point "/data")
-             (device "/dev/disk/by-partlabel/data")
+              (device "/run/wilkbook-data-device")
+              (shepherd-requirements '(pinenote-data-device))
              (type "ext4")
              (create-mount-point? #t)
              (mount-may-fail? #t))
