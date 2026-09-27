@@ -43,7 +43,7 @@ negatives. Keep later sessions/prompt families for checking improvement on new
 writing. These first repeated sheets are development data, not an independent
 test set. No local recognizer or decision-model fine-tuning has run yet.
 
-**Code and erasing are in scope (operator follow-up).** The next collection
+**Code and erasing are in scope (operator follow-up).** The supplement
 includes handwritten Python and Guile Scheme, including indentation and literal
 syntax, plus area-erase-and-rewrite tasks. `make-sampler.scm OUT code-edits`
 creates a six-page supplement (12 four-line blocks), reserving its last two
@@ -51,7 +51,24 @@ pages for a later-session check. Intended prompts remain separate from verified
 labels; evaluate final visible ink, not erased history. Erased lines are part of
 the recognition target, not cases to omit. The existing image replay preserves
 area erasure; raw trajectory export refuses affected lines. No new on-device
-eraser qualification is implied by the kit.
+eraser qualification is implied by generating the kit.
+
+**Collected 2026-09-27 on generation 25:** pages 1–4 now provide eight code
+blocks with **31 written lines and one writer-confirmed blank slot**. Pages 5–6
+remain unwritten for a later session. The complete journal is hash-verified:
+945 pen strokes and 12 area erasers, clean production replay. The writer accepts
+erasing as clean and surviving Refresh/close-reopen. Four specified edits are
+visible in the final ink. Labels preserve a writer-confirmed missing closing
+parenthesis in one Scheme block; parsing fails there as expected, without repair.
+Private evidence: `pinenote/tools/handwriting/build/collection-code-20260927/`.
+
+Use the **eight full-width block crops**, expanded to 1404×360 at y=440/1200
+so guide-boundary overshoot is retained. Several written lines overlap in their
+vertical extents; the printed line boxes are not yet qualified segmentation.
+Labels preserve visible indentation levels using the prompt's column convention
+and conventional inter-token spaces: handwritten gaps do not define a literal
+keystroke count. This whitespace convention is explicit in the collection README;
+geometry stays with the labels. No code recognizer or adaptation has run yet.
 
 This also exposes a hard limit beyond prose CER: the frozen OnlineHTR alphabet
 cannot emit `=`, `_`, `{}`, `<`, `>`, backslash, backtick, `~` or `%`. Code

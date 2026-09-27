@@ -29,11 +29,13 @@ this lineage. **Unreleased** above it collects what has landed since.
   evidence reach 3.72% character error and 9/19 exact lines. The API experiment
   costs about 3.3 cents; it is not deployed recognition or fresh-session accuracy
   evidence. All fixed scoring comparisons are in `doc/handwriting-baseline.md`.
-- **A code-and-erasing handwriting sampler is available offline.** The new
+- **A code-and-erasing handwriting sampler is collected on device.** The new
   `code-edits` profile creates Python and Guile Scheme blocks with indentation
   guides and deliberate erase-and-rewrite tasks. Its final two pages are for
   a later-session check; intended prompts stay separate from verified labels.
-  Collection instructions: `pinenote/tools/handwriting/README.md`.
+  Pages 1–4 now supply eight labelled blocks (31 written lines and one confirmed
+  blank); the operator accepts the eraser edits as clean and surviving reopen
+  on generation 25. Collection instructions: `pinenote/tools/handwriting/README.md`.
 - **Independent sentence scoring improves the handwriting development set.**
   Text-only Von Noul assessments fused with stroke and character-LM evidence
   reach 4.46% character error, down from 5.06%; Laya ordinal fusion reaches

@@ -3,6 +3,44 @@
 Last updated: 2026-09-27. Update protocol: add a dated entry at the top
 after every hardware session; entries are per-device/per-operator.
 
+## 2026-09-27 code sampler pages 1–4 collected; eraser/reopen accepted (wkelly PineNote, generation 25)
+
+Operator reported **"I filled out the notebook pages 1-4"**, then confirmed
+Notebook closed and the tablet awake for collection. Same promoted generation
+**25**, system `/gnu/store/yy13ywsn16qa5y6kwbgg1ibhgaxzcxpc-system`, same boot
+`c664cad7-f825-4657-b2b1-b2fffa1af280`. Verified os2 root p6 and real `/data`
+p7 before collection. No reboot, generation change or reader restart.
+
+Copied the complete notebook **`20260927T170521Z-c0a4b7`** without modifying its
+files. Device SHA-256 manifests taken before and after the copy are identical;
+all **12 files** verify on the host. Initial paper/metadata match the installed
+kit. Journal files exist only for pages 0–3: **pages 5–6 remain unwritten** and
+reserved for a later-session check.
+
+Production replay finds **957 records: 945 pen strokes and 12 area erasers**,
+all active, no undo/redo records, no bad/ignored records, no torn tails or
+recorded contact gaps, all writing in mode 1. Page record counts are
+217/218/268/254; eraser counts 0/0/9/3. The four deliberate edit targets survive
+final replay as **1500, River, <=, River**. Asked about on-panel erasing and
+Refresh/close-reopen persistence, the operator explicitly answered **"Clean,
+survived reopen"**. This accepts those tasks on this sampler; it does not add
+rotation or an exhaustive gray-brush erasure qualification.
+
+Prepared eight ink-only code-block crops and reviewed labels, preserving
+indentation geometry and final erasure. The operator confirmed that block 03's
+fourth `(format #t ...)` line was left blank: **31 written lines**, not 32. They
+also confirmed one missing closing parenthesis in block 08's third line, while
+its last-line variable is `notes`; labels preserve the missing parenthesis
+rather than repairing Scheme syntax. Intended prompts remain separate.
+Adjacent lines overlap vertically, so fixed-height line crops/trajectory
+exports are not inferred from the guide boxes. No recognizer or training ran.
+
+Auto-suspend was paused from **`enabled=1`** to **`enabled=0`** for collection,
+then restored to the original **`enabled=1`**, synced and read back by the
+successful collection script. Original journal, archive, before/after hashes,
+replay, cropped images, labels, provenance and checksums remain private under
+`pinenote/tools/handwriting/build/collection-code-20260927/`.
+
 ## 2026-09-27 code-and-erasing sampler installed (wkelly PineNote, generation 25)
 
 Operator requested deployment and confirmed **"Ready—Notebook closed"** with
