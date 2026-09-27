@@ -1,4 +1,4 @@
-.PHONY: check image-metrics-check trajectory-input-check
+.PHONY: check image-metrics-check trajectory-input-check candidate-check
 check:
 	luajit -e 'assert(loadfile("export-line.lua"))'
 	luajit test-sample.lua
@@ -11,3 +11,6 @@ image-metrics-check:
 
 trajectory-input-check:
 	python3 test-trajectory-input.py
+
+candidate-check:
+	python3 test-ctc-candidates.py

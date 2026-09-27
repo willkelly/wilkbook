@@ -60,6 +60,7 @@ def main():
     parser.add_argument("weights", type=Path, help="unpacked model directory")
     parser.add_argument("output", type=Path, help="new directory")
     parser.add_argument("--threads", type=int, default=8)
+    parser.add_argument("--save-emissions", action="store_true", help="retain frame log probabilities for decoder experiments")
     args = parser.parse_args()
     revision = subprocess.check_output(["git", "-C", str(args.upstream), "rev-parse", "HEAD"], text=True).strip()
     if revision != UPSTREAM_COMMIT:
@@ -90,6 +91,9 @@ def main():
         saved = torch.load(checkpoint, map_location="cpu", weights_only=True)
     alphabet = load_alphabet(args.weights / "alphabet.json")
     assert alphabet == list(saved["hyper_parameters"]["alphabet"])
+    if args.save_emissions:
+        (args.output / "emissions").mkdir()
+        (args.output / "emissions" / "alphabet.json").write_text(json.dumps(alphabet) + "\n")
     model = LitModule1(**saved["hyper_parameters"])
     model.load_state_dict(saved["state_dict"], strict=True)
     model.eval()
@@ -115,9 +119,13 @@ def main():
             ink = tensorize(transformed)["ink"].unsqueeze(1)
             if not torch.isfinite(ink).all():
                 raise ValueError("nonfinite features")
-            prediction = decoder(model(ink), mapper)[0]
+            emissions = model(ink)
+            prediction = decoder(emissions, mapper)[0]
             elapsed = time.perf_counter() - start
             number = path.stem.removeprefix("line-")
+            if args.save_emissions:
+                np.savez_compressed(args.output / "emissions" / f"line-{number}.npz",
+                                    log_probs=emissions[:, 0, :].numpy())
             row = dict(sample=number, prediction=prediction, seconds=elapsed,
                 inkml_sha256=sha(path), image_sha256=sha(args.collection / "rendered" / f"line-{number}.png"),
                 strokes=n_strokes, input_points=len(sample["x"]), model_points=len(ink))

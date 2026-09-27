@@ -93,6 +93,47 @@ recomputes accuracy and median latency over the same 19 lines for every model;
 image/label hashes must match. Peak RSS remains each original process's
 high-water mark. No cloud recognizer or training is involved.
 
+## Retaining alternatives and testing a contextual selector
+
+The trajectory runner's optional `--save-emissions` stores per-frame log
+probabilities under `emissions/`. `evaluate-candidates.py` verifies that the
+new greedy predictions and source hashes match the frozen baseline, then
+performs CTC prefix beam search: width 128, eight highest-scoring nonblank
+frame labels (plus blank and repeated-prefix label), retain 32 line candidates.
+It sums blank/nonblank alignment paths; it does not independently guess letters
+or run a spellchecker. The exhaustive small-alphabet test is the oracle for
+repeat/blank path accounting. Beam pruning makes these approximate scores,
+not calibrated confidence.
+
+`evaluate-von.py` uses an existing **local Von option-marker checkpoint** to
+choose among those texts on CPU. It records direct Von selection and a fixed
+combination, `CTC logp + 0.2 * log(max(Von probability, 1e-6))`. It repeats the
+same query with the option order reversed. The installed older Von API rounds
+probabilities to four decimals and calls the top-two probability margin
+`confidence`; neither is validated handwriting confidence. No printed prompts,
+reference labels, fine-tuning or freely generated corrections enter selection.
+All predictions are saved before labels are opened for evaluation. The
+truth-assisted best-candidate score is diagnostic only, never a selectable
+recognizer or a reported achieved result.
+
+```sh
+# Repeat the earlier trajectory command into a NEW_CAPTURE with --save-emissions.
+pinenote/tools/handwriting/build/eval-venv/bin/python \
+  pinenote/tools/handwriting/evaluate-candidates.py \
+  NEW_CAPTURE ORIGINAL_GREEDY_OUTPUT NEW_BEAM_OUTPUT
+# Use the existing Von runtime's Python and library-path setup. This command
+# explicitly uses CPU and local files; no server or remote API is contacted.
+HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 "$VON_PYTHON" \
+  pinenote/tools/handwriting/evaluate-von.py \
+  NEW_BEAM_OUTPUT/candidates.json COLLECTION LOCAL_VON_SNAPSHOT NEW_VON_OUTPUT
+make -C pinenote/tools/handwriting candidate-check
+```
+
+The evaluation records the actual model snapshot, weight/source hashes and
+runtime versions. The local cached model may predate the current online model
+card; results name that local version rather than silently downloading newer
+weights. Images, emissions and candidates remain under gitignored `build/`.
+
 ## Copy-and-write sampler
 
 Generate five pages of four prompts: everyday prose, Workbench-like requests,

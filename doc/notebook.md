@@ -67,7 +67,10 @@ and collection recipe are in `pinenote/tools/handwriting/README.md`.
 at 11.69%/9.72% raw character error on those 20 lines. A subsequent 19-line
 trajectory run with the small OnlineHTR LSTM measured 7.14% raw character error,
 but worse word-content error than TrOCR Base (23.08% vs 10.77% on the shared
-lines). Model choice remains open, and recognition is not in the drawing path.
+lines). A CTC-alternatives + local Von CPU experiment retained useful choices,
+but the installed selector worsened the primary result and changed answers on
+17/19 lines when options were reversed. The candidate interface is reusable;
+model choice remains open, and recognition is not in the drawing path.
 
 ### Fixed paper and the handwriting sampler (2026-09-26)
 

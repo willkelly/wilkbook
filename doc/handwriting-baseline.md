@@ -166,6 +166,107 @@ Linux SDK. Its accuracy is not represented by this independent implementation.
 The Microsoft/InkFM leads below remain relevant research, with no additional
 released trajectory weights established during this search.
 
+## Candidate selection with the existing Von installation (same day)
+
+The operator proposed retaining uncertain recognition alternatives and using a
+small contextual classifier to choose what makes sense, specifically the recent
+**Jev-style** decision models, then identified the existing local installation
+as **Von**. CPU was explicitly preferred for this experiment.
+
+### What ran
+
+- Re-ran the unchanged trajectory model with emission capture. All 19 greedy
+  predictions and input hashes match the frozen baseline. Retained frame-level
+  log probabilities permit decoder experiments without more model inference.
+- A tested CTC prefix beam sums alignment paths with separate blank/nonblank
+  states. Fixed beam width 128, top eight nonblank labels per frame plus blank
+  and any prefix-repeat label, top 32 final text candidates. No spelling repair
+  or template hints. Plain beam top-1 matches greedy on every sample.
+- Used the operator's **existing Von 1.0.1 SDK**, option-marker backend,
+  cached `wfzyx/von-1.0` snapshot
+  `aa2fdc9630ecdadef32c56073553b3a69bed38bf`. The runtime uses
+  PyTorch 2.9.1+rocm6.4 and Transformers 5.17.0, but inference here was explicitly
+  **CPU**, float32, eight threads. No server or cloud service was used. Downloads
+  were disabled. The existing environment and cached model were not upgraded.
+- The installed model has **395,310,081 parameters**, a ModernBERT encoder with
+  an option-marker scoring head. It is not a tiny classifier despite the small
+  size of the head. The local snapshot lacks a calibration file; the installed
+  backend uses temperature 1 and reports a top-two probability margin as
+  `confidence`. Its rounded option probabilities are not calibrated handwriting
+  probabilities. Strict loading of `option_marker.pt` succeeded; the encoder's
+  unused classification-head keys in the base-model load report are retained
+  in the run log.
+- Input state describes alternative readings of an unknown handwritten English
+  line. The fixed question is: **"Which proposed reading makes the most sense
+  in its sentence context? Select only from the supplied readings."** Von sees
+  the candidate texts, not images, pen trajectories, printed prompts or labels.
+- Compared direct Von choice and a fixed combined score:
+  `CTC logp + 0.2 * log(max(Von probability, 1e-6))`. The probability floor
+  handles the API's four-decimal rounding. The coefficient was fixed before
+  the run and not searched against these labels. Choices remain constrained to
+  actual candidate texts.
+- Every query was repeated with the same candidate IDs/texts in reverse order.
+  This is a diagnostic, not an opportunity to pick the better ordering after
+  seeing labels. Saved all choices/probabilities before opening labels.
+
+### Results: no reliable improvement from this installed selector
+
+| Method | Raw CER | Raw WER | Lexical WER | Exact lines |
+|---|---:|---:|---:|---:|
+| Greedy / plain CTC beam | 7.14% | 26.77% | 23.08% | 2/19 |
+| Von choice, CTC-ranked option order | 9.82% | 41.73% | 30.00% | 1/19 |
+| Stroke score + Von, same order | 8.04% | 29.13% | 24.62% | 1/19 |
+| Von choice, reversed option order | 8.78% | 36.22% | 29.23% | 0/19 |
+| Stroke score + Von, reversed order | 6.85% | 24.41% | 20.77% | 2/19 |
+
+**Reversing options changed Von's selected text on 17/19 lines**, and the
+combined-score winner on 15/19. Direct forward-order choice improved character
+error on four lines and worsened twelve; forward fusion improved five and
+worsened eleven. The small gain from reversed fusion cannot justify deploying
+an order-sensitive selector. One previously exact line lost a correct word
+space. This is a negative result for this checkpoint/query/decoder combination,
+not evidence that contextual selection is inherently ineffective.
+
+**The alternatives do contain useful information:** the exact reference is
+present among the 32 candidates for 5/19 lines. A truth-assisted oracle choosing
+the lowest-character-error candidate could achieve **4.46% CER (30/672)** versus
+greedy's 7.14% (48/672). This is an unattainable-without-truth diagnostic bound
+for the retained lists, not an achieved recognition score. Correcting all errors
+is impossible with these candidates: many intended words never reach the list,
+and the missing dollar symbol remains outside the recognizer's alphabet.
+
+CPU cost on the workstation: median **0.252 s/line** for the unoptimized Python
+beam search, **0.407 s/line** for one Von choice, excluding its 2.38 s model load
+and warm-up. The reversed-order diagnostic incurs a second choice call. Von
+process peak RSS was **3769.4 MiB**, including weights/runtime/load. These are
+separate measured stages, not a PineNote latency measurement.
+
+### Model identity and next direction
+
+[Jev](https://typesafe.ai/blog/introducing-system-one-models-and-jev) is TypeSafe's
+September 2026 structured-decision release; its architecture is not publicly
+established as BERT. [Von](https://github.com/wfzyx/von) is the open ModernBERT
+option-marker implementation actually tested. **Jev is not JEPA**. An initial
+JEPA interpretation in conversation was corrected before model selection.
+
+The [current online Von card](https://huggingface.co/wfzyx/von-1.0) redirects to
+a newer 1.2 release and describes independent-option attention to remove order
+dependence. That is not the installed 1.0.1 SDK/snapshot and was not tested.
+Do not attach those newer claims to this result. The local run records actual
+weight and implementation hashes.
+
+Keep the candidate interface: it is reusable for a specialized contextual
+ranker, a smaller masked-language model or a later Von checkpoint. Before
+trusting automatic selection, improve candidate coverage, test order stability
+and measure both corrected and newly introduced errors on fresh writing. For
+the current release, the ink and original recognition remain available; no
+automatic notebook correction was added.
+
+Private evidence:
+`pinenote/tools/handwriting/build/candidates-20260927/` contains emission capture,
+the 32-candidate lists, every forward/reversed Von answer, full comparisons,
+timings, settings, source/weight hashes and dependency versions.
+
 ## Microsoft Research and related work
 
 - **[TrOCR](https://www.microsoft.com/en-us/research/publication/trocr-transformer-based-optical-character-recognition-with-pre-trained-models/)**

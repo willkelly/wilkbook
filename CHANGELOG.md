@@ -24,6 +24,11 @@ this lineage. **Unreleased** above it collects what has landed since.
 
 ## Unreleased
 
+- **Recognition alternatives can be evaluated locally.** The host tools retain
+  scored stroke-recognition candidates and test a contextual selector against
+  them. The existing Von model was tested on CPU: its primary selection worsened
+  accuracy and was strongly option-order-sensitive, so the result is recorded
+  rather than adopted (`doc/handwriting-baseline.md`).
 - **Pen trajectories have a measured recognition baseline.** A local OnlineHTR
   LSTM run on the 19 comparable lines has fewer character errors and lower
   workstation latency than the image baselines, but more whole-word errors
