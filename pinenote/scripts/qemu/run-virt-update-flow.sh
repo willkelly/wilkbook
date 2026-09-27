@@ -47,6 +47,7 @@ tree_helper=$here/../../packages/update-path/wilkbook-generation.lua
 for sys in "$sys_a" "$sys_b"; do
   shipped=$(find -L "$sys/profile/share" -name wilkbook-generation.lua 2>/dev/null | head -n 1)
   [ -n "$shipped" ] && cmp -s "$tree_helper" "$shipped" || { echo "FAIL: $sys ships a helper that is not the tree's (stale SYSTEM_B or ROOTFS? rebuild it)" >&2; exit 2; }
+  cmp -s "$here/../../packages/update-path/generation_ledger.lua" "$(dirname "$shipped")/generation_ledger.lua" || { echo "FAIL: $sys ships a stale ledger/health predicate" >&2; exit 2; }
 done
 if [ -z "$log" ]; then log=/tmp/wilkbook/pinenote-virt-update-$$.log; fi
 : > "$log"
@@ -58,8 +59,8 @@ append=$(sed -n 's/^[[:space:]]*APPEND[[:space:]][[:space:]]*//p' "$config" | se
 append=$(printf '%s' "$append" | sed -e 's/console=ttyS2,1500000n8/console=ttyAMA0/' -e 's/console=tty0 //')
 case " $append " in *" gnu.system=$sys_a "*) ;; *) echo "FAIL: the bundle's APPEND does not name SYSTEM_A ($sys_a)" >&2; exit 2;; esac
 
-printf 'qemu update flow: booting generation A (console -> %s, ssh -> 127.0.0.1:%s)\n' "$log" "$VIRT_UPDATE_PORT"
-qemu-system-aarch64 \
+boot_vm() {
+ qemu-system-aarch64 \
   -M virt -cpu max -smp 4 -m 2048 -display none -no-reboot \
   -chardev "socket,id=con0,path=$log.sock,server=on,wait=off,logfile=$log" -serial chardev:con0 -monitor none \
   -kernel "$kernel" -initrd "$initrd" -append "$append" \
@@ -67,6 +68,9 @@ qemu-system-aarch64 \
   -netdev "user,id=n0,hostfwd=tcp:127.0.0.1:${VIRT_UPDATE_PORT}-:22" -device virtio-net-pci,netdev=n0 \
   2> "$log.qemu-stderr" &
 qemu_pid=$!
+}
+printf 'qemu update flow: booting generation A (console -> %s, ssh -> 127.0.0.1:%s)\n' "$log" "$VIRT_UPDATE_PORT"
+boot_vm
 start=$(date +%s)
 finish() { kill "$qemu_pid" 2>/dev/null || true; sleep 1; kill -9 "$qemu_pid" 2>/dev/null || true; }
 trap finish EXIT
@@ -94,6 +98,52 @@ wait_ssh "generation A" || { finish; exit 1; }
 cur=$(vm readlink -f /run/current-system)
 [ "$cur" = "$sys_a" ] && pass "generation A booted: /run/current-system = $sys_a" || fail "A: running $cur"
 boot_a1=$(vm cat /proc/sys/kernel/random/boot_id)
+# Optional data-recovery qualification. This kills only this harness's QEMU
+# process, never a hardware guest, then boots the same disk without an os1
+# interlude that could conceal journal recovery. The durable baseline was
+# synced before the cut; later unsynced writes are deliberately not promised.
+if [ "${VIRT_UPDATE_DATA_RECOVERY:-0}" = 1 ]; then
+  vm 'sh -s' <<'EOF'
+set -eu
+printf 'data resolver: '; readlink -f /run/wilkbook-data-device
+findmnt -n -M /data -o SOURCE,FSTYPE,OPTIONS
+test "$(readlink -f /run/wilkbook-data-device)" = /dev/vda3
+test "$(readlink -f "$(findmnt -n -M /data -o SOURCE)")" = /dev/vda3
+printf 'durable data-recovery baseline\n' > /data/recovery-baseline
+sha256sum /data/recovery-baseline > /data/recovery-baseline.sha256
+sync
+# Leave normal writers and both ext4 filesystems mounted read-write.
+printf 'unsynced tail\n' >> /data/recovery-tail
+EOF
+  kill -KILL "$qemu_pid"
+  wait "$qemu_pid" 2>/dev/null || true
+  mv "$log" "$log.before-cut"
+  rm -f "$log.sock"
+  boot_vm
+  wait_ssh "unclean data recovery" || exit 1
+  boot_recovered=$(vm cat /proc/sys/kernel/random/boot_id)
+  [ "$boot_recovered" != "$boot_a1" ] && pass "data recovery: a new boot after the VM power cut" || fail "data recovery: boot unchanged"
+  boot_a1=$boot_recovered
+  vm 'sha256sum -c /data/recovery-baseline.sha256' && pass "data recovery: synced file intact" || fail "data recovery: baseline lost"
+  vm "wilkbook-generation health --expect $sys_a" && pass "data recovery: production health accepts the recovered GPT data mount" || fail "data recovery: health failed"
+  vm 'test "$(readlink -f /run/wilkbook-data-device)" = /dev/vda3' && pass "data recovery: kernel resolver selected vda3" || fail "data recovery: wrong resolver output"
+  grep -Eq '^data: recovering journal|(vda3|wilkbook-data-device).*recovering journal|EXT4-fs \(vda3\): recovery complete' "$log" \
+    && pass "data recovery: journal recovery observed without os1" || fail "data recovery: no journal-recovery evidence"
+  # A real mount table negative control, with guaranteed cleanup in the guest.
+  vm "sh -s -- '$sys_a'" <<'EOF' && pass "data health: mounted tmpfs placeholder refused, original mount restored" || fail "data health: negative control failed"
+set -eu
+mount -t tmpfs tmpfs /data
+trap 'umount /data' EXIT
+rc=0
+wilkbook-generation health --expect "$1" >/run/health-placeholder.log || rc=$?
+test "$rc" = 1
+grep -q '^data_ready=false$' /run/health-placeholder.log
+umount /data
+trap - EXIT
+wilkbook-generation health --expect "$1"
+EOF
+  [ "$fails" -eq 0 ] || exit 1
+fi
 vm 'herd status guix-daemon | grep -q running' && pass "guix-daemon is running in the guest" || fail "guix-daemon not running"
 image_bytes=$(cat "$disk_rootfs_bytes_file" 2>/dev/null || echo 0)
 fs_bytes=$(vm 'df -B1 --output=size / | tail -n 1' | tr -d ' ')

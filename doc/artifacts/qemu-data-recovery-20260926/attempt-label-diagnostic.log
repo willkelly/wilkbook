@@ -1,0 +1,35 @@
+PASS: staged rootfs-matched boot bundle under /tmp/wilkbook/pinenote-data-recovery-20260926/pinenote-updchk-bundle-20260926-220205
+PASS: extracted Image, matching config, PineNote DTB, initrd, and generated extlinux.conf
+NOTE: run: pinenote/scripts/preflight/inspect-boot-bundle.sh /tmp/wilkbook/pinenote-data-recovery-20260926/pinenote-updchk-bundle-20260926-220205
+PASS: data fixture (update-flow) built: /tmp/wilkbook/pinenote-data-recovery-20260926/pinenote-updchk-data-20260926-220205.img
+PASS:   Debian home present at ./user with 8 visible entries
+PASS: waveform partition left zero-filled (copy-path test only)
+PASS: rootfs written into partition 2 (GPT name os2)
+PASS: data fixture written into partition 3 (GPT name data)
+PASS: synthetic PineNote-layout disk ready: /tmp/wilkbook/pinenote-data-recovery-20260926/pinenote-updchk-disk-20260926-220205.img
+qemu update flow: booting generation A (console -> /tmp/wilkbook/pinenote-virt-update-344728.log, ssh -> 127.0.0.1:2277)
+  PASS  generation A booted: /run/current-system = /gnu/store/wkv21zrmb8xrf2ynaqx8bcsw74irybj2-system
+data resolver: /dev/vda3
+/run/wilkbook-data-device ext4 rw,relatime
+  PASS  data recovery: a new boot after the VM power cut
+/data/recovery-baseline: OK
+  PASS  data recovery: synced file intact
+current_system=/gnu/store/wkv21zrmb8xrf2ynaqx8bcsw74irybj2-system
+booted_generation=1
+broker_ready=true
+reader_started=true
+data_ready=true
+data_reason=ext4 data partition mounted read-write
+health=ok
+  PASS  data recovery: production health accepts the recovered GPT data mount
+  PASS  data recovery: kernel resolver selected vda3
+  FAIL  data recovery: no journal-recovery evidence
+current_system=/gnu/store/wkv21zrmb8xrf2ynaqx8bcsw74irybj2-system
+booted_generation=1
+broker_ready=true
+reader_started=true
+data_ready=true
+data_reason=ext4 data partition mounted read-write
+health=ok
+  PASS  data health: mounted tmpfs placeholder refused, original mount restored
+make: *** [Makefile:291: qemu-update-check] Error 1

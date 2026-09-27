@@ -78,12 +78,28 @@ ssh reader wilkbook-generation add S          → system-(N+1)-link, /boot/gen-(
                                                 extlinux.conf regenerated: one LABEL per kept generation,
                                                 DEFAULT unchanged (still gen N)
 ssh reader wilkbook-generation trial N+1      → EBC quiesce, gadget off, Wi-Fi off, kexec -l, kexec -e
-wait for ssh; health check                    → /run/current-system == S, broker ready, reader up
+wait for ssh; health check                    → /run/current-system == S, broker ready, reader up, real data rw
 ssh reader wilkbook-generation promote N+1    → DEFAULT = gen N+1
 (prune)                                       → keep K generations (+ DEFAULT, the booted one, and
                                                 every PINNED one); guix gc reclaims the rest
 (after a cold boot: wilkbook-generation pin N) → /boot/gen-N/pinned; prune never deletes N
 ```
+
+**Data health (source follow-up, not yet deployed):** `health --expect` now
+requires one exact `/data` mount, rooted at the whole ext4 filesystem, with
+both mount and superblock read-write. Its mountinfo major:minor identifies the
+sysfs block-device `uevent`, which must say `PARTNAME=data`. Missing, stacked,
+subdirectory, read-only and wrong-partition mounts fail health; the root's
+placeholder library cannot pass. This also applies to update-flow QEMU guests,
+which carry a synthetic GPT data partition. Bare virt guests without one are
+not eligible for promotion. Reader health uses Shepherd's current state,
+ignoring historical "running" text. These are observations, not a write probe
+or a guarantee against failures that occur after the check. Host tests execute
+the actual health command and the data predicate; VM/image qualification of
+this follow-up is recorded separately from generation 24's evidence in
+`doc/artifacts/qemu-data-recovery-20260926/`: the rebuilt image passed a real
+VM power cut, observed data-journal recovery and a tmpfs-overmount negative
+control, then completed the update/rollback flow (54 checks).
 
 The transfer is guix's own signed nar stream — `guix archive --export`
 piped through plain OpenSSH into `guix archive --import` on the reader,
