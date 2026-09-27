@@ -307,6 +307,14 @@ the operator reviews the record and decides whether to continue or revise this
 policy. No trial-period session is counted merely because these rules were
 added. Procedure: `doc/hardware-deploy.md`, "Cable-free trial period".
 
+**Three-session review completed (2026-09-26).** After generation 24 passed
+health/promotion, the agreed operator checks and cleanup, wkelly explicitly
+approved continuing this existing attended, explicit-invocation policy
+unchanged ("I approve"). The three-session review pause is lifted. All
+per-session invocation, expiration, recovery and evidence requirements above
+remain in force; this approval is not a standing invocation or unattended
+deployment grant. Record: `doc/status.md`, generation 23 → 24 session.
+
 ## Committing
 
 Two-person repo with outside contributors (as of 2026-08-31 the first
@@ -438,8 +446,9 @@ gitignored `build/`, or the reader's static address.
   18 and 23 `[pinned]`, all four cold-booted, plus 19–22, which are
   kexec-only, and 24 (also kexec-only, not pinned; `doc/status.md` 2026-09-26).
   Suspend was restored to `enabled=1`. The cable-free trial period stands at
-  three completed successful sessions; new cable-free sessions are paused
-  pending the operator's policy review.
+  three completed successful sessions. The operator completed the policy
+  review and approved continuation unchanged; the review pause is lifted,
+  with explicit invocation still required for each new session.
   Pause suspend (`enabled=0`) before a
   session and restore it after; a session that ends with `enabled=1` on
   battery leaves only the hourly backstop's 20 s ssh windows

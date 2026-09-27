@@ -324,6 +324,11 @@ The grant covers the agreed session's normal trial/health/promote steps; it
 expires on restart, departure, withdrawal, or failure. `CLAUDE.md` owns the
 scope, exclusions, and three-successful-session review point.
 
+The three-session review was completed after generation 24's acceptance on
+2026-09-26: wkelly approved continuation of the existing policy unchanged.
+That review pause is lifted; each new session still needs its own explicit
+invocation and all the same checks (`doc/status.md`, generation 23 → 24).
+
 Before handoff, pass the offline gates (reuse recorded passes for unchanged
 relevant source, inputs, and output), verify the actual source/target
 identities and os2/data mounts, record the last promoted generation and a

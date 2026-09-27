@@ -63,10 +63,13 @@ KOReader process-restart persistence, contact-dropout/night-mode/hover edge
 cases, forced fallback rendering, RTC accounting and deliberate busy-data
 refusal remain separate checks; the three answers do not certify those.
 Health/promotion, agreed operator checks and cleanup are now complete:
-**this is the third successful cable-free trial-period session.** New
-cable-free sessions are paused until the operator reviews the record and
-decides whether to continue or revise the policy. No policy change is implied
-by the successful checks.
+**this is the third successful cable-free trial-period session.** The review
+pause was engaged, then the operator explicitly approved the recommendation
+to continue the existing attended, explicit-invocation policy unchanged:
+**"I approve"**. This completes the required review and lifts that pause.
+Each new session still requires its own exact invocation; attendance,
+expiration, recovery, health and evidence requirements remain unchanged.
+No standing invocation or unattended deployment permission was granted.
 Evidence: `doc/artifacts/pinenote-gen24-batch-20260926/`.
 
 ## 2026-09-26 later (wkelly PineNote, generation 23, SSH inspection) — idle authority and root writers observed

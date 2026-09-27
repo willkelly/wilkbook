@@ -32,5 +32,7 @@ all three requested checks: reading/page turns; notebook existing strokes,
 drawing, Refresh and close/reopen; power-button/cover suspend/wake. No cycle
 count or timing was measured. Process-restart persistence and targeted
 notebook/broker edge cases remain unqualified. This completes the third
-successful cable-free session; new sessions await the operator's policy
-review. See `doc/status.md` for the living record.
+successful cable-free session. The operator then explicitly approved
+continuing the existing attended, explicit-invocation policy unchanged,
+completing its review and lifting the pause. No standing invocation was
+granted. See `doc/status.md` for the living record.

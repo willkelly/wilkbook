@@ -163,7 +163,9 @@ recovery in dmesg. Generation 23 remains the pinned recovery target;
 auto-suspend was restored to `enabled=1`. The operator subsequently accepted
 reading/page turns, existing notebook strokes, drawing/Refresh/close/reopen,
 and power-button/cover suspend/wake. This completes the third trial-period
-session; new cable-free sessions await the operator's policy review. Hardware truth and
+session. The operator then approved continuing the existing policy unchanged,
+completing its review and lifting the pause; new sessions still require the
+explicit invocation and existing checks. Hardware truth and
 identities: `doc/status.md`; evidence: `doc/artifacts/pinenote-gen24-batch-20260926/`.
 
 1. Plain-reader QEMU update-flow and full-log page-turn capture have passed.
