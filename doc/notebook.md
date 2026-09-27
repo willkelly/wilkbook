@@ -35,8 +35,11 @@ are recommendations for discussion, not an approved redesign.
   work; page/rotation/suspend/close changes invalidate it. Keep the canonical
   strokes, eraser/undo semantics and journal independent of this derived render.
   Before device testing, prove replay consistency, clipping/overlap, night mode,
-  cancellation and bounded host cost. A canceled pass must leave correct binary
-  ink. The ordinary driver scheduler compares target with next; switching the
+  cancellation and bounded host cost. Cancel stale work before publication;
+  once GL16 is in flight the driver's early-cancel path only admits binary
+  DU-to-DU, so renewed ink on those pixels may wait for GL16 to finish. An
+  attended trial must include a quick return to the same line, not only a
+  pleasant idle finish. The ordinary driver scheduler compares target with next; switching the
   hint while repainting identical binary pixels is not itself a finishing pass
   (`linux-pinenote-7.1-hrdl-direct-mode.patch`, `q8_start_scheduled` and
   `q8_start_redraw`). Its redraw hint also requires a changed target. This is
