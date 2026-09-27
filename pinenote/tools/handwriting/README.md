@@ -45,6 +45,38 @@ standard image processor, greedy decoding, float32 CPU inference and eight
 threads. Subsequent tuning on these lines makes them development data; use new
 writing for the next independent evaluation.
 
+### Gemma direct image transcription
+
+`evaluate-gemma-images.py` tests vision separately from the text-only candidate
+selector. It sends the **original ink PNG bytes**, without candidate text,
+sampler prompts or labels, to a local CPU llama.cpp server loaded with both the
+Gemma text model and its vision projector. Its one fixed instruction requests
+literal transcription, preserving spelling/case/numbers/punctuation. Thinking
+and prompt reuse are disabled; generation is deterministic with a 128-token
+limit. It uses native multimodal preprocessing defaults, with no externally
+chosen crop, threshold or scaling. A blank image warms the vision path.
+
+```sh
+# Use the pinned CPU llama.cpp build documented below. Download both files
+# from the same pinned ggml-org/gemma-4-E2B-it-GGUF revision before inference.
+python3 pinenote/tools/handwriting/evaluate-gemma-images.py \
+  COLLECTION LOCAL_MODEL.gguf LOCAL_MMPROJ.gguf NEW_VISION_RUN \
+  --llama-server LLAMA_CPP/build/bin/llama-server
+python3 pinenote/tools/handwriting/summarize-images.py \
+  SMALL_OUTPUT/results.json BASE_OUTPUT/results.json NEW_VISION_RUN/results.json \
+  > IMAGE_COMPARISON.md
+# Add the trajectory run with --shared for the same 19-line comparison.
+```
+
+The recorded projector is `mmproj-gemma-4-E2B-it-BF16.gguf`; model and projector
+come from revision `b4243c156154b6dca9324415f8c7ccc098b4aed1`. The runner requires
+Pillow, explicitly checks that vision is enabled, keeps full requests/responses,
+and saves every prediction before reading labels. Only outer whitespace is
+removed: spelling changes, extra prose and internal whitespace are scored as
+produced. Token-limit events remain visible. Its `peak_process_rss_mib` is the
+inference server's peak, with client memory reported separately. Both text and
+vision run on CPU, and the owned server is stopped before scoring.
+
 ## Local trajectory baseline
 
 `evaluate-trajectories.py` runs the released English IAM-OnDB checkpoint from

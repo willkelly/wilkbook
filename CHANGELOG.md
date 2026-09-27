@@ -24,6 +24,11 @@ this lineage. **Unreleased** above it collects what has landed since.
 
 ## Unreleased
 
+- **Gemma vision provides a much stronger handwriting baseline.** Direct local
+  Gemma 4 E2B image transcription reaches 0.85% character error and 15/20 exact
+  lines on the sampler. It costs about 1.18 s/line and 5.0 GiB peak host memory,
+  and still normalizes one confirmed spelling slip. This changes the accuracy
+  reference; it is not a tablet deployment (`doc/handwriting-baseline.md`).
 - **Gemma and the next recognition direction assessed.** A quantized Gemma 4
   E2B CPU comparison kept every original reading in the focused-choice task.
   A review of character-level restoration research identifies integrated

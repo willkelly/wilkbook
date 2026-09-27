@@ -32,7 +32,7 @@ def parse_answer(response, options):
 
 
 class GemmaSelector:
-    def __init__(self, weights, server, output):
+    def __init__(self, weights, server, output, projector=None):
         self.log = (output / 'server.log').open('w')
         with socket.socket() as sock:
             sock.bind(('127.0.0.1', 0))
@@ -42,6 +42,8 @@ class GemmaSelector:
             '--host', '127.0.0.1', '--port', str(port), '--offline', '-ngl', '0',
             '-t', '8', '-tb', '8', '-c', '4096', '-np', '1', '--cache-ram', '0',
             '--jinja', '--reasoning-budget', '0']
+        if projector is not None:
+            self.command.extend(['--mmproj', str(projector.resolve()), '--no-mmproj-offload'])
         self.process = subprocess.Popen(self.command, stdout=self.log, stderr=subprocess.STDOUT)
         atexit.register(self.close)
         deadline = time.monotonic() + 180

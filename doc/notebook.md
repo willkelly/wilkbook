@@ -77,7 +77,12 @@ presentation changes 15/44 decisions (Von: 32/44). Requiring agreement makes no
 corrections. Quantized Gemma 4 E2B also makes no corrections in that task,
 at 1.14 s/question on the host CPU. The research recommendation is integrated
 character-language-model decoding and writer adaptation, pending experiments.
-These remain host experiments (`doc/handwriting-baseline.md`).
+Direct Gemma vision was then tested on the ink images and is much stronger:
+0.85% CER, 15/20 exact lines (0.74% CER on the shared 19), at 1.18 s/line and
+5.04 GiB peak host inference memory. It still normalizes a confirmed spelling
+slip. Gemma is now the quality reference; OnlineHTR remains the small stroke
+model proposed for adaptation. These remain host experiments
+(`doc/handwriting-baseline.md`).
 
 ### Fixed paper and the handwriting sampler (2026-09-26)
 

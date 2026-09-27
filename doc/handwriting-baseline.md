@@ -1,8 +1,15 @@
 # Handwriting recognition: first local baseline
 
-2026-09-27, wkelly's completed five-page sampler. **Promising word recovery,
-insufficient literal transcription.** Microsoft TrOCR Base improves on Small,
-but its modest accuracy gain costs substantially more host CPU time and memory.
+2026-09-27, wkelly's completed five-page sampler. **Latest result: direct Gemma
+4 E2B vision is the strongest measured recognizer on this small corpus:** 0.85%
+CER across all 20 images, 15 exact lines, 1.18 s/line on the workstation CPU,
+5156.5 MiB inference-server peak RSS. It still normalizes a confirmed spelling
+slip. This is development evidence, not deployment or general-accuracy proof.
+See "Gemma 4 E2B direct image recognition" below.
+
+The following sections record the experiments in order. The initial TrOCR
+finding was **promising word recovery, insufficient literal transcription**:
+Base improved on Small at substantially greater host CPU time and memory.
 
 ## What ran
 
@@ -436,12 +443,98 @@ and sibling `gemma4-e2b-sanity/`, including GGUF/source identity, all requests a
 answers, server logs/configuration, timings, comparison and result files.
 The E4B and larger Gemma variants remain untested.
 
+## Gemma 4 E2B direct image recognition
+
+The operator asked whether Gemma's vision/OCR had been tested, then requested
+that comparison. **This is a different task from the text-only candidate
+selection above.** It recognizes the image directly, without any trajectory
+prediction or candidate list. No model was fine-tuned. The proposed adaptation
+target remains the small **OnlineHTR stroke model**, not TrOCR.
+
+### Inputs and execution
+
+- Same 20 original 1404×240 ink-only PNGs, including line 20's visible erasure.
+  Exact request image bytes and image/label hashes match the TrOCR evaluation.
+  Printed sampler text, rules, reference transcriptions and candidate readings
+  are absent from model input.
+- Same Gemma E2B IT Q4_0 and llama.cpp pins as above, now with
+  **`mmproj-gemma-4-E2B-it-BF16.gguf`** from the same model repository revision.
+  The projector file is 986,833,664 bytes. Both text and multimodal offload are
+  disabled; eight CPU threads, one slot, 4096-token context. Server properties
+  confirm vision enabled. Native image preprocessing/token defaults; no
+  sample-dependent crop, threshold, resizing or prompt changes.
+- Fixed instruction: **"Transcribe the handwritten text in this image exactly
+  as written. Preserve spelling, capitalization, numbers, and punctuation; do
+  not correct mistakes. Return only the transcription, with no explanation,
+  added quotation marks, or Markdown."**
+- Temperature zero, seed zero, thinking disabled, maximum 128 output tokens,
+  no constrained candidate vocabulary and no prompt caching. One blank-image
+  warm-up. Each request contains only its image and the fixed instruction.
+- All predictions saved before opening labels. Preserve full requests and
+  responses; strip only outer whitespace for scoring. All 20 completions ended
+  normally, none hit the token limit, server logs show no truncation, and all
+  responses report zero cached prompt tokens.
+
+### Results
+
+| Measure | All 20 image lines | Shared 19 trajectory lines |
+|---|---:|---:|
+| Raw CER | **0.85% (6/710)** | **0.74% (5/672)** |
+| Raw WER | **4.51% (6/133)** | **3.94% (5/127)** |
+| Secondary lexical WER | **3.68% (5/136)** | **3.08% (4/130)** |
+| Exact lines, raw | **15/20** | **15/19** |
+| Exact lines, lexical | 16/20 | 16/19 |
+| Median line wall time | **1.182 s** | **1.186 s** |
+
+The shared comparison is substantially better than both the trajectory
+baseline (7.14% CER, 23.08% lexical WER) and TrOCR Base (9.97% CER, 10.77%
+lexical WER). It handles the numeric/currency lines exactly and preserves the
+deliberately absent period on line 04. It is the strongest measured recognizer
+in these experiments, not merely a better candidate selector.
+
+Five image lines differ from their references: one merged word boundary, one
+missing final period, two incorrect words, and the confirmed doubled-letter
+spelling slip normalized to the usual spelling. That final case remains an
+error under literal transcription even though the output is conventionally
+spelled. The prompt does not guarantee spelling preservation.
+
+Inference-server peak RSS: **5156.5 MiB (about 5.04 GiB)**. The Python client
+separately peaks at 27.5 MiB. These include load/warm-up high-water marks;
+per-line wall time includes image reading, request encoding, vision processing
+and text generation, excluding model load/warm-up. The CPU server is stopped
+after inference. The measured process footprint exceeds the PineNote's 4 GiB
+RAM; this configuration is a host accuracy reference, not an on-device fit.
+No quantization/runtime-memory optimization or ARM timing was attempted.
+
+### Effect on the architecture recommendation
+
+**This result changes the quality reference.** Gemma vision now deserves direct
+evaluation on fresh natural handwriting and a deployment-cost investigation.
+It should not be dismissed on the basis of the failed text-selection test.
+For a host-assisted recognition path, it is the leading measured candidate.
+For a self-contained PineNote, the small stroke recognizer remains the practical
+adaptation/decoder target; its prospective accuracy after those improvements
+is still unknown and must be compared against this stronger image baseline.
+Possible selective fallback or hybrid recognition should be measured rather
+than assumed to beat Gemma alone.
+
+One writer, 20 short prompted lines, one pass: these results do not establish
+unprompted-note accuracy, names/rare-word fidelity, page segmentation, an energy
+budget or adaptation benefit. Fresh held-out writing is still required.
+Private evidence: `pinenote/tools/handwriting/build/gemma-vision-20260927/`,
+including full 20-line and shared 19-line comparisons, model/projector hashes,
+requests, predictions, timings and server logs. Runner:
+`pinenote/tools/handwriting/evaluate-gemma-images.py`.
+
 ## Architecture assessment: recognition, decoding, then personalization
 
 At the operator's request, three independent agent reviews examined the linked
 [OCR-assisted character-BERT paper](https://www.techscience.com/cmc/v85n3/64172/html),
 our decoding implementation, and writer adaptation. The following is a research
 recommendation, not a measured new recognizer or a hardware qualification.
+The assessment preceded the direct-vision experiment above; that result makes
+Gemma the accuracy reference while leaving the small-model recommendations as
+the CPU/memory-constrained device track.
 
 ### What the linked paper establishes
 
