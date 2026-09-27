@@ -36,10 +36,12 @@ this lineage. **Unreleased** above it collects what has landed since.
   53 Info manuals; omissions are recorded explicitly. Long Info command lines
   can still wrap with display hyphens, so code-example fidelity is not signed
   off. The converter is unchanged.
-- **Generation trials refuse unsafe handoffs.** The target helper now stops
+- **Generation trials protect writable notebook data.** The target helper stops
   the optional note authority and requires its runtime cleanup, then verifies
-  `/` and mounted `/data` are read-only. Refusals restore prior mounts and
-  running services and record incomplete recovery. Executable host tests pass;
+  mounted `/data` is read-only. Root remount remains best-effort because other
+  services retain writable logs; root-writer quiescence is still unresolved.
+  Refusals restore and verify original mounts before restarting services,
+  and record incomplete recovery. Executable host tests pass;
   QEMU and device qualification remain. Older targets still need the manual
   authority stop, including rollback.
 - **Configuration checks cover the current reader.** The audit now runs in

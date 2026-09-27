@@ -322,15 +322,34 @@ Wi-Fi. It checks the authority's runtime directory was removed, rather
 than treating a stopped parent as proof its children and mounts are gone.
 An absent or already stopped service stays that way.
 
-Both `/` and an exactly mounted `/data` must be the original filesystems
-and read-only before handoff; the helper checks mount and superblock flags.
-A failed remount refuses the trial. An absent `/data` mount is supported
+Both `/` and an exactly mounted `/data` must retain their original identities.
+Mounted `/data` must become read-only before handoff; the helper checks mount
+and superblock flags, and a failed data remount refuses the trial.
+An absent `/data` mount is supported
 for the QEMU fixture; a directory named `/data` is not a mounted partition.
 This closes the old behavior that merely logged a busy data filesystem
 and continued toward kexec.
 
+**Root remount remains best-effort, as before this batch.** A first version
+made it mandatory without stopping the other root writers; review found that
+Shepherd's broker/orientation loggers and system logging retain writable
+descriptors under `/var/log` on the root filesystem. That would refuse normal
+updates. The scoped correction retains root mount-identity verification and
+prior-mode restoration but logs and continues if the original root stays
+writable. This is an unresolved baseline crash-consistency risk, not a claim
+that root was clean in past successful trials.
+
+**Follow-up: reversible root-writer quiescence before kexec.** Inventory actual
+root writers and writable mappings in the realized service composition;
+define service/logging shutdown and restoration order, including broker and
+orientation dependencies; retain handoff diagnostics off root; then prove
+successful root remount and failed-handoff recovery in QEMU with persistent
+writable descriptors/mappings before hardware qualification. Stopping two
+named services is not a complete root-writer strategy.
+
 Refusal recovery hands the armed watchdog back first, unloads the candidate,
-restores changed mounts before restarting writers, and restores only
+restores changed mounts before restarting writers, verifies the original
+mount identities and modes even when no remount was attempted, and restores only
 previously running services. Failed restoration is named in `last-trial`;
 it can leave a service stopped and must not be reported as full recovery.
 Executable host tests cover service-stop failures, surviving runtime state,

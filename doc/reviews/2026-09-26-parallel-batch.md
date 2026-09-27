@@ -9,7 +9,7 @@ engineering record, not a new hardware-status entry.
 
 | Task | Result | Remaining boundary |
 | --- | --- | --- |
-| Update teardown | Stop the optional note authority, require runtime cleanup and root/data read-only remounts, preserve prior state on refusal; executable failure-path tests | Updated QEMU systems and real filesystem/Shepherd/device qualification |
+| Update teardown | Stop the optional note authority, require runtime cleanup and data read-only remount, verify original mounts before restoring writers on refusal; executable failure-path tests | Root remount remains best-effort; root-writer quiescence and updated QEMU/device qualification remain |
 | Notebook | Persistent panel-contact ownership, one-pass inverted framebuffer paint, hover-aware washer hold, deferred page charges, acknowledged Refresh debt receipts, richer pen-up logs | Panel behavior and backlog cause |
 | Platform broker | Validated RGB565/XRGB8888 fallback rendering; MONOTONIC deadlines/evdev, BOOTTIME suspend duration; cancel RTC alarm on deep-mode refusal | Physical fallback appearance, evdev clock selection and ultra-suspend accounting; RTC writer serialization remains open |
 | Settings | Guile coupling audit, mutation checks and real Lua configuration parser fixtures; proposed durable enumerable API | General settings backend/schema migration/UI remain proposed |
@@ -26,7 +26,7 @@ their interfaces without combining them with unrelated migrations.
 Worker checks were reused where sources and inputs were unchanged. Parent
 integration also ran:
 
-- `update-path-check`: 203 executable trial assertions, ledger and structural
+- `update-path-check`: 267 executable trial assertions, ledger and structural
   checks. The worker additionally passed `reader-stop-check`, `uart-pick-check`
   and the existing authority control-structure test.
 - `platform-controls-check`, including byte-exact framebuffer, clock-step and
@@ -54,8 +54,12 @@ The ambient derivation check refused kernel 7.1.13 as intended. Repeating with
 `guix time-machine -C channels.scm -- repl -L .
 pinenote/tools/book-state-device/derive-system.scm` passed the exact kernel
 `334ljs8q` and gVisor `djgy782a` pins and lowered
-`/gnu/store/y43fbj5x91p7h2fkzbwld0jv0b00rqqh-system.drv` at the integrated source.
+`/gnu/store/9b3clfd0pxfrdz1s5dbr8miqjfpc10ww-system.drv` after the teardown
+review corrections.
 This is derivation evidence, not a realized system or closure check.
+The shipping flavor also lowers successfully with
+`make TIME_MACHINE=1 reader-system-drv` to
+`/gnu/store/nnkw30n7hqc7mx40jsp5sj6yag7brwml-system.drv`.
 
 QEMU update-flow was not rerun: cached system inputs contain older helpers and
 the harness correctly requires both generations to match the current helper.
@@ -76,8 +80,21 @@ and two stale statements (updated). The final performance/clarity review found
 no blockers. It confirmed that night-mode conversion is repaint-only (about
 5 MiB temporary storage for a full RGB565 page), washer holds park rather than
 poll, and neither broker nor teardown adds steady-state polling. These are
-source/host-test conclusions, not measured ARM performance. Final logic review
-is recorded below when complete.
+source/host-test conclusions, not measured ARM performance.
+
+The final logic review found two update-path defects: a new mandatory root
+remount left normal root log writers active, and a changed/missing data mount
+could be rejected before recovery bookkeeping was set, allowing writer restart
+and a false restoration-success message. The agreed correction keeps the
+approved strict `/data` scope, retains the baseline best-effort root remount
+with explicit diagnostics, and independently verifies original mount snapshots
+before restarting writers. Root-writer quiescence is a separate concrete
+follow-up in `doc/update-path.md`. A focused independent review of `7e561d6`
+executed disappearance/replacement, busy-root/busy-data, nonzero-remount with
+actual mode change, and originally-read-only fixtures. **Both findings are
+resolved; no new blocker remains in the scoped correction.** The initial
+snapshot was not a no-blocker result, and the final verdict retains the stated
+baseline root risk and QEMU/device qualification limits.
 
 ## Next acceptance sequence
 

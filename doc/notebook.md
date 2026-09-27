@@ -560,8 +560,9 @@ These are tracked here until each lands somewhere permanent.
 
 - **Kexec teardown gap: fixed in source, runtime qualification owed.**
   The 2026-09-26 helper stops the optional book-state authority after the
-  reader, requires runtime cleanup, and refuses if `/` or the real `/data`
-  cannot become read-only. Executable host tests cover refusal and partial
+  reader, requires runtime cleanup, and refuses if the real `/data`
+  cannot become read-only. Root remount remains best-effort; its other writers
+  need separate quiescence work. Host tests cover refusal and partial
   restoration. Older target helpers still require the manual authority
   stop; rollback runs the target's helper (`doc/update-path.md`).
 - **Ineffective negative assertions: fixed in source.** The negated greps

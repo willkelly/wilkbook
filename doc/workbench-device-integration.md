@@ -313,11 +313,12 @@ The operator-visible policy for a dirty local draft is a product choice (§10).
 At this investigation's baseline, `wilkbook-generation.lua` stopped only
 `reader-session` before radio-off and merely logged a failed `/data` read-only
 remount. The integrated September 26 batch now stops the optional note
-authority, checks runtime cleanup, and refuses failed root/data remounts
+authority, checks runtime cleanup, and refuses failed data remounts
 (`doc/update-path.md`, "Teardown hardening"). That change is host-tested;
 older target helpers still need the manual stop used in the hardware sessions.
-Workbench must extend that lifecycle for its own owners and authority, rather
-than add another unmanaged writer.
+Root remount remains best-effort: other root writers need a separate reversible
+shutdown strategy. Workbench must extend the data-writer lifecycle for its own
+owners and authority, rather than add another unmanaged writer.
 
 Before a Workbench generation can be trialled, integrate or explicitly perform
 host quiescence/stop of Workbench **and the existing note authority**, before

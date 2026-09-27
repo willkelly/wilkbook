@@ -625,7 +625,7 @@ gitignored `build/`, or the reader's static address.
   with the reader running, and the deployer said refused
   (`doc/update-path.md`).
 - **A kexec is a crash for every filesystem still mounted read-write**
-  (2026-09-04 night): the trial remounted `/` read-only before `kexec
+  (2026-09-04 night): the trial attempted to remount `/` read-only before `kexec
   -e` but left `/data` alone, so the next boot's journal recovery raced
   udev's probe (`incorrect ext4 checksum on /dev/mmcblk0p7`), `/data`
   came up on the library placeholder, and Wi-Fi never returned after a
@@ -637,9 +637,11 @@ gitignored `build/`, or the reader's static address.
   a failed data remount and stop only `reader-session`.** The opt-in note
   authority keeps SQLite writable while idle, so the September 11/26
   sessions stopped it manually. The 2026-09-26 source helper now stops that
-  authority, checks its runtime cleanup, and refuses unless `/` and the
-  mounted `/data` become read-only; failure restores prior mounts/services
-  and records incomplete restoration. This is host-tested, with runtime
+  authority, checks its runtime cleanup, and refuses unless the mounted
+  `/data` becomes read-only; failure verifies original mounts before restoring
+  prior services. Root remount remains best-effort: other root log writers
+  remain active, so clean-root quiescence is separate unresolved work. Recovery
+  records incomplete restoration. This is host-tested, with runtime
   qualification owed. A trial uses the TARGET's helper, so keep manually
   stopping the authority for older targets, including rollback
   (`doc/update-path.md`, "Teardown hardening").
