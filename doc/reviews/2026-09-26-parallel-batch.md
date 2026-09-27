@@ -121,7 +121,8 @@ to `9b3clfd0…` above, and the experimental reader was then **built** as
 `pinenote/tools/book-state-device/check-system-closure.sh` passed on that exact
 output. The kernel and gVisor remained the pinned existing outputs; the build
 assembled updated KOReader, helpers, manuals and service/profile objects.
-This candidate is not a numbered device generation and has not been booted.
+At this point the candidate was not yet a numbered generation. It was later
+trialled and promoted as generation 24; see the deployment entry below.
 
 The new hardware record also identifies held-button power cuts with writable
 filesystems and a requested short-hold shutdown menu under assessment. That
@@ -152,15 +153,24 @@ after its menu tap was corrected to the campaign's measured coordinates.
 The flash/global menu antecedent was unexercised; this is no issue-#14
 clearance. Replay evidence: `doc/artifacts/qemu-pageturn-batch-20260926/`.
 
-1. The experimental candidate is realized and closure-checked, and plain-reader
-   QEMU update-flow and full-log page-turn capture have passed. The actual
-   note-authority composition and deliberate busy-data refusal remain separate
-   runtime checks. A menu-trigger experiment still needs the antecedent
-   coverage absent from this campaign.
-2. In an authorized attended generation session, verify the authority releases
-   its SQLite/runtime resources and a failed data remount refuses handoff with
-   prior services restored. Use the target helper's identity; older rollback
-   targets retain the manual-stop requirement. Preserve the retained fallback.
+PR #87 was opened and main's docs-only PR #85 merged as `a24c5e1`, without
+changing the candidate derivation. On the operator's explicit trial invocation,
+the experimental candidate then became **generation 24**: 28/488 paths moved,
+the target helper automatically stopped the authority (bounded cleanup logged),
+passed its runtime/data gates, kexec'd, passed health and promoted. Postflight
+found the real data mount and all four services running, with no journal
+recovery in dmesg. Generation 23 remains the pinned recovery target;
+auto-suspend was restored to `enabled=1`. Operator acceptance remains pending,
+so this is not yet a completed third trial-period session. Hardware truth and
+identities: `doc/status.md`; evidence: `doc/artifacts/pinenote-gen24-batch-20260926/`.
+
+1. Plain-reader QEMU update-flow and full-log page-turn capture have passed.
+   A menu-trigger experiment still needs the antecedent coverage absent from
+   this campaign.
+2. The actual authority composition's normal handoff passed on 23 → 24.
+   Deliberate busy-data refusal and restoration in a real service composition
+   remain runtime checks. Older rollback targets retain the manual-stop
+   requirement; retain the pinned fallback.
 3. On the panel: panel-owned contact/dropout tails, night-mode full repaint and
    panel Close in both rotations, hover longer than the idle-wash threshold,
    page buttons near the debt ceiling, successful Refresh followed by new ink,

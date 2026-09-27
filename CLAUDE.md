@@ -427,15 +427,18 @@ gitignored `build/`, or the reader's static address.
   `[pinned]` in `list`; **proven on glass 2026-09-04 late**: from
   generation 17, `pin 16` and `pin 10`, then `prune --keep 1` deleted
   11–15 and kept both pins and DEFAULT; recipe in
-  `doc/hardware-deploy.md`). **wkelly's device is on generation 23**
+  `doc/hardware-deploy.md`). **wkelly's device is on generation 24**
   (2026-09-26): the experimental `book-state-device-reader` flavor, on
-  the USER_NS test kernel `334ljs8q`, carrying the pen notebook and the
-  `25cea98` note fixes. It got there by two cable-free kexec trials,
-  21→22 and 22→23, then an operator-run cold boot of 23 without UART
-  (the operator waived it). The ledger holds 10, 16 (= v0.3.0-prealpha),
+  the USER_NS test kernel `334ljs8q`, carrying PR #87's batch notebook,
+  broker and update-teardown fixes. The cable-free 23→24 trial passed health
+  and promoted; the target helper stopped the authority automatically.
+  Operator panel/suspend acceptance is pending. Generation 23 remains the
+  cold-booted, pinned recovery target. The ledger holds 10, 16 (= v0.3.0-prealpha),
   18 and 23 `[pinned]`, all four cold-booted, plus 19–22, which are
-  kexec-only (`doc/status.md` 2026-09-26). The cable-free trial period
-  stands at two successful sessions of three. Pause suspend (`enabled=0`) before a
+  kexec-only, and 24 (also kexec-only, not pinned; `doc/status.md` 2026-09-26).
+  Suspend was restored to `enabled=1`. The cable-free trial period stands at
+  two completed successful sessions; the third awaits operator acceptance.
+  Pause suspend (`enabled=0`) before a
   session and restore it after; a session that ends with `enabled=1` on
   battery leaves only the hourly backstop's 20 s ssh windows
   (`doc/device-access.md`).

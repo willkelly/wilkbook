@@ -1,0 +1,75 @@
+ROOT /dev/mmcblk0p6 ext4 rw,relatime
+DATA /dev/disk/by-partlabel/data ext4 rw,relatime
+SYSTEM /gnu/store/13cg7sg6waa3ahj3ivxhmkagia0kbwi1-system
+BOOT 7d56208a-02f4-4a1c-9386-ef61cd7d0859
+KERNEL /gnu/store/334ljs8qa7ww8vlg9gpv428bh8yjd1nx-linux-pinenote-book-execution-test-7.1.8-pinenote/Image
+DEFAULT 24
+EXTLINUX DEFAULT gen-24
+AUTOSUSPEND enabled=0
+gen-10  /gnu/store/ildcv9alm0isv2yfzmywba2i3mlhgcl9-system  [pinned]
+gen-16  /gnu/store/8czi9ry1z0gph24n5yls7iiy83y4n0b8-system  [pinned]
+gen-18  /gnu/store/rkw61vxxzifrqwz407gf751w70afignb-system  [pinned]
+gen-19  /gnu/store/8zcb8zq9x92sag30m68b6jww86xd1nq7-system
+gen-20  /gnu/store/7wyr4smys53jgf2cjrif0mm94n9cg11p-system
+gen-21  /gnu/store/iv1div034ka7qaa05rqm4vlr6g5lzsxs-system
+gen-22  /gnu/store/m2smi93nva83wv84ph9h57d93fhffxc3-system
+gen-23  /gnu/store/x3qqz8r52pdh7jzghzfj8l44gfrqkncb-system  [pinned]
+gen-24  /gnu/store/13cg7sg6waa3ahj3ivxhmkagia0kbwi1-system  [promoted]  [booted]
+current_system=/gnu/store/13cg7sg6waa3ahj3ivxhmkagia0kbwi1-system
+booted_generation=24
+broker_ready=true
+reader_started=true
+health=ok
+Status of reader-session:
+  It is running since 01:59:25 (31 seconds ago).
+  Main PID: 609
+  Command: /gnu/store/gxp2jlgdas3d00f82wk4f6166pi52ag9-koreader-bin-book-state-device-2026.03/lib/koreader/luajit reader.lua
+  It is enabled.
+  Provides: reader-session
+  Requires: udev user-processes orientation-bridge pinenote-platform-controls pinenote-waveform pinenote-ebc-direct-params pinenote-ebc-clut pinenote-dmc pinenote-library
+  Will be respawned.
+  Log file: /var/log/reader-session.log
+
+Recent messages (use '-n' to view more or less):
+  2026-09-27 01:59:29 ffi.findlib: k2pdfopt [2]
+  2026-09-27 01:59:29 ffi.load: libs/libk2pdfopt.so.2
+  2026-09-27 01:59:29 09/27/26-01:59:29 INFO  [pn-hint] disarm 
+  2026-09-27 01:59:29 09/27/26-01:59:29 INFO  [idlewasher] enabled debt_min=15 debt_max=60 idle_s=45 deepclean_idle_s=600 
+  2026-09-27 01:59:29 09/27/26-01:59:29 INFO  [pn-refresh] ui partial rect=0,0,1404,1872 dither=nil t=1790474369.808238 
+Status of pinenote-book-state-device:
+  It is running since 01:59:22 (34 seconds ago).
+  Main PID: 538
+  Command: /run/current-system/profile/bin/env -i HOME=/nonexistent LANG=C LC_ALL=C PATH=/run/current-system/profile/bin GUILE_AUTO_COMPILE=0 GUILE_LOAD_PATH=/gnu/store/p1c7mmca1rb6ncqvyc41z69d544lf6v8-wilkbook-book-state-device-modules:/gnu/store/4xw3152qj9xiap982l6jmfbknqrllvjz-wilkbook-book-state-device-supervisor/share/guile/site/3.0 GUILE_LOAD_COMPILED_PATH=/gnu/store/4xw3152qj9xiap982l6jmfbknqrllvjz-wilkbook-book-state-device-supervisor/lib/guile/3.0/site-ccache /gnu/store/4xw3152qj9xiap982l6jmfbknqrllvjz-wilkbook-book-state-device-supervisor/bin/guile --no-auto-compile -s /gnu/store/8saswi7ha6s8l9mnmslhlal2j4mwakck-wilkbook-book-state-device-authority
+  It is enabled.
+  Provides: pinenote-book-state-device
+  Requires: user-processes udev pinenote-book-state-device-ready
+  Will not be respawned.
+  Log file: /var/log/book-state-device.log
+
+Recent messages (use '-n' to view more or less):
+  2026-09-27 01:59:30 BOOK_STATE_DEVICE: ready socket=/run/wilkbook-book-state/control.sock database=/data/wilkbook/book-state/book-state-v1.sqlite
+Status of pinenote-platform-controls:
+  It is running since 01:59:23 (33 seconds ago).
+  Main PID: 568
+  Command: /gnu/store/a47h6h4pmkrdcnx8p4w733gkgbsb6kb1-koreader-bin-2026.03/lib/koreader/luajit /gnu/store/r38sd1q7yfdhypz0phb4fpsh4fanfzxf-pinenote-platform-controls-1.0.0/share/pinenote-platform-controls/pinenote-power-broker.lua
+  It is enabled.
+  Provides: pinenote-platform-controls
+  Requires: root-file-system udev user-processes
+  Will be respawned.
+  Log file: /var/log/pinenote-platform-controls.log
+Status of orientation-bridge:
+  It is running since 01:59:23 (33 seconds ago).
+  Main PID: 570
+  Command: /gnu/store/a47h6h4pmkrdcnx8p4w733gkgbsb6kb1-koreader-bin-2026.03/lib/koreader/luajit /gnu/store/72ak40x42gn3a9drzz3gavv8ypajh9qg-pinenote-orientation-bridge-0.1.0/share/pinenote-orientation/orientation-bridge.lua
+  It is enabled.
+  Provides: orientation-bridge
+  Requires: root-file-system udev user-processes
+  Will be respawned.
+  Log file: /var/log/wilkbook-orientation.log
+DATA MOUNT AND ERROR SIGNATURES
+[    3.158423] EXT4-fs (mmcblk0p6): mounted filesystem 70c4c247-d9b4-126d-ef67-4d4970c4c247 r/w with ordered data mode. Quota mode: none.
+[    7.613857] EXT4-fs (mmcblk0p7): mounted filesystem 73e99bbd-f1cc-4afb-8371-d7c8bf8dd009 r/w with ordered data mode. Quota mode: none.
+TRIAL HISTORY
+/run/wilkbook-book-state:
+total 0
+srw------- 1 root root 0 Sep 27 01:59 control.sock

@@ -3,6 +3,61 @@
 Last updated: 2026-09-26. Update protocol: add a dated entry at the top
 after every hardware session; entries are per-device/per-operator.
 
+## 2026-09-26 deployment (wkelly PineNote, generation 23 → 24, cable-free) — batch candidate healthy and promoted; operator acceptance pending
+
+**Invocation and scope.** The operator requested the PR and deployment, then
+directly said **`I invoke the trial!!`**. This was an attended cable-free trial
+with `WILKBOOK_UART` unset and a 600-second host deadline. PR #87 is open from
+`batch/integration`; source `a24c5e1` includes main through `a7445ad` (the held
+power-button assessment). No recovery intervention was needed.
+
+**Source and fallback:** generation 23, cold-booted and pinned,
+`/gnu/store/x3qqz8r52pdh7jzghzfj8l44gfrqkncb-system`, boot
+`6caf4f3c-4c06-439f-88aa-8acec877a8cf`. DEFAULT was 23 before registration and
+remained 23 after adding the candidate. Pins 10, 16 and 18 were retained too.
+Root was p6, the exact `/data` mount resolved to p7, source health passed,
+and battery was 100%. Auto-suspend was backed up and paused from `enabled=1`
+to `enabled=0`.
+
+**Target:** generation 24,
+`/gnu/store/13cg7sg6waa3ahj3ivxhmkagia0kbwi1-system`. The pinned derivation gate
+and exact-output closure check passed; the newer main merge changed no target
+derivation. Kernel `334ljs8q` and gVisor `djgy782a` stayed at their required
+pins. Target kernel Image SHA-256 `5435c84e…` matched generation 23's staged
+Image. Applicable host/native tests and the 40-check plain-reader QEMU update
+run were reused; the full-log QEMU page-turn campaign also passed. The
+experimental authority's normal handoff is newly exercised below; deliberate
+busy-data refusal remains unrun in a real service composition.
+
+**Trial and result:**
+- The existing deployer, run through the pinned Guix PATH with KEEP=8,
+  transferred **28 of 488 closure paths**, registered 24 and completed the
+  kexec/health/promote flow with exit 0.
+- The target helper stopped the authority automatically: Shepherd logged
+  stopping at 01:58:55 UTC and stopped at 01:59:07; the authority logged
+  `stopped after bounded cleanup` at 01:59:07. It was not manually stopped.
+  Handoff passed the helper's runtime-directory cleanup and strict mounted
+  `/data` read-only gates. Busy-data refusal/recovery was not injected.
+- New boot `7d56208a-02f4-4a1c-9386-ef61cd7d0859` ran the expected system and
+  kernel. Both the deployer's health check and a separate postflight passed.
+  Reader, authority, broker and orientation bridge were running. The authority
+  became ready at 01:59:30 and reopened its writable SQLite database.
+- p6 and p7 mounted read-write; dmesg showed their mount lines without journal
+  recovery or the checked WARNING/BUG/Oops/runtime-PM signatures. This does
+  not establish clean-root kexec: root remount remains best-effort.
+- Both `gen-default` and extlinux DEFAULT now name **24**. Nothing was pruned;
+  generation 23 remains pinned. Generation 24 is **kexec-only and not pinned**;
+  this trial does not qualify its device tree.
+
+**Cleanup and outstanding operator checks:** the original auto-suspend file
+was restored byte-for-byte and read back as **`enabled=1`** on the new boot.
+Backup: `/data/wilkbook/diagnostic-backups/gen23-before-batch-gen24-20260926/`.
+Panel/notebook, persistence/restart and suspend/fallback checks are awaiting
+the operator. This is not yet the third successful trial-period session:
+the recorded count stays at two completed sessions until acceptance is done.
+The third success requires the policy review before a new cable-free session.
+Evidence: `doc/artifacts/pinenote-gen24-batch-20260926/`.
+
 ## 2026-09-26 later (wkelly PineNote, generation 23, SSH inspection) — idle authority and root writers observed
 
 The operator granted exclusive SSH access; after unlocking the host SSH agent,
