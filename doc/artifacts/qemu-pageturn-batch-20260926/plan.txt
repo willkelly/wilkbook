@@ -1,0 +1,599 @@
+# page-turn / menu campaign (issue #14 offline reproduction)
+WAIT 5
+MARK campaign-begin
+MARK steady-fwd
+TAP 944 316
+WAIT 3.5
+MARK steady-fwd
+TAP 937 301
+WAIT 3.5
+MARK steady-fwd
+TAP 923 291
+WAIT 3.5
+MARK steady-fwd
+TAP 906 315
+WAIT 3.5
+MARK steady-fwd
+TAP 923 292
+WAIT 1.6
+MARK steady-fwd
+TAP 969 263
+WAIT 3.5
+MARK steady-fwd
+TAP 935 327
+WAIT 3.5
+MARK steady-back
+TAP 937 1232
+WAIT 3.5
+MARK menu-open
+TAP 145 723
+WAIT 3.0
+MARK menu-dismiss
+TAP 934 1262
+WAIT 1.0
+MARK postmenu-back
+TAP 901 1218
+WAIT 0.9
+MARK postmenu-back
+TAP 967 1216
+WAIT 0.9
+MARK postmenu-back
+TAP 940 1256
+WAIT 0.9
+MARK postmenu-back
+TAP 897 1264
+WAIT 0.9
+MARK steady-fwd
+TAP 897 334
+WAIT 3.5
+MARK steady-fwd
+TAP 959 331
+WAIT 3.5
+MARK steady-fwd
+TAP 896 312
+WAIT 1.6
+MARK steady-fwd
+TAP 939 296
+WAIT 3.5
+MARK menu-open
+TAP 123 726
+WAIT 3.0
+MARK menu-dismiss
+TAP 907 1231
+WAIT 1.0
+MARK postmenu-fwd
+TAP 926 286
+WAIT 0.9
+MARK postmenu-fwd
+TAP 953 292
+WAIT 0.9
+MARK postmenu-fwd
+TAP 966 260
+WAIT 0.9
+MARK postmenu-back
+TAP 960 1239
+WAIT 0.9
+MARK steady-back
+TAP 949 1243
+WAIT 3.5
+MARK steady-back
+TAP 921 1268
+WAIT 3.5
+MARK steady-back
+TAP 920 1234
+WAIT 3.5
+MARK steady-back
+TAP 948 1270
+WAIT 3.5
+MARK menu-open
+TAP 123 695
+WAIT 3.0
+MARK menu-dismiss
+TAP 955 1286
+WAIT 1.0
+MARK postmenu-fwd
+TAP 898 304
+WAIT 0.9
+MARK postmenu-fwd
+TAP 952 290
+WAIT 0.9
+MARK postmenu-fwd
+TAP 947 320
+WAIT 0.9
+MARK postmenu-fwd
+TAP 904 315
+WAIT 0.9
+MARK steady-fwd
+TAP 959 264
+WAIT 3.5
+MARK steady-fwd
+TAP 945 326
+WAIT 1.6
+MARK steady-back
+TAP 948 1213
+WAIT 3.5
+MARK steady-back
+TAP 958 1247
+WAIT 3.5
+MARK menu-open
+TAP 140 716
+WAIT 3.0
+MARK menu-dismiss
+TAP 964 1265
+WAIT 1.0
+MARK postmenu-back
+TAP 903 1240
+WAIT 0.9
+MARK postmenu-back
+TAP 927 1260
+WAIT 0.9
+MARK postmenu-back
+TAP 907 1226
+WAIT 0.9
+MARK postmenu-fwd
+TAP 900 290
+WAIT 0.9
+MARK steady-fwd
+TAP 965 305
+WAIT 3.5
+MARK steady-fwd
+TAP 953 268
+WAIT 3.5
+MARK steady-fwd
+TAP 967 260
+WAIT 3.5
+MARK steady-fwd
+TAP 944 264
+WAIT 1.6
+MARK menu-open
+TAP 171 682
+WAIT 3.0
+MARK menu-dismiss
+TAP 963 1253
+WAIT 1.0
+MARK postmenu-fwd
+TAP 935 325
+WAIT 0.9
+MARK postmenu-fwd
+TAP 923 335
+WAIT 0.9
+MARK postmenu-back
+TAP 962 1221
+WAIT 0.9
+MARK postmenu-back
+TAP 908 1270
+WAIT 0.9
+MARK steady-back
+TAP 953 1283
+WAIT 1.6
+MARK steady-back
+TAP 910 1232
+WAIT 3.5
+MARK steady-back
+TAP 960 1263
+WAIT 3.5
+MARK steady-back
+TAP 935 1273
+WAIT 3.5
+MARK menu-open
+TAP 182 739
+WAIT 3.0
+MARK menu-dismiss
+TAP 953 1255
+WAIT 1.0
+MARK postmenu-fwd
+TAP 960 317
+WAIT 0.9
+MARK postmenu-fwd
+TAP 969 281
+WAIT 0.9
+MARK postmenu-fwd
+TAP 960 302
+WAIT 0.9
+MARK postmenu-fwd
+TAP 961 304
+WAIT 0.9
+MARK steady-fwd
+TAP 945 327
+WAIT 3.5
+MARK steady-fwd
+TAP 896 270
+WAIT 3.5
+MARK steady-back
+TAP 924 1276
+WAIT 1.6
+MARK steady-back
+TAP 944 1250
+WAIT 3.5
+MARK menu-open
+TAP 110 712
+WAIT 3.0
+MARK menu-dismiss
+TAP 937 1226
+WAIT 1.0
+MARK postmenu-back
+TAP 900 1223
+WAIT 0.9
+MARK postmenu-back
+TAP 896 1215
+WAIT 0.9
+MARK postmenu-back
+TAP 972 1223
+WAIT 0.9
+MARK postmenu-fwd
+TAP 898 272
+WAIT 0.9
+MARK steady-fwd
+TAP 926 309
+WAIT 3.5
+MARK steady-fwd
+TAP 963 269
+WAIT 3.5
+MARK steady-fwd
+TAP 942 305
+WAIT 3.5
+MARK steady-fwd
+TAP 909 314
+WAIT 3.5
+MARK menu-open
+TAP 184 716
+WAIT 3.0
+MARK menu-dismiss
+TAP 963 1266
+WAIT 1.0
+MARK postmenu-fwd
+TAP 897 274
+WAIT 0.9
+MARK postmenu-fwd
+TAP 929 285
+WAIT 0.9
+MARK postmenu-back
+TAP 898 1210
+WAIT 0.9
+MARK postmenu-back
+TAP 896 1241
+WAIT 0.9
+MARK steady-back
+TAP 954 1232
+WAIT 3.5
+MARK steady-back
+TAP 905 1217
+WAIT 1.6
+MARK steady-back
+TAP 945 1268
+WAIT 3.5
+MARK steady-back
+TAP 901 1233
+WAIT 3.5
+MARK menu-open
+TAP 151 738
+WAIT 3.0
+MARK menu-dismiss
+TAP 944 1231
+WAIT 1.0
+MARK postmenu-fwd
+TAP 907 293
+WAIT 0.9
+MARK postmenu-fwd
+TAP 936 280
+WAIT 0.9
+MARK postmenu-fwd
+TAP 959 324
+WAIT 0.9
+MARK postmenu-fwd
+TAP 933 283
+WAIT 0.9
+MARK steady-fwd
+TAP 905 337
+WAIT 3.5
+MARK steady-fwd
+TAP 932 309
+WAIT 3.5
+MARK steady-back
+TAP 898 1267
+WAIT 3.5
+MARK steady-back
+TAP 975 1235
+WAIT 1.6
+MARK menu-open
+TAP 187 679
+WAIT 3.0
+MARK menu-dismiss
+TAP 961 1235
+WAIT 1.0
+MARK postmenu-back
+TAP 910 1241
+WAIT 0.9
+MARK postmenu-back
+TAP 969 1257
+WAIT 0.9
+MARK postmenu-back
+TAP 949 1216
+WAIT 0.9
+MARK postmenu-fwd
+TAP 975 270
+WAIT 0.9
+MARK steady-fwd
+TAP 959 268
+WAIT 1.6
+MARK steady-fwd
+TAP 918 293
+WAIT 3.5
+MARK steady-fwd
+TAP 922 294
+WAIT 3.5
+MARK steady-fwd
+TAP 975 285
+WAIT 3.5
+MARK menu-open
+TAP 131 736
+WAIT 3.0
+MARK menu-dismiss
+TAP 946 1287
+WAIT 1.0
+MARK postmenu-fwd
+TAP 973 287
+WAIT 0.9
+MARK postmenu-fwd
+TAP 965 283
+WAIT 0.9
+MARK postmenu-back
+TAP 920 1263
+WAIT 0.9
+MARK postmenu-back
+TAP 922 1265
+WAIT 0.9
+MARK steady-back
+TAP 905 1233
+WAIT 3.5
+MARK steady-back
+TAP 968 1219
+WAIT 3.5
+MARK steady-back
+TAP 968 1231
+WAIT 1.6
+MARK steady-back
+TAP 915 1273
+WAIT 3.5
+MARK menu-open
+TAP 132 692
+WAIT 3.0
+MARK menu-dismiss
+TAP 926 1211
+WAIT 1.0
+MARK postmenu-fwd
+TAP 922 288
+WAIT 0.9
+MARK postmenu-fwd
+TAP 971 265
+WAIT 0.9
+MARK postmenu-fwd
+TAP 949 325
+WAIT 0.9
+MARK postmenu-fwd
+TAP 958 329
+WAIT 0.9
+MARK steady-fwd
+TAP 910 293
+WAIT 3.5
+MARK steady-fwd
+TAP 929 265
+WAIT 3.5
+MARK steady-back
+TAP 954 1278
+WAIT 3.5
+MARK steady-back
+TAP 966 1250
+WAIT 3.5
+MARK menu-open
+TAP 120 669
+WAIT 3.0
+MARK menu-dismiss
+TAP 971 1233
+WAIT 1.0
+MARK postmenu-back
+TAP 969 1282
+WAIT 0.9
+MARK postmenu-back
+TAP 902 1254
+WAIT 0.9
+MARK postmenu-back
+TAP 949 1284
+WAIT 0.9
+MARK postmenu-fwd
+TAP 897 298
+WAIT 0.9
+MARK steady-fwd
+TAP 946 262
+WAIT 3.5
+MARK steady-fwd
+TAP 949 292
+WAIT 1.6
+MARK steady-fwd
+TAP 915 264
+WAIT 3.5
+MARK steady-fwd
+TAP 898 301
+WAIT 3.5
+MARK menu-open
+TAP 175 731
+WAIT 3.0
+MARK menu-dismiss
+TAP 941 1256
+WAIT 1.0
+MARK postmenu-fwd
+TAP 936 336
+WAIT 0.9
+MARK postmenu-fwd
+TAP 922 329
+WAIT 0.9
+MARK postmenu-back
+TAP 950 1284
+WAIT 0.9
+MARK postmenu-back
+TAP 953 1259
+WAIT 0.9
+MARK steady-back
+TAP 956 1269
+WAIT 3.5
+MARK steady-back
+TAP 935 1248
+WAIT 3.5
+MARK steady-back
+TAP 961 1238
+WAIT 3.5
+MARK steady-back
+TAP 958 1220
+WAIT 1.6
+MARK menu-open
+TAP 151 670
+WAIT 3.0
+MARK menu-dismiss
+TAP 926 1246
+WAIT 1.0
+MARK postmenu-fwd
+TAP 905 293
+WAIT 0.9
+MARK postmenu-fwd
+TAP 918 321
+WAIT 0.9
+MARK postmenu-fwd
+TAP 958 313
+WAIT 0.9
+MARK postmenu-fwd
+TAP 946 324
+WAIT 0.9
+MARK steady-fwd
+TAP 932 305
+WAIT 1.6
+MARK steady-fwd
+TAP 904 285
+WAIT 3.5
+MARK steady-back
+TAP 932 1210
+WAIT 3.5
+MARK steady-back
+TAP 924 1235
+WAIT 3.5
+MARK menu-open
+TAP 132 701
+WAIT 3.0
+MARK menu-dismiss
+TAP 947 1237
+WAIT 1.0
+MARK postmenu-back
+TAP 933 1222
+WAIT 0.9
+MARK postmenu-back
+TAP 945 1242
+WAIT 0.9
+MARK postmenu-back
+TAP 938 1254
+WAIT 0.9
+MARK postmenu-fwd
+TAP 909 267
+WAIT 0.9
+MARK steady-fwd
+TAP 911 289
+WAIT 3.5
+MARK steady-fwd
+TAP 964 304
+WAIT 3.5
+MARK steady-fwd
+TAP 911 278
+WAIT 1.6
+MARK steady-fwd
+TAP 943 333
+WAIT 3.5
+MARK menu-open
+TAP 167 719
+WAIT 3.0
+MARK menu-dismiss
+TAP 958 1231
+WAIT 1.0
+MARK postmenu-fwd
+TAP 911 318
+WAIT 0.9
+MARK postmenu-fwd
+TAP 941 335
+WAIT 0.9
+MARK postmenu-back
+TAP 964 1223
+WAIT 0.9
+MARK postmenu-back
+TAP 963 1210
+WAIT 0.9
+MARK steady-back
+TAP 932 1281
+WAIT 3.5
+MARK steady-back
+TAP 955 1223
+WAIT 3.5
+MARK steady-back
+TAP 930 1244
+WAIT 3.5
+MARK steady-back
+TAP 959 1217
+WAIT 3.5
+MARK menu-open
+TAP 110 691
+WAIT 3.0
+MARK menu-dismiss
+TAP 945 1216
+WAIT 1.0
+MARK postmenu-fwd
+TAP 920 334
+WAIT 0.9
+MARK postmenu-fwd
+TAP 909 290
+WAIT 0.9
+MARK postmenu-fwd
+TAP 907 305
+WAIT 0.9
+MARK postmenu-fwd
+TAP 953 287
+WAIT 0.9
+MARK steady-fwd
+TAP 937 315
+WAIT 3.5
+MARK steady-fwd
+TAP 935 310
+WAIT 1.6
+MARK steady-back
+TAP 935 1251
+WAIT 3.5
+MARK steady-back
+TAP 904 1265
+WAIT 3.5
+MARK menu-open
+TAP 180 739
+WAIT 3.0
+MARK menu-dismiss
+TAP 927 1226
+WAIT 1.0
+MARK postmenu-back
+TAP 919 1274
+WAIT 0.9
+MARK postmenu-back
+TAP 934 1245
+WAIT 0.9
+MARK postmenu-back
+TAP 937 1287
+WAIT 0.9
+MARK postmenu-fwd
+TAP 953 275
+WAIT 0.9
+MARK steady-fwd
+TAP 898 321
+WAIT 3.5
+MARK steady-fwd
+TAP 915 277
+WAIT 3.5
+MARK steady-fwd
+TAP 926 305
+WAIT 3.5
+MARK steady-fwd
+TAP 975 302
+WAIT 1.6
+MARK campaign-end
+WAIT 6

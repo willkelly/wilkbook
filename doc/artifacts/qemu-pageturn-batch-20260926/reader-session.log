@@ -1,0 +1,759 @@
+2026-09-27 01:39:42 ---------------------------------------------
+2026-09-27 01:39:42                 launching...
+2026-09-27 01:39:42   _  _____  ____                _
+2026-09-27 01:39:42  | |/ / _ \|  _ \ ___  __ _  __| | ___ _ __
+2026-09-27 01:39:42  | ' / | | | |_) / _ \/ _` |/ _` |/ _ \ '__|
+2026-09-27 01:39:42  | . \ |_| |  _ <  __/ (_| | (_| |  __/ |
+2026-09-27 01:39:42  |_|\_\___/|_| \_\___|\__,_|\__,_|\___|_|
+2026-09-27 01:39:42 
+2026-09-27 01:39:42  It's a scroll... It's a codex... It's KOReader!
+2026-09-27 01:39:42 
+2026-09-27 01:39:42  [*] Current time: 09/27/26-01:39:42
+2026-09-27 01:39:42 has monolibtic? no (libs/libkoreader-monolibtic.so: cannot open shared object file: No such file or directory)
+2026-09-27 01:39:42 lib_search_path: libs/?
+2026-09-27 01:39:42 lib_basic_format: lib%s.so
+2026-09-27 01:39:43 lib_version_format: lib%s.so.%s
+2026-09-27 01:39:43  [*] Version: v2026.03
+2026-09-27 01:39:43 
+2026-09-27 01:39:43 ffi.load: rt.so.1 (RTLD_GLOBAL)
+2026-09-27 01:39:43 ffi.findlib: utf8proc [3]
+2026-09-27 01:39:43 ffi.load: libs/libutf8proc.so.3
+2026-09-27 01:39:43 ffi.findlib: blitbuffer
+2026-09-27 01:39:43 ffi.load: libs/libblitbuffer.so
+2026-09-27 01:39:43 ffi.findlib: archive [13]
+2026-09-27 01:39:43 ffi.load: libs/libarchive.so.13
+2026-09-27 01:39:43 09/27/26-01:39:43 WARN  PineNote: no DRM card with DRIVER=rockchip-ebc; full refresh disabled 
+2026-09-27 01:39:43 09/27/26-01:39:43 INFO  PineNote: hint plane unreachable (no card) 
+2026-09-27 01:39:43 09/27/26-01:39:43 INFO  PineNote: reading hint 32 
+2026-09-27 01:39:43 09/27/26-01:39:43 INFO  PineNote: flash_area_fraction=0.98 
+2026-09-27 01:39:43 09/27/26-01:39:43 INFO  PineNote(virt): tablet 32767x32767 -> screen 1872x1404 (MT synthesis) 
+2026-09-27 01:39:43 09/27/26-01:39:43 INFO  initializing for device PineNote 
+2026-09-27 01:39:43 09/27/26-01:39:43 INFO  framebuffer resolution: {
+2026-09-27 01:39:43   h = 1404,
+2026-09-27 01:39:43   w = 1872
+2026-09-27 01:39:43 } --[[table: 0x058fc9162170]] 
+2026-09-27 01:39:43 ffi.findlib: wrap-mupdf
+2026-09-27 01:39:43 ffi.load: libs/libwrap-mupdf.so
+2026-09-27 01:39:43 ffi.findlib: sqlite3 [0]
+2026-09-27 01:39:43 ffi.load: libs/libsqlite3.so.0
+2026-09-27 01:39:43 09/27/26-01:39:43 INFO  Performing one-time migration for 20200421 
+2026-09-27 01:39:43 09/27/26-01:39:43 WARN  os.remove: /root/.config/koreader/cache/fontlist/fontinfo.dat: No such file or directory 
+2026-09-27 01:39:43 ffi.findlib: freetype [6]
+2026-09-27 01:39:43 ffi.load: libs/libfreetype.so.6
+2026-09-27 01:39:43 ffi.findlib: harfbuzz [0]
+2026-09-27 01:39:43 ffi.load: libs/libharfbuzz.so.0
+2026-09-27 01:39:43 ffi.findlib: zstd [1]
+2026-09-27 01:39:43 ffi.load: libs/libzstd.so.1
+2026-09-27 01:39:43 09/27/26-01:39:43 INFO  /root/.config/koreader/cache/fontlist/fontinfo.dat fopen: No such file or directory -> initializing it 
+2026-09-27 01:39:43 09/27/26-01:39:43 INFO  Performing one-time migration for 20210306 (1/2) 
+2026-09-27 01:39:43 09/27/26-01:39:43 INFO  Performing one-time migration for 20210306 (2/2) 
+2026-09-27 01:39:43 09/27/26-01:39:43 INFO  Performing one-time migration for 20210330 
+2026-09-27 01:39:43 ffi.findlib: leptonica [6]
+2026-09-27 01:39:43 ffi.load: libs/libleptonica.so.6
+2026-09-27 01:39:43 ffi.findlib: k2pdfopt [2]
+2026-09-27 01:39:43 ffi.load: libs/libk2pdfopt.so.2
+2026-09-27 01:39:45 off
+2026-09-27 01:39:47 off
+2026-09-27 01:39:49 pinenote-wifi: missing /data/wifi/wlan0.conf
+2026-09-27 01:39:49 09/27/26-01:39:49 INFO  Performing one-time migration for 20210404 
+2026-09-27 01:39:49 09/27/26-01:39:49 INFO  Performing one-time migration for 20210409 
+2026-09-27 01:39:49 09/27/26-01:39:49 WARN  os.rename: /root/.config/koreader/cache/fontinfo.dat: No such file or directory 
+2026-09-27 01:39:49 09/27/26-01:39:49 INFO  Performing one-time migration for 20210412 
+2026-09-27 01:39:49 09/27/26-01:39:49 WARN  os.rename: /root/.config/koreader/cache/calibre-libraries.lua: No such file or directory 
+2026-09-27 01:39:49 09/27/26-01:39:49 WARN  os.rename: /root/.config/koreader/cache/calibre-books.dat: No such file or directory 
+2026-09-27 01:39:49 09/27/26-01:39:49 INFO  Performing one-time migration for 20210414 
+2026-09-27 01:39:49 09/27/26-01:39:49 WARN  os.remove: /root/.config/koreader/cache/calibre/books.dat: No such file or directory 
+2026-09-27 01:39:49 09/27/26-01:39:49 INFO  Performing one-time migration for 20210503 & 20210508 
+2026-09-27 01:39:49 09/27/26-01:39:49 INFO  Performing one-time migration for 20210518 
+2026-09-27 01:39:49 09/27/26-01:39:49 INFO  Performing one-time migration for 20210521 
+2026-09-27 01:39:49 09/27/26-01:39:49 INFO  Performing one-time migration for 20210531 
+2026-09-27 01:39:49 09/27/26-01:39:49 INFO  Performing one-time migration for 20210622 
+2026-09-27 01:39:49 09/27/26-01:39:49 WARN  os.remove: /root/.config/koreader/cache/fontlist/fontinfo.dat: No such file or directory 
+2026-09-27 01:39:49 09/27/26-01:39:49 INFO  Performing one-time migration for 20210629 
+2026-09-27 01:39:49 09/27/26-01:39:49 INFO  Performing one-time migration for 20210715 
+2026-09-27 01:39:49 09/27/26-01:39:49 INFO  Performing one-time migration for 20210720 
+2026-09-27 01:39:49 09/27/26-01:39:49 INFO  Performing one-time migration for 20210831 
+2026-09-27 01:39:49 09/27/26-01:39:49 INFO  Performing one-time migration for 20210925 
+2026-09-27 01:39:49 09/27/26-01:39:49 INFO  Performing one-time migration for 20220116 
+2026-09-27 01:39:49 09/27/26-01:39:49 INFO  Performing one-time migration for 20220205 
+2026-09-27 01:39:49 09/27/26-01:39:49 INFO  Performing one-time migration for 20220819 
+2026-09-27 01:39:49 09/27/26-01:39:49 INFO  Performing one-time migration for 20220914 
+2026-09-27 01:39:49 09/27/26-01:39:49 WARN  os.remove: /root/.config/koreader/cache/fontlist/fontinfo.dat: No such file or directory 
+2026-09-27 01:39:49 09/27/26-01:39:49 INFO  Performing one-time migration for 20220930 
+2026-09-27 01:39:49 09/27/26-01:39:49 WARN  loadfile: cannot open /root/.config/koreader/defaults.persistent.lua: No such file or directory 
+2026-09-27 01:39:49 09/27/26-01:39:49 WARN  os.rename: /root/.config/koreader/defaults.persistent.lua: No such file or directory 
+2026-09-27 01:39:49 09/27/26-01:39:49 INFO  Performing one-time migration for 20221027 
+2026-09-27 01:39:49 09/27/26-01:39:49 INFO  Performing one-time migration for 20230531 
+2026-09-27 01:39:49 09/27/26-01:39:49 INFO  Performing one-time migration for 20230703 
+2026-09-27 01:39:49 09/27/26-01:39:49 INFO  Performing one-time migration for 20230707 
+2026-09-27 01:39:49 09/27/26-01:39:49 INFO  Performing one-time migration for 20230710 
+2026-09-27 01:39:49 09/27/26-01:39:49 INFO  Performing one-time migration for 20230731 
+2026-09-27 01:39:49 09/27/26-01:39:49 INFO  Performing one-time migration for 20230802 
+2026-09-27 01:39:49 09/27/26-01:39:49 INFO  statistics.sqlite3 not found. 
+2026-09-27 01:39:49 09/27/26-01:39:49 INFO  Performing one-time migration for 20230901 
+2026-09-27 01:39:49 09/27/26-01:39:49 INFO  Performing one-time migration for 20231217 
+2026-09-27 01:39:49 09/27/26-01:39:49 INFO  Performing one-time migration for 20240408 
+2026-09-27 01:39:49 09/27/26-01:39:49 INFO  Performing one-time migration for 20240616 
+2026-09-27 01:39:49 09/27/26-01:39:49 WARN  os.remove: /root/.config/koreader/cache/fontlist/fontinfo.dat: No such file or directory 
+2026-09-27 01:39:49 09/27/26-01:39:49 INFO  Performing one-time migration for 20240731 
+2026-09-27 01:39:49 09/27/26-01:39:49 INFO  Performing one-time migration for 20240911 
+2026-09-27 01:39:49 09/27/26-01:39:49 INFO  Performing one-time migration for 20240914 
+2026-09-27 01:39:49 09/27/26-01:39:49 INFO  Performing one-time migration for 20240915 
+2026-09-27 01:39:49 09/27/26-01:39:49 INFO  Performing one-time migration for 20240928 
+2026-09-27 01:39:49 09/27/26-01:39:49 INFO  Performing one-time migration for 20241123 
+2026-09-27 01:39:49 09/27/26-01:39:49 INFO  Performing one-time migration for 20241207 
+2026-09-27 01:39:49 09/27/26-01:39:49 INFO  Performing one-time migration for 20241208 
+2026-09-27 01:39:49 09/27/26-01:39:49 INFO  Performing one-time migration for 20241228 
+2026-09-27 01:39:49 09/27/26-01:39:49 INFO  Performing one-time migration for 20250207 
+2026-09-27 01:39:49 09/27/26-01:39:49 INFO  Performing one-time migration for 20250302 
+2026-09-27 01:39:49 09/27/26-01:39:49 INFO  Performing one-time migration for 20250318 
+2026-09-27 01:39:49 09/27/26-01:39:49 INFO  Performing one-time migration for 20250405 
+2026-09-27 01:39:49 09/27/26-01:39:49 INFO  Performing one-time migration for 20250601 
+2026-09-27 01:39:49 09/27/26-01:39:49 INFO  Performing one-time migration for 20250914 
+2026-09-27 01:39:49 09/27/26-01:39:49 INFO  Performing one-time migration for 20250929 
+2026-09-27 01:39:49 09/27/26-01:39:49 INFO  Performing one-time migration for 20260306 
+2026-09-27 01:39:49 09/27/26-01:39:49 INFO  Looking for plugins in directory: plugins 
+2026-09-27 01:39:49 09/27/26-01:39:49 INFO  Looking for plugins in directory: /root/.config/koreader/plugins/ 
+2026-09-27 01:39:50 09/27/26-01:39:50 WARN  No gestures file or invalid gestures file found, copying defaults 
+2026-09-27 01:39:50 09/27/26-01:39:50 INFO  [idlewasher] enabled debt_min=15 debt_max=60 idle_s=45 deepclean_idle_s=600 
+2026-09-27 01:39:52 off
+2026-09-27 01:39:52 09/27/26-01:39:52 INFO  [pn-refresh] ui partial rect=0,0,1404,1872 dither=nil t=1790473192.309031 
+2026-09-27 01:39:54 off
+2026-09-27 01:39:56 off
+2026-09-27 01:39:58 off
+2026-09-27 01:40:01 off
+2026-09-27 01:40:03 off
+2026-09-27 01:40:05 off
+2026-09-27 01:40:07 off
+2026-09-27 01:40:09 off
+2026-09-27 01:40:11 off
+2026-09-27 01:40:14 off
+2026-09-27 01:40:16 off
+2026-09-27 01:40:18 off
+2026-09-27 01:40:20 off
+2026-09-27 01:40:23 off
+2026-09-27 01:40:25 off
+2026-09-27 01:40:28 ---------------------------------------------
+2026-09-27 01:40:28                 launching...
+2026-09-27 01:40:28   _  _____  ____                _
+2026-09-27 01:40:28  | |/ / _ \|  _ \ ___  __ _  __| | ___ _ __
+2026-09-27 01:40:28  | ' / | | | |_) / _ \/ _` |/ _` |/ _ \ '__|
+2026-09-27 01:40:28  | . \ |_| |  _ <  __/ (_| | (_| |  __/ |
+2026-09-27 01:40:28  |_|\_\___/|_| \_\___|\__,_|\__,_|\___|_|
+2026-09-27 01:40:28 
+2026-09-27 01:40:28  It's a scroll... It's a codex... It's KOReader!
+2026-09-27 01:40:28 
+2026-09-27 01:40:28  [*] Current time: 09/27/26-01:40:28
+2026-09-27 01:40:28 has monolibtic? no (libs/libkoreader-monolibtic.so: cannot open shared object file: No such file or directory)
+2026-09-27 01:40:28 lib_search_path: libs/?
+2026-09-27 01:40:28 lib_basic_format: lib%s.so
+2026-09-27 01:40:28 lib_version_format: lib%s.so.%s
+2026-09-27 01:40:28  [*] Version: v2026.03
+2026-09-27 01:40:28 
+2026-09-27 01:40:28 ffi.load: rt.so.1 (RTLD_GLOBAL)
+2026-09-27 01:40:28 ffi.findlib: utf8proc [3]
+2026-09-27 01:40:28 ffi.load: libs/libutf8proc.so.3
+2026-09-27 01:40:28 ffi.findlib: blitbuffer
+2026-09-27 01:40:28 ffi.load: libs/libblitbuffer.so
+2026-09-27 01:40:28 ffi.findlib: archive [13]
+2026-09-27 01:40:28 ffi.load: libs/libarchive.so.13
+2026-09-27 01:40:28 09/27/26-01:40:28 WARN  PineNote: no DRM card with DRIVER=rockchip-ebc; full refresh disabled 
+2026-09-27 01:40:28 09/27/26-01:40:28 INFO  PineNote: hint plane unreachable (no card) 
+2026-09-27 01:40:28 09/27/26-01:40:28 INFO  PineNote: reading hint 32 
+2026-09-27 01:40:28 09/27/26-01:40:28 INFO  PineNote: flash_area_fraction=0.98 
+2026-09-27 01:40:28 09/27/26-01:40:28 INFO  PineNote(virt): tablet 32767x32767 -> screen 1872x1404 (MT synthesis) 
+2026-09-27 01:40:28 09/27/26-01:40:28 INFO  initializing for device PineNote 
+2026-09-27 01:40:28 09/27/26-01:40:28 INFO  framebuffer resolution: {
+2026-09-27 01:40:28   h = 1404,
+2026-09-27 01:40:28   w = 1872
+2026-09-27 01:40:28 } --[[table: 0x029febed1038]] 
+2026-09-27 01:40:28 ffi.findlib: wrap-mupdf
+2026-09-27 01:40:28 ffi.load: libs/libwrap-mupdf.so
+2026-09-27 01:40:28 ffi.findlib: sqlite3 [0]
+2026-09-27 01:40:28 ffi.load: libs/libsqlite3.so.0
+2026-09-27 01:40:28 09/27/26-01:40:28 INFO  Performing one-time migration for 20200421 
+2026-09-27 01:40:28 09/27/26-01:40:28 WARN  os.remove: /root/.config/koreader/cache/fontlist/fontinfo.dat: No such file or directory 
+2026-09-27 01:40:28 ffi.findlib: freetype [6]
+2026-09-27 01:40:28 ffi.load: libs/libfreetype.so.6
+2026-09-27 01:40:28 ffi.findlib: harfbuzz [0]
+2026-09-27 01:40:28 ffi.load: libs/libharfbuzz.so.0
+2026-09-27 01:40:28 ffi.findlib: zstd [1]
+2026-09-27 01:40:28 ffi.load: libs/libzstd.so.1
+2026-09-27 01:40:28 09/27/26-01:40:28 INFO  /root/.config/koreader/cache/fontlist/fontinfo.dat fopen: No such file or directory -> initializing it 
+2026-09-27 01:40:28 09/27/26-01:40:28 INFO  Performing one-time migration for 20210306 (1/2) 
+2026-09-27 01:40:28 09/27/26-01:40:28 INFO  Performing one-time migration for 20210306 (2/2) 
+2026-09-27 01:40:28 09/27/26-01:40:28 INFO  Performing one-time migration for 20210330 
+2026-09-27 01:40:28 ffi.findlib: leptonica [6]
+2026-09-27 01:40:28 ffi.load: libs/libleptonica.so.6
+2026-09-27 01:40:28 ffi.findlib: k2pdfopt [2]
+2026-09-27 01:40:28 ffi.load: libs/libk2pdfopt.so.2
+2026-09-27 01:40:30 off
+2026-09-27 01:40:32 off
+2026-09-27 01:40:34 pinenote-wifi: missing /data/wifi/wlan0.conf
+2026-09-27 01:40:34 09/27/26-01:40:34 INFO  Performing one-time migration for 20210404 
+2026-09-27 01:40:34 09/27/26-01:40:34 INFO  Performing one-time migration for 20210409 
+2026-09-27 01:40:34 09/27/26-01:40:34 WARN  os.rename: /root/.config/koreader/cache/fontinfo.dat: No such file or directory 
+2026-09-27 01:40:34 09/27/26-01:40:34 INFO  Performing one-time migration for 20210412 
+2026-09-27 01:40:34 09/27/26-01:40:34 WARN  os.rename: /root/.config/koreader/cache/calibre-libraries.lua: No such file or directory 
+2026-09-27 01:40:34 09/27/26-01:40:34 WARN  os.rename: /root/.config/koreader/cache/calibre-books.dat: No such file or directory 
+2026-09-27 01:40:34 09/27/26-01:40:34 INFO  Performing one-time migration for 20210414 
+2026-09-27 01:40:34 09/27/26-01:40:34 WARN  os.remove: /root/.config/koreader/cache/calibre/books.dat: No such file or directory 
+2026-09-27 01:40:34 09/27/26-01:40:34 INFO  Performing one-time migration for 20210503 & 20210508 
+2026-09-27 01:40:34 09/27/26-01:40:34 INFO  Performing one-time migration for 20210518 
+2026-09-27 01:40:34 09/27/26-01:40:34 INFO  Performing one-time migration for 20210521 
+2026-09-27 01:40:34 09/27/26-01:40:34 INFO  Performing one-time migration for 20210531 
+2026-09-27 01:40:34 09/27/26-01:40:34 INFO  Performing one-time migration for 20210622 
+2026-09-27 01:40:34 09/27/26-01:40:34 WARN  os.remove: /root/.config/koreader/cache/fontlist/fontinfo.dat: No such file or directory 
+2026-09-27 01:40:34 09/27/26-01:40:34 INFO  Performing one-time migration for 20210629 
+2026-09-27 01:40:34 09/27/26-01:40:34 INFO  Performing one-time migration for 20210715 
+2026-09-27 01:40:34 09/27/26-01:40:34 INFO  Performing one-time migration for 20210720 
+2026-09-27 01:40:34 09/27/26-01:40:34 INFO  Performing one-time migration for 20210831 
+2026-09-27 01:40:34 09/27/26-01:40:34 INFO  Performing one-time migration for 20210925 
+2026-09-27 01:40:34 09/27/26-01:40:34 INFO  Performing one-time migration for 20220116 
+2026-09-27 01:40:34 09/27/26-01:40:34 INFO  Performing one-time migration for 20220205 
+2026-09-27 01:40:34 09/27/26-01:40:34 INFO  Performing one-time migration for 20220819 
+2026-09-27 01:40:34 09/27/26-01:40:34 INFO  Performing one-time migration for 20220914 
+2026-09-27 01:40:34 09/27/26-01:40:34 WARN  os.remove: /root/.config/koreader/cache/fontlist/fontinfo.dat: No such file or directory 
+2026-09-27 01:40:34 09/27/26-01:40:34 INFO  Performing one-time migration for 20220930 
+2026-09-27 01:40:34 09/27/26-01:40:34 WARN  loadfile: cannot open /root/.config/koreader/defaults.persistent.lua: No such file or directory 
+2026-09-27 01:40:34 09/27/26-01:40:34 WARN  os.rename: /root/.config/koreader/defaults.persistent.lua: No such file or directory 
+2026-09-27 01:40:34 09/27/26-01:40:34 INFO  Performing one-time migration for 20221027 
+2026-09-27 01:40:34 09/27/26-01:40:34 INFO  Performing one-time migration for 20230531 
+2026-09-27 01:40:34 09/27/26-01:40:34 INFO  Performing one-time migration for 20230703 
+2026-09-27 01:40:34 09/27/26-01:40:34 INFO  Performing one-time migration for 20230707 
+2026-09-27 01:40:34 09/27/26-01:40:34 INFO  Performing one-time migration for 20230710 
+2026-09-27 01:40:34 09/27/26-01:40:34 INFO  Performing one-time migration for 20230731 
+2026-09-27 01:40:34 09/27/26-01:40:34 INFO  Performing one-time migration for 20230802 
+2026-09-27 01:40:34 09/27/26-01:40:34 INFO  Performing one-time migration for 20230901 
+2026-09-27 01:40:34 09/27/26-01:40:34 INFO  Performing one-time migration for 20231217 
+2026-09-27 01:40:34 09/27/26-01:40:34 INFO  Performing one-time migration for 20240408 
+2026-09-27 01:40:34 09/27/26-01:40:34 INFO  Performing one-time migration for 20240616 
+2026-09-27 01:40:34 09/27/26-01:40:34 WARN  os.remove: /root/.config/koreader/cache/fontlist/fontinfo.dat: No such file or directory 
+2026-09-27 01:40:34 09/27/26-01:40:34 INFO  Performing one-time migration for 20240731 
+2026-09-27 01:40:34 09/27/26-01:40:34 INFO  Performing one-time migration for 20240911 
+2026-09-27 01:40:34 09/27/26-01:40:34 INFO  Performing one-time migration for 20240914 
+2026-09-27 01:40:34 09/27/26-01:40:34 INFO  Performing one-time migration for 20240915 
+2026-09-27 01:40:34 09/27/26-01:40:34 INFO  Performing one-time migration for 20240928 
+2026-09-27 01:40:34 09/27/26-01:40:34 INFO  Performing one-time migration for 20241123 
+2026-09-27 01:40:34 09/27/26-01:40:34 INFO  Performing one-time migration for 20241207 
+2026-09-27 01:40:34 09/27/26-01:40:34 INFO  Performing one-time migration for 20241208 
+2026-09-27 01:40:34 09/27/26-01:40:34 INFO  Performing one-time migration for 20241228 
+2026-09-27 01:40:34 09/27/26-01:40:34 INFO  Performing one-time migration for 20250207 
+2026-09-27 01:40:34 09/27/26-01:40:34 INFO  Performing one-time migration for 20250302 
+2026-09-27 01:40:34 09/27/26-01:40:34 INFO  Performing one-time migration for 20250318 
+2026-09-27 01:40:34 09/27/26-01:40:34 INFO  Performing one-time migration for 20250405 
+2026-09-27 01:40:34 09/27/26-01:40:34 INFO  Performing one-time migration for 20250601 
+2026-09-27 01:40:34 09/27/26-01:40:34 INFO  Performing one-time migration for 20250914 
+2026-09-27 01:40:34 09/27/26-01:40:34 INFO  Performing one-time migration for 20250929 
+2026-09-27 01:40:34 09/27/26-01:40:34 INFO  Performing one-time migration for 20260306 
+2026-09-27 01:40:35 09/27/26-01:40:35 INFO  [pn-refresh] ui partial rect=159,844,1086,184 dither=nil t=1790473235.031835 
+2026-09-27 01:40:37 off
+2026-09-27 01:40:37 09/27/26-01:40:37 INFO  opening file /tmp/wbcamp-book.txt 
+2026-09-27 01:40:37 09/27/26-01:40:37 INFO  Inhibiting user input 
+2026-09-27 01:40:37 09/27/26-01:40:37 INFO  Looking for plugins in directory: plugins 
+2026-09-27 01:40:37 09/27/26-01:40:37 INFO  Looking for plugins in directory: /root/.config/koreader/plugins/ 
+2026-09-27 01:40:37 09/27/26-01:40:37 INFO  [idlewasher] enabled debt_min=15 debt_max=60 idle_s=45 deepclean_idle_s=600 
+2026-09-27 01:40:37 09/27/26-01:40:37 INFO  [idlewasher] page-turn charge 1 (debt=1) 
+2026-09-27 01:40:37 09/27/26-01:40:37 INFO  [idlewasher] page-turn charge 1 (debt=2) 
+2026-09-27 01:40:37 09/27/26-01:40:37 INFO  [pn-refresh] full global rect=0,0,1404,1872 dither=nil t=1790473237.905824 
+2026-09-27 01:40:39 off
+2026-09-27 01:40:39 09/27/26-01:40:39 INFO  Restoring user input handling 
+2026-09-27 01:40:42 off
+2026-09-27 01:40:44 off
+2026-09-27 01:40:46 off
+2026-09-27 01:40:48 off
+2026-09-27 01:40:50 off
+2026-09-27 01:40:53 off
+2026-09-27 01:40:55 off
+2026-09-27 01:40:57 off
+2026-09-27 01:40:59 off
+2026-09-27 01:41:02 off
+2026-09-27 01:41:04 off
+2026-09-27 01:41:06 off
+2026-09-27 01:41:08 off
+2026-09-27 01:41:10 off
+2026-09-27 01:41:13 off
+2026-09-27 01:41:13 09/27/26-01:41:13 INFO  [idlewasher] page-turn charge 1 (debt=3) 
+2026-09-27 01:41:13 09/27/26-01:41:13 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473273.675785 
+2026-09-27 01:41:15 off
+2026-09-27 01:41:15 09/27/26-01:41:15 INFO  [idlewasher] page-turn charge 1 (debt=4) 
+2026-09-27 01:41:16 09/27/26-01:41:16 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473276.228691 
+2026-09-27 01:41:18 off
+2026-09-27 01:41:20 off
+2026-09-27 01:41:20 09/27/26-01:41:20 INFO  [idlewasher] page-turn charge 1 (debt=5) 
+2026-09-27 01:41:21 09/27/26-01:41:21 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473281.119972 
+2026-09-27 01:41:23 off
+2026-09-27 01:41:23 09/27/26-01:41:23 INFO  [idlewasher] page-turn charge 1 (debt=6) 
+2026-09-27 01:41:23 09/27/26-01:41:23 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473283.813718 
+2026-09-27 01:41:25 off
+2026-09-27 01:41:28 off
+2026-09-27 01:41:28 09/27/26-01:41:28 INFO  [idlewasher] page-turn charge 1 (debt=7) 
+2026-09-27 01:41:28 09/27/26-01:41:28 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473288.716404 
+2026-09-27 01:41:28 09/27/26-01:41:28 INFO  [idlewasher] page-turn charge 1 (debt=8) 
+2026-09-27 01:41:30 off
+2026-09-27 01:41:31 09/27/26-01:41:31 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473291.222227 
+2026-09-27 01:41:33 off
+2026-09-27 01:41:33 09/27/26-01:41:33 INFO  [idlewasher] page-turn charge 1 (debt=9) 
+2026-09-27 01:41:33 09/27/26-01:41:33 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473293.525255 
+2026-09-27 01:41:35 off
+2026-09-27 01:41:35 09/27/26-01:41:35 INFO  [idlewasher] page-turn charge 1 (debt=10) 
+2026-09-27 01:41:35 09/27/26-01:41:35 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473295.990671 
+2026-09-27 01:41:36 tr: read error: No such process
+2026-09-27 01:41:38 off
+2026-09-27 01:41:40 off
+2026-09-27 01:41:40 09/27/26-01:41:40 INFO  [pn-refresh] ui partial rect=-28,0,1460,1872 dither=nil t=1790473300.749878 
+2026-09-27 01:41:42 off
+2026-09-27 01:41:43 09/27/26-01:41:43 INFO  [pn-refresh] ui partial rect=-28,0,1460,1872 dither=nil t=1790473303.295537 
+2026-09-27 01:41:43 tr: read error: No such process
+2026-09-27 01:41:45 off
+2026-09-27 01:41:45 09/27/26-01:41:45 INFO  [idlewasher] page-turn charge 1 (debt=11) 
+2026-09-27 01:41:45 09/27/26-01:41:45 INFO  [idlewasher] page-turn charge 1 (debt=12) 
+2026-09-27 01:41:45 09/27/26-01:41:45 INFO  [pn-refresh] ui partial rect=0,0,1404,1872 dither=nil t=1790473305.836007 
+2026-09-27 01:41:45 09/27/26-01:41:45 INFO  [idlewasher] page-turn charge 1 (debt=13) 
+2026-09-27 01:41:47 off
+2026-09-27 01:41:48 09/27/26-01:41:48 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473308.368257 
+2026-09-27 01:41:50 off
+2026-09-27 01:41:50 09/27/26-01:41:50 INFO  [idlewasher] page-turn charge 1 (debt=14) 
+2026-09-27 01:41:50 09/27/26-01:41:50 INFO  [idlewasher] page-turn charge 1 (debt=15) 
+2026-09-27 01:41:50 09/27/26-01:41:50 INFO  [pn-refresh] ui partial rect=0,0,1404,1872 dither=nil t=1790473310.643623 
+2026-09-27 01:41:52 off
+2026-09-27 01:41:52 09/27/26-01:41:52 INFO  [idlewasher] page-turn charge 1 (debt=16) 
+2026-09-27 01:41:53 09/27/26-01:41:53 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473313.346064 
+2026-09-27 01:41:55 off
+2026-09-27 01:41:55 09/27/26-01:41:55 INFO  [idlewasher] page-turn charge 1 (debt=17) 
+2026-09-27 01:41:55 09/27/26-01:41:55 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473315.859978 
+2026-09-27 01:41:58 off
+2026-09-27 01:41:58 09/27/26-01:41:58 INFO  [idlewasher] page-turn charge 1 (debt=18) 
+2026-09-27 01:41:58 09/27/26-01:41:58 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473318.608542 
+2026-09-27 01:42:00 off
+2026-09-27 01:42:01 09/27/26-01:42:01 INFO  [pn-refresh] ui partial rect=36,720,1331,432 dither=nil t=1790473321.174505 
+2026-09-27 01:42:03 off
+2026-09-27 01:42:03 09/27/26-01:42:03 INFO  [idlewasher] page-turn charge 1 (debt=19) 
+2026-09-27 01:42:03 09/27/26-01:42:03 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473323.887431 
+2026-09-27 01:42:06 off
+2026-09-27 01:42:06 09/27/26-01:42:06 INFO  [idlewasher] page-turn charge 1 (debt=20) 
+2026-09-27 01:42:06 09/27/26-01:42:06 INFO  [idlewasher] page-turn charge 1 (debt=21) 
+2026-09-27 01:42:06 09/27/26-01:42:06 INFO  [pn-refresh] ui partial rect=0,0,1404,1872 dither=nil t=1790473326.382828 
+2026-09-27 01:42:06 09/27/26-01:42:06 INFO  [idlewasher] page-turn charge 1 (debt=22) 
+2026-09-27 01:42:08 off
+2026-09-27 01:42:08 09/27/26-01:42:08 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473328.842501 
+2026-09-27 01:42:10 off
+2026-09-27 01:42:10 09/27/26-01:42:10 INFO  [idlewasher] page-turn charge 1 (debt=23) 
+2026-09-27 01:42:10 09/27/26-01:42:10 INFO  [idlewasher] page-turn charge 1 (debt=24) 
+2026-09-27 01:42:11 09/27/26-01:42:11 INFO  [pn-refresh] ui partial rect=0,0,1404,1872 dither=nil t=1790473331.045142 
+2026-09-27 01:42:13 off
+2026-09-27 01:42:13 09/27/26-01:42:13 INFO  [idlewasher] page-turn charge 1 (debt=25) 
+2026-09-27 01:42:13 09/27/26-01:42:13 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473333.751751 
+2026-09-27 01:42:15 off
+2026-09-27 01:42:15 09/27/26-01:42:15 INFO  [idlewasher] page-turn charge 1 (debt=26) 
+2026-09-27 01:42:16 09/27/26-01:42:16 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473336.338120 
+2026-09-27 01:42:18 off
+2026-09-27 01:42:18 09/27/26-01:42:18 INFO  [idlewasher] page-turn charge 1 (debt=27) 
+2026-09-27 01:42:19 tr: read error: No such process
+2026-09-27 01:42:20 off
+2026-09-27 01:42:21 09/27/26-01:42:21 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473341.268006 
+2026-09-27 01:42:23 off
+2026-09-27 01:42:23 09/27/26-01:42:23 INFO  [pn-refresh] ui partial rect=-28,0,1460,1872 dither=nil t=1790473343.359735 
+2026-09-27 01:42:25 off
+2026-09-27 01:42:26 09/27/26-01:42:26 INFO  [pn-refresh] ui partial rect=-28,0,1460,1872 dither=nil t=1790473346.079211 
+2026-09-27 01:42:28 off
+2026-09-27 01:42:28 09/27/26-01:42:28 INFO  [idlewasher] page-turn charge 1 (debt=28) 
+2026-09-27 01:42:28 09/27/26-01:42:28 INFO  [idlewasher] page-turn charge 1 (debt=29) 
+2026-09-27 01:42:28 09/27/26-01:42:28 INFO  [pn-refresh] ui partial rect=0,0,1404,1872 dither=nil t=1790473348.717129 
+2026-09-27 01:42:28 09/27/26-01:42:28 INFO  [idlewasher] page-turn charge 1 (debt=30) 
+2026-09-27 01:42:30 off
+2026-09-27 01:42:31 09/27/26-01:42:31 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473351.194510 
+2026-09-27 01:42:33 off
+2026-09-27 01:42:33 09/27/26-01:42:33 INFO  [idlewasher] page-turn charge 1 (debt=31) 
+2026-09-27 01:42:33 09/27/26-01:42:33 INFO  [idlewasher] page-turn charge 1 (debt=32) 
+2026-09-27 01:42:33 09/27/26-01:42:33 INFO  [pn-refresh] ui partial rect=0,0,1404,1872 dither=nil t=1790473353.544807 
+2026-09-27 01:42:35 off
+2026-09-27 01:42:35 09/27/26-01:42:35 INFO  [idlewasher] page-turn charge 1 (debt=33) 
+2026-09-27 01:42:36 09/27/26-01:42:36 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473356.126266 
+2026-09-27 01:42:36 09/27/26-01:42:36 INFO  [idlewasher] page-turn charge 1 (debt=34) 
+2026-09-27 01:42:36 tr: read error: No such process
+2026-09-27 01:42:38 off
+2026-09-27 01:42:38 09/27/26-01:42:38 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473358.570437 
+2026-09-27 01:42:40 off
+2026-09-27 01:42:40 09/27/26-01:42:40 INFO  [idlewasher] page-turn charge 1 (debt=35) 
+2026-09-27 01:42:41 09/27/26-01:42:41 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473361.020928 
+2026-09-27 01:42:43 off
+2026-09-27 01:42:43 09/27/26-01:42:43 INFO  [pn-refresh] ui partial rect=36,720,1331,432 dither=nil t=1790473363.697775 
+2026-09-27 01:42:45 off
+2026-09-27 01:42:48 off
+2026-09-27 01:42:48 09/27/26-01:42:48 INFO  [idlewasher] page-turn charge 1 (debt=36) 
+2026-09-27 01:42:48 09/27/26-01:42:48 INFO  [idlewasher] page-turn charge 1 (debt=37) 
+2026-09-27 01:42:48 09/27/26-01:42:48 INFO  [pn-refresh] ui partial rect=0,0,1404,1872 dither=nil t=1790473368.264322 
+2026-09-27 01:42:48 09/27/26-01:42:48 INFO  [idlewasher] page-turn charge 1 (debt=38) 
+2026-09-27 01:42:50 off
+2026-09-27 01:42:50 09/27/26-01:42:50 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473370.786228 
+2026-09-27 01:42:52 off
+2026-09-27 01:42:52 09/27/26-01:42:52 INFO  [idlewasher] page-turn charge 1 (debt=39) 
+2026-09-27 01:42:52 09/27/26-01:42:52 INFO  [idlewasher] page-turn charge 1 (debt=40) 
+2026-09-27 01:42:52 09/27/26-01:42:52 INFO  [idlewasher] page-turn charge 1 (debt=41) 
+2026-09-27 01:42:52 09/27/26-01:42:52 INFO  [pn-refresh] ui partial rect=0,0,1404,1872 dither=nil t=1790473372.882527 
+2026-09-27 01:42:55 off
+2026-09-27 01:42:55 09/27/26-01:42:55 INFO  [idlewasher] page-turn charge 1 (debt=42) 
+2026-09-27 01:42:55 09/27/26-01:42:55 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473375.530083 
+2026-09-27 01:42:57 off
+2026-09-27 01:42:59 off
+2026-09-27 01:42:59 09/27/26-01:42:59 INFO  [idlewasher] page-turn charge 1 (debt=43) 
+2026-09-27 01:43:00 09/27/26-01:43:00 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473380.347977 
+2026-09-27 01:43:01 tr: read error: No such process
+2026-09-27 01:43:02 off
+2026-09-27 01:43:02 09/27/26-01:43:02 INFO  [idlewasher] page-turn charge 1 (debt=44) 
+2026-09-27 01:43:03 09/27/26-01:43:03 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473383.030775 
+2026-09-27 01:43:05 off
+2026-09-27 01:43:05 09/27/26-01:43:05 INFO  [pn-refresh] ui partial rect=-28,0,1460,1872 dither=nil t=1790473385.337053 
+2026-09-27 01:43:07 off
+2026-09-27 01:43:08 09/27/26-01:43:08 INFO  [pn-refresh] ui partial rect=-28,1424,1460,448 dither=nil t=1790473388.233656 
+2026-09-27 01:43:08 09/27/26-01:43:08 INFO  [pn-refresh] ui partial rect=277,522,850,827 dither=nil t=1790473388.236623 
+2026-09-27 01:43:10 off
+2026-09-27 01:43:11 09/27/26-01:43:11 INFO  [pn-refresh] ui partial rect=277,522,850,827 dither=nil t=1790473391.241964 
+2026-09-27 01:43:13 off
+2026-09-27 01:43:13 09/27/26-01:43:13 INFO  [pn-refresh] ui partial rect=0,0,1404,1872 dither=nil t=1790473393.905275 
+2026-09-27 01:43:15 off
+2026-09-27 01:43:15 09/27/26-01:43:15 INFO  [idlewasher] page-turn charge 1 (debt=45) 
+2026-09-27 01:43:15 09/27/26-01:43:15 INFO  [idlewasher] page-turn charge 1 (debt=46) 
+2026-09-27 01:43:16 09/27/26-01:43:16 INFO  [pn-refresh] ui partial rect=0,0,1404,1872 dither=nil t=1790473396.226240 
+2026-09-27 01:43:18 off
+2026-09-27 01:43:18 09/27/26-01:43:18 INFO  [idlewasher] page-turn charge 1 (debt=47) 
+2026-09-27 01:43:18 09/27/26-01:43:18 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473398.937941 
+2026-09-27 01:43:21 off
+2026-09-27 01:43:21 09/27/26-01:43:21 INFO  [idlewasher] page-turn charge 1 (debt=48) 
+2026-09-27 01:43:21 09/27/26-01:43:21 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473401.611283 
+2026-09-27 01:43:23 off
+2026-09-27 01:43:26 off
+2026-09-27 01:43:26 09/27/26-01:43:26 INFO  [pn-refresh] ui partial rect=36,720,1331,432 dither=nil t=1790473406.491323 
+2026-09-27 01:43:28 off
+2026-09-27 01:43:28 09/27/26-01:43:28 INFO  [idlewasher] page-turn charge 1 (debt=49) 
+2026-09-27 01:43:28 09/27/26-01:43:28 INFO  [idlewasher] page-turn charge 1 (debt=50) 
+2026-09-27 01:43:29 09/27/26-01:43:29 INFO  [pn-refresh] ui partial rect=0,0,1404,1872 dither=nil t=1790473409.170680 
+2026-09-27 01:43:31 off
+2026-09-27 01:43:31 09/27/26-01:43:31 INFO  [idlewasher] page-turn charge 1 (debt=51) 
+2026-09-27 01:43:31 09/27/26-01:43:31 INFO  [idlewasher] page-turn charge 1 (debt=52) 
+2026-09-27 01:43:31 09/27/26-01:43:31 INFO  [pn-refresh] ui partial rect=0,0,1404,1872 dither=nil t=1790473411.701664 
+2026-09-27 01:43:31 09/27/26-01:43:31 INFO  [idlewasher] page-turn charge 1 (debt=53) 
+2026-09-27 01:43:33 off
+2026-09-27 01:43:34 09/27/26-01:43:34 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473414.221451 
+2026-09-27 01:43:36 off
+2026-09-27 01:43:36 09/27/26-01:43:36 INFO  [idlewasher] page-turn charge 1 (debt=54) 
+2026-09-27 01:43:36 09/27/26-01:43:36 INFO  [idlewasher] page-turn charge 1 (debt=55) 
+2026-09-27 01:43:36 09/27/26-01:43:36 INFO  [pn-refresh] ui partial rect=0,0,1404,1872 dither=nil t=1790473416.719283 
+2026-09-27 01:43:38 off
+2026-09-27 01:43:41 off
+2026-09-27 01:43:41 09/27/26-01:43:41 INFO  [idlewasher] page-turn charge 1 (debt=56) 
+2026-09-27 01:43:41 09/27/26-01:43:41 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473421.606326 
+2026-09-27 01:43:41 09/27/26-01:43:41 INFO  [idlewasher] page-turn charge 1 (debt=57) 
+2026-09-27 01:43:43 off
+2026-09-27 01:43:43 09/27/26-01:43:43 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473423.836214 
+2026-09-27 01:43:45 off
+2026-09-27 01:43:45 09/27/26-01:43:45 INFO  [pn-refresh] ui partial rect=-28,0,1460,1872 dither=nil t=1790473425.954422 
+2026-09-27 01:43:48 off
+2026-09-27 01:43:48 09/27/26-01:43:48 INFO  [pn-refresh] ui partial rect=-28,0,1460,1872 dither=nil t=1790473428.691660 
+2026-09-27 01:43:50 off
+2026-09-27 01:43:50 09/27/26-01:43:50 INFO  [idlewasher] page-turn charge 1 (debt=58) 
+2026-09-27 01:43:50 09/27/26-01:43:50 INFO  [idlewasher] page-turn charge 1 (debt=59) 
+2026-09-27 01:43:51 09/27/26-01:43:51 INFO  [pn-refresh] ui partial rect=0,0,1404,1872 dither=nil t=1790473431.372102 
+2026-09-27 01:43:51 09/27/26-01:43:51 INFO  [idlewasher] page-turn charge 1 (debt=0) 
+2026-09-27 01:43:51 09/27/26-01:43:51 INFO  [idlewasher] bundled wash (debt max) 
+2026-09-27 01:43:53 off
+2026-09-27 01:43:53 09/27/26-01:43:53 INFO  [pn-refresh] full global rect=0,0,1404,1872 dither=nil t=1790473433.836570 
+2026-09-27 01:43:55 off
+2026-09-27 01:43:55 09/27/26-01:43:55 INFO  [idlewasher] page-turn charge 1 (debt=1) 
+2026-09-27 01:43:55 09/27/26-01:43:55 INFO  [idlewasher] page-turn charge 1 (debt=2) 
+2026-09-27 01:43:56 09/27/26-01:43:56 INFO  [pn-refresh] ui partial rect=0,0,1404,1872 dither=nil t=1790473436.283609 
+2026-09-27 01:43:58 off
+2026-09-27 01:43:58 09/27/26-01:43:58 INFO  [idlewasher] page-turn charge 1 (debt=3) 
+2026-09-27 01:43:58 09/27/26-01:43:58 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473438.821774 
+2026-09-27 01:44:01 off
+2026-09-27 01:44:01 09/27/26-01:44:01 INFO  [idlewasher] page-turn charge 1 (debt=4) 
+2026-09-27 01:44:01 09/27/26-01:44:01 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473441.556320 
+2026-09-27 01:44:03 off
+2026-09-27 01:44:04 09/27/26-01:44:04 INFO  [idlewasher] page-turn charge 1 (debt=5) 
+2026-09-27 01:44:06 off
+2026-09-27 01:44:06 09/27/26-01:44:06 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473446.464656 
+2026-09-27 01:44:08 off
+2026-09-27 01:44:08 09/27/26-01:44:08 INFO  [pn-refresh] ui partial rect=36,720,1331,432 dither=nil t=1790473448.982112 
+2026-09-27 01:44:11 off
+2026-09-27 01:44:11 09/27/26-01:44:11 INFO  [idlewasher] page-turn charge 1 (debt=6) 
+2026-09-27 01:44:11 09/27/26-01:44:11 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473451.421620 
+2026-09-27 01:44:13 off
+2026-09-27 01:44:13 09/27/26-01:44:13 INFO  [idlewasher] page-turn charge 1 (debt=7) 
+2026-09-27 01:44:13 09/27/26-01:44:13 INFO  [idlewasher] page-turn charge 1 (debt=8) 
+2026-09-27 01:44:13 09/27/26-01:44:13 INFO  [pn-refresh] ui partial rect=0,0,1404,1872 dither=nil t=1790473453.906084 
+2026-09-27 01:44:13 09/27/26-01:44:13 INFO  [idlewasher] page-turn charge 1 (debt=9) 
+2026-09-27 01:44:15 off
+2026-09-27 01:44:16 09/27/26-01:44:16 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473456.377273 
+2026-09-27 01:44:18 off
+2026-09-27 01:44:18 09/27/26-01:44:18 INFO  [idlewasher] page-turn charge 1 (debt=10) 
+2026-09-27 01:44:18 09/27/26-01:44:18 INFO  [idlewasher] page-turn charge 1 (debt=11) 
+2026-09-27 01:44:18 09/27/26-01:44:18 INFO  [pn-refresh] ui partial rect=0,0,1404,1872 dither=nil t=1790473458.451854 
+2026-09-27 01:44:20 off
+2026-09-27 01:44:20 09/27/26-01:44:20 INFO  [idlewasher] page-turn charge 1 (debt=12) 
+2026-09-27 01:44:21 09/27/26-01:44:21 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473461.162664 
+2026-09-27 01:44:21 09/27/26-01:44:21 INFO  [idlewasher] page-turn charge 1 (debt=13) 
+2026-09-27 01:44:23 off
+2026-09-27 01:44:23 09/27/26-01:44:23 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473463.573270 
+2026-09-27 01:44:25 off
+2026-09-27 01:44:25 09/27/26-01:44:25 INFO  [idlewasher] page-turn charge 1 (debt=14) 
+2026-09-27 01:44:25 09/27/26-01:44:25 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473465.816093 
+2026-09-27 01:44:28 off
+2026-09-27 01:44:30 off
+2026-09-27 01:44:30 09/27/26-01:44:30 INFO  [pn-refresh] ui partial rect=-28,0,1460,1872 dither=nil t=1790473470.428887 
+2026-09-27 01:44:32 off
+2026-09-27 01:44:32 09/27/26-01:44:32 INFO  [pn-refresh] ui partial rect=-28,0,1460,1872 dither=nil t=1790473472.901608 
+2026-09-27 01:44:35 off
+2026-09-27 01:44:35 09/27/26-01:44:35 INFO  [idlewasher] page-turn charge 1 (debt=15) 
+2026-09-27 01:44:35 09/27/26-01:44:35 INFO  [idlewasher] page-turn charge 1 (debt=16) 
+2026-09-27 01:44:35 09/27/26-01:44:35 INFO  [pn-refresh] ui partial rect=0,0,1404,1872 dither=nil t=1790473475.573514 
+2026-09-27 01:44:35 09/27/26-01:44:35 INFO  [idlewasher] page-turn charge 1 (debt=17) 
+2026-09-27 01:44:37 off
+2026-09-27 01:44:37 09/27/26-01:44:37 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473477.843683 
+2026-09-27 01:44:39 off
+2026-09-27 01:44:39 09/27/26-01:44:39 INFO  [idlewasher] page-turn charge 1 (debt=18) 
+2026-09-27 01:44:40 09/27/26-01:44:40 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473480.303073 
+2026-09-27 01:44:40 09/27/26-01:44:40 INFO  [idlewasher] page-turn charge 1 (debt=19) 
+2026-09-27 01:44:42 off
+2026-09-27 01:44:42 09/27/26-01:44:42 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473482.767622 
+2026-09-27 01:44:44 off
+2026-09-27 01:44:44 09/27/26-01:44:44 INFO  [idlewasher] page-turn charge 1 (debt=20) 
+2026-09-27 01:44:44 09/27/26-01:44:44 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473484.990008 
+2026-09-27 01:44:47 off
+2026-09-27 01:44:47 09/27/26-01:44:47 INFO  [idlewasher] page-turn charge 1 (debt=21) 
+2026-09-27 01:44:47 09/27/26-01:44:47 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473487.741707 
+2026-09-27 01:44:49 off
+2026-09-27 01:44:50 09/27/26-01:44:50 INFO  [pn-refresh] ui partial rect=-28,0,1460,1872 dither=nil t=1790473490.078421 
+2026-09-27 01:44:52 off
+2026-09-27 01:44:52 09/27/26-01:44:52 INFO  [pn-refresh] ui partial rect=-28,1424,1460,448 dither=nil t=1790473492.788629 
+2026-09-27 01:44:54 off
+2026-09-27 01:44:55 09/27/26-01:44:55 INFO  [pn-refresh] ui partial rect=0,0,1404,1872 dither=nil t=1790473495.309458 
+2026-09-27 01:44:55 09/27/26-01:44:55 INFO  [idlewasher] page-turn charge 1 (debt=22) 
+2026-09-27 01:44:57 off
+2026-09-27 01:44:57 09/27/26-01:44:57 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473497.784305 
+2026-09-27 01:44:59 off
+2026-09-27 01:44:59 09/27/26-01:44:59 INFO  [idlewasher] page-turn charge 1 (debt=23) 
+2026-09-27 01:44:59 09/27/26-01:44:59 INFO  [idlewasher] page-turn charge 1 (debt=24) 
+2026-09-27 01:44:59 09/27/26-01:44:59 INFO  [idlewasher] page-turn charge 1 (debt=25) 
+2026-09-27 01:45:00 09/27/26-01:45:00 INFO  [pn-refresh] ui partial rect=0,0,1404,1872 dither=nil t=1790473500.056014 
+2026-09-27 01:45:02 off
+2026-09-27 01:45:02 09/27/26-01:45:02 INFO  [idlewasher] page-turn charge 1 (debt=26) 
+2026-09-27 01:45:02 09/27/26-01:45:02 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473502.836129 
+2026-09-27 01:45:04 off
+2026-09-27 01:45:07 off
+2026-09-27 01:45:07 09/27/26-01:45:07 INFO  [idlewasher] page-turn charge 1 (debt=27) 
+2026-09-27 01:45:07 09/27/26-01:45:07 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473507.427093 
+2026-09-27 01:45:09 off
+2026-09-27 01:45:09 09/27/26-01:45:09 INFO  [pn-refresh] ui partial rect=-28,0,1460,1872 dither=nil t=1790473509.674021 
+2026-09-27 01:45:11 off
+2026-09-27 01:45:13 off
+2026-09-27 01:45:14 09/27/26-01:45:14 INFO  [pn-refresh] ui partial rect=-28,0,1460,1872 dither=nil t=1790473514.297821 
+2026-09-27 01:45:16 off
+2026-09-27 01:45:16 09/27/26-01:45:16 INFO  [idlewasher] page-turn charge 1 (debt=28) 
+2026-09-27 01:45:16 09/27/26-01:45:16 INFO  [idlewasher] page-turn charge 1 (debt=29) 
+2026-09-27 01:45:16 09/27/26-01:45:16 INFO  [pn-refresh] ui partial rect=0,0,1404,1872 dither=nil t=1790473516.768757 
+2026-09-27 01:45:16 09/27/26-01:45:16 INFO  [idlewasher] page-turn charge 1 (debt=30) 
+2026-09-27 01:45:18 off
+2026-09-27 01:45:19 09/27/26-01:45:19 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473519.175188 
+2026-09-27 01:45:21 off
+2026-09-27 01:45:21 09/27/26-01:45:21 INFO  [idlewasher] page-turn charge 1 (debt=31) 
+2026-09-27 01:45:21 09/27/26-01:45:21 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473521.569188 
+2026-09-27 01:45:21 09/27/26-01:45:21 INFO  [idlewasher] page-turn charge 1 (debt=32) 
+2026-09-27 01:45:23 off
+2026-09-27 01:45:23 09/27/26-01:45:23 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473523.985607 
+2026-09-27 01:45:25 off
+2026-09-27 01:45:25 09/27/26-01:45:25 INFO  [idlewasher] page-turn charge 1 (debt=33) 
+2026-09-27 01:45:26 09/27/26-01:45:26 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473526.401009 
+2026-09-27 01:45:28 off
+2026-09-27 01:45:28 09/27/26-01:45:28 INFO  [idlewasher] page-turn charge 1 (debt=34) 
+2026-09-27 01:45:28 09/27/26-01:45:28 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473528.757140 
+2026-09-27 01:45:30 off
+2026-09-27 01:45:31 09/27/26-01:45:31 INFO  [pn-refresh] ui partial rect=-28,0,1460,1872 dither=nil t=1790473531.018130 
+2026-09-27 01:45:33 off
+2026-09-27 01:45:33 09/27/26-01:45:33 INFO  [pn-refresh] ui partial rect=-28,0,1460,1872 dither=nil t=1790473533.719350 
+2026-09-27 01:45:35 off
+2026-09-27 01:45:35 09/27/26-01:45:35 INFO  [idlewasher] page-turn charge 1 (debt=35) 
+2026-09-27 01:45:35 09/27/26-01:45:35 INFO  [idlewasher] page-turn charge 1 (debt=36) 
+2026-09-27 01:45:36 09/27/26-01:45:36 INFO  [pn-refresh] ui partial rect=0,0,1404,1872 dither=nil t=1790473536.116311 
+2026-09-27 01:45:38 off
+2026-09-27 01:45:38 09/27/26-01:45:38 INFO  [idlewasher] page-turn charge 1 (debt=37) 
+2026-09-27 01:45:38 09/27/26-01:45:38 INFO  [idlewasher] page-turn charge 1 (debt=38) 
+2026-09-27 01:45:38 09/27/26-01:45:38 INFO  [pn-refresh] ui partial rect=0,0,1404,1872 dither=nil t=1790473538.678806 
+2026-09-27 01:45:38 09/27/26-01:45:38 INFO  [idlewasher] page-turn charge 1 (debt=39) 
+2026-09-27 01:45:40 off
+2026-09-27 01:45:40 09/27/26-01:45:40 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473540.980046 
+2026-09-27 01:45:42 off
+2026-09-27 01:45:42 09/27/26-01:45:42 INFO  [idlewasher] page-turn charge 1 (debt=40) 
+2026-09-27 01:45:43 09/27/26-01:45:43 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473543.440544 
+2026-09-27 01:45:45 off
+2026-09-27 01:45:45 09/27/26-01:45:45 INFO  [idlewasher] page-turn charge 1 (debt=41) 
+2026-09-27 01:45:45 09/27/26-01:45:45 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473545.987157 
+2026-09-27 01:45:48 off
+2026-09-27 01:45:50 off
+2026-09-27 01:45:50 09/27/26-01:45:50 INFO  [idlewasher] page-turn charge 1 (debt=42) 
+2026-09-27 01:45:50 09/27/26-01:45:50 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473550.791718 
+2026-09-27 01:45:52 off
+2026-09-27 01:45:53 09/27/26-01:45:53 INFO  [pn-refresh] ui partial rect=36,720,1331,432 dither=nil t=1790473553.419927 
+2026-09-27 01:45:55 off
+2026-09-27 01:45:55 09/27/26-01:45:55 INFO  [idlewasher] page-turn charge 1 (debt=43) 
+2026-09-27 01:45:57 off
+2026-09-27 01:45:58 09/27/26-01:45:58 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473558.306024 
+2026-09-27 01:46:00 off
+2026-09-27 01:46:00 09/27/26-01:46:00 INFO  [idlewasher] page-turn charge 1 (debt=44) 
+2026-09-27 01:46:00 09/27/26-01:46:00 INFO  [idlewasher] page-turn charge 1 (debt=45) 
+2026-09-27 01:46:00 09/27/26-01:46:00 INFO  [idlewasher] page-turn charge 1 (debt=46) 
+2026-09-27 01:46:00 09/27/26-01:46:00 INFO  [idlewasher] page-turn charge 1 (debt=47) 
+2026-09-27 01:46:00 09/27/26-01:46:00 INFO  [pn-refresh] ui partial rect=0,0,1404,1872 dither=nil t=1790473560.748225 
+2026-09-27 01:46:02 off
+2026-09-27 01:46:02 09/27/26-01:46:02 INFO  [idlewasher] page-turn charge 1 (debt=48) 
+2026-09-27 01:46:03 09/27/26-01:46:03 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473563.264761 
+2026-09-27 01:46:05 off
+2026-09-27 01:46:05 09/27/26-01:46:05 INFO  [idlewasher] page-turn charge 1 (debt=49) 
+2026-09-27 01:46:05 09/27/26-01:46:05 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473565.872756 
+2026-09-27 01:46:08 off
+2026-09-27 01:46:08 09/27/26-01:46:08 INFO  [idlewasher] page-turn charge 1 (debt=50) 
+2026-09-27 01:46:08 09/27/26-01:46:08 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473568.442012 
+2026-09-27 01:46:10 off
+2026-09-27 01:46:10 09/27/26-01:46:10 INFO  [idlewasher] page-turn charge 1 (debt=51) 
+2026-09-27 01:46:11 09/27/26-01:46:11 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473571.137743 
+2026-09-27 01:46:13 off
+2026-09-27 01:46:13 09/27/26-01:46:13 INFO  [pn-refresh] ui partial rect=-28,0,1460,1872 dither=nil t=1790473573.511437 
+2026-09-27 01:46:15 off
+2026-09-27 01:46:17 off
+2026-09-27 01:46:18 09/27/26-01:46:18 INFO  [pn-refresh] ui partial rect=-28,0,1460,1872 dither=nil t=1790473578.222286 
+2026-09-27 01:46:20 off
+2026-09-27 01:46:20 09/27/26-01:46:20 INFO  [idlewasher] page-turn charge 1 (debt=52) 
+2026-09-27 01:46:20 09/27/26-01:46:20 INFO  [idlewasher] page-turn charge 1 (debt=53) 
+2026-09-27 01:46:20 09/27/26-01:46:20 INFO  [pn-refresh] ui partial rect=0,0,1404,1872 dither=nil t=1790473580.773393 
+2026-09-27 01:46:20 09/27/26-01:46:20 INFO  [idlewasher] page-turn charge 1 (debt=54) 
+2026-09-27 01:46:22 off
+2026-09-27 01:46:23 09/27/26-01:46:23 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473583.248618 
+2026-09-27 01:46:25 off
+2026-09-27 01:46:25 09/27/26-01:46:25 INFO  [idlewasher] page-turn charge 1 (debt=55) 
+2026-09-27 01:46:25 09/27/26-01:46:25 INFO  [idlewasher] page-turn charge 1 (debt=56) 
+2026-09-27 01:46:25 09/27/26-01:46:25 INFO  [pn-refresh] ui partial rect=0,0,1404,1872 dither=nil t=1790473585.683234 
+2026-09-27 01:46:27 off
+2026-09-27 01:46:30 off
+2026-09-27 01:46:30 09/27/26-01:46:30 INFO  [idlewasher] page-turn charge 1 (debt=57) 
+2026-09-27 01:46:30 09/27/26-01:46:30 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473590.581842 
+2026-09-27 01:46:32 off
+2026-09-27 01:46:32 09/27/26-01:46:32 INFO  [idlewasher] page-turn charge 1 (debt=58) 
+2026-09-27 01:46:33 09/27/26-01:46:33 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473593.088155 
+2026-09-27 01:46:35 off
+2026-09-27 01:46:35 09/27/26-01:46:35 INFO  [pn-refresh] ui partial rect=-28,0,1460,1872 dither=nil t=1790473595.399831 
+2026-09-27 01:46:37 off
+2026-09-27 01:46:37 09/27/26-01:46:37 INFO  [pn-refresh] ui partial rect=-28,0,1460,1872 dither=nil t=1790473597.959326 
+2026-09-27 01:46:40 off
+2026-09-27 01:46:40 09/27/26-01:46:40 INFO  [idlewasher] page-turn charge 1 (debt=59) 
+2026-09-27 01:46:40 09/27/26-01:46:40 INFO  [idlewasher] page-turn charge 1 (debt=0) 
+2026-09-27 01:46:40 09/27/26-01:46:40 INFO  [idlewasher] bundled wash (debt max) 
+2026-09-27 01:46:40 09/27/26-01:46:40 INFO  [pn-refresh] full global rect=0,0,1404,1872 dither=nil t=1790473600.419547 
+2026-09-27 01:46:40 09/27/26-01:46:40 INFO  [idlewasher] page-turn charge 1 (debt=1) 
+2026-09-27 01:46:40 09/27/26-01:46:40 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473600.949824 
+2026-09-27 01:46:43 off
+2026-09-27 01:46:43 09/27/26-01:46:43 INFO  [idlewasher] page-turn charge 1 (debt=2) 
+2026-09-27 01:46:43 09/27/26-01:46:43 INFO  [idlewasher] page-turn charge 1 (debt=3) 
+2026-09-27 01:46:43 09/27/26-01:46:43 INFO  [pn-refresh] ui partial rect=0,0,1404,1872 dither=nil t=1790473603.504688 
+2026-09-27 01:46:45 off
+2026-09-27 01:46:45 09/27/26-01:46:45 INFO  [idlewasher] page-turn charge 1 (debt=4) 
+2026-09-27 01:46:46 09/27/26-01:46:46 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473606.119945 
+2026-09-27 01:46:48 off
+2026-09-27 01:46:48 09/27/26-01:46:48 INFO  [idlewasher] page-turn charge 1 (debt=5) 
+2026-09-27 01:46:48 09/27/26-01:46:48 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473608.861031 
+2026-09-27 01:46:51 off
+2026-09-27 01:46:51 09/27/26-01:46:51 INFO  [idlewasher] page-turn charge 1 (debt=6) 
+2026-09-27 01:46:51 09/27/26-01:46:51 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473611.464826 
+2026-09-27 01:46:53 off
+2026-09-27 01:46:55 off
+2026-09-27 01:46:56 09/27/26-01:46:56 INFO  [pn-refresh] ui partial rect=36,720,1331,432 dither=nil t=1790473616.349012 
+2026-09-27 01:46:58 off
+2026-09-27 01:46:58 09/27/26-01:46:58 INFO  [idlewasher] page-turn charge 1 (debt=7) 
+2026-09-27 01:46:59 09/27/26-01:46:59 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473619.015534 
+2026-09-27 01:46:59 09/27/26-01:46:59 INFO  [idlewasher] page-turn charge 1 (debt=8) 
+2026-09-27 01:47:00 off
+2026-09-27 01:47:01 09/27/26-01:47:01 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473621.354701 
+2026-09-27 01:47:03 off
+2026-09-27 01:47:03 09/27/26-01:47:03 INFO  [idlewasher] page-turn charge 1 (debt=9) 
+2026-09-27 01:47:03 09/27/26-01:47:03 INFO  [idlewasher] page-turn charge 1 (debt=10) 
+2026-09-27 01:47:03 09/27/26-01:47:03 INFO  [idlewasher] page-turn charge 1 (debt=11) 
+2026-09-27 01:47:03 09/27/26-01:47:03 INFO  [idlewasher] page-turn charge 1 (debt=12) 
+2026-09-27 01:47:03 09/27/26-01:47:03 INFO  [pn-refresh] ui partial rect=0,0,1404,1872 dither=nil t=1790473623.497130 
+2026-09-27 01:47:05 off
+2026-09-27 01:47:07 off
+2026-09-27 01:47:07 09/27/26-01:47:07 INFO  [idlewasher] page-turn charge 1 (debt=13) 
+2026-09-27 01:47:08 09/27/26-01:47:08 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473628.364493 
+2026-09-27 01:47:10 off
+2026-09-27 01:47:10 09/27/26-01:47:10 INFO  [idlewasher] page-turn charge 1 (debt=14) 
+2026-09-27 01:47:11 09/27/26-01:47:11 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473631.073479 
+2026-09-27 01:47:13 off
+2026-09-27 01:47:13 09/27/26-01:47:13 INFO  [idlewasher] page-turn charge 1 (debt=15) 
+2026-09-27 01:47:13 09/27/26-01:47:13 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473633.686669 
+2026-09-27 01:47:15 off
+2026-09-27 01:47:15 09/27/26-01:47:15 INFO  [pn-refresh] ui partial rect=-28,0,1460,1872 dither=nil t=1790473635.963705 
+2026-09-27 01:47:18 off
+2026-09-27 01:47:20 off
+2026-09-27 01:47:20 09/27/26-01:47:20 INFO  [pn-refresh] ui partial rect=-28,0,1460,1872 dither=nil t=1790473640.862023 
+2026-09-27 01:47:22 off
+2026-09-27 01:47:22 09/27/26-01:47:22 INFO  [idlewasher] page-turn charge 1 (debt=16) 
+2026-09-27 01:47:22 09/27/26-01:47:22 INFO  [idlewasher] page-turn charge 1 (debt=17) 
+2026-09-27 01:47:22 09/27/26-01:47:22 INFO  [idlewasher] page-turn charge 1 (debt=18) 
+2026-09-27 01:47:22 09/27/26-01:47:22 INFO  [idlewasher] page-turn charge 1 (debt=19) 
+2026-09-27 01:47:23 09/27/26-01:47:23 INFO  [pn-refresh] ui partial rect=0,0,1404,1872 dither=nil t=1790473643.338456 
+2026-09-27 01:47:25 off
+2026-09-27 01:47:25 09/27/26-01:47:25 INFO  [idlewasher] page-turn charge 1 (debt=20) 
+2026-09-27 01:47:25 09/27/26-01:47:25 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473645.852135 
+2026-09-27 01:47:28 off
+2026-09-27 01:47:28 09/27/26-01:47:28 INFO  [idlewasher] page-turn charge 1 (debt=21) 
+2026-09-27 01:47:28 09/27/26-01:47:28 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473648.510265 
+2026-09-27 01:47:30 off
+2026-09-27 01:47:30 09/27/26-01:47:30 INFO  [idlewasher] page-turn charge 1 (debt=22) 
+2026-09-27 01:47:31 09/27/26-01:47:31 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473651.065446 
+2026-09-27 01:47:33 off
+2026-09-27 01:47:35 off
+2026-09-27 01:47:35 09/27/26-01:47:35 INFO  [idlewasher] page-turn charge 1 (debt=23) 
+2026-09-27 01:47:35 09/27/26-01:47:35 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473655.958179 
+2026-09-27 01:47:38 off
+2026-09-27 01:47:38 09/27/26-01:47:38 INFO  [pn-refresh] ui partial rect=36,720,1331,432 dither=nil t=1790473658.651056 
+2026-09-27 01:47:40 off
+2026-09-27 01:47:41 09/27/26-01:47:41 INFO  [idlewasher] page-turn charge 1 (debt=24) 
+2026-09-27 01:47:41 09/27/26-01:47:41 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473661.333213 
+2026-09-27 01:47:43 off
+2026-09-27 01:47:43 09/27/26-01:47:43 INFO  [idlewasher] page-turn charge 1 (debt=25) 
+2026-09-27 01:47:43 09/27/26-01:47:43 INFO  [idlewasher] page-turn charge 1 (debt=26) 
+2026-09-27 01:47:43 09/27/26-01:47:43 INFO  [pn-refresh] ui partial rect=0,0,1404,1872 dither=nil t=1790473663.824753 
+2026-09-27 01:47:45 off
+2026-09-27 01:47:45 09/27/26-01:47:45 INFO  [idlewasher] page-turn charge 1 (debt=27) 
+2026-09-27 01:47:45 09/27/26-01:47:45 INFO  [idlewasher] page-turn charge 1 (debt=28) 
+2026-09-27 01:47:46 09/27/26-01:47:46 INFO  [pn-refresh] ui partial rect=0,0,1404,1872 dither=nil t=1790473666.332091 
+2026-09-27 01:47:46 09/27/26-01:47:46 INFO  [idlewasher] page-turn charge 1 (debt=29) 
+2026-09-27 01:47:48 off
+2026-09-27 01:47:48 09/27/26-01:47:48 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473668.453419 
+2026-09-27 01:47:50 off
+2026-09-27 01:47:50 09/27/26-01:47:50 INFO  [idlewasher] page-turn charge 1 (debt=30) 
+2026-09-27 01:47:50 09/27/26-01:47:50 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473670.960905 
+2026-09-27 01:47:53 off
+2026-09-27 01:47:53 09/27/26-01:47:53 INFO  [idlewasher] page-turn charge 1 (debt=31) 
+2026-09-27 01:47:53 09/27/26-01:47:53 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473673.508779 
+2026-09-27 01:47:55 off
+2026-09-27 01:47:55 09/27/26-01:47:55 INFO  [idlewasher] page-turn charge 1 (debt=32) 
+2026-09-27 01:47:56 09/27/26-01:47:56 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473676.197655 
+2026-09-27 01:47:56 09/27/26-01:47:56 INFO  Failed to restore Wi-Fi (after 45 seconds)! 
+2026-09-27 01:47:56 pinenote-wifi: off
+2026-09-27 01:47:58 09/27/26-01:47:58 INFO  [pn-refresh] ui partial rect=-28,0,1460,1872 dither=nil t=1790473678.656898 
+2026-09-27 01:48:02 09/27/26-01:48:02 INFO  [pn-refresh] ui partial rect=-28,0,1460,1872 dither=nil t=1790473682.194643 
+2026-09-27 01:48:02 09/27/26-01:48:02 INFO  [idlewasher] page-turn charge 1 (debt=33) 
+2026-09-27 01:48:03 09/27/26-01:48:03 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473683.266996 
+2026-09-27 01:48:03 09/27/26-01:48:03 INFO  [idlewasher] page-turn charge 1 (debt=34) 
+2026-09-27 01:48:04 09/27/26-01:48:04 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473684.228322 
+2026-09-27 01:48:04 09/27/26-01:48:04 INFO  [idlewasher] page-turn charge 1 (debt=35) 
+2026-09-27 01:48:05 09/27/26-01:48:05 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473685.250635 
+2026-09-27 01:48:05 09/27/26-01:48:05 INFO  [idlewasher] page-turn charge 1 (debt=36) 
+2026-09-27 01:48:06 09/27/26-01:48:06 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473686.236133 
+2026-09-27 01:48:06 09/27/26-01:48:06 INFO  [idlewasher] page-turn charge 1 (debt=37) 
+2026-09-27 01:48:07 09/27/26-01:48:07 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473687.191600 
+2026-09-27 01:48:10 09/27/26-01:48:10 INFO  [idlewasher] page-turn charge 1 (debt=38) 
+2026-09-27 01:48:10 09/27/26-01:48:10 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473690.770978 
+2026-09-27 01:48:13 09/27/26-01:48:13 INFO  [idlewasher] page-turn charge 1 (debt=39) 
+2026-09-27 01:48:14 09/27/26-01:48:14 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473694.419731 
+2026-09-27 01:48:17 09/27/26-01:48:17 INFO  [idlewasher] page-turn charge 1 (debt=40) 
+2026-09-27 01:48:17 09/27/26-01:48:17 INFO  [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=1790473697.945176 

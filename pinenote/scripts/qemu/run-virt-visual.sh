@@ -70,7 +70,12 @@ case " $append " in
 esac
 append=$(printf '%s' "$append" | sed \
   -e 's/console=ttyS2,1500000n8/console=ttyAMA0/' \
-  -e 's/console=tty0 //')
+  -e 's/console=tty0 //' \
+  -e 's/fbcon=map:1/fbcon=map:0/')
+# The device suppresses fbcon by mapping it to absent fb1. On virtio-gpu
+# that also leaves the scanout inactive (QMP shows its 640x480 placeholder),
+# even while KOReader writes the correctly sized fb0. Let fbcon activate
+# fb0 here; reader-session unbinds it before launching KOReader.
 # Select the pinenote KOReader device target despite the virt DT model.
 append="$append wilkbook.force_device=pinenote"
 
@@ -241,7 +246,9 @@ if [ "$painted" = 0 ]; then
     settle_tries=$((settle_tries + 1))
   done
   printf '  baseline settled at %ss (%s retries)\n' "$(elapsed)" "$settle_tries"
-  tap 936 100
+  # Portrait top-center mapped into the landscape framebuffer, as measured
+  # by the page-turn campaign's coordinate probe.
+  tap 150 700
   sleep 12                       # give TCG time to repaint
   shot_b=$outdir/shot-b.ppm
   screendump "$shot_b"

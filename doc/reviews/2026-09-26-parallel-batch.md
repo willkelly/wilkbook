@@ -14,7 +14,7 @@ engineering record, not a new hardware-status entry.
 | Platform broker | Validated RGB565/XRGB8888 fallback rendering; MONOTONIC deadlines/evdev, BOOTTIME suspend duration; cancel RTC alarm on deep-mode refusal | Physical fallback appearance, evdev clock selection and ultra-suspend accounting; RTC writer serialization remains open |
 | Settings | Guile coupling audit, mutation checks and real Lua configuration parser fixtures; proposed durable enumerable API | General settings backend/schema migration/UI remain proposed |
 | Manuals | Installed-profile census plus real native KOReader rendering, TOC/link/Back navigation and negative controls | 49 recorded corpus omissions; command-example display hyphens; device check |
-| Refresh diagnostics | Full-log transport validated by length/hash; checked analyzers; context and clock uncertainty explicit | New end-to-end QEMU campaign and future field evidence |
+| Refresh diagnostics | Full-log transport validated by length/hash; checked analyzers; context and clock uncertainty explicit; 198-tap QEMU campaign | Missing flash/global menu antecedent; future field evidence |
 | Workbench device | Guile coordinator composition plan and owner-receipt gate | Coordinator/service implementation and qualification; no device launcher yet |
 
 Python remains available. New system/build scripts in this batch use Guile;
@@ -141,10 +141,22 @@ root log/cache writers. Auto-suspend was paused and restored byte-for-byte to
 `enabled=1`; no deployment or service restart ran. The per-device record is in
 `doc/status.md`.
 
+The full-log QEMU campaign subsequently passed after correcting two stale
+harness assumptions: the device's absent-fb1 mapping left virtio-gpu scanout
+inactive, and the shipping startup policy opens the file manager, not a book.
+The VM now uses fb0 and explicitly opens a deterministic text fixture through
+the supervised reader. The run issued 198 taps, captured 158 refresh traces
+(89 full-panel partial/partial), validated the complete 57,045-byte log by
+SHA-256, and completed both analyzers. The separate visual smoke test passed
+after its menu tap was corrected to the campaign's measured coordinates.
+The flash/global menu antecedent was unexercised; this is no issue-#14
+clearance. Replay evidence: `doc/artifacts/qemu-pageturn-batch-20260926/`.
+
 1. The experimental candidate is realized and closure-checked, and plain-reader
-   QEMU update-flow has passed. The actual note-authority composition and
-   deliberate busy-data refusal remain separate runtime checks; run the full-log
-   page-turn campaign against matching inputs too.
+   QEMU update-flow and full-log page-turn capture have passed. The actual
+   note-authority composition and deliberate busy-data refusal remain separate
+   runtime checks. A menu-trigger experiment still needs the antecedent
+   coverage absent from this campaign.
 2. In an authorized attended generation session, verify the authority releases
    its SQLite/runtime resources and a failed data remount refuses handoff with
    prior services restored. Use the target helper's identity; older rollback

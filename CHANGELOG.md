@@ -24,6 +24,11 @@ this lineage. **Unreleased** above it collects what has landed since.
 
 ## Unreleased
 
+- **The QEMU page-turn campaign works with the current reader image again.**
+  It activates the virtual display, opens a deterministic test book rather
+  than tapping the file manager, and validates the complete reader log.
+  A 198-tap run passed capture and analysis; the missing flash/global menu
+  antecedent remains explicit, so this is not a double-refresh clearance.
 - **Notebook edge cases are fixed in source.** Panel taps cannot turn into ink
   across a proximity dropout, night-mode pages use one framebuffer pass, and
   automatic washes wait while the pen hovers without keeping AutoSuspend

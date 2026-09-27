@@ -1,0 +1,13 @@
+qemu-virt visual: booting (out -> /tmp/wilkbook/pinenote-batch-20260926/visual-menu-fixed)
+  login prompt (or wait expired) at 12s
+  (shot at 17s: 1872x1404 UNIFORM; waiting for KOReader paint)
+  first painted shot at 38s
+  baseline settled at 51s (0 retries)
+
+Visual-loop assertions:
+  PASS  require  boot reached login prompt
+  PASS  require  virtio-gpu DRM bound
+  PASS  require  KOReader painted the fb (1872x1404, non-uniform)
+  PASS  require  tap changed the screen
+
+qemu-virt visual: OK (shots in /tmp/wilkbook/pinenote-batch-20260926/visual-menu-fixed)

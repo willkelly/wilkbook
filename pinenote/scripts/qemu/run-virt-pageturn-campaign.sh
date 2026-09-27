@@ -134,7 +134,11 @@ case " $append " in
 esac
 append=$(printf '%s' "$append" | sed \
   -e 's/console=ttyS2,1500000n8/console=ttyAMA0/' \
-  -e 's/console=tty0 //')
+  -e 's/console=tty0 //' \
+  -e 's/fbcon=map:1/fbcon=map:0/')
+# As in run-virt-visual.sh, activate virtio-gpu's scanout through fb0.
+# The device's absent-fb1 mapping otherwise leaves QMP at 640x480 despite
+# KOReader writing its 1872x1404 framebuffer. reader-session unbinds fbcon.
 append="$append wilkbook.force_device=pinenote"
 
 # ---------------------------------------------------------------- plan --
@@ -214,12 +218,12 @@ elif [ -z "${CAMPAIGN_PLAN:-}" ]; then
   #    IMMEDIATELY flip fast: that is the field sequencing (the wash
   #    precedes the run of repeated refreshes, it does not follow it).
   #
-  # SHUTTLE, not a straight run.  The image's only book is KOReader's
-  # 11-page quickstart guide.  200 forward taps would spend 190 of them
-  # parked on the last page — no repaint, no trace, and an
-  # end-of-document dialog in the way.  So the plan tracks a page cursor
-  # and reverses inside a safe band, which keeps EVERY tap a real
-  # full-panel repaint.  The dismiss tap is deliberately placed in the
+  # SHUTTLE, not a straight run. The harness opens a generated text book
+  # before this plan (the shipping image starts in the file manager).
+  # A straight run could exhaust even a long fixture, leaving no repaint,
+  # no trace, and an end-of-document dialog. So the plan tracks a page cursor
+  # and reverses inside a safe band to avoid parking at end-of-book.
+  # Issued taps are not proof of handled page turns. The dismiss tap is in the
   # BACKWARD zone so that when no menu happens to be open it is still a
   # page turn the cursor can account for, instead of silent drift.
   #
@@ -227,8 +231,7 @@ elif [ -z "${CAMPAIGN_PLAN:-}" ]; then
   # identical coordinates inside GestureDetector's double-tap window are
   # a DOUBLE TAP, not two page turns, and the fast bursts sit inside
   # that window.  Jitter separates them without touching any KOReader
-  # default — this harness changes no defaults, which is the whole point
-  # of using it to reason about the shipped configuration.
+  # input/refresh default — only the VM's startup book is overridden.
   awk -v turns="$CAMPAIGN_TURNS" -v every="$CAMPAIGN_MENU_EVERY" \
       -v fx="$Z_FWD_X" -v fy="$Z_FWD_Y" \
       -v bx="$Z_BACK_X" -v by="$Z_BACK_Y" \
@@ -238,7 +241,7 @@ elif [ -z "${CAMPAIGN_PLAN:-}" ]; then
     function jitter() { seed = (seed * 1103515245 + 12345) % 2147483648
                         return int((seed / 2147483648.0) * 80) - 40 }
     # one page turn in the current shuttle direction, then reverse at
-    # the band edges (the book is 11 pages; 2..8 never reaches either end)
+    # the band edges (the generated book is much longer than this band)
     function turn(label, wait) {
       if (dir > 0 && page >= 8) dir = -1
       else if (dir < 0 && page <= 2) dir = 1
@@ -624,6 +627,40 @@ done
 printf '  first painted shot at %ss\n' "$(elapsed)"
 [ "$painted" = 0 ] || { require 'KOReader painted the fb' "$painted"; kill_qemu; trap - EXIT; exit 1; }
 
+# A page-turn plan on the file manager is a false experiment. Keep the real
+# supervised reader and its settings, but select a deterministic startup book
+# in this disposable VM. The wrapper reads the saved settings table so it
+# preserves refresh/input policy without needing a second Lua serializer.
+setup=$outdir/setup-book.sh
+cat > "$setup" <<'EOF'
+set -eu
+grep -q 'wilkbook.force_device=pinenote' /proc/cmdline
+herd stop reader-session
+conf=/root/.config/koreader/settings.reader.lua
+cp "$conf" /tmp/wbcamp-settings.lua
+printf '%s\n' 'local s = dofile("/tmp/wbcamp-settings.lua")' \
+  's.start_with = "last"' 's.lastfile = "/tmp/wbcamp-book.txt"' \
+  'return s' > "$conf"
+i=0
+while [ "$i" -lt 600 ]; do
+  i=$((i + 1))
+  printf 'Paragraph %s. This deterministic reading fixture exercises page turns and menu transitions. Each numbered paragraph gives the renderer distinct content while preserving the normal reader input and refresh settings.\n\n' "$i"
+done > /tmp/wbcamp-book.txt
+herd start reader-session
+i=0
+until grep -q 'opening file /tmp/wbcamp-book.txt' /var/log/reader-session.log; do
+  i=$((i + 1))
+  [ "$i" -lt 60 ] || exit 1
+  sleep 1
+done
+EOF
+tab=$(printf '\t')
+setup_b64=$(base64 "$setup" | tr -d '\n')
+printf '  opening the deterministic campaign book...\n'
+guile -s "$harvest_scm" "$sock" "$outdir/setup-harvest.txt" "$CAMPAIGN_HARVEST_WAIT" \
+  "WBCAMP-BOOK-READY${tab}s=WBCAMP; printf '%s' '$setup_b64' | base64 -d > /tmp/wbcamp-setup.sh; sh /tmp/wbcamp-setup.sh && echo \$s-BOOK-READY" \
+  > "$outdir/setup-driver.out" 2>&1 || fail "campaign book setup failed; see $outdir/setup-harvest.txt"
+
 # Phase 3: let the reader settle (two identical consecutive shots), so the
 # campaign does not start on top of a still-unfolding first paint.
 settle_tries=0
@@ -692,6 +729,8 @@ require 'QMP plan completed'        "$(grep -aq ' PLAN-END ' "$ledger" && echo 0
 if guile --no-auto-compile -e main -s "$reporter" "$harvest" "$outdir" "$ledger" \
     > "$outdir/report-driver.out" 2>&1; then
   cat "$outdir/capture-validation.txt" "$outdir/episodes.txt" "$outdir/triggers.txt"
+  require 'campaign book opened in the guest' "$(grep -q 'opening file /tmp/wbcamp-book.txt' "$outdir/reader-session.log" && echo 0 || echo 1)"
+  require 'page-turn refreshes were recorded' "$(grep -q '\[pn-refresh\] partial partial rect=0,0,1404,1872' "$outdir/reader-session.log" && echo 0 || echo 1)"
 else
   cat "$outdir/report-driver.out" >&2
   require 'complete log and successful analyses' 1

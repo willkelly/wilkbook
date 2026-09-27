@@ -21,6 +21,15 @@ corpus gates. The trigger analyser does not need a wholesale rewrite here.
 
 ## Capture fidelity and failure handling
 
+The QEMU campaign activates virtio-gpu through `fbcon=map:0` (the device's
+absent-fb1 mapping leaves QMP at its 640x480 placeholder). The reader service
+unbinds fbcon as usual. Before the input plan, the harness stops the supervised
+reader, preserves its settings, selects a generated numbered text book, and
+starts the same service again. Only startup-book selection is overridden;
+input and refresh settings remain the image's. Setup requires an `opening
+file` log entry; final acceptance also requires full-panel page-turn requests.
+The image's default file manager is not page-turn evidence.
+
 `run-virt-pageturn-campaign.sh` snapshots the guest's current
 `/var/log/reader-session.log` once, then harvests that **complete snapshot**
 as base64 between line-delimited `WBCAMP-LOG-BEGIN`/`WBCAMP-LOG-END`
