@@ -31,8 +31,10 @@ x = export{record(1), record(2), {k="u",a=2}}
 check(x:find('xml:id="a1"',1,true) and not x:find('xml:id="a2"',1,true), "undone stroke omitted")
 x = export{record(1), record(2), {k="u",a=2}, {k="r",a=2}, {k="x",a=3,ids={1}}}
 check(not x:find('xml:id="a1"',1,true) and x:find('xml:id="a2"',1,true), "redo and whole-stroke erase use production replay")
+x = export{record(1,"pen",1)}
+check(x:find("1403.000000 0.000000",1,true), "recorded mode 1 maps through BB rotation 3")
 x = export{record(1,"pen",3)}
-check(x:find("1403.000000 0.000000",1,true), "rotation maps to upright logical coordinates")
+check(x:find("0.000000 1871.000000",1,true), "recorded mode 3 maps through BB rotation 1")
 local cases = {
     {"area erase", {record(1),record(2,"eraser")}},
     {"mixed orientations", {record(1),record(2,"pen",1)}},

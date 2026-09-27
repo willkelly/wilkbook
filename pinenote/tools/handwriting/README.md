@@ -25,7 +25,9 @@ It neither changes the reader nor writes to the copied journals.
 
 InkML contains ordered active traces with upright logical pixel coordinates,
 relative recorded time in milliseconds, raw pressure and raw tilt, plus notebook,
-page and rotation annotations. The notebook's **production replay** resolves
+page and KOReader rotation-mode annotations. Export converts that mode to
+Blitbuffer's opposite rotation before computing upright coordinates.
+The notebook's **production replay** resolves
 undo/redo and whole-stroke erase. Area-erased pages are refused because exporting
 the surviving pen trajectories alone would resurrect visually erased text.
 Mixed writing orientations, contact gaps, damaged/ignored records and torn tails

@@ -31,6 +31,9 @@ function M.export(root, id, page_n, transcript, read)
     assert(#page.strokes > 0, "page has no active ink")
     local rotation = page.strokes[1].rec.rot
     assert(rotation >= 0 and rotation <= 3, "invalid stroke rotation")
+    -- nb_controller records its KOReader rotation mode, not the oppositely
+    -- directed Blitbuffer rotation consumed by the geometry functions.
+    local bb_rotation = G.bb_rotation(rotation)
     local samples, t0 = {}, nil
     for i, stroke in ipairs(page.strokes) do
         local r = stroke.rec
@@ -51,7 +54,7 @@ function M.export(root, id, page_n, transcript, read)
         '  <annotation type="truth">' .. xml(transcript) .. '</annotation>',
         '  <annotation type="source-notebook">' .. xml(id) .. '</annotation>',
         '  <annotation type="source-page">' .. tostring(page_n) .. '</annotation>',
-        '  <annotation type="source-rotation">' .. rotation .. '</annotation>',
+        '  <annotation type="source-rotation-mode">' .. rotation .. '</annotation>',
         '  <annotation type="coordinate-space">logical panel pixels; T is relative recorded realtime in ms; F and tilt are raw</annotation>',
         '  <traceFormat>',
         '    <channel name="X" type="decimal" units="dev"/>',
@@ -66,7 +69,7 @@ function M.export(root, id, page_n, transcript, read)
         local points = {}
         for k, p in ipairs(samples[i]) do
             local physical = stroke.points[k]
-            local x, y = G.to_logical(rotation, cfg.W, cfg.H, physical.x, physical.y)
+            local x, y = G.to_logical(bb_rotation, cfg.W, cfg.H, physical.x, physical.y)
             points[#points + 1] = string.format("%.6f %.6f %.3f %.0f %.0f %.0f",
                 x, y, (p.t - t0) / 1000, p.p, p.tx, p.ty)
         end
