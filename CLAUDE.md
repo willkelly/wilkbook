@@ -126,8 +126,8 @@ code review — before a single reboot. That's the standard.
   proofs, and the bail-out. Read before touching anything
   direct-related.
 - `doc/notebook.md` — the pen notebook (on glass since generation 22,
-  2026-09-26; generation 23's Refresh and KOReader-restart checks
-  owed): paper-and-pen with a floating
+  2026-09-26; generation 23 cold-booted and pinned): paper-and-pen with a
+  floating
   panel on long press that the stylus can tap, DU ink through a
   per-region hint, pressure brushes, two-finger undo, Refresh and
   idle-washer debt for ghosting, an append-only stroke journal on
@@ -432,10 +432,10 @@ gitignored `build/`, or the reader's static address.
   the USER_NS test kernel `334ljs8q`, carrying the pen notebook and the
   `25cea98` note fixes. It got there by two cable-free kexec trials,
   21→22 and 22→23, then an operator-run cold boot of 23 without UART
-  (the operator waived it). The ledger holds 10, 16 (= v0.3.0-prealpha)
-  and 18 `[pinned]`, all three cold-booted, plus 19–23. 19–22 are
-  kexec-only; 23 is cold-booted but not yet pinned (`doc/status.md`
-  2026-09-26). Pause suspend (`enabled=0`) before a
+  (the operator waived it). The ledger holds 10, 16 (= v0.3.0-prealpha),
+  18 and 23 `[pinned]`, all four cold-booted, plus 19–22, which are
+  kexec-only (`doc/status.md` 2026-09-26). The cable-free trial period
+  stands at two successful sessions of three. Pause suspend (`enabled=0`) before a
   session and restore it after; a session that ends with `enabled=1` on
   battery leaves only the hourly backstop's 20 s ssh windows
   (`doc/device-access.md`).

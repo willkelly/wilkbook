@@ -3,6 +3,113 @@
 Last updated: 2026-09-26. Update protocol: add a dated entry at the top
 after every hardware session; entries are per-device/per-operator.
 
+## 2026-09-26 late (wkelly PineNote, os1 detour, no UART) — the touch controller's config read (#82); the os1 rescue script (PR #51) fixed and run; generation 23 cold-booted twice
+
+**Posture.** The operator ran every power cycle by hand, with UART waived
+("we can cold boot without uart"); no kexec trial ran in this part.
+Auto-suspend stayed `enabled=1`.
+- From generation 23 (boot `34742c60…`), the operator powered off from
+  KOReader.
+- os1 came up by the menu's default, on kernel
+  `6.12.11-pinenote-202501281646-00249-g211ba27556cc`, root `/dev/mmcblk0p5`.
+- Everything below ran over the os1 alias.
+- The operator then powered off os1 and picked "Boot OS2 (part 6)".
+
+**The touch controller's stored config (issue #82's read-only step).**
+- Both of hrdl's attributes are present on os1's kernel: `dump_config` and
+  `dump_cydata` under `/sys/bus/i2c/devices/5-0024/`.
+- The operator kept off the glass during the read. It logged no
+  `cyttsp5` lines, and touch worked on os1 afterwards (operator).
+- `dump_config`: 1914 bytes.
+  - Byte 0x42 (`max_num_of_tch_per_refresh_cycle`) is `0x02`.
+  - The CRC-CCITT-FALSE over all but the last two bytes is `0x93af`,
+    matching the value stored little-endian: valid.
+  - The config version (byte 0x08) is 1, the same as hrdl's
+    device-dumped config.
+- `dump_cydata`: 28 bytes. The firmware revision at bytes 6–9 is 827952
+  (little-endian).
+- So the factory two-contact limit is now read from the chip itself, not
+  inferred from captures. It agrees with the per-frame count of the
+  earlier capture. The 2026-08-24 `RESULT.md` now carries the per-event
+  counting correction.
+- The files are in the host device backups (`2026-09-26-cyttsp5/`, local
+  and NAS, with `SHA256SUMS`), not the repo. SHA-256 prefixes:
+  `c5b15d813756710d` (config) and `b9f49e8714d194df` (cydata).
+
+**The os1 rescue script, first run (PR #51, rebased onto main).**
+- **Found offline, before the run:** the original would have refused on
+  every run. It looked for the helper through
+  `/var/guix/profiles/system → system-N-link → /gnu/store/…`, an absolute
+  link that resolves against os1's root, where no store exists. The
+  check moved inside the chroot.
+- **Found on the device:** `list` then printed nothing and exited 0.
+  - The helper shells out to `ls`, `readlink`, `ln`, `mkdir`, `cp` and
+    `mv`, which inside the Guix root exist only in a system profile.
+  - sudo's Debian PATH names none of them, so the ledger read as empty,
+    and `promote` would have died.
+  - The script now runs the helper with the promoted profile as PATH.
+- **Then:**
+  - `list` showed all eight generations, 23 `[promoted]`, with no
+    `[booted]` mark (os1's command line names no Guix system).
+  - `log` tailed os2's `/var/log/messages`.
+- **The round trip:**
+  - Baseline: `extlinux.conf` `487ebbff…`, `DEFAULT gen-23`,
+    `gen-default` 23, profile → `system-23-link`.
+  - `demote`: all three moved to 22 (`affc3866…`).
+  - `promote 23`: back to `487ebbff…`, byte-identical, with 23 and
+    `system-23-link`.
+  - p6 was unmounted after every run, and the script's copy was removed
+    from os1's `/tmp`.
+- **Back on os2:**
+  - boot `69ac9f1e…`, generation 23 `[promoted] [booted]`, no kexec
+    blacklist on the command line;
+  - `extlinux.conf` still `487ebbff…`;
+  - p6 and the real `/data` mounted read-write with no journal recovery;
+  - only the known boot-time log lines, and all three services running.
+
+**A second os1 visit (2026-09-27, about 00:05–00:31), for the reworked
+rescue script.**
+- **How os2 went down: the power button, held.** The operator says this
+  will be their everyday shutdown.
+  - os2's `/var/log/messages` ends at 00:04:09 with `rfkill: block set for
+    type wifi`, followed by about 2 KB of NUL bytes: the file's size reached
+    the disk, but its last data did not.
+  - Read from os1 without mounting (`dumpe2fs -h`), p6 was `clean` after the
+    script's read-only mount.
+  - p7 (`data`) was mounted read-write by **os1 itself, as its `/home`**.
+    That is stock os1 behaviour, so an os1 boot replays `/data`'s journal.
+- **The reworked script ran on os1, read-only.** It was PR #51 at
+  `0147b1b`, streamed with `ssh <os1> sh -s -- … < script`, and nothing was
+  copied to os1.
+  - `list` showed the ledger, with 23 `[promoted] [pinned]`, and `extlinux
+    DEFAULT: gen-23`.
+  - With no arguments it ran the same list, so dash's bare-`shift` exit is
+    fixed.
+  - `log 4` tailed the log.
+  - `promote` without a number was refused with the usage line, exit 2,
+    before anything was mounted.
+  - p6 was unmounted after every run.
+- **Back on os2:** boot `6caf4f3c…`, generation 23 `[promoted] [booted]
+  [pinned]`, the real `/data`. No journal recovery was needed, since os1 had
+  replayed both. No new kernel errors, and the three services were running.
+- **Everyday shutdown by holding the button.** Every such shutdown cuts
+  power with `/` and `/data` mounted read-write. That is the same crash
+  CLAUDE.md's kexec lesson describes, and there it once left `/data` on the
+  library placeholder. The operator wants a short hold (longer than a tap)
+  to open a shutdown menu instead. An assessment of the hold path is under
+  way (power-key handling, the PMIC's hard cut, boot recovery, data at
+  risk).
+
+**Generation 23 now has two cold boots** (`34742c60…` and `69ac9f1e…`).
+At the operator's word it was pinned on boot `69ac9f1e…` (`wilkbook-generation
+pin 23`, 23:39). The ledger shows 23 `[promoted] [booted] [pinned]` beside
+10, 16 and 18. The two checks still owed from the entry below then passed
+on the same boot (operator: "koreader works, refresh works"):
+- **KOReader restart:** KOReader exited at 23:38:19 (`Tearing down UIManager
+  with exit code: 0`), and the session service started it again. The
+  notebook reopened at 23:38:32 with its strokes.
+- **Refresh:** the full wash at 23:39:21 came with no idle-wash line.
+
 ## 2026-09-26 (wkelly PineNote, generations 22 and 23, cable-free) — the notebook's first glass run; the note fixes accepted; the touchscreen reports two contacts
 
 **Invocation.** The operator first typed "I invoke theh trial!!". That is not
@@ -101,14 +208,16 @@ pen-ups on it.
     to 16 on a `charge 1` at 23:07:34.
   - The operator found it hard to judge how much a unit is
     (`doc/notebook.md`).
-- **Refresh: not reported, and still owed.** The log shows no Refresh wash.
-  Refresh writes no log line of its own. The only full global refreshes
-  inside notebook sessions are the two idle washes.
-- **A KOReader restart: not done.**
-  - The reader process (pid 606) has run since the kexec boot. The log has
-    no restart or crash after the trial's teardown at 22:31:28.
-  - The operator's report said only "koreader restart !?!?". What they
-    meant is not yet known.
+- **Refresh: not reported at first, then passed** after the cold boots
+  (the entry above). Refresh writes no log line of its own. Until then, the
+  only full global refreshes inside notebook sessions were the two idle
+  washes.
+- **A KOReader restart: not done at first, then passed** after the cold
+  boots (the entry above).
+  - Until then the reader process (pid 606) had run since the kexec boot,
+    and the log had no restart or crash after the trial's teardown at
+    22:31:28.
+  - The operator's first report said only "koreader restart !?!?".
 - **A cold boot: passed**, at about 23:17, by the operator without UART.
   - The operator waived UART for it ("we can cold boot without uart"),
     since CLAUDE.md's policy lists cold boots as still needing it. The
@@ -145,12 +254,12 @@ only where no brush was ever chosen.
 - Battery 86 %. No recovery was needed.
 - **Cable-free count:**
   - Both trials passed health and promotion.
-  - The generation-22 checks passed, and so did seven of generation 23's
-    nine, the cold boot included.
-  - Refresh and a KOReader restart remain. So by the policy's definition
-    this session does not yet count as a success.
-  - It becomes the second of three once those pass, or if the operator
-    narrows the agreed checks.
+  - The generation-22 checks passed, and so did all nine of generation 23's.
+    The last two were Refresh and a KOReader restart, after the cold boots
+    (the entry above).
+  - Auto-suspend was restored.
+  - So this session counts as the **second of three** successful
+    cable-free sessions. The third is the policy's review point.
 
 Evidence: `doc/artifacts/pinenote-gen22-23-notebook-20260926/`.
 

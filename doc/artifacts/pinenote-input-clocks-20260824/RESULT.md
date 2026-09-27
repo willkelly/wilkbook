@@ -17,7 +17,7 @@ turned out to have **premises that were wrong**.
 | issue | question | answer |
 |---|---|---|
 | #20 | does the digitizer report pressure/tilt? | **yes** — 12-bit pressure, ±90° tilt, hover |
-| #21 | how many touch slots? | **32** advertised; 3 simultaneous observed |
+| #21 | how many touch slots? | **32** advertised; 3 simultaneous observed (counted per event; 2 per frame, see the 2026-09-26 correction in §2) |
 | #23 | what does a 250 MHz `dclk_ebc` request round to? | `cpll_333m` is **already 250 MHz** |
 | #18 | do the sound modules load? | **already loaded**; card 0 registered |
 | #8 | is the hall sensor on `vcc_3v3_pmu`? | **no** — it is on `vcc_bat` |
@@ -76,6 +76,18 @@ Three separable results:
 - **Only 3 simultaneous, despite five fingers.** This is the soft number
   and is *not* claimed as a cap. It may be `max_num_of_tch_per_refresh_cycle`,
   or five flat fingers may not all have registered. Unresolved.
+- **Correction (2026-09-26).** The limit is 2 per frame, and the "3" is
+  most likely an artifact of how it was counted.
+  - `evmon.lua` recounts active slots at every `ABS_MT_TRACKING_ID`
+    event, not at `SYN_REPORT`. A new contact's ID arrives inside the
+    frame, before the dropped contact's `-1`, so per-event counting
+    overshoots by one.
+  - A 60 s five-finger capture on 2026-09-26 peaked at 2 per frame.
+    Counted per event, the same stream reached 3.
+  - The controller's stored config, read from os1 the same night, has
+    `max_num_of_tch_per_refresh_cycle` (byte 0x42) = 2.
+  - The raw events of this capture were not kept, so this is the likely
+    explanation, not a proof (`doc/status.md` 2026-09-26, issue #82).
 
 ## 3. `cpll_333m` is already at 250 MHz (#23)
 

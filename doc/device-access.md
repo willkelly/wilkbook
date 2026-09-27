@@ -48,6 +48,14 @@ Related patterns, all proven:
 - **Chroot testing**: `sudo chroot /mnt/os2 <store-path>` runs the Guix
   aarch64 binaries natively — proves deployed-binary behavior without a
   boot.
+  - Name the binary by store path. The profile links end in absolute
+    `/gnu/store` paths, which do not resolve from os1's side of the
+    mount.
+  - A script that shells out needs a profile on PATH:
+    `sudo env PATH=/var/guix/profiles/system/profile/bin:… /usr/sbin/chroot /mnt/os2 …`.
+    sudo's Debian PATH names nothing inside the Guix root. The first os1
+    run of `wilkbook-generation` read an empty ledger and exited 0
+    because `ls` was not found (2026-09-26, PR #51).
 - **os2's /tmp is on-disk, but Guix WIPES it when os2 boots.** Evidence
   under /tmp survives a hang + power-cycle *only if you boot os1 next*:
   boot os1, mount p6 `ro,noload`, harvest, sha256-verify, unmount — then

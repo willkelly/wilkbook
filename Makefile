@@ -76,7 +76,7 @@ FLAVORS = minimal slim networked dev usb-console usb-console-linux-6-6 reader
         timezone-check kernel-version-check library-check \
         manuals-check manuals-acceptance-check ultra-coupling-check timesync-check \
         settings-check koreader-profile-check ebc-modprobe-options-check \
-        ebc-clut-check ebc-card-resolution-check ebc-ioctl-roster-check direct-probe-quirk-check direct-rect-hints-check update-path-check uart-pick-check deploy reader-stop-check pen-check ebc-lab-check \
+        ebc-clut-check ebc-card-resolution-check ebc-ioctl-roster-check direct-probe-quirk-check direct-rect-hints-check update-path-check uart-pick-check os1-rescue-check deploy reader-stop-check pen-check ebc-lab-check \
         check-source book-workbench-check book-workbench-editor-check book-workbench-device-check book-workbench-qemu-drv book-workbench-editor-qemu-drv $(FLAVORS) $(addprefix image-,$(FLAVORS)) $(addprefix rootfs-,$(FLAVORS))
 
 help:
@@ -110,6 +110,7 @@ help:
 	@echo "  direct-rect-hints-check   quirk: hrdl's RECT_HINTS ioctl is unbounded; our bounds patch is present and applied after it"
 	@echo "  update-path-check the update path: generation ledger, extlinux rendering, trial/promote pins"
 	@echo "  uart-pick-check   the U-Boot menu picker against a pty replaying the real captured menu bytes (termios, handle file, keystrokes, timeout)"
+	@echo "  os1-rescue-check  the os1 rescue script against a stub sudo: refusals, mount modes, the helper's chroot PATH, signals, sh -s"
 	@echo "  deploy            DEVICE=<ssh host>: build, guix copy, add generation, kexec trial, health, promote"
 	@echo "  qemu-update-check ROOTFS=<ext4> [SYSTEM_B=..]: the update flow end to end in QEMU (rung 4u)"
 	@echo "  ebc-logic-check   extracted EBC driver logic checks ([WBF=..])"
@@ -408,7 +409,7 @@ CHECK_HOST_TARGETS = clut-check ebc-logic-check rastersim-check \
         battery-dtb-check time-machine-check gexp-modules-check \
         timezone-check refresh-episodes-check refresh-trigger-check refresh-capture-check timesync-check settings-check \
         ebc-modprobe-options-check ebc-clut-check ebc-card-resolution-check ebc-ioctl-roster-check direct-probe-quirk-check direct-rect-hints-check \
-        update-path-check uart-pick-check reader-stop-check pen-check ebc-lab-check
+        update-path-check uart-pick-check os1-rescue-check reader-stop-check pen-check ebc-lab-check
 
 # Parse time, not recipe time: a recipe-level guard would run only AFTER every
 # prerequisite had already completed, so it could not prevent the mistake it
@@ -657,6 +658,16 @@ update-path-check:
 # the no-menu timeout (WILKBOOK_UBOOT_MENU_TIMEOUT).  python3 + setsid + stty.
 uart-pick-check:
 	sh pinenote/scripts/uart/test-uboot-pick-slot.sh
+
+# The os1 rescue script (change os2's DEFAULT from os1, no cable) against a
+# stub sudo that stands in for os1 and plays the generation helper.  Pins
+# the refusals, arguments checked before any mount, plain ro for list and
+# log (never noload), the helper found inside the chroot and run with the
+# promoted profile as PATH (the two bugs its first os1 run found), no /sys
+# bind, a loud empty ledger, the extlinux DEFAULT beside the ledger,
+# unmounting on HUP/INT/TERM, and `sh -s` from stdin.  sh, dash, bash.
+os1-rescue-check:
+	sh pinenote/scripts/os1/test-rescue-generation.sh
 
 # Deploy a flavor to a running reader over ssh: build, guix copy, add a
 # generation, kexec trial boot, health check, promote, prune

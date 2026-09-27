@@ -37,6 +37,12 @@ note() { printf 'FAIL: %s\n' "$1" >&2; fail=1; }
 #   guix describe   `channels-pin' regenerates the pin and must therefore
 #                   describe the AMBIENT guix; routing it through the pin
 #                   would make it copy channels.scm back onto itself.
+#   guix time-machine -C channels.scm --
+#                   already pinned to channels.scm on every run, which is
+#                   what this gate exists to guarantee (the Book Workbench's
+#                   qemu-drv gates derive the pinned system by design).
+#                   Routing it through $(GUIX) would pin it twice under
+#                   TIME_MACHINE=1 and not at all without it.
 lineno=0
 while IFS= read -r line; do
     lineno=$((lineno + 1))
@@ -57,6 +63,7 @@ while IFS= read -r line; do
     esac
     case $line in
         *'guix describe'*) continue ;;  # allowlisted, see above
+        *'guix time-machine -C channels.scm --'*) continue ;;  # pinned already, see above
         *'$(GUIX)'*) continue ;;        # pinnable: honours TIME_MACHINE
         *'$(call guix-shell'*) continue ;;  # toolchain only, not a build
     esac

@@ -23,7 +23,7 @@ claims are quoted where the exact shape matters.
 | 8 | The R1–R7 shipping-reader list and the optics check were not run; S3–S5 not started. | **Correct** per `doc/status.md` 2026-09-03 late afternoon. | — | — |
 | 9 | PR #67's finding (a trial runs the running device tree) should become policy: DTB changes need a cold boot and a live-FDT check before promotion counts. | **Agreed**; the helper's NOTE and the docs are in #67; the cold-boot rule is written into `doc/update-path.md`. | — | — |
 | 10 | PR #66's Wi-Fi fix needs captured repetition (30–50 cycles, both trigger paths, varied sleep lengths) before it is called proven. | **Agreed**, and superseded in part: the same evening root-caused the remaining losses to KOReader's `wifi_was_on` bookkeeping, not the radio (`doc/networking.md` §8, the late-night status entry). Rig v2 is designed [and has since run: 27 + 32 cycles, both trigger paths, 2026-09-03/04 — `doc/status.md`]. | — | — |
-| 11 | PR #51's os1 rescue is untested on os1. | **Correct**. | — | — |
+| 11 | PR #51's os1 rescue is untested on os1. | **Correct** [and since run on os1, 2026-09-26: `list`, `log` and a `demote`/`promote 23` round trip, after two fixes the run exposed — `doc/status.md`]. | — | — |
 
 One caution on item 6 the audit did not state: KOReader draws through
 fbdev and is not DRM master. Gating global refresh or mode control on

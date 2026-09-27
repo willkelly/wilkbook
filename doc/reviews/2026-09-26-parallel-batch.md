@@ -98,6 +98,29 @@ baseline root risk and QEMU/device qualification limits.
 
 ## Next acceptance sequence
 
+### Main reconciliation after PRs #51 and #84
+
+Merged `main` at `6e8a19a` into the batch after its initial completion.
+Generation 23 is now pinned, Refresh and KOReader restart have passed, and
+the cable-free record stands at two successful sessions of three. The os1
+recovery script is merged: the earlier version exercised demote/promote on
+os1; the reviewed version's read-only commands ran there, with its write
+paths host-tested. The stored touchscreen configuration confirms two contacts.
+
+The merged delta changes recovery tooling, check wiring and hardware records;
+it does not change the batch's notebook or generation-helper implementation.
+Both sets of Makefile targets and changelog entries were retained, and the
+root Makefile's source-map hash was recomputed. `os1-rescue-check` passed 75
+cases across sh/dash/bash; `update-path-check` and `time-machine-check` passed;
+a fresh source-capsule export and preparation passed.
+
+The new hardware record also identifies held-button power cuts with writable
+filesystems and a requested short-hold shutdown menu under assessment. That
+is separate from the batch's kexec data-writer fix; os1's journal replay is
+recovery evidence, not evidence of orderly shutdown.
+
+### Remaining qualification
+
 1. Realize/check the candidate system closure using the pinned channel. Build
    matching QEMU A/B inputs and exercise update-flow success and refusal; run
    the full-log page-turn campaign against matching inputs.
