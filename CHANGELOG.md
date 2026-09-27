@@ -24,6 +24,11 @@ this lineage. **Unreleased** above it collects what has landed since.
 
 ## Unreleased
 
+- **Focused recognition choices tested with Von and Laya.** Both local CPU
+  selectors now receive a word-sized ambiguity, fixed sentence context and
+  stroke probabilities. Laya gives a small accuracy gain in the primary order,
+  but both remain presentation-sensitive; no automatic correction is adopted
+  (`doc/handwriting-baseline.md`).
 - **Recognition alternatives can be evaluated locally.** The host tools retain
   scored stroke-recognition candidates and test a contextual selector against
   them. The existing Von model was tested on CPU: its primary selection worsened

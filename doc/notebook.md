@@ -70,7 +70,11 @@ but worse word-content error than TrOCR Base (23.08% vs 10.77% on the shared
 lines). A CTC-alternatives + local Von CPU experiment retained useful choices,
 but the installed selector worsened the primary result and changed answers on
 17/19 lines when options were reversed. The candidate interface is reusable;
-model choice remains open, and recognition is not in the drawing path.
+model choice remains open, and recognition is not in the drawing path. A focused
+word/span follow-up supplies stroke probabilities to Von and Laya on CPU: Laya
+reduces character error from 7.14% to 6.85% in the primary order, but reversing
+presentation changes 15/44 decisions (Von: 32/44). Requiring agreement makes no
+corrections. These remain host experiments (`doc/handwriting-baseline.md`).
 
 ### Fixed paper and the handwriting sampler (2026-09-26)
 

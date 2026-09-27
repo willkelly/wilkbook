@@ -134,6 +134,52 @@ runtime versions. The local cached model may predate the current online model
 card; results name that local version rather than silently downloading newer
 weights. Images, emissions and candidates remain under gitignored `build/`.
 
+### Focused word/span selection with stroke probabilities
+
+`make-focused-candidates.py` aligns the original greedy characters to emission
+frames, takes word-sized windows between delimiter runs, and searches each
+window independently (beam 64, eight frame labels). It scores retained strings
+with the exact CTC forward algorithm, keeps up to five readings within five
+log-probability units of the best, and always retains the original. It asks the
+selector only when the top-two gap is at most `ln(10)`. These fixed thresholds
+are heuristics; they were set before this run, not optimized on its labels.
+
+`evaluate-focused.py` supports `--selector von` and `--selector laya`. Both get
+the identical sentence with the current span blanked, the original span, and
+**each option's relative stroke probability in the input context** (normalized
+over only the listed readings). The sentence stays at the original recognition
+for every question; changes are applied simultaneously afterwards. The primary
+order is descending stroke probability. The diagnostic reverses both the
+option list and the probability list, keeping IDs, texts and probabilities
+together. A separate agreement gate applies a change only if both presentations
+select identical text. It is not proof of invariance under all permutations.
+
+```sh
+"$NUMPY_PYTHON" pinenote/tools/handwriting/make-focused-candidates.py \
+  CAPTURE NEW_FOCUSED_CANDIDATES
+HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 LAYA_CPU_AMP= \
+  "$SELECTOR_PYTHON" pinenote/tools/handwriting/evaluate-focused.py \
+  NEW_FOCUSED_CANDIDATES/candidates.json COLLECTION LOCAL_SNAPSHOT NEW_RUN \
+  --selector laya
+python3 pinenote/tools/handwriting/summarize-focused.py \
+  NEW_FOCUSED_CANDIDATES/candidates.json NEW_RUN
+make -C pinenote/tools/handwriting candidate-check
+```
+
+Use a runtime with the chosen SDK available; for a pinned Laya source checkout,
+put its root on `PYTHONPATH`. The recorded runs use the existing Von runtime's
+Python/library setup for both selectors, float32 CPU, eight threads, and no
+dependency upgrades. Laya's native packing is checked against an untruncated
+sequence before inference. Its SDK displays candidate IDs alongside texts;
+Von's displays texts alone. These are native SDK encodings of identical API
+inputs, not identical token sequences. `summarize-focused.py` reads saved truth
+only after prediction, and calculates a diagnostic candidate-coverage bound
+over all allowed span combinations. Never use that oracle to select text.
+
+Results and exact source/model pins: `doc/handwriting-baseline.md`, focused
+selection section. All question contexts, probabilities, answers, labels and
+comparisons remain under private gitignored `build/focused-20260927/`.
+
 ## Copy-and-write sampler
 
 Generate five pages of four prompts: everyday prose, Workbench-like requests,

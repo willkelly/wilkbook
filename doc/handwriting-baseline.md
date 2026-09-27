@@ -267,6 +267,124 @@ Private evidence:
 the 32-candidate lists, every forward/reversed Von answer, full comparisons,
 timings, settings, source/weight hashes and dependency versions.
 
+## Focused span selection: Von and Laya, with stroke probabilities
+
+The operator asked to narrow the decision to a word/short span, include the
+recognizer's probabilities in the input context, and also try **Laya**. Both
+ran locally on CPU against the same 19 trajectory-compatible lines. No model
+was adapted, and no prompt/threshold search was performed for this run.
+
+### Fixed inputs and selection procedure
+
+- Align greedy characters to their CTC emission runs; use word-sized frame
+  windows between neighboring delimiter emissions. Surrounding punctuation and
+  spaces stay fixed. A reading may insert an internal word space, but the
+  windows cannot merge across existing word boundaries or repair punctuation.
+- Independently search each window with beam 64 and eight nonblank labels per
+  frame. Re-score proposed strings with the **exact CTC forward probability**
+  on that window. Keep at most five candidates within five natural-log units
+  of the top score, always including the original reading. Restrict alternatives
+  to alphanumeric words with internal apostrophes/spaces. Ask a question only
+  if the best/second-best score gap is at most `ln(10)`.
+- This produced **44 questions out of 128 spans**: five with two options,
+  three with three, four with four, and 32 with five. This count is tokenization
+  specific, not the metric's reference word count.
+- Each question gets the **unchanged original sentence with one span replaced
+  by `___`**, the original span, and each candidate's probability as text:
+  `exp(local CTC logp) / sum(exp(local CTC logp))` over the retained options.
+  Those are conditional relative stroke scores, not calibrated correctness
+  probabilities or estimates including discarded readings.
+- The question is: **"Which candidate best fills the gap? Use both the
+  surrounding sentence and the supplied stroke-recognizer probabilities. Select
+  only a supplied reading. Other words in the sentence may also have recognition
+  errors."** The reference transcription and printed writing prompt are absent.
+- Primary presentation sorts by stroke score. Reverse both the options and
+  probability list for a diagnostic, preserving IDs and values. Record an
+  additional agreement gate: apply a replacement only when both presentations
+  choose exactly the same text. All questions use frozen original context;
+  apply the changes together afterwards, avoiding correction cascades.
+- Both selectors' **88 forward/reversed API inputs match exactly**, including
+  options and probability contexts. Each SDK uses its native encoding: Laya
+  includes the IDs in option text, Von does not. Every Laya question was checked
+  for state, instruction and option truncation; none was truncated. Save all
+  predictions before opening labels for scoring.
+
+### Checkpoints and CPU execution
+
+Von is the same installed SDK 1.0.1 and snapshot as the full-line experiment.
+[Laya](https://github.com/NandhaKishorM/laya) is SDK/source version **0.3.20**, clean
+source commit `4066d5d5fbf08b66c6757ddeedbd797bd7655bc0`, using the English
+`convaiinnovations/laya` checkpoint pinned to
+`55cf4c4ebb4ebe31b2550e8bdf3bd21b99753851`. Its ModernBERT-large decision model
+contains **421,293,827 parameters**. The multilingual and typed-decisions
+checkpoints were not used. Downloaded only the pinned model/config/tokenizer
+files before inference; model inference runs in offline mode with local files.
+
+Both use the existing runtime's PyTorch 2.9.1+rocm6.4 / Transformers 5.17.0,
+explicit **CPU float32, eight threads**. Laya runs without compilation, GPU fast
+path or autocast. No existing package or Von checkpoint was upgraded. Laya's
+weights and configuration hashes match before/after loading. Its native SDK
+warns about clamping the checkpoint's `choice:11+` temperature, a bucket these
+2–5-choice questions never use. The applicable shipped temperatures are 1.90636
+for two choices and 1.76015 for 3–5 choices. Neither model's published
+calibration has been validated on handwriting decisions.
+
+### Results
+
+| Method | Raw CER | Raw WER | Lexical WER | Exact lines |
+|---|---:|---:|---:|---:|
+| Original / local beam | 7.14% | 26.77% | 23.08% | 2/19 |
+| Focused Von, primary order | 7.14% | 25.98% | 22.31% | 2/19 |
+| Focused Von, reversed | 9.52% | 37.80% | 31.54% | 2/19 |
+| Focused Laya, primary order | **6.85%** | **25.20%** | **20.77%** | **3/19** |
+| Focused Laya, reversed | 8.04% | 29.92% | 23.85% | 2/19 |
+| Either selector, agreement gate | 7.14% | 26.77% | 23.08% | 2/19 |
+
+Primary Von improves character error on two lines and worsens two. Primary
+Laya improves two and worsens none (48 → 46 character edits). It changes three
+words across three lines; one spelling improvement leaves strict character
+distance unchanged because the original's final letter occupied the position
+of a missing period. Raw CER and lexical WER therefore tell different parts
+of the story.
+
+**Order sensitivity remains decisive:** Von changes its answer on **32/44**
+questions, Laya on **15/44**, under reversed presentation. The agreement gate
+makes **zero text changes** for either model. The test reverses the probability
+list too, so it diagnoses presentation sensitivity rather than isolating which
+input position causes it. Keeping stroke ranks in candidate IDs and naming
+the original may also anchor the decision; there is no ablation of those cues.
+There is no probability-free focused run, so the contribution of the supplied
+probabilities is not isolated either.
+
+Candidate coverage is still limited. The truth-assisted lattice oracle over
+all permitted span combinations reaches **4.32% CER (29/672)**, with exact
+references possible for **5/19** lines. This is diagnostic only, not a selector
+result. It was independently checked against exhaustive combinations on tiny
+examples. Even a perfect selector cannot repair the remaining errors under
+these window, threshold, alphabet and candidate-list restrictions.
+
+| Workstation CPU cost | Von | Laya |
+|---|---:|---:|
+| Median single question | 198 ms | 227 ms |
+| Median forward-order selection per line | 408 ms | 471 ms |
+| Process peak RSS | 3775 MiB | 3157 MiB |
+
+Shared candidate generation costs a median **164 ms/line**. Timings exclude
+load/warm-up; reverse diagnostics require additional calls. These are sequential
+workstation measurements, not PineNote latency, energy measurements or a
+controlled memory comparison between architectures. Neither is a tiny model.
+
+**Conclusion:** the focused Laya result is a small improvement in the primary
+ordering, but neither selector supports dependable automatic correction yet.
+Retain alternatives and original ink; investigate candidate coverage and
+presentation robustness before adding corrections to the notebook. This corpus
+is development evidence; an independent claim needs fresh held-out writing.
+
+Reproduction and native-input details: `pinenote/tools/handwriting/README.md`.
+Private evidence: `build/focused-20260927/` under that tool contains the common
+candidates, all question/probability contexts, both models' answers, comparisons,
+diagnostic bounds, logs, hashes and runtime provenance.
+
 ## Microsoft Research and related work
 
 - **[TrOCR](https://www.microsoft.com/en-us/research/publication/trocr-transformer-based-optical-character-recognition-with-pre-trained-models/)**

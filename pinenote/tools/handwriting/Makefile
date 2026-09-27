@@ -14,3 +14,4 @@ trajectory-input-check:
 
 candidate-check:
 	python3 test-ctc-candidates.py
+	python3 test-focused-candidates.py

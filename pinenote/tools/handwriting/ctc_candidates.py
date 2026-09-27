@@ -62,3 +62,24 @@ def rerank(candidates, language_scores, weight=0.2):
     for c, score in zip(candidates, language_scores):
         ranked.append(dict(c, language_score=score, combined_score=c["ctc_logp"] + weight * score))
     return sorted(ranked, key=lambda c: c["combined_score"], reverse=True)
+
+
+def sequence_logp(frames, text, alphabet):
+    """Exact CTC forward probability for one fixed text (no beam pruning)."""
+    lookup = {c: i + 1 for i, c in enumerate(alphabet)}
+    labels = [0]
+    for c in text:
+        labels.extend([lookup[c], 0])
+    previous = [NEG] * len(labels)
+    previous[0] = 0.0
+    for frame in frames:
+        current = [NEG] * len(labels)
+        for i, label in enumerate(labels):
+            value = previous[i]
+            if i:
+                value = logadd(value, previous[i - 1])
+            if i > 1 and label != 0 and label != labels[i - 2]:
+                value = logadd(value, previous[i - 2])
+            current[i] = value + frame[label]
+        previous = current
+    return logadd(previous[-1], previous[-2]) if len(labels) > 1 else previous[0]
