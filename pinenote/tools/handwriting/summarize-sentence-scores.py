@@ -39,6 +39,9 @@ def main():
         '| Model | Method | CER | Raw WER | Lexical WER | Exact | Better / worse vs previous |',
         '|---|---|---:|---:|---:|---:|---:|']
     for run, meta, data in loaded:
+        normalize = normalized_score
+        if meta['selector'] == 'jev':
+            from jev_scoring import normalized_score as normalize, choice_readings
         name = meta['selector'] + '/' + meta.get('evidence', 'stroke')
         methods = {name: [] for name in data['rows'][0]['readings']}
         oracle_edits = oracle_exact = 0
@@ -48,7 +51,7 @@ def main():
             truth = path.read_text().removesuffix('\n').removesuffix('\r')
             for c in row['candidates']:
                 for kind, a in c['assessments'].items():
-                    if abs(normalized_score(a['answer'], kind) - a['normalized_score']) > 1e-12:
+                    if abs(normalize(a['answer'], kind) - a['normalized_score']) > 1e-12:
                         raise ValueError('assessment mismatch')
             # Independently re-order to verify candidate presentation is absent
             # from the selection rule (not a claim about rubric/polarity bias).
@@ -61,6 +64,10 @@ def main():
                         raise ValueError('fused selection mismatch')
                 if select(candidates, kind, direct=True) != row['readings'][kind + '_direct']:
                     raise ValueError('direct selection mismatch')
+            if meta['selector'] == 'jev':
+                for method, text in choice_readings(candidates, row['choice_answer']).items():
+                    if row['readings'][method] != text:
+                        raise ValueError('choice selection mismatch')
             for method, text in row['readings'].items():
                 methods[method].append(dict(sample=sample, truth=truth, prediction=text,
                     label_sha256=common.sha(path), image_sha256=row['image_sha256'],

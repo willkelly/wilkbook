@@ -24,6 +24,11 @@ this lineage. **Unreleased** above it collects what has landed since.
 
 ## Unreleased
 
+- **Hosted Jev tested as a handwriting candidate selector.** On the same prose
+  development sheets, flat-choice probabilities fused with stroke/character-LM
+  evidence reach 3.72% character error and 9/19 exact lines. The API experiment
+  costs about 3.3 cents; it is not deployed recognition or fresh-session accuracy
+  evidence. All fixed scoring comparisons are in `doc/handwriting-baseline.md`.
 - **A code-and-erasing handwriting sampler is available offline.** The new
   `code-edits` profile creates Python and Guile Scheme blocks with indentation
   guides and deliberate erase-and-rewrite tasks. Its final two pages are for

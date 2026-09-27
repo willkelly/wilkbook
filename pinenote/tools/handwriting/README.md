@@ -381,6 +381,58 @@ is not confidence). Every observed cutoff plus a simple fixed grid is saved,
 for fused `score_8` and direct ordinal ranking. Thresholds explored on these
 same lines are development findings, not calibrated acceptance guarantees.
 
+### Hosted Jev comparison (explicit opt-in)
+
+`evaluate-jev.py` sends **candidate sentences**, optionally with numeric stroke
+evidence, to TypeSafe's hosted API. It sends no images, trajectories or reference
+labels. This is a host experiment, separate from the local notebook recognition
+path. Supply `TYPESAFE_API_KEY` in the process environment or the existing
+`jeveval.auth` session cache; never put it in source, arguments or run artifacts.
+
+The runner reuses the client in a checkout of
+<https://github.com/willkelly/jev-evaluation> (the checkout containing
+`jeveval/` and `PROMPTING.md`). Its prompting guide informs the experiment:
+batch Noul and Score about the same sentence, preserve the original candidate
+text, and add one flat Choice over all 32 readings per line. Choices identify
+options by their actual text, not numbered positions. Noul/Score retain the
+local experiment's identical wire rubrics and single-candidate context; the
+Choice arm is a separately specified comparison, not a matched Von ablation.
+
+```sh
+python3 pinenote/tools/handwriting/evaluate-jev.py \
+  SENTENCE_CANDIDATES/candidates.json NEW_JEV_SMOKE \
+  --jev-repo /path/to/jev/eval --smoke
+python3 pinenote/tools/handwriting/evaluate-jev.py \
+  SENTENCE_CANDIDATES/candidates.json NEW_JEV_RUN \
+  --jev-repo /path/to/jev/eval
+python3 pinenote/tools/handwriting/summarize-sentence-scores.py \
+  COLLECTION NEW_JEV_RUN/stroke NEW_JEV_RUN/text-only --output NEW_JEV_COMPARISON
+python3 pinenote/tools/handwriting/audit-jev.py NEW_JEV_RUN COLLECTION
+python3 pinenote/tools/handwriting/test-jev-scoring.py
+```
+
+Both evidence arms use the same base score and fixed weights `.5, 2, 8`.
+Scalar fusion adds a clipped assessment logit; categorical fusion adds
+`weight * log(max(probability, 1e-6))`. Record every weight and direct selection.
+Jev rounds probabilities independently to two decimals, so the distribution
+checks allow only the resulting rounding error. Ordinal normalization uses the
+native reported expected level divided by four, checking consistency with the
+rounded distribution. It is a heuristic quality score, not HTR confidence.
+
+`plan.json` freezes inputs, code, rubrics and weights before sending requests;
+`calls.jsonl` retains each raw request/response, reported tokens, model version,
+latency and failures, without authorization headers. `--resume` requires the
+same plan and reuses successful requests from that log. An error stops the
+evaluation rather than substituting an answer. A completed run must have one
+returned model version. Pricing estimates use the client's recorded rate;
+confirm current vendor pricing before a new run. The September 2026 rate is
+$42 per billion input tokens, output free.
+
+Keep labelled examples and threshold fitting out of this direct comparison.
+Future few-shot examples belong in state and must come from a disjoint training
+split. Candidate coverage, confidence ranking and repeated-sheet gains are
+development diagnostics; fresh writing remains the accuracy gate.
+
 ### Gemma comparison through a local CPU runtime
 
 The same focused evaluator accepts `--selector gemma --llama-server PATH` and

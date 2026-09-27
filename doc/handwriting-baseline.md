@@ -950,6 +950,129 @@ an empty inventory. Original run metadata is preserved, with separate audits
 verifying every current weight hash and SDK source against the earlier pinned
 experiments. This bookkeeping fix does not alter model inputs or predictions.
 
+## Hosted Jev: native assessments and one flat choice (2026-09-27)
+
+The operator supplied API access and requested a comparison with the Von work,
+specifically pointing to our **Jev prompting guide**. Read
+[`PROMPTING.md`](https://github.com/willkelly/jev-evaluation/blob/d80f375621ad4b9306c6dff6941242925d7e2386/PROMPTING.md)
+before constructing the requests. The existing evaluation client's clean source
+at **`d80f375621ad4b9306c6dff6941242925d7e2386`** provides transport and raw logging.
+Every response, including the six synthetic compatibility requests, identifies
+**`jev-1.13.0`** (requested alias `jev-latest`).
+
+### Fixed experiment and guide application
+
+- Identical **608 candidates: 32 per line on the shared 19**. No model retraining,
+  new candidate search or label changes. Candidates retain exact full-line CTC,
+  character-LM and length evidence. Base is the prior **5.06% CER** decoder.
+- Native Noul and five-level Score use **the identical rubrics and state** as
+  the Von/Laya experiment, with both questions about one sentence in one request.
+  Each candidate is still judged without seeing the other candidates. Repeat
+  the existing `stroke` and `text-only` input arms. Stroke evidence remains in
+  final code-side fusion in both arms.
+- The guide additionally motivates **one flat Choice over all 32 readings**,
+  one request per line: actual sentences are option ids and descriptions,
+  without a filter pass or pairwise tournament. In the stroke arm, each reading
+  carries its numeric stroke evidence; in text-only, the options carry only
+  candidate text. No order-shuffle requests. This Choice prompt is separately
+  specified, not an exact replica of the old Von full-line choice experiment.
+- Fixed fusion weights **.5, 2, 8**, plus direct ranking. Independent assessments
+  use the previous clipped-logit fusion; categorical Choice uses
+  `base + weight * log(max(probability, 1e-6))`. Native Score's reported expected
+  level divided by four is a rating, not a correctness probability. Jev rounds
+  probabilities to two decimals; validate mass/expectation within those rounding
+  bounds without silently renormalizing the response.
+- Hash source, candidates and settings before sending; cache raw responses and
+  reuse them for every downstream calculation. No labelled few-shot examples,
+  threshold fitting or hidden answer validation by another model. Only candidate
+  text and optional numeric evidence go to the explicitly requested hosted
+  experiment; neither ink nor reference labels are sent. It is not an on-device
+  recognition implementation. The supplied credential stayed in process memory
+  and a mode-0600 session-specific tmpfs file, removed after the run.
+
+### Results: every specified method
+
+| Method | Stroke-input CER | Text-only-input CER |
+|---|---:|---:|
+| Base decoder | 5.06% | 5.06% |
+| Noul direct | 4.17% | 4.02% |
+| Noul, weight .5 | 5.21% | 4.76% |
+| Noul, weight 2 | 4.46% | **3.87%** |
+| Noul, weight 8 | 4.32% | 4.02% |
+| Score direct | 4.61% | 4.32% |
+| Score, weight .5 | 5.21% | 4.76% |
+| Score, weight 2 | 4.61% | 4.32% |
+| Score, weight 8 | 4.46% | 4.02% |
+| Choice direct | 5.80% | **3.72%** |
+| Choice, weight .5 | 5.36% | 4.61% |
+| Choice, weight 2 | 4.91% | **3.72%** |
+| Choice, weight 8 | 5.80% | **3.72%** |
+
+Text-only Choice fusion at weights 2 and 8 returns the same aggregate scores:
+**25/672 character edits (3.72% CER), 13/127 raw word edits (10.24% WER),
+12/130 lexical word edits (9.23%), 9/19 exact lines**. Relative to the base's
+34 character edits and 5 exact lines, eight lines improve, one worsens, and no
+formerly exact line is lost. These two weights differ in the capitalization of
+one still-incorrect word on line 18 (`auick` versus `Auick`). Direct Choice has
+the same aggregate CER/WER but
+**8 exact lines**, improving eight lines and harming two; the aggregate masks
+different selected readings. Candidate coverage remains **16/672 oracle edits
+(2.38%), 11/19 exact references available**, not an achieved recognizer score.
+
+Examples of useful changes include recovering a space, `ogene → opened`,
+`books → looks` and sentence-initial capitalization. Failure modes remain:
+the damaged page number changes `U2 → U` rather than recovering `42`, and
+`boos → book` is a plausible word but the writing says `box`. Literal number,
+case, punctuation and rare-word accuracy still need ink evidence. Text-only
+Noul at weight 2 gives **26 edits, 7 exact lines**, improving six lines and
+harming none in character-edit count; some changed readings have equal error.
+
+The guide's ranking advice is diagnostic here, not a reason to fit a gate.
+Among the **11 lines containing an exact candidate**, within-line exact-versus-
+imperfect AUROC, macro-averaged across lines, is **.968 Noul / .979 Score /
+.991 Choice** in the text-only arm. Many losing candidates are visibly corrupt,
+so this easy ranking task can score highly while top-1 still misses lines.
+Across *all* lines, ranking lower-edit candidates above higher-edit ones yields
+only **.690 / .712 / .613** concordance respectively, with half credit for ties.
+Neither statistic validates Jev's confidence as transcription confidence.
+
+### Cost, verification and interpretation
+
+Full run: **1,254 successful requests, zero retries/failures**, **774,205 reported
+input tokens**, estimated **$0.03251661** at the published $42/billion input-token
+rate (output free). Six preliminary synthetic requests add **3,055 tokens /
+$0.00012831**. Four concurrent requests; **50.92 seconds** for the full run.
+Median request latency in the text-only arm is **131 ms** for a paired Noul/Score
+assessment of one candidate and **136 ms** for Choice over an entire line.
+The latter needs one request/line, versus 32 paired assessment requests. These
+are network-inclusive workstation measurements, excluding candidate decoding;
+no tablet latency, memory or offline deployment claim follows from them.
+Largest request: **4,947 reported input tokens**.
+
+`audit-jev.py` reconstructs every expected request from frozen candidates,
+checks every response against saved predictions, checks all snapshots/hashes,
+then opens labels for ranking diagnostics. The metric summarizer separately
+recomputes fusion with reversed candidate order. A full `--resume` replay with
+network access disabled reproduced both prediction files and the original call
+log byte-for-byte, without another request. The original handwriting/label
+snapshot remains unchanged.
+
+**Conclusion:** Jev provides the lowest measured stroke-track CER so far and
+the flat-choice route is much cheaper in requests than per-candidate scoring.
+It is only **five fewer character edits than text-only Von's 30**, and these
+same sheets have now seen many methods. Even with frozen within-run settings,
+choosing the best method from this table is development selection. This is
+not independently demonstrated sub-5% recognition, a near-zero-error solution,
+or personalization. Direct Gemma vision remains substantially stronger on the
+same 19 lines (**5 edits, 0.74% CER, 15 exact**). Freeze a candidate/model/fusion
+policy before fresh-session evaluation; actual writer adaptation remains unrun.
+
+Private artifacts: `pinenote/tools/handwriting/build/jev-20260927/` and sibling
+`jev-20260927-smoke/`: pre-call plan/source snapshots, requests/responses,
+predictions, every comparison, ranking audit and cache-replay check. Runners:
+`evaluate-jev.py`, `jev_scoring.py`, `audit-jev.py`; adapter checks:
+`test-jev-scoring.py`. No API credential is included in these artifacts.
+
 ## Architecture assessment: recognition, decoding, then personalization
 
 At the operator's request, three independent agent reviews examined the linked
