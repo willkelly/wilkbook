@@ -43,6 +43,24 @@ negatives. Keep later sessions/prompt families for checking improvement on new
 writing. These first repeated sheets are development data, not an independent
 test set. No local recognizer or decision-model fine-tuning has run yet.
 
+**Code and erasing are in scope (operator follow-up).** The next collection
+includes handwritten Python and Guile Scheme, including indentation and literal
+syntax, plus area-erase-and-rewrite tasks. `make-sampler.scm OUT code-edits`
+creates a six-page supplement (12 four-line blocks), reserving its last two
+pages for a later-session check. Intended prompts remain separate from verified
+labels; evaluate final visible ink, not erased history. Erased lines are part of
+the recognition target, not cases to omit. The existing image replay preserves
+area erasure; raw trajectory export refuses affected lines. No new on-device
+eraser qualification is implied by the kit.
+
+This also exposes a hard limit beyond prose CER: the frozen OnlineHTR alphabet
+cannot emit `=`, `_`, `{}`, `<`, `>`, backslash, backtick, `~` or `%`. Code
+adaptation requires vocabulary/output-head work or another recognizer. Existing
+prose runners do not qualify multiline/indentation handling; code needs exact
+line/block and whitespace-sensitive metrics. Syntax checks are diagnostic,
+not permission to silently rewrite the transcription. An English-fluency
+selector is not a suitable correctness criterion for code.
+
 ## What ran
 
 - 20 ink-only images from production journal replay, including the erased and

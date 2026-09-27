@@ -468,6 +468,62 @@ The printed prompts and rules never enter the stroke export.
 
 ## Collect a small evaluation set
 
+### Code and erase-and-rewrite supplement
+
+```sh
+guix shell guile librsvg imagemagick zip font-dejavu -- \
+  guile --no-auto-compile -s pinenote/tools/handwriting/make-sampler.scm \
+  NEW_CODE_KIT code-edits
+```
+
+This optional profile creates **six pages, twelve four-line blocks**: six Python
+blocks and six Guile Scheme blocks, including six deliberate area-erase tasks.
+It covers indentation, underscores/hyphens, parentheses/brackets/braces, quotes,
+backquote/unquote, comparisons, numbers, boolean literals, f-strings and escapes.
+The printed code is the **initial** text; edit instructions specify what to
+erase and replace. Use the real area eraser, preserving surrounding strokes.
+
+- Pages 1–4 (notebook pages 0–3) are the adaptation collection. Leave pages 5–6
+  (notebook pages 4–5) for a **later writing session** and keep those blocks out
+  of training/parameter selection. Record actual session boundaries. This is a
+  small coverage supplement, not a claim that 48 lines suffice for adaptation.
+- After edits, use Refresh and close/reopen; compare the final visible ink.
+  Record remnants, neighbour damage, missing replacements or replay differences.
+  Generating this kit does not qualify the eraser's on-device appearance or
+  persistence; those are operator checks.
+- `regions.tsv` describes **whole blocks**; `line-regions.tsv` gives individual
+  lines with IDs such as `01-1`. Both retain the full page width and a common
+  horizontal origin. Do not crop each line to its own ink bounds: that removes
+  the evidence for indentation. Inspect actual ink before accepting crop boxes.
+- `prompts/NN.txt` and `line-prompts/NN-L.txt` contain **unverified intended final
+  text**. `tasks.scm` records initial/final prompts and actions. The new profile
+  leaves `transcriptions/` empty: populate it with reviewed literal final ink,
+  preserving indentation, newlines and any actual writing mistakes.
+- Recognition inputs are ink-only replay on white with erasers applied in order;
+  paper, printed prompts and erased historical marks are not model inputs.
+  The original journal remains authoritative and unchanged. Area-erased lines
+  must stay in the raster evaluation; do not discard them to improve a score.
+  The current trajectory exporter still refuses affected lines, because ignoring
+  erasers resurrects deleted writing. Untouched lines and whole-stroke undo/erase
+  remain eligible for trajectory export.
+
+**Code needs its own evaluation path.** Existing prose runners are single-line
+baselines and some trim outer whitespace. They are not qualified for multiline
+code or indentation. Use exact characters (including punctuation/whitespace),
+exact lines and exact blocks, with erased/unedited cases visible separately.
+Parsing is a useful additional diagnostic, not a substitute for matching what
+was written; do not autoformat, repair or execute recognized code as part of
+scoring. English sentence plausibility is not a code-transcription criterion.
+
+The frozen OnlineHTR alphabet lacks several required code symbols, including
+`=`, `_`, `{`, `}`, `<`, `>`, backslash, backtick, `~` and `%`. A decoder-only
+change cannot fix that. Adapting the stroke model for these samples needs an
+expanded output vocabulary and trained output head, or a different recognizer.
+Image recognition naturally covers the final raster after area erasing; its
+code accuracy and whitespace preservation still need measurement.
+
+### Prose-only starter collection
+
 1. Use a fresh notebook, Ball or Fine, and **one short line per page**. Keep one
    writing orientation per page. Write normally; do not carefully imitate print.
 2. Start with 12–20 lines: prose, a few Workbench-like labels, and numbers or

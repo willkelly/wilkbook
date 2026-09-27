@@ -24,6 +24,11 @@ this lineage. **Unreleased** above it collects what has landed since.
 
 ## Unreleased
 
+- **A code-and-erasing handwriting sampler is available offline.** The new
+  `code-edits` profile creates Python and Guile Scheme blocks with indentation
+  guides and deliberate erase-and-rewrite tasks. Its final two pages are for
+  a later-session check; intended prompts stay separate from verified labels.
+  Collection instructions: `pinenote/tools/handwriting/README.md`.
 - **Independent sentence scoring improves the handwriting development set.**
   Text-only Von Noul assessments fused with stroke and character-LM evidence
   reach 4.46% character error, down from 5.06%; Laya ordinal fusion reaches
