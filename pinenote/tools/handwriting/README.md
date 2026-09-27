@@ -180,6 +180,35 @@ Results and exact source/model pins: `doc/handwriting-baseline.md`, focused
 selection section. All question contexts, probabilities, answers, labels and
 comparisons remain under private gitignored `build/focused-20260927/`.
 
+### Gemma comparison through a local CPU runtime
+
+The same focused evaluator accepts `--selector gemma --llama-server PATH` and
+a local GGUF **file** in place of an SDK snapshot directory. It owns a temporary
+loopback-only llama.cpp server, uses eight CPU threads with zero GPU layers,
+and shuts that process down after inference. The model's embedded chat template
+formats the same state/question/options, with an added JSON-output instruction.
+Schema-constrained output permits only the supplied candidate IDs. Temperature
+is zero, thinking is disabled, and prompt reuse is disabled. Generated IDs are
+not reported as option probabilities. The input still contains all relative
+stroke probabilities. Save the raw requests, responses, server configuration,
+model hash, timings and server peak RSS; the Python client's RSS is separate.
+
+```sh
+python3 pinenote/tools/handwriting/evaluate-focused.py \
+  FOCUSED_CANDIDATES/candidates.json COLLECTION LOCAL_MODEL.gguf NEW_GEMMA_RUN \
+  --selector gemma --llama-server LLAMA_CPP/build/bin/llama-server
+```
+
+For the recorded E2B run, build llama.cpp commit
+`7ac59a6e3ad851cd41af00f678effab0598ba9a8` with CMake Release, CPU backend,
+`GGML_CUDA=OFF`, `GGML_VULKAN=OFF`, `LLAMA_OPENSSL=OFF`,
+`LLAMA_BUILD_TESTS=OFF`, `LLAMA_BUILD_EXAMPLES=OFF`, `LLAMA_BUILD_SERVER=ON`;
+build target `llama-server`. Download
+`ggml-org/gemma-4-E2B-it-GGUF` at
+`b4243c156154b6dca9324415f8c7ccc098b4aed1`, file
+`gemma-4-E2B-it-Q4_0.gguf`, before starting offline inference. No vision
+projector is used in this text-only selection experiment.
+
 ## Copy-and-write sampler
 
 Generate five pages of four prompts: everyday prose, Workbench-like requests,

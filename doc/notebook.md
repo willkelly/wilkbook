@@ -74,7 +74,10 @@ model choice remains open, and recognition is not in the drawing path. A focused
 word/span follow-up supplies stroke probabilities to Von and Laya on CPU: Laya
 reduces character error from 7.14% to 6.85% in the primary order, but reversing
 presentation changes 15/44 decisions (Von: 32/44). Requiring agreement makes no
-corrections. These remain host experiments (`doc/handwriting-baseline.md`).
+corrections. Quantized Gemma 4 E2B also makes no corrections in that task,
+at 1.14 s/question on the host CPU. The research recommendation is integrated
+character-language-model decoding and writer adaptation, pending experiments.
+These remain host experiments (`doc/handwriting-baseline.md`).
 
 ### Fixed paper and the handwriting sampler (2026-09-26)
 

@@ -385,6 +385,163 @@ Private evidence: `build/focused-20260927/` under that tool contains the common
 candidates, all question/probability contexts, both models' answers, comparisons,
 diagnostic bounds, logs, hashes and runtime provenance.
 
+## Gemma 4 E2B: same focused task, quantized CPU comparison
+
+The operator next asked about Gemma 4. Tested **Gemma 4 E2B IT Q4_0**, using
+[`ggml-org/gemma-4-E2B-it-GGUF`](https://huggingface.co/ggml-org/gemma-4-E2B-it-GGUF)
+revision `b4243c156154b6dca9324415f8c7ccc098b4aed1`, file
+`gemma-4-E2B-it-Q4_0.gguf`. CPU-only llama.cpp source is pinned to
+`7ac59a6e3ad851cd41af00f678effab0598ba9a8`. The GGUF contains 4,628,569,635
+text-model tensor parameters and occupies **2,841,481,184 bytes**; E2B is the
+effective-size designation, not the total stored parameter count. No image
+projector or handwriting image enters this experiment.
+
+The evaluator starts and owns an offline, loopback-only server with eight CPU
+threads, zero GPU layers, one slot and a 4096-token context. It uses the embedded
+Gemma chat template, disables thinking, uses temperature zero and disables
+prompt caching. The same question, sentence context, original span, candidates
+and eight-decimal relative stroke probabilities are supplied as in the focused
+Von/Laya runs. A JSON-output instruction and JSON Schema constrain the answer
+to one supplied candidate ID. Every request/response is saved. There are no
+generated option probabilities; none are inferred from deterministic output.
+All 88 forward/reversed state/options presentations match the earlier inputs;
+unrounded internal Python probabilities differ by at most floating-point
+roundoff between runtimes, without changing the actual displayed probabilities.
+
+**Result: no corrections.** All 44 primary selections retain the original,
+as do all 44 reversed selections. Character error remains **7.14% (48/672)**,
+raw WER **26.77%**, lexical WER **23.08%**, and exact lines **2/19**. There are
+zero reversal flips, but that stability provides no recognition improvement.
+The agreement gate also changes nothing.
+
+Because this outcome could indicate an output-constraint bug, checked four
+separate synthetic choice questions afterwards, without handwriting or labels.
+The model correctly chooses red over blue, 4 over 5 for 2+2, and dog over cat
+for barking when the right answer has ID `c01`, and follows an ID remapping for
+red. The interface can select non-first/non-`c00` answers. The handwriting result
+may reflect anchoring on the original or the strongest stroke probability, but
+no ablation establishes that explanation. This run does not show that Gemma
+cannot supply a useful independently measured language score.
+
+Median cost: **1.137 s/question**, **2.367 s/line** for the forward-order
+selector, plus the shared **164 ms/line** candidate generation. Reverse-order
+diagnostics require another set of calls. Measured server peak RSS is
+**3976.9 MiB**; the Python client separately peaks at 29.2 MiB. These are
+workstation measurements after warm-up, not tablet measurements. Server-side
+responses confirm zero cached prompt tokens. The owned server is stopped after
+the run; the synthetic diagnostic server was also stopped.
+
+Private evidence: `pinenote/tools/handwriting/build/focused-20260927/gemma4-e2b/`
+and sibling `gemma4-e2b-sanity/`, including GGUF/source identity, all requests and
+answers, server logs/configuration, timings, comparison and result files.
+The E4B and larger Gemma variants remain untested.
+
+## Architecture assessment: recognition, decoding, then personalization
+
+At the operator's request, three independent agent reviews examined the linked
+[OCR-assisted character-BERT paper](https://www.techscience.com/cmc/v85n3/64172/html),
+our decoding implementation, and writer adaptation. The following is a research
+recommendation, not a measured new recognizer or a hardware qualification.
+
+### What the linked paper establishes
+
+Lee, Park and Lee (2025), **OCR-Assisted Masked BERT for Homoglyph Restoration
+towards Multiple Phishing Text Downstream Tasks**, addresses Unicode homoglyph
+substitutions in phishing text. It renders individual glyphs, runs Tesseract,
+and creates a 13,488-entry normalization mapping before character-level
+contextual restoration. Algorithm 1 and Figure 3 qualify the prose: OCR is
+applied in the **zero-shot** inference branch; fine-tuned inference does not
+require it. Its Table 2 reports 95.16 ± 12.89% word accuracy before homoglyph
+fine-tuning and 99.59 ± 0.08% after it, with 21,342/5,336 train/held-out examples
+in Table 1. Zero-shot still includes language-model pretraining on clean text,
+including domain-specific spam.
+
+Transferable principle: resolve visual ambiguity using character-sensitive
+context. Important limits:
+
+- This is not handwritten-stroke recognition. Non-ASCII corruption supplies
+  localization cues that an ordinary but wrong ASCII recognition lacks.
+- The authors explicitly acknowledge equal-length restoration. Insertions,
+  deletions and word-boundary mistakes require different decoding/edit support.
+- Word restoration accuracy is not Levenshtein WER. The paper defines an
+  all-word denominator, while the related [BitAbuse evaluation code](https://github.com/CAU-AutoML/Bitabuse/blob/main/metrics.py)
+  scores originally corrupted words. That repository targets the earlier
+  BitAbuse paper; whether CMC used that exact implementation is unverified.
+- Fifty random 80:20 splits do not establish template/campaign-disjoint
+  generalization. Template overlap is a risk to check, not demonstrated leakage.
+- The paper reports no latency, memory or FLOPs. Its pretraining-ablation prose
+  and table coverage are inconsistent, and annotation is described as both
+  single- and multiple-annotator in different sections.
+
+Public related resources exist: [character-MLM training code](https://github.com/lhy0718/bert-character-mlm)
+and [`lhy/char-bert-base-uncased`](https://huggingface.co/lhy/char-bert-base-uncased),
+revision `4d6af8e4c911ccc9737d5ca2fb0aed7c62580b78` (12 layers, hidden size 768,
+881 vocabulary entries, 512 positions). Its sparse model card and 2023 date do
+not establish it as the checkpoint behind the 2025 CMC results. It was not run
+here; neither its footprint nor its quality is a measured handwriting result.
+
+### Recommended CPU-first path
+
+**1. Improve decoding before adding another large option classifier.** Preserve
+the small stroke recognizer's frame evidence and combine a character language
+model with CTC during prefix search, including spaces and punctuation. A useful
+starting score is `log P_CTC(text|ink) + alpha * log P_LM(text) + beta * length`.
+Tune weights on development data; this is log-linear fusion, not a calibrated
+Bayesian posterior. Apply character-LM increments only when the collapsed text
+grows, not on blank/repeated frames. A pruned character n-gram is the first
+cost baseline; a small character RNN is a later comparison.
+
+This lets context preserve alternatives **before pruning**, and lets word
+boundaries move. Our current focused windows are anchored to greedy delimiters;
+their exact CTC scores are exact only within each cropped window, not the full
+line. The 4.32% oracle is a bound for the retained candidates, not the intrinsic
+limit of the recognizer's entire output distribution. `$` is genuinely absent
+from its alphabet and needs an output-head/tokenizer change plus training.
+Relevant precedents: [CTC prefix search with language-model integration](https://arxiv.org/abs/1408.2873)
+and [Fast Multi-language LSTM-based Online Handwriting Recognition](https://arxiv.org/abs/1902.10525).
+Their benchmark gains do not predict gains on this checkpoint or writer.
+
+**2. Test writer-specific adaptation of the 245k-parameter recognizer.** Compare
+head-only, last-recurrent-layer-plus-head, and conservative full fine-tuning,
+using line-level CTC labels, early stopping and preservation of the original
+model. A model this small does not initially need LoRA. Collect onboarding
+coverage and natural writing; choose collection size from measured learning
+curves rather than promising that a fixed number of pages suffices. Pressure
+and tilt remain a separate training experiment because the existing input
+representation does not consume them.
+
+**3. Use a second recognizer or contextual model selectively.** Image recognition
+has complementary word accuracy and handles visible ink after area erasure.
+Evaluate candidate unions/late fusion before training a joint image/stroke
+model. A second-pass language model should score each complete candidate
+independently, combining that score with full-line exact CTC evidence; this
+removes option-list ordering from the model input. Masked-LM
+[pseudo-log-likelihood rescoring](https://aclanthology.org/2020.acl-main.240/)
+is one established method, with length handling and inference cost to measure.
+It is not a normalized sequence probability, and simply reading unmasked BERT
+logits is not equivalent. Gemma is a useful quality/cost challenger and possible
+occasional helper, not an assumed always-resident tablet component.
+
+### Experiment order and acceptance
+
+First measure search loss on saved emissions: vary pruning, exact-rescore full
+lines, and report oracle CER, reference inclusion and boundary coverage. Then
+compare CTC-only, finished-list LM rescoring and integrated character-LM search
+at explicit compute budgets. In parallel, define adaptation splits before
+collecting further handwriting. Keep the existing sampler as development data;
+separate fresh train/dev/test by writing session and prompt family, with names,
+numbers, symbols, natural notes and intentional spelling mistakes. Label actual
+writing, not the printed prompt. Never feed held-out labels to adaptation or
+language-model tuning.
+
+Accept improvements on actual top-1 CER/WER, numeric/symbol fidelity, introduced
+errors and correction effort, not oracle improvements alone. Recognition runs
+after pauses/completed lines, outside the drawing path; the bidirectional model
+does not imply causal per-stroke recognition. A lean runtime for its roughly
+0.94 MiB float32 weights needs parity checks and measured memory; Python's
+425 MiB baseline is not an intrinsic model requirement. Tablet latency and
+energy remain separate later gates after host quality is demonstrated.
+
 ## Microsoft Research and related work
 
 - **[TrOCR](https://www.microsoft.com/en-us/research/publication/trocr-transformer-based-optical-character-recognition-with-pre-trained-models/)**

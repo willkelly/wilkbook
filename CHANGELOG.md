@@ -24,6 +24,11 @@ this lineage. **Unreleased** above it collects what has landed since.
 
 ## Unreleased
 
+- **Gemma and the next recognition direction assessed.** A quantized Gemma 4
+  E2B CPU comparison kept every original reading in the focused-choice task.
+  A review of character-level restoration research identifies integrated
+  CTC/language-model decoding and writer adaptation as the next experiments;
+  measurements and limitations are in `doc/handwriting-baseline.md`.
 - **Focused recognition choices tested with Von and Laya.** Both local CPU
   selectors now receive a word-sized ambiguity, fixed sentence context and
   stroke probabilities. Laya gives a small accuracy gain in the primary order,

@@ -27,23 +27,35 @@ def main():
     parser.add_argument('collection', type=Path)
     parser.add_argument('weights', type=Path)
     parser.add_argument('output', type=Path)
-    parser.add_argument('--selector', choices=['von', 'laya'], required=True)
+    parser.add_argument('--selector', choices=['von', 'laya', 'gemma'], required=True)
+    parser.add_argument('--llama-server', type=Path, help='CPU llama.cpp executable for Gemma')
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=False)
     os.environ['HF_HUB_OFFLINE'] = '1'
     os.environ['TRANSFORMERS_OFFLINE'] = '1'
-    import torch
-    import transformers
     common = load_module('von_eval', 'evaluate-von.py')
-    torch.set_num_threads(8)
-    torch.set_num_interop_threads(1)
-    torch.manual_seed(0)
+    if args.selector != 'gemma':
+        import torch
+        import transformers
+        torch.set_num_threads(8)
+        torch.set_num_interop_threads(1)
+        torch.manual_seed(0)
     data = json.loads(args.candidates.read_text())
     start = time.perf_counter()
-    selector = (VonSelector if args.selector == 'von' else LayaSelector)(args.weights)
-    model = selector.model
+    if args.selector == 'gemma':
+        if args.llama_server is None:
+            parser.error('--llama-server is required for Gemma')
+        from gemma_selector import GemmaSelector
+        selector = GemmaSelector(args.weights, args.llama_server, args.output)
+        runtime = dict(device='cpu', dtype='GGUF mixed quantization; see server log', threads=8)
+    else:
+        selector = (VonSelector if args.selector == 'von' else LayaSelector)(args.weights)
+        model = selector.model
+        assert next(model.parameters()).device.type == 'cpu'
+        runtime = dict(device='cpu', dtype=str(next(model.parameters()).dtype), threads=8,
+            model_parameters=sum(p.numel() for p in model.parameters()),
+            torch=torch.__version__, transformers=transformers.__version__)
     load_seconds = time.perf_counter() - start
-    assert next(model.parameters()).device.type == 'cpu'
     selector.evaluate('A red object.', 'Which color?', {'red': 'red', 'blue': 'blue'})
     methods = ['original', 'local_beam', 'selected', 'reverse', 'stable']
     query_times, line_times = [], []
@@ -62,7 +74,8 @@ def main():
                     start = time.perf_counter()
                     answer = selector.evaluate(state, QUESTION, options)
                     times.append(time.perf_counter() - start)
-                    common.validate_choice(answer, options)
+                    if args.selector != 'gemma':
+                        common.validate_choice(answer, options)
                     answers.append(answer)
                     choices.append(options[answer['choice']])
                     contexts.append(dict(state=state, options=options))
@@ -83,6 +96,8 @@ def main():
                            for name, parts in replacements.items()}
         line_times.append(sum(row_times))
     (args.output / 'predictions.json').write_text(json.dumps(data, indent=2) + '\n')
+    if args.selector == 'gemma':
+        runtime['server_peak_rss_mib'] = selector.close()
     # Only now read labels. Selection contexts contain no template or truth.
     metrics = common.module('metrics', 'evaluate-images.py')
     summary = common.module('summary', 'summarize-images.py')
@@ -104,14 +119,13 @@ def main():
         stroke_evidence='softmax of exact local CTC log probabilities across retained options, supplied in text',
         update_policy='all questions use frozen original context; substitutions applied simultaneously',
         stable_policy='apply only if forward and reversed presentations select identical text; otherwise retain original',
-        device='cpu', dtype=str(next(model.parameters()).dtype), threads=8,
-        model_parameters=sum(p.numel() for p in model.parameters()), snapshot=args.weights.name,
+        **runtime, snapshot=args.weights.name,
         selector=args.selector, selector_version=selector.version, selector_config=selector.config,
-        torch=torch.__version__, transformers=transformers.__version__,
         candidate_file_sha256=common.sha(args.candidates),
         source_sha256={str(f): common.sha(f) for f in selector.source_files},
-        weights={str(f.relative_to(args.weights)): common.sha(f) for f in args.weights.rglob('*')
-                 if f.is_file() and '.cache' not in f.relative_to(args.weights).parts}),
+        weights=({args.weights.name: common.sha(args.weights)} if args.weights.is_file() else
+            {str(f.relative_to(args.weights)): common.sha(f) for f in args.weights.rglob('*')
+             if f.is_file() and '.cache' not in f.relative_to(args.weights).parts})),
         words=sum(len(r['spans']) for r in data['rows']), questions=len(query_times),
         order_flips=flips, model_load_seconds=load_seconds,
         median_query_seconds=statistics.median(query_times) if query_times else 0,
