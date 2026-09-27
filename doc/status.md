@@ -1,7 +1,42 @@
 # Hardware status
 
-Last updated: 2026-09-26. Update protocol: add a dated entry at the top
+Last updated: 2026-09-27. Update protocol: add a dated entry at the top
 after every hardware session; entries are per-device/per-operator.
+
+## 2026-09-27 code-and-erasing sampler installed (wkelly PineNote, generation 25)
+
+Operator requested deployment and confirmed **"Ready—Notebook closed"** with
+the device awake. This was a data-file installation on the existing promoted
+generation **25**, system `/gnu/store/yy13ywsn16qa5y6kwbgg1ibhgaxzcxpc-system`,
+kernel **7.1.8**, same boot ID `c664cad7-f825-4657-b2b1-b2fffa1af280`.
+Verified os2 root p6 and the real ext4 `/data` on p7 before writing. No OS
+generation transfer, reader restart or reboot was involved.
+
+Source **`e79f8f2`**, `make-sampler.scm ... code-edits`: six pages, twelve
+four-line Python/Guile blocks, six area-erase-and-rewrite tasks. The last two
+pages are reserved for a later writing session. Host checks validated EPUB/kit
+archives and XML, notebook background geometry, region manifests, all intended
+Python/Guile syntax (parsing only), and refusal to overwrite an existing kit;
+the original prose profile's page images and prompts remain byte-identical.
+
+Installed new notebook **`/data/notebooks/20260927T170521Z-c0a4b7`** and companion
+**`/data/books/handwriting-code-erasing.epub`**. Both destinations were absent.
+Transferred a 1,590,893-byte compressed payload to a fresh staging directory,
+verified all **nine files** there, installed without clobbering existing paths,
+then verified all nine SHA-256 hashes again at their final destinations and
+synced. Installed ownership follows the respective notebook/book parent.
+The operator can select the new notebook through Tools → Notebook → Open.
+Paper appearance, writing, eraser quality and close/reopen persistence on this
+sampler await operator observations; installation alone does not qualify them.
+
+SSH initially stalled at the workstation's GPG-agent signing step; the pinned
+device host key matched, and no device command ran during those failed attempts.
+After the operator unlocked/added the key, preflight and transfer succeeded.
+Auto-suspend was **`enabled=1`**, paused to **`enabled=0`** for installation and
+restored byte-for-byte to **`enabled=1`**, with readback in the successful
+installer's cleanup. Generation 25 remains promoted; pins 10/16/18/23 remain.
+Private transfer manifest, script and log:
+`pinenote/tools/handwriting/build/code-edits-sampler-20260927-v3/deployment/`.
 
 ## 2026-09-26 completed handwriting sampler (wkelly PineNote, generation 25, same session)
 
