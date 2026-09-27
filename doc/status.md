@@ -3,6 +3,61 @@
 Last updated: 2026-09-26. Update protocol: add a dated entry at the top
 after every hardware session; entries are per-device/per-operator.
 
+## 2026-09-26 sampler deployment (wkelly PineNote, generation 24 → 25, cable-free) — promoted, writable first page open
+
+**Invocation:** the operator requested the update and loading the sampler, then
+directly said **`I invoke the trial!!`**. No UART; pinned time-machine deployer
+environment, 600-second host deadline, normal trial/health/promote machinery.
+Source commit `0a989eb` on `notebook/background-template`. The source is based
+on the recognition-export branch; the separate data-recovery PR is not included.
+
+**Source:** generation 24, promoted and kexec-only,
+`/gnu/store/13cg7sg6waa3ahj3ivxhmkagia0kbwi1-system`, boot
+`7d56208a-02f4-4a1c-9386-ef61cd7d0859`. Verified root p6, real writable data p7,
+source health, DEFAULT 24 and 100% battery. Retained recovery fallback is pinned,
+cold-booted generation 23,
+`/gnu/store/x3qqz8r52pdh7jzghzfj8l44gfrqkncb-system`.
+
+**Target:** generation 25,
+`/gnu/store/yy13ywsn16qa5y6kwbgg1ibhgaxzcxpc-system`, derivation
+`/gnu/store/h19zc0wj9sdcss79iswlhxahs0wy4z5i-system.drv`. Pin gate, full build
+and exact-output closure checks passed. Kernel remains USER_NS test `334ljs8q`
+and gVisor `djgy782a`; Image SHA-256 `5435c84e…` matches generations 24 and 23.
+Full native input suite, background and region-export tests passed; the native
+reader rendered all five EPUB pages. Installed update-helper Lua sources and
+the LuaJIT executable are byte-identical to generation 24 (wrapper paths change
+with the reader package), so existing update-path/QEMU proofs were reused.
+
+**Result:** deploy exit 0; 27/488 closure paths transferred; generation 25 was
+registered with DEFAULT still 24, then health passed and 25 was promoted. A
+separate postflight passed health on boot
+`c664cad7-f825-4657-b2b1-b2fffa1af280`. Reader and note authority are running;
+authority reported ready with its data database. Root and data are writable on
+p6/p7; the checked dmesg signatures show their mounts without journal recovery
+or WARNING/BUG/Oops/unbalanced-runtime-PM messages. This is not proof of clean-root
+kexec. No recovery intervention; no pruning; pins 10/16/18/23 remain. Generation
+25 is **kexec-only and unpinned**, not device-tree qualification.
+
+**Sampler:** checksum-verified new notebook
+`/data/notebooks/20260927T051718Z-d466ff`, pages 0–4, and EPUB
+`/data/books/handwriting-sampler.epub`. A session-only KOReader startup patch
+called the ordinary notebook launch path, opened page 0, captured its blank
+framebuffer, then removed itself. The capture shows all four prompts and ruled
+spaces in portrait. Existing notebooks were not overwritten. Subsequent
+pen-up/append/fsync logs show new writing on page 0; no written content is
+committed. **Operator appearance, erasing, page-turn and persistence acceptance
+has not yet been reported.** This session is not counted as a fully accepted
+cable-free success on automated health alone.
+
+**Cleanup:** prior auto-suspend file restored byte-for-byte to **`enabled=1`**.
+Backup, import archive and prompt/transcription map remain under
+`/data/wilkbook/diagnostic-backups/gen24-before-sampler-20260926/`.
+One preparation query used `readlink` on the regular `gen-default` file; a later
+read-only query corrected it. A postflight service query used the wrong
+authority name; restoration was completed separately and the actual
+`pinenote-book-state-device` service was verified. Neither was a trial failure.
+Evidence: `doc/artifacts/pinenote-gen25-sampler-20260926/`.
+
 ## 2026-09-26 final batch checks (wkelly PineNote, generation 24, same boot) — rotation, night mode, hover, restart persistence and fallback suspend
 
 No additional kexec or cold boot. System remains

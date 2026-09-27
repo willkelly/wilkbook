@@ -70,8 +70,11 @@ Operator-approved scope: a simple notebook template; orient the device by hand.
 The five-page, 20-line sampler pairs each printed prompt with a ruled writing
 area. `pinenote/tools/handwriting/make-sampler.scm` generates the EPUB and a fresh
 notebook from the same artwork; its README has generation, installation and
-labelled-region export instructions. **Implemented and host-tested, not deployed
-or glass-accepted.** The actual native KOReader renders the EPUB as five pages.
+labelled-region export instructions. **Deployed as generation 25 on wkelly's
+PineNote:** health passed, sampler page 0 opened through the normal notebook
+path, and pen-up/append/fsync logs show new writing. Operator appearance and
+interaction acceptance is still pending (`doc/status.md`). The actual native
+KOReader renders the EPUB as five pages.
 
 Paper is an immutable physical-pixel layer below the journal. Live area erasing
 restores paper; replay, undo and stroke erasing start from that same paper.

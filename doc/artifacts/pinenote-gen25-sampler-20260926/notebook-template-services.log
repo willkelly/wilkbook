@@ -1,0 +1,16 @@
+● Status of pinenote-book-state-device:
+  It is running since 05:30:28 AM (109 seconds ago).
+  Main PID: 542
+  Command: /run/current-system/profile/bin/env -i HOME=/nonexistent LANG=C LC_ALL=C PATH=/run/current-system/profile/bin GUILE_AUTO_COMPILE=0 GUILE_LOAD_PATH=/gnu/store/p1c7mmca1rb6ncqvyc41z69d544lf6v8-wilkbook-book-state-device-modules:/gnu/store/4xw3152qj9xiap982l6jmfbknqrllvjz-wilkbook-book-state-device-supervisor/share/guile/site/3.0 GUILE_LOAD_COMPILED_PATH=/gnu/store/4xw3152qj9xiap982l6jmfbknqrllvjz-wilkbook-book-state-device-supervisor/lib/guile/3.0/site-ccache /gnu/store/4xw3152qj9xiap982l6jmfbknqrllvjz-wilkbook-book-state-device-supervisor/bin/guile --no-auto-compile -s /gnu/store/81xpxfnr9vxsikbn6rlbh6w8naqmn52s-wilkbook-book-state-device-authority
+  It is enabled.
+  Provides: pinenote-book-state-device
+  Requires: user-processes udev pinenote-book-state-device-ready
+  Will not be respawned.
+  Log file: /var/log/book-state-device.log
+
+Recent messages (use '-n' to view more or less):
+  2026-09-27 05:30:35 BOOK_STATE_DEVICE: ready socket=/run/wilkbook-book-state/control.sock database=/data/wilkbook/book-state/book-state-v1.sqlite
+grep: /var/log/shepherd.log: No such file or directory
+[    3.577235] EXT4-fs (mmcblk0p6): mounted filesystem 70c4c247-d9b4-126d-ef67-4d4970c4c247 r/w with ordered data mode. Quota mode: none.
+[    8.006145] EXT4-fs (mmcblk0p7): mounted filesystem 73e99bbd-f1cc-4afb-8371-d7c8bf8dd009 r/w with ordered data mode. Quota mode: none.
+enabled=1
