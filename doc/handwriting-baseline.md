@@ -41,7 +41,8 @@ entered correction to supply its positive target. The confirmed sheet labels
 already supply positives, and mistaken recognition alternatives supply hard
 negatives. Keep later sessions/prompt families for checking improvement on new
 writing. These first repeated sheets are development data, not an independent
-test set. No local recognizer or decision-model fine-tuning has run yet.
+test set. The first small-model writer-adaptation pilot has now run (below),
+using page-disjoint development folds; no decision model has been fine-tuned.
 
 **Code and erasing are in scope (operator follow-up).** The supplement
 includes handwritten Python and Guile Scheme, including indentation and literal
@@ -68,7 +69,8 @@ vertical extents; the printed line boxes are not yet qualified segmentation.
 Labels preserve visible indentation levels using the prompt's column convention
 and conventional inter-token spaces: handwritten gaps do not define a literal
 keystroke count. This whitespace convention is explicit in the collection README;
-geometry stays with the labels. No code recognizer or adaptation has run yet.
+geometry stays with the labels. The code-block image baseline follows;
+code-specific model adaptation remains unrun.
 
 This also exposes a hard limit beyond prose CER: the frozen OnlineHTR alphabet
 cannot emit `=`, `_`, `{}`, `<`, `>`, backslash, backtick, `~` or `%`. Code
@@ -77,6 +79,56 @@ prose runners do not qualify multiline/indentation handling; code needs exact
 line/block and whitespace-sensitive metrics. Syntax checks are diagnostic,
 not permission to silently rewrite the transcription. An English-fluency
 selector is not a suitable correctness criterion for code.
+
+## Code-block image baseline (2026-09-27)
+
+After the operator requested continuation, the same frozen Gemma 4 E2B Q4_0 +
+BF16 projector read the eight collected code blocks directly from their final
+ink-only PNGs. Model/projector/server hashes match the prose vision experiment.
+The fixed instruction names Python or Guile Scheme and asks for literal code,
+preserving indentation, unmatched parentheses and mistakes, without adding
+unwritten lines. No prompts, labels or syntax corrections enter inference.
+Temperature/seed zero, thinking disabled, eight CPU threads, no GPU or prompt
+cache; maximum 512 output tokens. All eight completions stopped normally at
+34–46 tokens. Predictions were saved before labels were read.
+
+The code evaluator removes **only one terminal newline**, never leading or
+internal whitespace. Spaces in the references follow the explicitly recorded
+annotation convention above. Metrics count punctuation and line breaks;
+line alignment handles insertions/deletions instead of shifting every later
+line. No Markdown cleanup or formatting is applied.
+
+| Group | Character edits / characters | Whitespace-sensitive CER | Exact blocks | Exact aligned lines |
+|---|---:|---:|---:|---:|
+| **All code** | **17/826** | **2.06%** | **5/8** | **25/31** |
+| Python | 0/402 | 0.00% | 4/4 | 16/16 |
+| Guile Scheme | 17/424 | 4.01% | 1/4 | 9/15 |
+| Erased-and-rewritten blocks | 4/418 | 0.96% | 3/4 | 15/16 |
+| Unedited blocks | 13/408 | 3.19% | 2/4 | 10/15 |
+
+The secondary metric deleting **all whitespace** is **7/693 = 1.01% CER**;
+it must not replace the primary 2.06%. Indentation matches the reference on
+29/31 aligned lines, with no extra or missing lines. All Python blocks,
+including the two edited blocks, match exactly. The Scheme errors include
+`+ → t`, underscore → hyphen, `let* → let#`, altered parentheses/spacing,
+and lost quasiquote/unquote. The blank fourth slot is not hallucinated back.
+The incomplete last Scheme block stays incomplete, but its quoting is changed.
+
+Syntax is diagnostic only. Both the original last block and its prediction
+fail Guile reading. Other predicted Scheme blocks *read* despite transcription
+errors: a reader accepts symbols such as `let#` and does not prove executable
+or correct Scheme. Nothing is evaluated to score these samples.
+
+Median **2.954 s/block**, inference-server peak **5142.8 MiB**; network-free
+workstation CPU measurements, not a PineNote runtime qualification. The four
+edited blocks doing better than the four unedited ones does not establish an
+eraser accuracy benefit: the contents differ. This is one small prompted
+collection, with no code-model fine-tuning. It shows promising Python fidelity
+and a concrete Scheme punctuation/structure gap, not zero-error code recognition.
+
+Private artifacts: `pinenote/tools/handwriting/build/code-vision-20260927/`.
+Runner and checks: `evaluate-code-images.py`, `code_metrics.py`,
+`test-code-metrics.py`. The known-writing omissions remain in the references.
 
 ## What ran
 
@@ -1082,13 +1134,117 @@ choosing the best method from this table is development selection. This is
 not independently demonstrated sub-5% recognition, a near-zero-error solution,
 or personalization. Direct Gemma vision remains substantially stronger on the
 same 19 lines (**5 edits, 0.74% CER, 15 exact**). Freeze a candidate/model/fusion
-policy before fresh-session evaluation; actual writer adaptation remains unrun.
+policy before fresh-session evaluation. The subsequent writer-adaptation pilot
+is recorded below; it is independent of this Jev comparison.
 
 Private artifacts: `pinenote/tools/handwriting/build/jev-20260927/` and sibling
 `jev-20260927-smoke/`: pre-call plan/source snapshots, requests/responses,
 predictions, every comparison, ranking audit and cache-replay check. Runners:
 `evaluate-jev.py`, `jev_scoring.py`, `audit-jev.py`; adapter checks:
 `test-jev-scoring.py`. No API credential is included in these artifacts.
+
+## First writer-adaptation pilot (2026-09-27)
+
+This is the first experiment that **changes the OnlineHTR recognizer's weights**.
+It uses the 19 qualified single-line prose trajectories. Code blocks are not
+passed through a single-line model, and erased historical trajectories are not
+reintroduced. New code-model adaptation still needs qualified segmentation and
+actual code-symbol training examples.
+
+### Fixed protocol
+
+- Five outer folds, one complete page held out per fold. The next page cyclically
+  supplies validation; the other three pages supply **11 or 12 training lines**.
+  Validation has three/four lines and test has three/four. No test-page example
+  trains its corresponding checkpoint or chooses its stopping epoch. Every line
+  receives exactly one out-of-fold prediction per policy/seed.
+- Three fixed policies: head only (Adam .001), top bidirectional recurrent layer
+  plus head (.0003), all recurrent layers plus head (.0001). Three seeds each,
+  **0/1/2**, making **45 fits**. Per-line batches, no weight decay or augmentation,
+  gradient norm clipping at 1, at most 25 epochs, stop after five validation-loss
+  nonimprovements. Select the lowest mean validation CTC loss, including epoch
+  zero. No CER-based test checkpoint selection or best-seed reporting.
+- Append the **14 missing printable ASCII symbols** without moving existing
+  token indices or blank=0. New classifier rows have zero weights and bias -20.
+  This keeps the original greedy predictions identical before training, while
+  making the existing `$` reference representable. It prepares output shape for
+  code, but cannot teach symbols absent from the prose training split. The model
+  grows from **245,074 to 246,880 parameters**.
+- Preserve the upstream feature transform and exact source/input/checkpoint
+  hashes. Reproduce all 19 baseline predictions before training; reject missing
+  characters, impossible CTC alignments and nonfinite losses. Original checkpoint
+  remains unchanged. Save every fold checkpoint and validation history.
+
+### Greedy recognition result
+
+All nine policy/seed combinations are worse in character error than the original
+**48/672 = 7.14% CER** baseline:
+
+| Updated parameters | Seed 0: edits / CER | Seed 1: edits / CER | Seed 2: edits / CER |
+|---|---:|---:|---:|
+| Head only | 51 / 7.59% | 52 / 7.74% | 51 / 7.59% |
+| Top recurrent layer + head | 54 / 8.04% | 53 / 7.89% | 50 / 7.44% |
+| Full model | 51 / 7.59% | 50 / 7.44% | 51 / 7.59% |
+
+The lowest CER among these is still two character edits worse than the baseline.
+Head-only results have 1/19 exact lines; top-layer 2–3/19; full-model 2/19,
+against 2/19 originally. **This pilot does not demonstrate a dependable
+personalization gain.** Lower validation CTC loss did not guarantee lower
+held-out CER.
+
+Of 45 selected checkpoints, **22 are epoch zero and 23 contain actual updates**.
+An audit verifies that every selected epoch is the validation-loss minimum,
+all losses are finite, frozen parameters remain byte-identical, and updated
+checkpoint tensors really changed. A separate plain-PyTorch loader reconstructs
+every fold and reproduces all saved held-out greedy predictions. Training and
+fold evaluation took **32.49 s** on four workstation CPU threads, excluding
+initial loading/preprocessing. This is not an ARM runtime or energy measurement.
+
+These are small **development cross-validation** folds on previously examined
+same-session writing, not independent fresh-session qualification. Their failure
+does not show writer adaptation is impossible: each fit sees only 11–12 lines,
+and symbol/content coverage differs between pages. It does show that adopting
+one of these updates on the basis of training fit would be unjustified.
+
+### Follow-up with the unchanged character-LM decoder
+
+After observing the greedy result, run **all nine saved policy/seed outputs**
+through the existing length-adjusted character 6-gram decoder: alpha=.5,
+beta=.5, beam 128, top eight nonblank frame symbols, 32 retained readings.
+This is an explicitly named follow-up, not a hidden change to the initial
+training protocol; no decoder weight or checkpoint is retuned. A separately
+exported **expanded-vocabulary epoch-zero control** reproduces all 19 original
+length-decoder predictions exactly, still **34/672 = 5.06% CER**.
+
+| Updated parameters + same decoder | Seed 0: edits / CER | Seed 1: edits / CER | Seed 2: edits / CER |
+|---|---:|---:|---:|
+| Head only | 33 / 4.91% | 33 / 4.91% | 33 / 4.91% |
+| Top recurrent layer + head | 38 / 5.65% | 36 / 5.36% | 33 / 4.91% |
+| Full model | 37 / 5.51% | 32 / 4.76% | 34 / 5.06% |
+
+The head-only improvement is **the same single character on one line in every
+seed**: `thint → think`. Exact lines stay **5/19**; lexical WER changes from
+14.62% to 13.85%. It is repeatable within these seeds but still too narrow to
+establish generalization. Full-model tuning ranges from worse to two edits
+better; its best seed improves two lines and harms one, and is not an accepted
+policy. Mean full-model error is 34.33 edits, worse than the control's 34.
+Top-layer tuning averages 35.67 edits. Report these distributions rather than
+selecting the 4.76% run. The operator's warning about tiny development gains
+still applies.
+
+The pretrained character LM lacks `{` even though the expanded recognizer can
+now represent it. That symbol is absent from the prose references; this does
+not qualify the decoder for code. End-to-end code adaptation needs appropriate
+stroke/raster inputs, code-symbol examples and a code-compatible decoding policy.
+The current image baseline is already a substantially stronger quality reference
+than this small-data stroke adaptation pilot.
+
+Private artifacts: `pinenote/tools/handwriting/build/writer-pilot-20260927/`.
+The decoder follow-up is under sibling `writer-decoding-20260927/`, including
+held-out emissions, every method, the epoch-zero control and the fixed decoder
+plan. Both original corpus hashes still verify.
+Runners/checks: `train-writer-pilot.py`, `adaptation.py`, `test-adaptation.py`,
+`export-writer-emissions.py`. All checkpoints are experimental host artifacts.
 
 ## Architecture assessment: recognition, decoding, then personalization
 
@@ -1102,7 +1258,8 @@ the CPU/memory-constrained device track.
 The subsequent pyctcdecode experiment now supplies an initial positive
 measurement for integrated word-LM decoding. The character 6-gram experiment
 above subsequently improves character fidelity/candidate coverage with a
-smaller model but a slower decoder; writer adaptation remains untested.
+smaller model but a slower decoder. The later writer-adaptation pilot above
+supplies an initial negative result for the tested small-data tuning protocol.
 
 ### What the linked paper establishes
 

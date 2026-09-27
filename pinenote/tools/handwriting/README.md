@@ -462,6 +462,85 @@ build target `llama-server`. Download
 `gemma-4-E2B-it-Q4_0.gguf`, before starting offline inference. No vision
 projector is used in this text-only selection experiment.
 
+### Code-block image baseline
+
+Use `evaluate-code-images.py` for the reviewed code collection, rather than
+passing multiline labels through the prose evaluator:
+
+```sh
+python3 pinenote/tools/handwriting/evaluate-code-images.py \
+  CODE_COLLECTION LOCAL_MODEL.gguf LOCAL_PROJECTOR.gguf NEW_CODE_RUN \
+  --llama-server LLAMA_CPP/build/bin/llama-server
+python3 pinenote/tools/handwriting/test-code-metrics.py
+```
+
+It uses `regions-reviewed.tsv` to identify block images and language, sends
+only ink-only block PNGs and a literal-transcription instruction, and freezes
+predictions before reading labels. It preserves leading/internal whitespace,
+removing only one terminal newline. Markdown fences or explanations count as
+errors rather than being silently stripped. Report whitespace-sensitive CER,
+exact blocks and aligned lines, plus a separately named whitespace-free CER;
+the latter is not the primary result. Report edited/unedited and Python/Guile
+groups. Python AST parsing and Guile reading are diagnostics only: no sample
+code is evaluated, reformatted or repaired. Reference syntax may itself fail.
+
+### First writer-adaptation pilot
+
+`train-writer-pilot.py` changes the small OnlineHTR weights using the original
+**19 qualified prose trajectories**. Code-block stroke segmentation and
+erasure-aware trajectory adaptation are separate work; do not feed blocks into
+a single-line CTC model. This pilot uses the unchanged upstream feature
+transform and checks that it reproduces every original greedy prediction first.
+
+```sh
+python3 pinenote/tools/handwriting/test-adaptation.py
+python3 pinenote/tools/handwriting/train-writer-pilot.py \
+  PROSE_COLLECTION PINNED_ONLINEHTR_CHECKOUT ORIGINAL_MODEL_DIRECTORY \
+  ORIGINAL_TRAJECTORY_RUN/results.json NEW_WRITER_RUN
+```
+
+Use the previously qualified OnlineHTR Python environment. Five folds hold out
+an entire page each. The next page cyclically is validation; the other three
+pages supply training. Test-page labels never select a checkpoint. Compare
+head-only, last-recurrent-layer-plus-head, and full-model updates at fixed Adam
+learning rates .001, .0003 and .0001, respectively; seeds 0/1/2, at most 25
+epochs, validation-CTC early stopping after five nonimprovements. Epoch zero is
+eligible. Preserve every fold's weights and every seed's result, rather than
+reporting the luckiest fit.
+
+The output alphabet appends missing printable ASCII symbols while preserving
+old indices and blank=0. New head rows start at zero weights/bias -20; verify
+that greedy predictions are unchanged before training. This makes the existing
+`$` label representable and prepares the output shape for code, but **does not
+teach symbols absent from training**. No target is silently dropped or replaced
+by an unknown token. Gradients are clipped at norm 1; nonfinite/impossible CTC
+losses stop the run. Inputs, source and checkpoint hashes are recorded before
+training, and the original checkpoint is preserved.
+
+This is **development cross-validation**, not fresh-session evaluation: the
+same sheets have already informed this research program. The truly reserved
+later-session pages remain untouched. Fold checkpoints are experimental
+personalized artifacts, not automatically installed models.
+
+For the frozen-decoder follow-up, export only each fold's test-page emissions:
+
+```sh
+python3 pinenote/tools/handwriting/export-writer-emissions.py \
+  WRITER_RUN PROSE_COLLECTION PINNED_ONLINEHTR_CHECKOUT NEW_EMISSIONS
+# Use the KenLM environment for each named capture, including expanded-control:
+python3 pinenote/tools/handwriting/evaluate-character-lm.py \
+  NEW_EMISSIONS/head-seed-0 PROSE_COLLECTION CHARACTER_LM \
+  NEW_EMISSIONS/head-seed-0/length --mode length
+```
+
+Repeat decoding for **all nine** saved policy/seed captures and the
+`expanded-control`, not only the most favorable greedy result. The exporter
+reconstructs plain PyTorch models from saved weights and requires each greedy
+prediction to match the training runner's saved held-out prediction. It checks
+the train/validation/test separation again. The epoch-zero control requires the
+pilot's head-seed-0/fold-1 checkpoint to have selected epoch zero; it refuses if
+that recorded condition no longer holds.
+
 ## Copy-and-write sampler
 
 Generate five pages of four prompts: everyday prose, Workbench-like requests,

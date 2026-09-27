@@ -24,6 +24,12 @@ this lineage. **Unreleased** above it collects what has landed since.
 
 ## Unreleased
 
+- **Handwritten code has an image baseline, and writer adaptation has been tried.**
+  Gemma reads all 16 collected Python lines exactly; the full Python/Guile set
+  has 2.06% character error, with remaining Scheme punctuation/layout errors.
+  The first page-disjoint OnlineHTR fine-tuning pilot does not show a dependable
+  gain: its most repeatable decoder improvement is one character on one line.
+  Methods, all seeds and limitations: `doc/handwriting-baseline.md`.
 - **Hosted Jev tested as a handwriting candidate selector.** On the same prose
   development sheets, flat-choice probabilities fused with stroke/character-LM
   evidence reach 3.72% character error and 9/19 exact lines. The API experiment
