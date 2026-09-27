@@ -8,6 +8,9 @@ local function event(s) print(s) end
 local authority = "pinenote-book-state-device"
 local service = { [authority] = "running", ["reader-session"] = "running" }
 local root_ro, data_ro = false, false
+-- Model Shepherd's persistent log descriptors independently of the two
+-- services stopped by the helper: neither stop releases this root writer.
+local root_log_writer = initial == "busy-root" or scenario == "busy-root"
 local data_present = initial ~= "no-data"
 local runtime = true
 local wifi = initial ~= "wifi-off"
@@ -20,6 +23,8 @@ if initial == "stopped" or initial == "inert" then service[authority], runtime =
 if initial == "reader-stopped" then service["reader-session"] = "stopped" end
 if initial == "already-ro" then root_ro, data_ro = true, true end
 local data_id, root_id, root_present, loaded = "21", "20", true, false
+local mountinfo_unreadable = false
+local root_stacked = scenario == "root-stacked"
 local files = {
     ["/boot/gen-2/append"] = "root=LABEL=PNGuixRoot console=ttyS2,1500000n8\n",
     ["/run/current-system/profile/sbin/kexec"] = "binary",
@@ -27,14 +32,15 @@ local files = {
     ["/proc/sys/kernel/random/boot_id"] = "fixture-boot\n",
 }
 local function mountinfo()
-    if scenario == "mountinfo-fail" or (scenario == "late-mountinfo-fail" and loaded) then return nil end
+    if mountinfo_unreadable or scenario == "mountinfo-fail" or (scenario == "late-mountinfo-fail" and loaded) then return nil end
     local function mount(id, point, ro)
         local mode = ro and "ro" or "rw"
         return id .. " 1 179:6 / " .. point .. " " .. mode .. ",relatime - ext4 /dev/fixture " .. mode .. "\n"
     end
     local data = data_present and mount(data_id, "/data", data_ro) or ""
     if scenario == "bind-ro" then data = data:gsub("/data rw,", "/data ro,") end
-    return (root_present and mount(root_id, "/", root_ro) or "") .. data
+    return (root_present and mount(root_id, "/", root_ro) or "")
+        .. (root_stacked and mount("25", "/", root_ro) or "") .. data
 end
 local function read(path)
     if path == "/proc/self/mountinfo" then return mountinfo() end
@@ -122,8 +128,13 @@ local function command(cmd)
                 if service[authority] == "running" or scenario == "busy-data" then return 32, "filesystem busy" end
                 if scenario ~= "lying-mount" then data_ro = true end
             else
-                if scenario == "busy-root" then return 32, "root busy" end
+                if root_log_writer then return 32, "root busy: persistent Shepherd log writer" end
                 root_ro = true
+                if scenario == "root-replaced-during-remount" then root_id = "24" end
+                if scenario == "root-disappeared-during-remount" then root_present = false end
+                if scenario == "root-unreadable-after-remount" then mountinfo_unreadable = true end
+                if scenario == "root-stacked-during-remount" then root_stacked = true end
+                if initial == "root-error-changed" then return 32, "reported failure after changing root flags" end
             end
         else
             assert(mode == "rw")
@@ -190,5 +201,5 @@ if err == kexec_tag then event("RESULT kexec")
 elseif err ~= exit_tag then error(err or "helper unexpectedly returned") end
 event("STATE reader=" .. service["reader-session"] .. " authority=" .. service[authority]
     .. " root=" .. (root_ro and "ro" or "rw") .. " data=" .. (data_present and (data_ro and "ro" or "rw") or "absent")
-    .. " wifi=" .. tostring(wifi) .. " runtime=" .. tostring(runtime))
+    .. " wifi=" .. tostring(wifi) .. " runtime=" .. tostring(runtime) .. " root_log_writer=" .. tostring(root_log_writer))
 if record then event("RECORD " .. record:gsub("\n", "|")) end

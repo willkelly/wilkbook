@@ -75,6 +75,7 @@ sed '/^[[:space:]]*--/d' "$helper" | grep '/data' | reject -F -x -v \
   -e '    if torn.data_readonly then data_ok = restore("/data read-write", function() return restore_mount("/data", torn.data_readonly, "mount -o remount,rw /data >/dev/null 2>&1") end) end' \
   -e '        local verified = restore("original data mount state", function() return verify_mount("/data", torn.data_mount) end)' \
   -e '    torn.data_mount = mount_state("/data") or false' \
+  -e '            log("root remains read-write: legacy best-effort root remount (exit %s): %s; /data must still become read-only", tostring(rc), out)' \
   -e '    remount_readonly("/data", data_mount, "data_readonly")'
 echo "PASS: /data operations are limited to mount inspection and reversible remounts; no partition writes"
 # The ledger pin (2026-09-04, the review's S5): pin/unpin exist, list shows the

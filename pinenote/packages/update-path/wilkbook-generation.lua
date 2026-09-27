@@ -197,7 +197,8 @@ local function stop_service(name, key)
     if service_state(name) ~= "stopped" then bail("%s did not stop", name) end
 end
 
-local function remount_readonly(target, before, key)
+local function remount_readonly(target, before, key, best_effort)
+    assert(not best_effort or target == "/", "only the root remount may be best-effort")
     local current = mount_state(target)
     if not before then
         if current then bail("%s appeared during trial teardown", target) end
@@ -205,14 +206,33 @@ local function remount_readonly(target, before, key)
         return
     end
     if not current or current.id ~= before.id then bail("%s mount changed during trial teardown", target) end
+    local ok, rc, out = true, 0, ""
     if not before.readonly then
         -- Even a failed mount command can change state: restore on refusal.
         torn[key] = before
-        local ok, rc, out = capture("mount -o remount,ro " .. target)
-        if not ok then bail("%s did not remount read-only (exit %s): %s", target, tostring(rc), out) end
+        ok, rc, out = capture("mount -o remount,ro " .. target)
     end
+    -- Inspect even after a nonzero exit: only the observed mount identity and
+    -- flags tell us whether the command changed anything we must undo.
     current = mount_state(target)
-    if not current or current.id ~= before.id or not current.readonly then
+    if not current or current.id ~= before.id then
+        bail("%s mount changed during remount", target)
+    end
+    if current.readonly == before.readonly then torn[key] = nil end
+    if best_effort and not before.readonly then
+        -- Root still has system service log writers.  Preserve the legacy
+        -- best-effort remount until full reversible root-writer quiescence is
+        -- implemented; /data remains a strict gate below.  This exception
+        -- never accepts an unknown/replaced mount or changes an original ro.
+        if not current.readonly then
+            log("root remains read-write: legacy best-effort root remount (exit %s): %s; /data must still become read-only", tostring(rc), out)
+        elseif not ok then
+            log("root verified read-only despite remount exit %s: %s", tostring(rc), out)
+        end
+        return
+    end
+    if not ok then bail("%s did not remount read-only (exit %s): %s", target, tostring(rc), out) end
+    if not current.readonly then
         bail("%s is not the original read-only filesystem after remount", target)
     end
 end
@@ -476,7 +496,7 @@ function commands.trial(n)
     if not loaded then bail("kexec -l failed for generation %d (exit %s): %s", n, tostring(load_rc), load_said) end
     torn.loaded = true
     run("sync")
-    remount_readonly("/", root_mount, "readonly")
+    remount_readonly("/", root_mount, "readonly", true)
     -- The data partition too (2026-09-04, generation 18).  Every kexec
     -- had left p7 mounted read-write -- a crash, from ext4's point of
     -- view -- and its journal covered for that until one boot's recovery
