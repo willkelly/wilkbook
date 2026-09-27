@@ -1,0 +1,23 @@
+Sun Sep 27 05:31:12 AM UTC 2026
+/dev/mmcblk0p6 ext4 rw,relatime
+/dev/disk/by-partlabel/data ext4 rw,relatime
+/gnu/store/yy13ywsn16qa5y6kwbgg1ibhgaxzcxpc-system
+c664cad7-f825-4657-b2b1-b2fffa1af280
+current_system=/gnu/store/yy13ywsn16qa5y6kwbgg1ibhgaxzcxpc-system
+booted_generation=25
+broker_ready=true
+reader_started=true
+health=ok
+gen-10  /gnu/store/ildcv9alm0isv2yfzmywba2i3mlhgcl9-system  [pinned]
+gen-16  /gnu/store/8czi9ry1z0gph24n5yls7iiy83y4n0b8-system  [pinned]
+gen-18  /gnu/store/rkw61vxxzifrqwz407gf751w70afignb-system  [pinned]
+gen-19  /gnu/store/8zcb8zq9x92sag30m68b6jww86xd1nq7-system
+gen-20  /gnu/store/7wyr4smys53jgf2cjrif0mm94n9cg11p-system
+gen-21  /gnu/store/iv1div034ka7qaa05rqm4vlr6g5lzsxs-system
+gen-22  /gnu/store/m2smi93nva83wv84ph9h57d93fhffxc3-system
+gen-23  /gnu/store/x3qqz8r52pdh7jzghzfj8l44gfrqkncb-system  [pinned]
+gen-24  /gnu/store/13cg7sg6waa3ahj3ivxhmkagia0kbwi1-system
+gen-25  /gnu/store/yy13ywsn16qa5y6kwbgg1ibhgaxzcxpc-system  [promoted]  [booted]
+-rw-r--r-- 1 root root 53465 Sep 27 05:30 /data/wilkbook/diagnostic-backups/gen24-before-sampler-20260926/sampler-first-page.png
+{"v":1,"brush":"ballpoint","size":"L","mode":"write","rubber":"area","last_id":"20260927T051718Z-d466ff","last_page":{"20260926T193940Z-fb3b97":2}}
+enabled=0

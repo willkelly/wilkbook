@@ -78,6 +78,7 @@ local P_black         -- the memory value of black, after the inverse flag
 local P_fill          -- the Color8 of a black or white fill
 local P_pat           -- the darken pattern
 local P_row           -- fill_row or darken_row
+local P_paper         -- optional immutable physical background
 
 -- The 4x4 mask tile, [(y % 4) * 4 + x % 4 + 1], for tile_pat at
 -- tile_dens.  Pressure moves the density per segment, so a render
@@ -103,6 +104,12 @@ end
 
 local function fill_row(y, x0, x1)
     P_bb:paintRect(x0, y, x1 - x0 + 1, 1, P_fill)
+end
+
+local function paper_row(y, x0, x1)
+    -- blit_page handles the framebuffer's inverse flag and BB8 -> RGB16.
+    Surface.blit_page(P_bb, P_paper, 0, 0,
+                      { x = x0, y = y, w = x1 - x0 + 1, h = 1 })
 end
 
 local function darken_row(y, x0, x1, dens)
@@ -155,7 +162,7 @@ local function set_target(bb)
 end
 
 local function release()
-    P_bb, P_base = nil, nil
+    P_bb, P_base, P_paper = nil, nil, nil
 end
 
 -- Returns false for a comp this build does not draw.  Only a damaged or
@@ -167,7 +174,7 @@ local function set_style(comp, pat)
     if comp == "black" or (comp == "darken" and pat == "solid") then
         P_row, P_fill = fill_row, C_BLACK
     elseif comp == "white" then
-        P_row, P_fill = fill_row, C_WHITE
+        P_row, P_fill = P_paper and paper_row or fill_row, C_WHITE
     elseif comp == "darken" then
         P_row, P_pat = darken_row, pat
     else
@@ -205,8 +212,9 @@ end
 --- One controller ink command into bb (rotation 0).  exclude, when
 --- given, is a physical {x, y, w, h} left untouched: the open panel's
 --- rect on the framebuffer, whose pixels the page buffer does not hold.
-function Surface.ink(bb, cmd, exclude)
-    if not set_style(cmd.comp, cmd.pat) then return end
+function Surface.ink(bb, cmd, exclude, paper)
+    P_paper = paper
+    if not set_style(cmd.comp, cmd.pat) then release(); return end
     set_target(bb)
     local row, dens, spans = P_row, cmd.dens, cmd.spans
     local ex0, ex1, ey0, ey1
@@ -250,17 +258,19 @@ end
 --- written.  page_n is the command's page number and does not change
 --- the pixels.  cfg supplies W and H, the panel the controller clipped
 --- its live spans to.
-function Surface.render_page(bb, page_n, strokes, cfg, region)
+function Surface.render_page(bb, page_n, strokes, cfg, region, paper)
     local W, H = cfg.W, cfg.H
     local cx0, cy0, cx1, cy1 = 0, 0, W - 1, H - 1
     if region then
         cx0, cy0 = region.x, region.y
         cx1, cy1 = cx0 + region.w - 1, cy0 + region.h - 1
-        bb:paintRect(region.x, region.y, region.w, region.h, C_WHITE)
+        if not paper then bb:paintRect(region.x, region.y, region.w, region.h, C_WHITE) end
     else
-        bb:fill(C_WHITE)
+        if not paper then bb:fill(C_WHITE) end
     end
     if cx1 < cx0 or cy1 < cy0 then return end
+    if paper then Surface.blit_page(bb, paper, 0, 0, region) end
+    P_paper = paper
     set_target(bb)
     local function emit(y, x0, x1, dens)
         if y < cy0 or y > cy1 then return end

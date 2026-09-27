@@ -1,11 +1,665 @@
 # Handwriting: first labelled lines
 
-The current device notebooks are mostly scribbles. They remain useful for
+The pre-sampler device notebooks are mostly scribbles. They remain useful for
 capture/replay and performance tests, but do not measure recognition accuracy.
-This is a **host-side sample exporter**, not a recognizer or training pipeline.
-It neither changes the reader nor writes to the copied journals.
+The completed 2026-09-27 sampler now provides 20 reviewed image lines and 19
+trajectory-compatible lines. The first local TrOCR baseline is recorded in
+[`doc/handwriting-baseline.md`](../../../doc/handwriting-baseline.md).
+The **host-side sample exporter** is not a recognizer or training pipeline.
+It neither changes the reader nor writes to the copied journals. The companion
+sampler generator creates an EPUB and a fresh notebook with fixed paper.
+
+Architecture and sequencing decisions are in
+[`doc/handwriting-design.md`](../../../doc/handwriting-design.md): contextual
+decoding first, book resource packs, correction records/UI direction and the
+eventual continual-learning system. Those are design direction, separate from
+the executable experiments below.
+
+## Local image baseline
+
+`evaluate-images.py` runs pinned Microsoft TrOCR Small or Base on the ink-only
+`rendered/line-*.png` files in a collection. It saves all predictions before
+opening `transcriptions/NN.txt`, then computes corpus-weighted character and
+word edit rates. Images and labels stay local; only public model downloads use
+the network. Model cache, environment, handwriting and results belong in the
+gitignored `build/` directory. Run each model in its own process, sequentially,
+so peak RSS and latency are attributable to that run.
+
+```sh
+python3 -m venv pinenote/tools/handwriting/build/eval-venv
+pinenote/tools/handwriting/build/eval-venv/bin/python -m pip install \
+  torch==2.8.0 --index-url https://download.pytorch.org/whl/cpu
+pinenote/tools/handwriting/build/eval-venv/bin/python -m pip install \
+  transformers==4.56.2 Pillow==11.3.0 sentencepiece==0.2.1 protobuf==7.36.2
+HF_HOME="$PWD/pinenote/tools/handwriting/build/hf-cache" \
+  pinenote/tools/handwriting/build/eval-venv/bin/python \
+  pinenote/tools/handwriting/evaluate-images.py COLLECTION NEW_OUTPUT --model small
+# Repeat with a different NEW_OUTPUT and --model base.
+python3 pinenote/tools/handwriting/summarize-images.py \
+  SMALL_OUTPUT/results.json BASE_OUTPUT/results.json > COMPARISON.md
+make -C pinenote/tools/handwriting image-metrics-check
+```
+
+Output directories must be new. `predictions.json` preserves raw text,
+per-image hashes and measured times; `results.json` adds labels, label hashes,
+model revisions, environment, generation settings, peak process RSS and scores.
+The comparison refuses mismatched image/label sets. Its secondary lexical score
+ignores case and punctuation, explicitly retaining raw CER/WER alongside it.
+There is no prompt injection, dictionary correction, training or label-guided
+preprocessing. The first run uses the original 1404×240 bands and each model's
+standard image processor, greedy decoding, float32 CPU inference and eight
+threads. Subsequent tuning on these lines makes them development data; use new
+writing for the next independent evaluation.
+
+### Gemma direct image transcription
+
+`evaluate-gemma-images.py` tests vision separately from the text-only candidate
+selector. It sends the **original ink PNG bytes**, without candidate text,
+sampler prompts or labels, to a local CPU llama.cpp server loaded with both the
+Gemma text model and its vision projector. Its one fixed instruction requests
+literal transcription, preserving spelling/case/numbers/punctuation. Thinking
+and prompt reuse are disabled; generation is deterministic with a 128-token
+limit. It uses native multimodal preprocessing defaults, with no externally
+chosen crop, threshold or scaling. A blank image warms the vision path.
+
+```sh
+# Use the pinned CPU llama.cpp build documented below. Download both files
+# from the same pinned ggml-org/gemma-4-E2B-it-GGUF revision before inference.
+python3 pinenote/tools/handwriting/evaluate-gemma-images.py \
+  COLLECTION LOCAL_MODEL.gguf LOCAL_MMPROJ.gguf NEW_VISION_RUN \
+  --llama-server LLAMA_CPP/build/bin/llama-server
+python3 pinenote/tools/handwriting/summarize-images.py \
+  SMALL_OUTPUT/results.json BASE_OUTPUT/results.json NEW_VISION_RUN/results.json \
+  > IMAGE_COMPARISON.md
+# Add the trajectory run with --shared for the same 19-line comparison.
+```
+
+The recorded projector is `mmproj-gemma-4-E2B-it-BF16.gguf`; model and projector
+come from revision `b4243c156154b6dca9324415f8c7ccc098b4aed1`. The runner requires
+Pillow, explicitly checks that vision is enabled, keeps full requests/responses,
+and saves every prediction before reading labels. Only outer whitespace is
+removed: spelling changes, extra prose and internal whitespace are scored as
+produced. Token-limit events remain visible. Its `peak_process_rss_mib` is the
+inference server's peak, with client memory reported separately. Both text and
+vision run on CPU, and the owned server is stopped before scoring.
+
+## Local trajectory baseline
+
+`evaluate-trajectories.py` runs the released English IAM-OnDB checkpoint from
+[OnlineHTR](https://github.com/PellelNitram/OnlineHTR), Martin Lellep's independent
+implementation of Carbune et al.'s Google paper. It imports the upstream model,
+preprocessor and greedy CTC decoder unchanged. Inputs are the collection's
+`inkml/line-*.inkml`; embedded truth annotations never enter model features.
+Our adapter negates logical-panel Y (upstream expects Y increasing upward),
+converts milliseconds to seconds, and preserves original stroke order and
+pen-up gaps. Pressure and tilt remain in the archive but this four-channel
+model does not consume them.
+
+Use a separate virtual environment: the upstream preprocessor uses NumPy's
+`alltrue`, removed in NumPy 2. Download and unpack the author's
+[released weights](https://lellep.xyz/blog/online-htr.html#the-model-weights)
+under `build/`; the archive SHA-256 and selected checkpoint are recorded in
+`doc/handwriting-baseline.md`. The lowest upstream validation-loss checkpoint
+is selected, independently of our labels.
+
+```sh
+git clone https://github.com/PellelNitram/OnlineHTR.git \
+  pinenote/tools/handwriting/build/OnlineHTR
+git -C pinenote/tools/handwriting/build/OnlineHTR checkout \
+  a80693a2d278b16f91332a4d17e0bb47863cc183
+python3 -m venv pinenote/tools/handwriting/build/trajectory-venv
+pinenote/tools/handwriting/build/trajectory-venv/bin/python -m pip install \
+  torch==2.8.0 --index-url https://download.pytorch.org/whl/cpu
+pinenote/tools/handwriting/build/trajectory-venv/bin/python -m pip install \
+  numpy==1.26.4 pandas==2.2.3 scipy==1.14.1 lightning==2.4.0 \
+  torchmetrics==1.4.3 hydra-core==1.3.2 rich==13.9.4 GitPython==3.1.43
+pinenote/tools/handwriting/build/trajectory-venv/bin/python \
+  pinenote/tools/handwriting/evaluate-trajectories.py COLLECTION \
+  pinenote/tools/handwriting/build/OnlineHTR UNPACKED_MODEL_DIR NEW_OUTPUT
+python3 pinenote/tools/handwriting/summarize-images.py --shared \
+  SMALL_OUTPUT/results.json BASE_OUTPUT/results.json NEW_OUTPUT/results.json \
+  > SHARED_COMPARISON.md
+make -C pinenote/tools/handwriting trajectory-input-check image-metrics-check
+```
+
+The runner refuses changed upstream source, malformed channels, reversed time,
+zero-height ink, nonfinite features or preprocessing that drops stroke
+boundaries. It saves predictions before opening transcription files, then
+checks their consistency with InkML annotations and reports characters outside
+the checkpoint's alphabet. The shared comparison explicitly omits line 20 and
+recomputes accuracy and median latency over the same 19 lines for every model;
+image/label hashes must match. Peak RSS remains each original process's
+high-water mark. No cloud recognizer or training is involved.
+
+## Retaining alternatives and testing a contextual selector
+
+### Integrated word-language-model decoding with pyctcdecode
+
+`evaluate-pyctcdecode.py` applies **pyctcdecode 0.5.0 + KenLM 0.3.0** to the
+saved full-line CTC emissions. The labels are `[''] + alphabet`: blank is column
+zero, with case and punctuation kept in their original columns. It checks the
+decoder's normalized alphabet and reconstructs the frozen greedy prediction
+before decoding. It never trains or reruns OnlineHTR.
+
+Unlike finished-list selection, the language model contributes during search,
+including word boundaries. This package's standard KenLM integration is
+**word-based**, even for a character CTC alphabet; it is not a character LM.
+The runner saves 32-best output where available and scores labels only after
+all predictions have been written. No sampler-derived hotwords are supplied.
+
+```sh
+# Use an isolated environment; no Torch installation is needed for decoding.
+python3 -m venv CTC_ENV
+CTC_ENV/bin/python -m pip install \
+  pyctcdecode==0.5.0 kenlm==0.3.0 pyarrow==19.0.1 sacremoses==0.1.1
+# Build KenLM's lmplz/build_binary tools from source commit
+# 4cb443e60b7bf2c0ddf3c745378f76cb59e254e5 (CMake Release, ENABLE_PYTHON=OFF).
+# Download Salesforce/wikitext, revision b08601e04326c79dfdd32d625aee71d232d685c3,
+# wikitext-2-raw-v1/train-00000-of-00001.parquet. Training takes no handwriting.
+CTC_ENV/bin/python pinenote/tools/handwriting/train-ctc-word-lm.py \
+  WIKITEXT_TRAIN.parquet KENLM/build/bin NEW_LM_OUTPUT
+CTC_ENV/bin/python pinenote/tools/handwriting/evaluate-pyctcdecode.py \
+  EMISSION_CAPTURE COLLECTION NEW_DECODER_OUTPUT --mode default --lm NEW_LM_OUTPUT
+# Repeat into new directories with --mode none and --mode conservative.
+make -C pinenote/tools/handwriting pyctcdecode-check CTC_PYTHON=/absolute/path/CTC_ENV/bin/python
+```
+
+On the Guix host, the wheel environment additionally needs zlib's `lib/` on
+`LD_LIBRARY_PATH`; the recorded path is in private provenance. LM training
+detokenizes WikiText-2 training paragraphs using Moses, preserving case, and
+builds an unpruned modified-Kneser-Ney trigram plus a binary trie. Corpus/model
+hashes and parameters are recorded. The source corpus retains Unicode outside
+OnlineHTR's alphabet, triggering pyctcdecode's vocabulary-coverage warning;
+that is investigated in `doc/handwriting-baseline.md`.
+
+The primary run uses library LM defaults (`alpha=.5`, `beta=1.5`, unknown offset
+`-10`); a separately reported conservative setting uses `.2`, `0`, `-2`.
+Both use width 128, beam prune `-10`, token prune `-5`, and no history pruning.
+These were fixed before the runs rather than searched for the best label score.
+Times are **decoder-only**, and RSS belongs to that process, excluding the
+separate recognizer. The comparison script prints those times in its usual
+column, so retain this qualification when quoting the generated table.
+
+### Integrated character n-gram experiment
+
+`train-character-lm.py` reuses the **same detokenized WikiText-2 corpus** from
+the word-LM experiment. It encodes each Unicode character as a separate KenLM
+token (`U000020` for a literal space), preserving case and punctuation. It
+trains a modified-Kneser-Ney **6-gram**, pruning counts `0 0 1 1 2 2`, and builds
+a binary trie. No handwriting or references enter training.
+
+`ctc_candidates.beam_search` now optionally scores prefixes with this incremental
+LM. It keeps CTC alignment sums separate from the LM score, advances LM state
+only when a new character is emitted, adds EOS before the final beam pruning,
+and retains LM states only for the active beam. The combined score is:
+
+```
+CTC log probability + alpha * character-LM log probability + beta * character count
+```
+
+All scores use natural logs. There is no added unknown-word penalty: the model
+scores characters, including spaces. This experiment uses our Python prefix
+decoder (width 128, top eight nonblank frame labels plus repeats), not
+pyctcdecode's word-oriented LM interface. Its pruning and speed are not matched
+to pyctcdecode, so measured runtime is an implementation result, not a statement
+about the inherent cost of character versus word LMs.
+
+```sh
+python3 pinenote/tools/handwriting/train-character-lm.py \
+  WORD_LM_OUTPUT KENLM/build/bin NEW_CHARACTER_LM
+CTC_ENV/bin/python pinenote/tools/handwriting/evaluate-character-lm.py \
+  EMISSION_CAPTURE COLLECTION NEW_CHARACTER_LM NEW_CHAR_RUN --mode standard
+# All prespecified modes: none (0,0), light (.2,0), standard (.5,0), length (.5,.5).
+# Pairs above are (alpha,beta); run each into a NEW directory.
+CHAR_LM_BINARY=/absolute/path/NEW_CHARACTER_LM/char-6gram.binary \
+  CTC_ENV/bin/python pinenote/tools/handwriting/test-character-lm.py
+```
+
+The tests compare CTC path sums and fused text scores with exhaustive tiny
+alignment enumeration, verify zero-weight parity and EOS-sensitive pruning,
+and optionally compare incremental KenLM scoring with its full-sequence API.
+Each evaluator saves all hypotheses before reading labels, checks emission
+identity, and reports actual selection accuracy separately from candidate
+oracle coverage. Fixed weight comparisons on the existing 19 lines are
+development evidence, not an independently validated optimum.
+
+### Plain CTC candidates and contextual selectors
+
+The trajectory runner's optional `--save-emissions` stores per-frame log
+probabilities under `emissions/`. `evaluate-candidates.py` verifies that the
+new greedy predictions and source hashes match the frozen baseline, then
+performs CTC prefix beam search: width 128, eight highest-scoring nonblank
+frame labels (plus blank and repeated-prefix label), retain 32 line candidates.
+It sums blank/nonblank alignment paths; it does not independently guess letters
+or run a spellchecker. The exhaustive small-alphabet test is the oracle for
+repeat/blank path accounting. Beam pruning makes these approximate scores,
+not calibrated confidence.
+
+`evaluate-von.py` uses an existing **local Von option-marker checkpoint** to
+choose among those texts on CPU. It records direct Von selection and a fixed
+combination, `CTC logp + 0.2 * log(max(Von probability, 1e-6))`. It repeats the
+same query with the option order reversed. The installed older Von API rounds
+probabilities to four decimals and calls the top-two probability margin
+`confidence`; neither is validated handwriting confidence. No printed prompts,
+reference labels, fine-tuning or freely generated corrections enter selection.
+All predictions are saved before labels are opened for evaluation. The
+truth-assisted best-candidate score is diagnostic only, never a selectable
+recognizer or a reported achieved result.
+
+```sh
+# Repeat the earlier trajectory command into a NEW_CAPTURE with --save-emissions.
+pinenote/tools/handwriting/build/eval-venv/bin/python \
+  pinenote/tools/handwriting/evaluate-candidates.py \
+  NEW_CAPTURE ORIGINAL_GREEDY_OUTPUT NEW_BEAM_OUTPUT
+# Use the existing Von runtime's Python and library-path setup. This command
+# explicitly uses CPU and local files; no server or remote API is contacted.
+HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 "$VON_PYTHON" \
+  pinenote/tools/handwriting/evaluate-von.py \
+  NEW_BEAM_OUTPUT/candidates.json COLLECTION LOCAL_VON_SNAPSHOT NEW_VON_OUTPUT
+make -C pinenote/tools/handwriting candidate-check
+```
+
+The evaluation records the actual model snapshot, weight/source hashes and
+runtime versions. The local cached model may predate the current online model
+card; results name that local version rather than silently downloading newer
+weights. Images, emissions and candidates remain under gitignored `build/`.
+
+### Focused word/span selection with stroke probabilities
+
+`make-focused-candidates.py` aligns the original greedy characters to emission
+frames, takes word-sized windows between delimiter runs, and searches each
+window independently (beam 64, eight frame labels). It scores retained strings
+with the exact CTC forward algorithm, keeps up to five readings within five
+log-probability units of the best, and always retains the original. It asks the
+selector only when the top-two gap is at most `ln(10)`. These fixed thresholds
+are heuristics; they were set before this run, not optimized on its labels.
+
+`evaluate-focused.py` supports `--selector von` and `--selector laya`. Both get
+the identical sentence with the current span blanked, the original span, and
+**each option's relative stroke probability in the input context** (normalized
+over only the listed readings). The sentence stays at the original recognition
+for every question; changes are applied simultaneously afterwards. The primary
+order is descending stroke probability. The diagnostic reverses both the
+option list and the probability list, keeping IDs, texts and probabilities
+together. A separate agreement gate applies a change only if both presentations
+select identical text. It is not proof of invariance under all permutations.
+
+```sh
+"$NUMPY_PYTHON" pinenote/tools/handwriting/make-focused-candidates.py \
+  CAPTURE NEW_FOCUSED_CANDIDATES
+HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 LAYA_CPU_AMP= \
+  "$SELECTOR_PYTHON" pinenote/tools/handwriting/evaluate-focused.py \
+  NEW_FOCUSED_CANDIDATES/candidates.json COLLECTION LOCAL_SNAPSHOT NEW_RUN \
+  --selector laya
+python3 pinenote/tools/handwriting/summarize-focused.py \
+  NEW_FOCUSED_CANDIDATES/candidates.json NEW_RUN
+make -C pinenote/tools/handwriting candidate-check
+```
+
+Use a runtime with the chosen SDK available; for a pinned Laya source checkout,
+put its root on `PYTHONPATH`. The recorded runs use the existing Von runtime's
+Python/library setup for both selectors, float32 CPU, eight threads, and no
+dependency upgrades. Laya's native packing is checked against an untruncated
+sequence before inference. Its SDK displays candidate IDs alongside texts;
+Von's displays texts alone. These are native SDK encodings of identical API
+inputs, not identical token sequences. `summarize-focused.py` reads saved truth
+only after prediction, and calculates a diagnostic candidate-coverage bound
+over all allowed span combinations. Never use that oracle to select text.
+
+Results and exact source/model pins: `doc/handwriting-baseline.md`, focused
+selection section. All question contexts, probabilities, answers, labels and
+comparisons remain under private gitignored `build/focused-20260927/`.
+
+### Independent sentence assessment with native Noul and Score
+
+The installed Von and Laya SDKs support **`noul`** (yes/no assessment) and
+**`score`** (ordinal rating) in addition to `choice`. `sentence_scoring.py` uses
+those native APIs to assess each complete transcription separately. Jev is
+TypeSafe's structured-decision model, **not JEPA**; Von and Laya are the local
+implementations used here.
+
+`make-sentence-candidates.py` takes the 32 retained length-adjusted character-LM
+texts per line and recomputes their exact **full-line** CTC forward scores. Its
+input is the saved `predictions.json`, not a labelled results file. It freezes
+relative stroke probabilities over these retained texts, and uses the existing
+`CTC + .5 * character-LM + .5 * character-count` score as the control. Candidate
+generation is unchanged; no reference is injected into the lists.
+
+Each assessment receives one sentence, its relative stroke probability and its
+stroke-score loss from the strongest retained reading. It sees no competing
+sentences, original/rank marker, writing prompt, reference or image. Noul asks
+whether the text reads coherently without obvious recognition corruption;
+Score uses five levels from severely corrupted to coherent. The adapters reject
+input clipping, call the native APIs and preserve raw answers. The checkpoint's
+fixed rubric ordering can still introduce bias; eliminating candidate-list
+position does not establish calibrated confidence.
+
+The fixed comparison combines the control score with `weight * logit(s)`, for
+weights **0.5, 2, 8**, with `s` clipped to `[.0001,.9999]`. Noul supplies `s`
+directly; Score uses its probability-weighted expected level divided by four.
+The latter is an ordinal heuristic, **not a probability**. Both arms also report
+direct ranking by `s`, with the control as tie-breaker. Because stroke evidence
+is in the model input as well as the final score, these are heuristic fusion
+experiments, not independent Bayesian likelihood factors. No weights are fitted.
+
+```sh
+CTC_ENV/bin/python pinenote/tools/handwriting/make-sentence-candidates.py \
+  CHAR_LENGTH_RUN/predictions.json CAPTURE NEW_INPUT
+# Use the existing selector runtime; include the pinned Laya checkout on
+# PYTHONPATH for --selector laya. Run Von and Laya into separate NEW_RUNs.
+HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 LAYA_CPU_AMP= \
+  SELECTOR_ENV/bin/python pinenote/tools/handwriting/evaluate-sentence-scores.py \
+  NEW_INPUT/candidates.json LOCAL_WEIGHTS NEW_RUN --selector laya
+# Only this separate scoring command opens reference transcriptions.
+python3 pinenote/tools/handwriting/summarize-sentence-scores.py \
+  COLLECTION VON_RUN LAYA_RUN --output NEW_COMPARISON
+```
+
+The follow-up **`--evidence text-only`** ablation removes the stroke numbers
+and their explanation from the assessment input, and changes only the
+instruction's evidence sentence. The exact CTC score remains in final fusion.
+This was motivated by the primary run's compressed Von ratings, not included
+in the first prespecified comparison. Rubric, candidates and coefficients stay
+fixed; both evidence modes are retained in the report. Pass all four runs to
+the summarizer to compare them together.
+
+All 608 candidate sentences receive both assessments. Four unrelated synthetic
+sentences provide a clean/corrupted sanity comparison before handwriting
+inference. Output includes an incremental trace, predictions, model/source
+hashes, runtime/memory, and each fixed method's corrected/newly introduced errors.
+The current sheets remain a development set. To personalize further, record
+accepted/rejected predictions and corrected text against immutable ink IDs;
+binary rejection alone does not identify the intended replacement. Keep later
+writing sessions separate when measuring whether adaptation generalizes.
+
+Post-hoc threshold analysis uses the already saved ordinal answers:
+
+```sh
+python3 pinenote/tools/handwriting/analyze-score-thresholds.py \
+  LAYA_RUN COLLECTION NEW_THRESHOLD_OUTPUT
+```
+
+It reports both **fallback** (reject a change and keep the character-LM baseline,
+retaining the full denominator) and **selective** accuracy (omit low-confidence
+lines, reporting coverage). It compares entropy-based `confidence`, maximum
+ordinal-category `answer_confidence`, and the normalized ordinal rating (which
+is not confidence). Every observed cutoff plus a simple fixed grid is saved,
+for fused `score_8` and direct ordinal ranking. Thresholds explored on these
+same lines are development findings, not calibrated acceptance guarantees.
+
+### Hosted Jev comparison (explicit opt-in)
+
+`evaluate-jev.py` sends **candidate sentences**, optionally with numeric stroke
+evidence, to TypeSafe's hosted API. It sends no images, trajectories or reference
+labels. This is a host experiment, separate from the local notebook recognition
+path. Supply `TYPESAFE_API_KEY` in the process environment or the existing
+`jeveval.auth` session cache; never put it in source, arguments or run artifacts.
+
+The runner reuses the client in a checkout of
+<https://github.com/willkelly/jev-evaluation> (the checkout containing
+`jeveval/` and `PROMPTING.md`). Its prompting guide informs the experiment:
+batch Noul and Score about the same sentence, preserve the original candidate
+text, and add one flat Choice over all 32 readings per line. Choices identify
+options by their actual text, not numbered positions. Noul/Score retain the
+local experiment's identical wire rubrics and single-candidate context; the
+Choice arm is a separately specified comparison, not a matched Von ablation.
+
+```sh
+python3 pinenote/tools/handwriting/evaluate-jev.py \
+  SENTENCE_CANDIDATES/candidates.json NEW_JEV_SMOKE \
+  --jev-repo /path/to/jev/eval --smoke
+python3 pinenote/tools/handwriting/evaluate-jev.py \
+  SENTENCE_CANDIDATES/candidates.json NEW_JEV_RUN \
+  --jev-repo /path/to/jev/eval
+python3 pinenote/tools/handwriting/summarize-sentence-scores.py \
+  COLLECTION NEW_JEV_RUN/stroke NEW_JEV_RUN/text-only --output NEW_JEV_COMPARISON
+python3 pinenote/tools/handwriting/audit-jev.py NEW_JEV_RUN COLLECTION
+python3 pinenote/tools/handwriting/test-jev-scoring.py
+```
+
+Both evidence arms use the same base score and fixed weights `.5, 2, 8`.
+Scalar fusion adds a clipped assessment logit; categorical fusion adds
+`weight * log(max(probability, 1e-6))`. Record every weight and direct selection.
+Jev rounds probabilities independently to two decimals, so the distribution
+checks allow only the resulting rounding error. Ordinal normalization uses the
+native reported expected level divided by four, checking consistency with the
+rounded distribution. It is a heuristic quality score, not HTR confidence.
+
+`plan.json` freezes inputs, code, rubrics and weights before sending requests;
+`calls.jsonl` retains each raw request/response, reported tokens, model version,
+latency and failures, without authorization headers. `--resume` requires the
+same plan and reuses successful requests from that log. An error stops the
+evaluation rather than substituting an answer. A completed run must have one
+returned model version. Pricing estimates use the client's recorded rate;
+confirm current vendor pricing before a new run. The September 2026 rate is
+$42 per billion input tokens, output free.
+
+Keep labelled examples and threshold fitting out of this direct comparison.
+Future few-shot examples belong in state and must come from a disjoint training
+split. Candidate coverage, confidence ranking and repeated-sheet gains are
+development diagnostics; fresh writing remains the accuracy gate.
+
+### Gemma comparison through a local CPU runtime
+
+The same focused evaluator accepts `--selector gemma --llama-server PATH` and
+a local GGUF **file** in place of an SDK snapshot directory. It owns a temporary
+loopback-only llama.cpp server, uses eight CPU threads with zero GPU layers,
+and shuts that process down after inference. The model's embedded chat template
+formats the same state/question/options, with an added JSON-output instruction.
+Schema-constrained output permits only the supplied candidate IDs. Temperature
+is zero, thinking is disabled, and prompt reuse is disabled. Generated IDs are
+not reported as option probabilities. The input still contains all relative
+stroke probabilities. Save the raw requests, responses, server configuration,
+model hash, timings and server peak RSS; the Python client's RSS is separate.
+
+```sh
+python3 pinenote/tools/handwriting/evaluate-focused.py \
+  FOCUSED_CANDIDATES/candidates.json COLLECTION LOCAL_MODEL.gguf NEW_GEMMA_RUN \
+  --selector gemma --llama-server LLAMA_CPP/build/bin/llama-server
+```
+
+For the recorded E2B run, build llama.cpp commit
+`7ac59a6e3ad851cd41af00f678effab0598ba9a8` with CMake Release, CPU backend,
+`GGML_CUDA=OFF`, `GGML_VULKAN=OFF`, `LLAMA_OPENSSL=OFF`,
+`LLAMA_BUILD_TESTS=OFF`, `LLAMA_BUILD_EXAMPLES=OFF`, `LLAMA_BUILD_SERVER=ON`;
+build target `llama-server`. Download
+`ggml-org/gemma-4-E2B-it-GGUF` at
+`b4243c156154b6dca9324415f8c7ccc098b4aed1`, file
+`gemma-4-E2B-it-Q4_0.gguf`, before starting offline inference. No vision
+projector is used in this text-only selection experiment.
+
+### Code-block image baseline
+
+Use `evaluate-code-images.py` for the reviewed code collection, rather than
+passing multiline labels through the prose evaluator:
+
+```sh
+python3 pinenote/tools/handwriting/evaluate-code-images.py \
+  CODE_COLLECTION LOCAL_MODEL.gguf LOCAL_PROJECTOR.gguf NEW_CODE_RUN \
+  --llama-server LLAMA_CPP/build/bin/llama-server
+python3 pinenote/tools/handwriting/test-code-metrics.py
+```
+
+It uses `regions-reviewed.tsv` to identify block images and language, sends
+only ink-only block PNGs and a literal-transcription instruction, and freezes
+predictions before reading labels. It preserves leading/internal whitespace,
+removing only one terminal newline. Markdown fences or explanations count as
+errors rather than being silently stripped. Report whitespace-sensitive CER,
+exact blocks and aligned lines, plus a separately named whitespace-free CER;
+the latter is not the primary result. Report edited/unedited and Python/Guile
+groups. Python AST parsing and Guile reading are diagnostics only: no sample
+code is evaluated, reformatted or repaired. Reference syntax may itself fail.
+
+### First writer-adaptation pilot
+
+`train-writer-pilot.py` changes the small OnlineHTR weights using the original
+**19 qualified prose trajectories**. Code-block stroke segmentation and
+erasure-aware trajectory adaptation are separate work; do not feed blocks into
+a single-line CTC model. This pilot uses the unchanged upstream feature
+transform and checks that it reproduces every original greedy prediction first.
+
+```sh
+python3 pinenote/tools/handwriting/test-adaptation.py
+python3 pinenote/tools/handwriting/train-writer-pilot.py \
+  PROSE_COLLECTION PINNED_ONLINEHTR_CHECKOUT ORIGINAL_MODEL_DIRECTORY \
+  ORIGINAL_TRAJECTORY_RUN/results.json NEW_WRITER_RUN
+```
+
+Use the previously qualified OnlineHTR Python environment. Five folds hold out
+an entire page each. The next page cyclically is validation; the other three
+pages supply training. Test-page labels never select a checkpoint. Compare
+head-only, last-recurrent-layer-plus-head, and full-model updates at fixed Adam
+learning rates .001, .0003 and .0001, respectively; seeds 0/1/2, at most 25
+epochs, validation-CTC early stopping after five nonimprovements. Epoch zero is
+eligible. Preserve every fold's weights and every seed's result, rather than
+reporting the luckiest fit.
+
+The output alphabet appends missing printable ASCII symbols while preserving
+old indices and blank=0. New head rows start at zero weights/bias -20; verify
+that greedy predictions are unchanged before training. This makes the existing
+`$` label representable and prepares the output shape for code, but **does not
+teach symbols absent from training**. No target is silently dropped or replaced
+by an unknown token. Gradients are clipped at norm 1; nonfinite/impossible CTC
+losses stop the run. Inputs, source and checkpoint hashes are recorded before
+training, and the original checkpoint is preserved.
+
+This is **development cross-validation**, not fresh-session evaluation: the
+same sheets have already informed this research program. The truly reserved
+later-session pages remain untouched. Fold checkpoints are experimental
+personalized artifacts, not automatically installed models.
+
+For the frozen-decoder follow-up, export only each fold's test-page emissions:
+
+```sh
+python3 pinenote/tools/handwriting/export-writer-emissions.py \
+  WRITER_RUN PROSE_COLLECTION PINNED_ONLINEHTR_CHECKOUT NEW_EMISSIONS
+# Use the KenLM environment for each named capture, including expanded-control:
+python3 pinenote/tools/handwriting/evaluate-character-lm.py \
+  NEW_EMISSIONS/head-seed-0 PROSE_COLLECTION CHARACTER_LM \
+  NEW_EMISSIONS/head-seed-0/length --mode length
+```
+
+Repeat decoding for **all nine** saved policy/seed captures and the
+`expanded-control`, not only the most favorable greedy result. The exporter
+reconstructs plain PyTorch models from saved weights and requires each greedy
+prediction to match the training runner's saved held-out prediction. It checks
+the train/validation/test separation again. The epoch-zero control requires the
+pilot's head-seed-0/fold-1 checkpoint to have selected epoch zero; it refuses if
+that recorded condition no longer holds.
+
+## Copy-and-write sampler
+
+Generate five pages of four prompts: everyday prose, Workbench-like requests,
+numbers and punctuation. Each prompt has a generous ruled writing area beneath
+it. The same artwork produces the EPUB's page images and the notebook's paper.
+
+```sh
+guix shell guile librsvg imagemagick zip font-dejavu -- \
+  guile --no-auto-compile -s pinenote/tools/handwriting/make-sampler.scm \
+  pinenote/tools/handwriting/build
+```
+
+The output directory must not exist. Outputs:
+- `handwriting-sampler.epub`: five fixed-layout portrait pages. KOReader's
+  EPUB engine may fit the artwork within reader margins; the notebook uses
+  the full-resolution artwork, not a screenshot of that fitted EPUB.
+- `notebooks/<new-id>/`: an ordinary stroke journal notebook plus the immutable
+  `backgrounds.conf` and five `background-N.pgm` pages. The ID is generated at
+  creation; subsequent runs never replace a filled notebook.
+- `regions.tsv`: 20 numbered writing areas, in upright portrait pixels.
+- `transcriptions/01.txt` … `20.txt`: the prompt text, **not yet verified truth**.
+- `handwriting-sampler-kit.zip`: the EPUB, notebook, prompts, regions and
+  installation instructions together.
+
+**Requires the background-template reader change.** Generation 24 does not
+display these backgrounds; older readers ignore the companion files and show
+blank paper. After installing the qualified reader change, close Notebook,
+copy the entire new notebook directory to `/data/notebooks/` on the real data
+partition, refusing any existing destination, and sync it before opening.
+Keep all background files with the journal in backups. In Tools → Notebook →
+Open, select the newly created notebook by its UTC timestamp. Pages are 0–4;
+after that they are blank. Orient the tablet so the prompts are upright (the
+seeded portrait mode 1) and keep that orientation while writing. Ink and paper
+remain attached to physical pixels when the controls rotate.
+
+Use Ball or Fine, write normally above each rule, and lift between lines.
+Close Notebook when finished; preserve a complete host-side snapshot and
+checksums. Correct the transcription files to **what was actually written**,
+including mistakes. Export a writing area using its row of `regions.tsv`:
+
+```sh
+guix shell luajit -- luajit pinenote/tools/handwriting/export-line.lua \
+  /path/to/copied/notebooks NOTEBOOK-ID 0 transcriptions/01.txt \
+  88 390 1228 180 > sample-01.inkml
+```
+
+The optional `X Y W H` selects whole strokes in logical, upright coordinates;
+coordinates stay in that source space and the region is recorded in InkML.
+A stroke touching both sides of its boundary is refused, including its brush
+width. Choose a larger unambiguous region if needed, rather than silently
+cutting a letter. Area erasing that intersects the selected region needs raster
+recognition and is refused; an eraser whose entire brush box is outside the
+region does not invalidate that line. Whole-page export still refuses any
+active area eraser. Undo and whole-stroke erase replay correctly.
+The printed prompts and rules never enter the stroke export.
 
 ## Collect a small evaluation set
+
+### Code and erase-and-rewrite supplement
+
+```sh
+guix shell guile librsvg imagemagick zip font-dejavu -- \
+  guile --no-auto-compile -s pinenote/tools/handwriting/make-sampler.scm \
+  NEW_CODE_KIT code-edits
+```
+
+This optional profile creates **six pages, twelve four-line blocks**: six Python
+blocks and six Guile Scheme blocks, including six deliberate area-erase tasks.
+It covers indentation, underscores/hyphens, parentheses/brackets/braces, quotes,
+backquote/unquote, comparisons, numbers, boolean literals, f-strings and escapes.
+The printed code is the **initial** text; edit instructions specify what to
+erase and replace. Use the real area eraser, preserving surrounding strokes.
+
+- Pages 1–4 (notebook pages 0–3) are the adaptation collection. Leave pages 5–6
+  (notebook pages 4–5) for a **later writing session** and keep those blocks out
+  of training/parameter selection. Record actual session boundaries. This is a
+  small coverage supplement, not a claim that 48 lines suffice for adaptation.
+- After edits, use Refresh and close/reopen; compare the final visible ink.
+  Record remnants, neighbour damage, missing replacements or replay differences.
+  Generating this kit does not qualify the eraser's on-device appearance or
+  persistence; those are operator checks.
+- `regions.tsv` describes **whole blocks**; `line-regions.tsv` gives individual
+  lines with IDs such as `01-1`. Both retain the full page width and a common
+  horizontal origin. Do not crop each line to its own ink bounds: that removes
+  the evidence for indentation. Inspect actual ink before accepting crop boxes.
+- `prompts/NN.txt` and `line-prompts/NN-L.txt` contain **unverified intended final
+  text**. `tasks.scm` records initial/final prompts and actions. The new profile
+  leaves `transcriptions/` empty: populate it with reviewed literal final ink,
+  preserving indentation, newlines and any actual writing mistakes.
+- Recognition inputs are ink-only replay on white with erasers applied in order;
+  paper, printed prompts and erased historical marks are not model inputs.
+  The original journal remains authoritative and unchanged. Area-erased lines
+  must stay in the raster evaluation; do not discard them to improve a score.
+  The current trajectory exporter still refuses affected lines, because ignoring
+  erasers resurrects deleted writing. Untouched lines and whole-stroke undo/erase
+  remain eligible for trajectory export.
+
+**Code needs its own evaluation path.** Existing prose runners are single-line
+baselines and some trim outer whitespace. They are not qualified for multiline
+code or indentation. Use exact characters (including punctuation/whitespace),
+exact lines and exact blocks, with erased/unedited cases visible separately.
+Parsing is a useful additional diagnostic, not a substitute for matching what
+was written; do not autoformat, repair or execute recognized code as part of
+scoring. English sentence plausibility is not a code-transcription criterion.
+
+The frozen OnlineHTR alphabet lacks several required code symbols, including
+`=`, `_`, `{`, `}`, `<`, `>`, backslash, backtick, `~` and `%`. A decoder-only
+change cannot fix that. Adapting the stroke model for these samples needs an
+expanded output vocabulary and trained output head, or a different recognizer.
+Image recognition naturally covers the final raster after area erasing; its
+code accuracy and whitespace preservation still need measurement.
+
+### Prose-only starter collection
 
 1. Use a fresh notebook, Ball or Fine, and **one short line per page**. Keep one
    writing orientation per page. Write normally; do not carefully imitate print.
@@ -32,7 +686,8 @@ undo/redo and whole-stroke erase. Area-erased pages are refused because exportin
 the surviving pen trajectories alone would resurrect visually erased text.
 Mixed writing orientations, contact gaps, damaged/ignored records and torn tails
 also fail visibly. The source snapshot remains the authority; InkML is derived.
-No line segmentation or crop selection is inferred: one page is one labelled line.
+No line segmentation or crop selection is inferred: without an explicit region,
+one page is one labelled line.
 
 Notebook timestamps come from realtime, clamped within each stroke. They are
 not a fresh measurement of pen timing; downstream preprocessing must tolerate

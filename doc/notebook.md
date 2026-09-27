@@ -23,6 +23,15 @@ capture and storage half of stroke capture #20.
 
 ## Next polish: operator priorities (2026-09-26, after generation 24)
 
+**Recognition direction (2026-09-27):** the operator agreed to begin with
+[contextual decoding](handwriting-design.md), using book-provided language,
+scope and symbol resources, and to retain continual learning as the eventual
+system. The operator also accepted its ink-linked correction/review direction,
+explicitly including ghosting, flashing and draw speed. That record describes
+the rendering approach and open UI choices. Recognition and correction UI
+remain unimplemented in the notebook; the host experiment history below is
+not device qualification.
+
 The operator finds ink responsiveness good and current ghosting/refresh
 acceptable; charcoal (#83) can bring its own performance investigation.
 They want a **GL16 finishing phase after writing**, with an attended feel
@@ -59,10 +68,90 @@ are recommendations for discussion, not an approved redesign.
   risk overflowing input. Bounded asynchronous persistence is a separate design,
   with errors and acknowledgements, rather than silently increasing pen latency.
 
-Handwriting recognition begins with a small **labelled evaluation corpus**;
-the current scribbles are not accuracy evidence. The read-only host exporter
-and collection recipe are in `pinenote/tools/handwriting/README.md`. No model
-has been selected, and recognition is not in the drawing path.
+Handwriting recognition now has a small **labelled evaluation corpus**: the
+completed sampler supplies 20 image lines and 19 trajectory-compatible lines.
+The older scribbles are not accuracy evidence. The read-only host exporter
+and collection recipe are in `pinenote/tools/handwriting/README.md`.
+[The first local TrOCR baseline](handwriting-baseline.md) measures Small/Base
+at 11.69%/9.72% raw character error on those 20 lines. A subsequent 19-line
+trajectory run with the small OnlineHTR LSTM measured 7.14% raw character error,
+but worse word-content error than TrOCR Base (23.08% vs 10.77% on the shared
+lines). A CTC-alternatives + local Von CPU experiment retained useful choices,
+but the installed selector worsened the primary result and changed answers on
+17/19 lines when options were reversed. The candidate interface is reusable;
+model choice remains open, and recognition is not in the drawing path. A focused
+word/span follow-up supplies stroke probabilities to Von and Laya on CPU: Laya
+reduces character error from 7.14% to 6.85% in the primary order, but reversing
+presentation changes 15/44 decisions (Von: 32/44). Requiring agreement makes no
+corrections. Quantized Gemma 4 E2B also makes no corrections in that task,
+at 1.14 s/question on the host CPU. The research recommendation is integrated
+character-language-model decoding and writer adaptation, pending experiments.
+Direct Gemma vision was then tested on the ink images and is much stronger:
+0.85% CER, 15/20 exact lines (0.74% CER on the shared 19), at 1.18 s/line and
+5.04 GiB peak host inference memory. It still normalizes a confirmed spelling
+slip. Gemma is now the quality reference; OnlineHTR remains the small stroke
+model proposed for adaptation. These remain host experiments
+(`doc/handwriting-baseline.md`).
+Integrated pyctcdecode/KenLM word decoding subsequently improves the frozen
+stroke model to 5.65% CER / 13.08% lexical WER on the shared 19 lines, at
+4.35 ms median decoder-only host time and 124 MiB decoder-process peak RSS.
+It helps eight lines and harms four by character error; adaptation and
+on-device qualification remain unrun.
+A pruned 6.36 MiB character 6-gram then reaches 5.21% CER / 14.62% lexical WER
+(5.06% CER with a length adjustment), five exact shared lines. It improves
+literal fidelity and candidate coverage relative to word fusion, but the
+unoptimized Python decoder takes ~0.85 s/line and word fusion still has fewer
+lexical word errors. This remains an offline experiment, not a notebook feature.
+Independent native sentence assessment then reaches **4.46% CER / 13.08%
+lexical WER** with text-only Von Noul fused with stroke/character-LM evidence,
+and **4.76% / 12.31%** with text-only Laya Score. A post-hoc confidence gate on
+the separate stroke-evidence-in-input Laya run also reaches 4.76%, by accepting
+one useful change and falling back elsewhere. These same-sheet results are
+development evidence. A subsequent page-disjoint writer-adaptation pilot found
+no dependable gain; the code-image baseline read 16 Python lines exactly but
+retained Scheme punctuation/layout errors. Device inference remains unrun;
+the full progression is in `doc/handwriting-baseline.md`.
+
+### Fixed paper and the handwriting sampler (2026-09-26)
+
+Operator-approved scope: a simple notebook template; orient the device by hand.
+The five-page, 20-line sampler pairs each printed prompt with a ruled writing
+area. `pinenote/tools/handwriting/make-sampler.scm` generates the EPUB and a fresh
+notebook from the same artwork; its README has generation, installation and
+labelled-region export instructions. **Deployed as generation 25 on wkelly's
+PineNote:** health passed, sampler page 0 opened through the normal notebook
+path, and the operator completed all five pages, including an eraser correction
+on the last. The collected journals replay without damaged records or recorded
+contact gaps. Specific appearance and reopen acceptance is still pending
+(`doc/status.md`). The actual native
+KOReader renders the EPUB as five pages.
+
+Paper is an immutable physical-pixel layer below the journal. Live area erasing
+restores paper; replay, undo and stroke erasing start from that same paper.
+Rotation keeps ink and background aligned in panel coordinates, while controls
+can turn; this does not rotate existing writing upright. The `nb_background`
+loader reads `backgrounds.conf` (`wilkbook-backgrounds-v1 W H`, then one signed
+page number per line) and exactly sized `background-N.pgm` assets (P5, 8-bit
+gray, canonical `P5\nW H\n255\n` header). It refuses mismatched geometry and
+declared missing/corrupt pages before replacing the current page. Undeclared
+pages and notebooks without a manifest stay blank. Only the current background
+is retained (~2.6 MB on PineNote), with a second during page-load preflight.
+Assets are loaded on page changes, never while stamping a pen report.
+
+The stroke format is unchanged. Keep backgrounds with copied notebooks; older
+generations ignore them, so use a background-capable reader for this sampler.
+There is no reader-side importer or template picker yet: install the generated
+new directory once while the notebook is closed. The reusable layer can later
+hold a rendered book-page snapshot, but EPUB anchoring, repagination and book
+annotation UI remain separate work.
+
+Offline proof: full KOReader input suite, 36 dedicated background assertions
+(real BB8/RGB16, both blitters, all rotations/night mode, erase/replay and region
+clipping), plugin page-load/refusal/switch/close coverage, and labelled-region
+export tests. The operator completed the sampler on glass; detailed checks of
+drawing across a rule, undo, close/reopen and orientation are still owed.
+DU ink policy is unchanged;
+the physical appearance of restoring gray paper with the eraser is unmeasured.
 
 ## What it is
 
@@ -161,6 +250,7 @@ module talks to KOReader.
 | `nb_panel` | The floating panel's layout, hit testing, drag and flick. |
 | `nb_controller` | The session state machine. It composes the above and emits a command list; it does no IO. |
 | `nb_surface` | Spans into Blitbuffers: page buffer, framebuffer alias, blit with rotation matched. |
+| `nb_background` | Optional fixed physical paper, strict geometry and declared-page loading; independent of ink. |
 | `nb_fs` | The filesystem over ffi: one `write(2)` per append, fsync, atomic rename. |
 | `main.lua` | The KOReader shell: menu entry, the notebook window, the command executor, panel painting. |
 
