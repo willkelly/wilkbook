@@ -59,10 +59,13 @@ are recommendations for discussion, not an approved redesign.
   risk overflowing input. Bounded asynchronous persistence is a separate design,
   with errors and acknowledgements, rather than silently increasing pen latency.
 
-Handwriting recognition begins with a small **labelled evaluation corpus**;
-the current scribbles are not accuracy evidence. The read-only host exporter
-and collection recipe are in `pinenote/tools/handwriting/README.md`. No model
-has been selected, and recognition is not in the drawing path.
+Handwriting recognition now has a small **labelled evaluation corpus**: the
+completed sampler supplies 20 image lines and 19 trajectory-compatible lines.
+The older scribbles are not accuracy evidence. The read-only host exporter
+and collection recipe are in `pinenote/tools/handwriting/README.md`.
+[The first local TrOCR baseline](handwriting-baseline.md) measures Small/Base
+at 11.69%/9.72% raw character error on those 20 lines. Model choice remains
+open, and recognition is not in the drawing path.
 
 ### Fixed paper and the handwriting sampler (2026-09-26)
 

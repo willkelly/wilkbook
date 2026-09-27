@@ -24,6 +24,11 @@ this lineage. **Unreleased** above it collects what has landed since.
 
 ## Unreleased
 
+- **The first local handwriting baseline is measured.** Microsoft TrOCR Small
+  and Base read the completed sampler's 20 ink-only lines on a workstation,
+  with 11.69% and 9.72% raw character error respectively. Numbers, punctuation
+  and literal spelling remain weaknesses. Reproducible host tooling preserves
+  predictions and reports accuracy, time and memory (`doc/handwriting-baseline.md`).
 - **A copy-and-write handwriting sampler is available in source.** It generates
   a five-page EPUB and matching notebook paper with 20 prompts and ruled spaces.
   The notebook gains a separate background layer: erasing restores the printed

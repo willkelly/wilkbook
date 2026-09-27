@@ -1,10 +1,49 @@
 # Handwriting: first labelled lines
 
-The current device notebooks are mostly scribbles. They remain useful for
+The pre-sampler device notebooks are mostly scribbles. They remain useful for
 capture/replay and performance tests, but do not measure recognition accuracy.
+The completed 2026-09-27 sampler now provides 20 reviewed image lines and 19
+trajectory-compatible lines. The first local TrOCR baseline is recorded in
+[`doc/handwriting-baseline.md`](../../../doc/handwriting-baseline.md).
 The **host-side sample exporter** is not a recognizer or training pipeline.
 It neither changes the reader nor writes to the copied journals. The companion
 sampler generator creates an EPUB and a fresh notebook with fixed paper.
+
+## Local image baseline
+
+`evaluate-images.py` runs pinned Microsoft TrOCR Small or Base on the ink-only
+`rendered/line-*.png` files in a collection. It saves all predictions before
+opening `transcriptions/NN.txt`, then computes corpus-weighted character and
+word edit rates. Images and labels stay local; only public model downloads use
+the network. Model cache, environment, handwriting and results belong in the
+gitignored `build/` directory. Run each model in its own process, sequentially,
+so peak RSS and latency are attributable to that run.
+
+```sh
+python3 -m venv pinenote/tools/handwriting/build/eval-venv
+pinenote/tools/handwriting/build/eval-venv/bin/python -m pip install \
+  torch==2.8.0 --index-url https://download.pytorch.org/whl/cpu
+pinenote/tools/handwriting/build/eval-venv/bin/python -m pip install \
+  transformers==4.56.2 Pillow==11.3.0 sentencepiece==0.2.1 protobuf==7.36.2
+HF_HOME="$PWD/pinenote/tools/handwriting/build/hf-cache" \
+  pinenote/tools/handwriting/build/eval-venv/bin/python \
+  pinenote/tools/handwriting/evaluate-images.py COLLECTION NEW_OUTPUT --model small
+# Repeat with a different NEW_OUTPUT and --model base.
+python3 pinenote/tools/handwriting/summarize-images.py \
+  SMALL_OUTPUT/results.json BASE_OUTPUT/results.json > COMPARISON.md
+make -C pinenote/tools/handwriting image-metrics-check
+```
+
+Output directories must be new. `predictions.json` preserves raw text,
+per-image hashes and measured times; `results.json` adds labels, label hashes,
+model revisions, environment, generation settings, peak process RSS and scores.
+The comparison refuses mismatched image/label sets. Its secondary lexical score
+ignores case and punctuation, explicitly retaining raw CER/WER alongside it.
+There is no prompt injection, dictionary correction, training or label-guided
+preprocessing. The first run uses the original 1404×240 bands and each model's
+standard image processor, greedy decoding, float32 CPU inference and eight
+threads. Subsequent tuning on these lines makes them development data; use new
+writing for the next independent evaluation.
 
 ## Copy-and-write sampler
 
