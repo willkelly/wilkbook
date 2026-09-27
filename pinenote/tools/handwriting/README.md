@@ -9,6 +9,12 @@ The **host-side sample exporter** is not a recognizer or training pipeline.
 It neither changes the reader nor writes to the copied journals. The companion
 sampler generator creates an EPUB and a fresh notebook with fixed paper.
 
+Architecture and sequencing decisions are in
+[`doc/handwriting-design.md`](../../../doc/handwriting-design.md): contextual
+decoding first, book resource packs, correction records/UI proposal and the
+eventual continual-learning system. Those are design direction, separate from
+the executable experiments below.
+
 ## Local image baseline
 
 `evaluate-images.py` runs pinned Microsoft TrOCR Small or Base on the ink-only

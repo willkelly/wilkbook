@@ -23,6 +23,13 @@ capture and storage half of stroke capture #20.
 
 ## Next polish: operator priorities (2026-09-26, after generation 24)
 
+**Recognition direction (2026-09-27):** the operator agreed to begin with
+[contextual decoding](handwriting-design.md), using book-provided language,
+scope and symbol resources, and to retain continual learning as the eventual
+system. That record proposes an ink-linked correction/review sheet and records
+the open UI choices. Recognition and correction UI remain unimplemented in
+the notebook; the host experiment history below is not device qualification.
+
 The operator finds ink responsiveness good and current ghosting/refresh
 acceptable; charcoal (#83) can bring its own performance investigation.
 They want a **GL16 finishing phase after writing**, with an attended feel
@@ -98,8 +105,10 @@ lexical WER** with text-only Von Noul fused with stroke/character-LM evidence,
 and **4.76% / 12.31%** with text-only Laya Score. A post-hoc confidence gate on
 the separate stroke-evidence-in-input Laya run also reaches 4.76%, by accepting
 one useful change and falling back elsewhere. These same-sheet results are
-development evidence; no writer-specific model adaptation or device inference
-has run (`doc/handwriting-baseline.md`).
+development evidence. A subsequent page-disjoint writer-adaptation pilot found
+no dependable gain; the code-image baseline read 16 Python lines exactly but
+retained Scheme punctuation/layout errors. Device inference remains unrun;
+the full progression is in `doc/handwriting-baseline.md`.
 
 ### Fixed paper and the handwriting sampler (2026-09-26)
 

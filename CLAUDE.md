@@ -133,6 +133,10 @@ code review — before a single reboot. That's the standard.
   idle-washer debt for ghosting, an append-only stroke journal on
   `/data`, its module map, offline proofs, measurements and glass
   sessions.
+- `doc/handwriting-design.md` — recognition architecture decisions: contextual
+  decoding first, book-provided scope/symbol/language resources, the correction
+  UI proposal and eventual continual learning. Experimental evidence lives in
+  `doc/handwriting-baseline.md`.
 - `doc/workbench-device-integration.md` — the opt-in Workbench device
   composition plan: Guile coordinator migration, existing Lua renderer,
   workspace ownership, lifecycle contracts and qualification still owed.

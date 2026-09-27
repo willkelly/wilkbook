@@ -24,6 +24,12 @@ this lineage. **Unreleased** above it collects what has landed since.
 
 ## Unreleased
 
+- **Recognition design recorded: context first, continual learning later.**
+  Books can contribute vocabulary, symbol examples and Scheme scope/layout
+  hints. An ink-linked correction UI is proposed, distinguishing transcription
+  fixes from changes to what was written. Architecture decisions, UI questions
+  and the implementation sequence: `doc/handwriting-design.md`. This is a
+  design record, not a deployed feature.
 - **Handwritten code has an image baseline, and writer adaptation has been tried.**
   Gemma reads all 16 collected Python lines exactly; the full Python/Guile set
   has 2.06% character error, with remaining Scheme punctuation/layout errors.

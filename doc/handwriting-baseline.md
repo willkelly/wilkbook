@@ -7,6 +7,11 @@ CER across all 20 images, 15 exact lines, 1.18 s/line on the workstation CPU,
 slip. This is development evidence, not deployment or general-accuracy proof.
 See "Gemma 4 E2B direct image recognition" below.
 
+The agreed next direction is [contextual decoding and correction](handwriting-design.md):
+book-provided language/scope/symbol resources first, with an eventual continual-
+learning system. That decision record also proposes the correction UI; this
+page retains the experimental evidence.
+
 The following sections record the experiments in order. The initial TrOCR
 finding was **promising word recovery, insufficient literal transcription**:
 Base improved on Small at substantially greater host CPU time and memory.
