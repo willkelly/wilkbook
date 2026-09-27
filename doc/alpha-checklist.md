@@ -538,8 +538,9 @@ blacklist is ever wrong on a future kernel change.
       (2026-09-26, wkelly's device): `list`, `log`, and a `demote` then
       `promote 23` round trip that left `extlinux.conf` byte-identical.
       It worked only after two fixes. Reviews of that run then reworked
-      it; the reworked version is pinned by `make os1-rescue-check` and
-      has not yet run on os1 (`doc/status.md` 2026-09-26 late).
+      it. The reworked version is pinned by `make os1-rescue-check`, and
+      its read-only commands ran on os1 on 2026-09-27; its writes have
+      run only against the check (`doc/status.md` 2026-09-26 late).
 - [x] Wi-Fi reassociating after a resume is exercised on both paths:
       27 unattended cycles overnight 2026-09-03/04 (broker-triggered)
       and 32 more on 2026-09-04 of which 28 were KOReader's own idle

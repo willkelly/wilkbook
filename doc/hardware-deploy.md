@@ -535,8 +535,11 @@ notes"):**
   - **Run on os1 2026-09-26** (wkelly's device): `list`, `log`, then `demote`
     and `promote 23`, which left `extlinux.conf` byte-identical
     (`doc/status.md`). The script was then reworked after reviews of that
-    run, and `make os1-rescue-check` pins it. **The reworked version has
-    run only against that check, not yet on os1.**
+    run, and `make os1-rescue-check` pins it. The reworked version then ran
+    on os1 read-only on 2026-09-27, through `sh -s`: `list`, the
+    no-argument default, `log`, and `promote` without a number refused
+    before mounting. Its `promote` and `demote` have run only against the
+    check.
   - kdump is not the tool for our hangs: a core stalled in a bus access
     never panics, so no crash kernel would fire. The watchdog reset plus
     os1 is the failsafe on this SoC.
