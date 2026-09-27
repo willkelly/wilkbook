@@ -1,0 +1,29 @@
+sh pinenote/tools/deploy/deploy.sh "pinenote-os2" "book-state-device-reader" "5"
+== 1/7 build: pinenote-book-state-device-reader (cross, aarch64-linux-gnu)
+   /gnu/store/x3qqz8r52pdh7jzghzfj8l44gfrqkncb-system
+== 2/7 transfer: only what root@pinenote-os2 is missing (the guix copy algorithm over OpenSSH)
+   28 of 490 store paths missing on the device
+== 3/7 add
+wilkbook-generation: generation 23: payload staged in /boot/gen-23
+wilkbook-generation: extlinux menu: 8 generation(s), DEFAULT gen-22
+   generation 23
+== trial: kexec into generation 23 (DEFAULT unchanged; the ssh link dies at the helper's Wi-Fi off, before the kexec)
+   trial> wilkbook-generation: trial boot of generation 23: DEFAULT is unchanged; a power-cycle returns to it
+   trial> wilkbook-generation: machine model "Pine64 PineNote v1.2" -> generation DTB
+   trial> wilkbook-generation: NOTE: the running kernel was kexec'd; its device tree is the last cold boot's, not gen-22's -- a device-tree change is proven only by a cold boot
+   trial> Timeout, server [reader address] not responding.
+== waiting for the new generation to answer ssh
+== health
+current_system=/gnu/store/x3qqz8r52pdh7jzghzfj8l44gfrqkncb-system
+booted_generation=23
+broker_ready=true
+reader_started=true
+health=ok
+== promote
+wilkbook-generation: extlinux menu: 8 generation(s), DEFAULT gen-23
+promoted generation 23
+wilkbook-generation: generation 10 is pinned; kept
+wilkbook-generation: generation 16 is pinned; kept
+wilkbook-generation: generation 18 is pinned; kept
+nothing to prune
+DEPLOY OK -- generation 23 is DEFAULT (/gnu/store/x3qqz8r52pdh7jzghzfj8l44gfrqkncb-system)

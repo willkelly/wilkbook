@@ -63,7 +63,7 @@ local EXPECT_IDS = {
     "size:S", "size:M", "size:L",
     "mode:write", "mode:erase", "mode:stroke_erase",
     "rubber:area", "rubber:stroke",
-    "undo", "redo", "page:prev", "page:next",
+    "undo", "redo", "page:prev", "page:next", "refresh",
     "nb:new", "nb:open", "nb:close",
 }
 
@@ -197,6 +197,23 @@ do
     local La, Lb = a:layout(STATE), b:layout(STATE)
     report(La.w == Lb.w and La.h == Lb.h, "same panel size in both orientations",
            La.w .. "x" .. La.h .. " vs " .. Lb.w .. "x" .. Lb.h)
+end
+
+do
+    -- Refresh (a wash of the page on the glass) sits in the page row after
+    -- Next, and is enabled whatever the state: it writes nothing.
+    for _, scr in ipairs({ LANDSCAPE, PORTRAIT }) do
+        local pn = Panel.new(cfg)
+        pn:open(0, 0, scr.lw, scr.lh)
+        for _, st in ipairs({ STATE, { page = 0 } }) do
+            local b = by_id(pn:layout(st))
+            local r, n = b.refresh, b["page:next"]
+            report(r and r.label == "Refresh" and r.enabled and r.y == b.undo.y
+                   and r.x > n.x and pn:hit(r.x + 1, r.y + 1) == "refresh",
+                   scr.name .. ": Refresh is in the page row after Next, enabled",
+                   r and string.format("%d,%d %dx%d", r.x, r.y, r.w, r.h) or "missing")
+        end
+    end
 end
 
 ------------------------------------------------------------------------

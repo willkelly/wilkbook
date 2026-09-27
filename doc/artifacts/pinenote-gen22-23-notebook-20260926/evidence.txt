@@ -1,0 +1,59 @@
+# Evidence excerpts, 2026-09-26 (wkelly PineNote, generations 22 and 23)
+
+## Note authority log (/var/log/book-state-device.log), generation 22, the 25cea98 check
+2026-09-26 19:38:16 BOOK_STATE_DEVICE: opened fixed-note version=6 present=#t
+2026-09-26 19:38:25 BOOK_STATE_DEVICE: saved fixed-note version=7 bytes=45
+2026-09-26 19:38:32 BOOK_STATE_DEVICE: saved fixed-note version=8 bytes=45
+2026-09-26 19:38:38 BOOK_STATE_DEVICE: saved fixed-note version=9 bytes=45
+2026-09-26 19:38:44 BOOK_STATE_DEVICE: saved fixed-note version=10 bytes=45
+2026-09-26 19:38:50 BOOK_STATE_DEVICE: saved fixed-note version=11 bytes=45
+2026-09-26 19:39:22 BOOK_STATE_DEVICE: closed fixed-note version=11
+
+## Notebook pen-up log (/var/log/reader-session.log, [notebook] lines), generation 22, first five of 218
+2026-09-26 19:39:43 [notebook] pen-up page=0 rec=s1 tool=pen use=ink n=196 dur=540967us gap=0 hits=0 batch=22 lag=19024us drops=1 stamp=196/62253/4699us publish=196/51790/1040us append=- fsync=- 
+2026-09-26 19:39:45 [notebook] pen-up page=0 rec=s2 tool=rubber use=erase n=201 dur=554753us gap=0 hits=0 batch=5 lag=6554us drops=0 stamp=201/54876/4043us publish=201/89598/1880us append=1/371/371us fsync=1/6031/6031us 
+2026-09-26 19:39:49 [notebook] pen-up page=0 rec=s3 tool=rubber use=erase n=1082 dur=3000664us gap=0 hits=0 batch=6 lag=9469us drops=0 stamp=1082/238568/1697us publish=1082/464233/2059us append=1/223/223us fsync=1/5946/5946us 
+2026-09-26 19:39:53 [notebook] pen-up page=0 rec=s4 tool=pen use=ink n=668 dur=1926749us gap=0 hits=0 batch=1 lag=1814us drops=0 stamp=668/91656/1237us publish=668/213619/1160us append=1/394/394us fsync=1/6402/6402us 
+2026-09-26 19:39:55 [notebook] pen-up page=0 rec=s5 tool=pen use=ink n=559 dur=1596098us gap=0 hits=0 batch=1 lag=1759us drops=0 stamp=559/85847/1344us publish=559/216681/1094us append=1/592/592us fsync=- 
+
+## Deploy postflights (as reported by the deploy agent)
+gen 22: boot_id 077b4be7-84e5-4085-aa85-4a933ac052ef; current=booted=/gnu/store/m2smi93nva83wv84ph9h57d93fhffxc3-system; kernel /gnu/store/334ljs8qa7ww8vlg9gpv428bh8yjd1nx-linux-pinenote-book-execution-test-7.1.8-pinenote/Image; /data ext4 rw; [7.551558] EXT4-fs (mmcblk0p7): mounted filesystem ... r/w with ordered data mode (no recovery); reader-session and pinenote-book-state-device running; 0 WARNING/timed out
+gen 23: boot_id 702f50dd-a8b9-4548-889c-99a51dd0cda5; current=booted=/gnu/store/x3qqz8r52pdh7jzghzfj8l44gfrqkncb-system; same kernel; /data ext4 rw; [7.857982] EXT4-fs (mmcblk0p7): mounted filesystem ... r/w (no recovery); both services running; 0 WARNING/timed out
+
+## Touch-error check, generation 22 (around the 60 s capture)
+dmesg | grep -c "Num touch err": 0 before the capture, 0 after.
+
+## Auto-suspend, bytes
+Before the session (od -c /data/wilkbook/autosuspend.conf): "e n a b l e d = 1 \n" (10 bytes), backed up to
+/data/wilkbook/diagnostic-backups/gen21-before-gen22-20260926/autosuspend.conf; set to "enabled=0" for the session;
+restored at close-out with cp -p from the backup, then cmp against it: identical ("enabled=1").
+
+## Generation 23: the idle washes and the reader's age (boot 702f50dd, read 2026-09-26 ~23:10)
+From /var/log/reader-session.log ([idlewasher] lines and the full global refresh each wash issued):
+2026-09-26 22:39:09 [idlewasher] charge 1 (debt=46)
+2026-09-26 22:40:12 [idlewasher] idle wash (debt=46)
+2026-09-26 22:40:12 [pn-refresh] full global rect=0,0,1404,1872
+2026-09-26 23:04:40 [idlewasher] charge 8 (debt=11)
+2026-09-26 23:04:53 [idlewasher] charge 1 (debt=12)
+2026-09-26 23:07:34 [idlewasher] charge 1 (debt=16)   <- 12 -> 16: page turns add debt without a log line
+2026-09-26 23:08:30 [idlewasher] charge 17 (debt=39)
+2026-09-26 23:09:09 [idlewasher] charge 21 (debt=60)
+2026-09-26 23:09:53 [idlewasher] idle wash (debt=60)   <- the wash the operator saw
+2026-09-26 23:09:53 [pn-refresh] full global rect=0,0,1404,1872
+Suspend cycles (dmesg): entry 535.68 s / exit 544.46 s; entry 1052.92 s / exit 1056.68 s.
+Reader process: pid 606, elapsed 38:35 at uptime ~2320 s, so no KOReader restart on this boot.
+Notebook pen-ups on this boot: 122 (22:37:22 to 23:09:08).
+
+## Generation 23 cold boot (operator-run, no UART; read over ssh at 178 s uptime, 23:20:26Z)
+boot_id=34742c60-1c39-4ea3-9e79-5f532e9cc4a8  root=/dev/mmcblk0p6  /data=/dev/disk/by-partlabel/data ext4 rw
+cmdline: root=PNGuixRoot gnu.system=/gnu/store/x3qqz8r52pdh7jzghzfj8l44gfrqkncb-system ... irqchip.gicv3_nolpi=1 fw_devlink=off fbcon=map:1
+  (no initcall_blacklist=rockchip_grf_init: not a kexec)
+ledger: gen-23 x3qqz8r5… [promoted] [booted]; extlinux DEFAULT gen-23, FDT /boot/gen-23/rk3566-pinenote-v1.2.dtb
+DTB sha256 prefix: gen-23 e0530087f39abdfa = gen-16 = gen-18 (both previously cold-booted)
+kernel: gens 20-23 all 334ljs8q (…-linux-pinenote-book-execution-test-7.1.8-pinenote); /boot/gen-20/Image = /boot/gen-23/Image (5435c84efda8fbed)
+[    3.290306] EXT4-fs (mmcblk0p6): mounted filesystem ... r/w with ordered data mode.
+[    7.900459] EXT4-fs (mmcblk0p7): mounted filesystem ... r/w with ordered data mode.
+[    2.756591] rockchip-ebc fdec0000.ebc: probe with driver rockchip-ebc failed with error -22   (known first probe)
+[    8.318474] rockchip_ebc_probe start                                                          (the rebind)
+[    8.417631] dwc3 fcc00000.usb: failed to enable ep0out   (also on every boot in /var/log/messages since 2026-09-08)
+services: reader-session, pinenote-book-state-device, pinenote-platform-controls running since 23:17:37-39

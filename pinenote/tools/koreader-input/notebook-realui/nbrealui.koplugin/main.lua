@@ -20,8 +20,9 @@ copies of them:
     device.lua's order;
   * the real HintOwner (_newHintOwner) over a fake RECT_HINTS ioctl that
     decodes and records every submit;
-  * the refresh-layer guard, wrapped around the SDL framebuffer's
-    refreshFullImp, where every refresh*Imp ends on this backend;
+  * the refresh layer as device.lua shapes it: every refresh*Imp it
+    overrides is a leaf that runs the guard, here recording its mode and
+    ending in the SDL framebuffer's one real refresh, refreshFullImp;
   * publishNow as a counter;
   * the working tree's ffi/input_evdev (keystate, absinfo's value) in
     place of the bundle's copy.  The fake device paths do not exist, so
@@ -37,6 +38,17 @@ Pen and touch are injected by wrapping the SDL backend's waitForEvent:
 queued batches are returned in order, each stamped with CLOCK_REALTIME
 when it is served (the PineNote's evdev clock), and the real timeout
 runs in between, so long-press timers fire on real time.
+
+The panel's repaints (open, a selection change by finger and by pen, a
+drag step, Close, a flick, Refresh by finger and by pen) run under a paint
+audit: every setDirty the window makes, every refresh with its mode and
+region, every publish, every RECT_HINTS arm and disarm, and the
+framebuffer after each page and panel blit and at each refresh.  Each must be one refresh, inside the panel's rect (or the old
+and new rects of a drag step), with no pixel ever holding a value that
+is neither its old nor its new one: on the PineNote a deferred-io flush
+can copy the framebuffer at any of those moments, and the driver shows
+what it copied (the generation-22 selection flicker).  Each audit prints
+a "note: repaint:" line.
 
 Output: "NOTEBOOK_REAL_UI: " lines on stdout -- "ok:", "FAIL:", "shot:",
 "note:", and one "result:ok" or "result:fail".  Screenshots are
@@ -96,10 +108,17 @@ local shim = {
     ioctls = {},      -- decoded RECT_HINTS submits, in order
     publishes = 0,
     refreshes = 0,
+    modes = {},       -- refreshes by mode
     served = 0,       -- injected batches returned by waitForEvent
     pen_out_t = nil,  -- realtime us of the last served proximity-out
+    pen_out_mono = nil, -- and its monotonic time, the audit's clock
 }
 local queue = {}      -- { delay_us, due, events }
+
+-- The paint audit (Probe:audit): while it is set, every setDirty on the
+-- notebook window, every paint of it, every refresh and every RECT_HINTS
+-- submit is recorded in order.
+local audit
 
 local function fake_ioctl(request, arg)
     local p = ffi.cast("uint8_t *", arg)
@@ -116,6 +135,9 @@ local function fake_ioctl(request, arg)
         end
     end
     shim.ioctls[#shim.ioctls + 1] = rec
+    if audit then
+        audit.events[#audit.events + 1] = { k = n > 0 and "arm" or "disarm" }
+    end
     return 0
 end
 
@@ -155,13 +177,38 @@ local function install_shim()
     Device.hint_owner = owner
     Device.publishNow = function()
         shim.publishes = shim.publishes + 1
+        if audit then
+            audit.events[#audit.events + 1] = { k = "publish", t = time.monotonic() }
+        end
         return true
     end
     local full_imp = Screen.refreshFullImp
-    Screen.refreshFullImp = function(this, x, y, w, h, d)
-        shim.refreshes = shim.refreshes + 1
-        owner:guard(x, y, w, h)
-        return full_imp(this, x, y, w, h, d)
+    local IMPS = { refreshPartialImp = "partial", refreshUIImp = "ui",
+                   refreshFastImp = "fast", refreshA2Imp = "a2",
+                   refreshFlashUIImp = "flashui",
+                   refreshFlashPartialImp = "flashpartial", refreshFullImp = "full" }
+    for name, mode in pairs(IMPS) do
+        Screen[name] = function(this, x, y, w, h, d)
+            shim.refreshes = shim.refreshes + 1
+            shim.modes[mode] = (shim.modes[mode] or 0) + 1
+            owner:guard(x, y, w, h)
+            if audit then audit:on_refresh(x, y, w, h, mode) end
+            return full_imp(this, x, y, w, h, d)
+        end
+    end
+    -- The notebook window's setDirty calls, and the refresh-only ones
+    -- (no widget) it makes for a region it painted in place.
+    local set_dirty = UIManager.setDirty
+    UIManager.setDirty = function(this, widget, mode, region, dither)
+        local own = type(widget) == "table" and widget.name == "notebook_window"
+        if audit and (own or (widget == nil and type(mode) == "string")) then
+            audit.events[#audit.events + 1] = {
+                k = own and "dirty" or "refresh_only", mode = mode,
+                region = region and { x = region.x, y = region.y,
+                                      w = region.w, h = region.h },
+            }
+        end
+        return set_dirty(this, widget, mode, region, dither)
     end
 
     -- device.lua scales against the screen's physical size.
@@ -206,6 +253,7 @@ local function install_shim()
                     if ev.src == PEN and ev.type == EV_KEY and ev.value == 0
                        and (ev.code == BTN_TOOL_PEN or ev.code == BTN_TOOL_RUBBER) then
                         shim.pen_out_t = now
+                        shim.pen_out_mono = time.monotonic()
                     end
                 end
                 if queue[1] then queue[1].due = now + queue[1].delay_us end
@@ -341,6 +389,19 @@ local function pen_hover_out()
     enqueue(3, { ev(PEN, EV_KEY, BTN_TOOL_PEN, 0), ev(PEN, EV_SYN, SYN_REPORT, 0) })
 end
 
+-- A tap of the pen tip at logical (lx, ly) that leaves the pen hovering:
+-- proximity in, BTN_TOUCH:1 then :0 3 ms apart, a hover report.
+local function pen_tap_hover(lx, ly)
+    local x, y = pen_raw(lx, ly)
+    local syn = function() return ev(PEN, EV_SYN, SYN_REPORT, 0) end
+    enqueue(0, { ev(PEN, EV_KEY, BTN_TOOL_PEN, 1), ev(PEN, EV_ABS, ABS_X, x),
+                 ev(PEN, EV_ABS, ABS_Y, y + 60), ev(PEN, EV_ABS, ABS_PRESSURE, 0), syn() })
+    enqueue(3, { ev(PEN, EV_ABS, ABS_Y, y), syn() })
+    enqueue(3, { ev(PEN, EV_KEY, BTN_TOUCH, 1), ev(PEN, EV_ABS, ABS_PRESSURE, 2700), syn() })
+    enqueue(3, { ev(PEN, EV_KEY, BTN_TOUCH, 0), ev(PEN, EV_ABS, ABS_PRESSURE, 0), syn() })
+    enqueue(3, { ev(PEN, EV_ABS, ABS_Y, y + 60), syn() })
+end
+
 -- The orientation bridge's report (KOReader mode 0..3 as MSC_RAW).
 local function gyro(mode)
     enqueue(0, { ev(GSENSOR, 4, 3, mode), ev(GSENSOR, EV_SYN, SYN_REPORT, 0) })
@@ -454,6 +515,82 @@ local function multi_swipe(starts, dx, dy, steps, step_ms)
     local up = {}
     for i = #starts, 1, -1 do up[#up + 1] = { slot = i - 1, up = true } end
     enqueue(step_ms, touch_frame(up, false, true))
+end
+
+------------------------------------------------------------------------
+-- The paint audit
+------------------------------------------------------------------------
+
+-- On the PineNote the driver copies whatever the framebuffer holds when a
+-- deferred-io flush runs: at the refresh's publish, or at the 250 ms
+-- deferred-io timer, which starts at the first write after the last flush
+-- and so can fire in the middle of a paint.  A pixel that holds a value
+-- during the paint that is neither its value before nor its value after
+-- can therefore reach the glass and be taken back by the next flush.  The
+-- audit snapshots the framebuffer at each stage of the notebook's paint and
+-- at each refresh, and counts such pixels.
+
+local U16P = ffi.typeof("const uint16_t *")
+
+-- The framebuffer's memory, rotation-free.
+local function fb_bytes()
+    local bb = Screen.bb
+    return ffi.string(bb.data, tonumber(bb.stride) * bb.h)
+end
+
+local Audit = {}
+Audit.__index = Audit
+
+function Audit:snap(label)
+    self.snaps[#self.snaps + 1] = { label = label, bytes = fb_bytes(),
+                                    t = time.monotonic() }
+    return #self.snaps
+end
+
+function Audit:on_refresh(x, y, w, h, mode)
+    local snap = self:snap("refresh")
+    self.events[#self.events + 1] = { k = "refresh", mode = mode, x = x, y = y,
+                                      w = w, h = h, snap = snap,
+                                      t = self.snaps[snap].t }
+end
+
+-- third: pixels in the snapshot that are neither before nor final;
+-- off: pixels that differ from final.  box: the physical bounding box of
+-- the pixels before and final disagree on.
+local function compare(before, snap, final)
+    local bb = Screen.bb
+    local n = tonumber(bb.stride) / 2 * bb.h
+    local pb, ps, pf = ffi.cast(U16P, before), ffi.cast(U16P, snap),
+                       ffi.cast(U16P, final)
+    local third, off = 0, 0
+    for i = 0, n - 1 do
+        local s, f = ps[i], pf[i]
+        if s ~= f then
+            off = off + 1
+            if s ~= pb[i] then third = third + 1 end
+        end
+    end
+    return third, off
+end
+
+local function changed_box(before, final)
+    local bb = Screen.bb
+    local row = tonumber(bb.stride) / 2
+    local pb, pf = ffi.cast(U16P, before), ffi.cast(U16P, final)
+    local x0, y0, x1, y1
+    for y = 0, bb.h - 1 do
+        local base = y * row
+        for x = 0, bb.w - 1 do
+            if pb[base + x] ~= pf[base + x] then
+                if not x0 or x < x0 then x0 = x end
+                if not x1 or x > x1 then x1 = x end
+                if not y0 then y0 = y end
+                y1 = y
+            end
+        end
+    end
+    if not x0 then return nil end
+    return { x = x0, y = y0, w = x1 - x0 + 1, h = y1 - y0 + 1 }
 end
 
 ------------------------------------------------------------------------
@@ -621,6 +758,159 @@ function Probe:item_dark(win, id)
     return gray(Screen.bb, it.x + 6, it.y + 6) < 96
 end
 
+-- Run action() under the paint audit.  Returns the audit: events (dirty,
+-- refresh_only, paint, refresh, arm, disarm, in order), snaps with
+-- third/off counts against the state before and after, and box, what
+-- changed (physical).  A snap is taken after every page and panel blit,
+-- at the first panel item a paint builds (the generation-22 paint drew
+-- the panel straight onto the screen, item by item), at the end of a
+-- whole-window paint and at every refresh.
+function Probe:audit(win, action)
+    UIManager:forceRePaint()
+    local a = setmetatable({ events = {}, snaps = {}, before = fb_bytes() }, Audit)
+    local Surface = require("nb_surface")
+    local blit_page, blit_panel = Surface.blit_page, Surface.blit_panel
+    Surface.blit_page = function(...)
+        blit_page(...)
+        a:snap("page")
+    end
+    Surface.blit_panel = function(...)
+        blit_panel(...)
+        a:snap("panel")
+    end
+    -- Instance fields over the class methods, removed afterwards.
+    local paint_to, item_widget = win.paintTo, win._item_widget
+    win.paintTo = function(this, ...)
+        local ev = { k = "paint" }
+        a.events[#a.events + 1] = ev
+        a.first_item = true
+        local t0 = time.monotonic()
+        paint_to(this, ...)
+        ev.us = time.monotonic() - t0
+        ev.snap = a:snap("painted")
+    end
+    win._item_widget = function(this, ...)
+        if a.first_item then
+            a.first_item = false
+            a:snap("item")
+        end
+        return item_widget(this, ...)
+    end
+    audit = a
+    local ok, err = pcall(action)
+    audit = nil
+    Surface.blit_page, Surface.blit_panel = blit_page, blit_panel
+    win.paintTo, win._item_widget = nil, nil
+    if not ok then error(err, 0) end
+    a.final = fb_bytes()
+    for _, s in ipairs(a.snaps) do
+        s.third, s.off = compare(a.before, s.bytes, a.final)
+        s.bytes = nil
+    end
+    a.box = changed_box(a.before, a.final)
+    a.before, a.final = nil, nil
+    return a
+end
+
+function Audit:describe()
+    local parts = {}
+    for _, e in ipairs(self.events) do
+        if e.k == "dirty" or e.k == "refresh_only" then
+            local r = e.region
+            parts[#parts + 1] = string.format("%s(%s %s)", e.k, tostring(e.mode),
+                r and string.format("%d,%d %dx%d", r.x, r.y, r.w, r.h) or "all")
+        elseif e.k == "paint" then
+            local s = self.snaps[e.snap]
+            parts[#parts + 1] = string.format("paint(%.1fms third=%d off=%d)",
+                                              e.us / 1000, s.third, s.off)
+        elseif e.k == "refresh" then
+            local s = self.snaps[e.snap]
+            parts[#parts + 1] = string.format("refresh:%s(%d,%d %dx%d third=%d off=%d)",
+                                              tostring(e.mode), e.x, e.y, e.w, e.h,
+                                              s.third, s.off)
+        else
+            parts[#parts + 1] = e.k
+        end
+    end
+    local stages = {}
+    for _, s in ipairs(self.snaps) do
+        if s.label ~= "refresh" and s.label ~= "painted" then
+            stages[#stages + 1] = string.format("%s third=%d", s.label, s.third)
+        end
+    end
+    local b = self.box
+    return table.concat(parts, " ") .. " | stages: " .. table.concat(stages, ", ")
+        .. " | changed: " .. (b and string.format("%d,%d %dx%d", b.x, b.y, b.w, b.h)
+                              or "nothing")
+end
+
+-- Events of kind k (and, for a refresh, of mode `mode`).
+function Audit:count(k, mode)
+    local n = 0
+    for _, e in ipairs(self.events) do
+        if e.k == k and (mode == nil or e.mode == mode) then n = n + 1 end
+    end
+    return n
+end
+
+-- The first event of kind k (and mode), and its index.
+function Audit:first(k, mode)
+    for i, e in ipairs(self.events) do
+        if e.k == k and (mode == nil or e.mode == mode) then return e, i end
+    end
+end
+
+-- The clean repaint: exactly one refresh, inside region (logical), the
+-- framebuffer at it the end state; no pixel at any snap through a value
+-- that is neither its old nor its new one; no whole-window paint; and,
+-- when changed (physical) is given, nothing changed outside it.
+function Probe:check_repaint(a, label, region, changed)
+    local ok, refresh = a:count("refresh") == 1 and a:count("paint") == 0, nil
+    for _, e in ipairs(a.events) do
+        if e.k == "refresh" then refresh = e end
+    end
+    if refresh then
+        local s = a.snaps[refresh.snap]
+        ok = ok and s.off == 0 and refresh.x >= region.x and refresh.y >= region.y
+             and refresh.x + refresh.w <= region.x + region.w
+             and refresh.y + refresh.h <= region.y + region.h
+    end
+    for _, s in ipairs(a.snaps) do
+        if s.third ~= 0 then ok = false end
+    end
+    if changed then
+        local b = a.box
+        ok = ok and b ~= nil and b.x >= changed.x and b.y >= changed.y
+             and b.x + b.w <= changed.x + changed.w and b.y + b.h <= changed.y + changed.h
+    end
+    self:check(ok, label, a:describe())
+    marker("note: repaint: " .. a:describe())
+    return ok
+end
+
+-- A logical rect clipped to the screen.
+local function on_screen(r)
+    local x0, y0 = math.max(0, r.x), math.max(0, r.y)
+    local x1 = math.min(Screen:getWidth(), r.x + r.w)
+    local y1 = math.min(Screen:getHeight(), r.y + r.h)
+    return { x = x0, y = y0, w = x1 - x0, h = y1 - y0 }
+end
+
+-- The physical bounding box of panel items a and b: where a selection
+-- change between them may change pixels.
+local function items_box(a, b)
+    local r = {}
+    for i, it in ipairs({ a, b }) do
+        local bx, by, bw, bh = Screen.bb:getBoundedRect(it.x, it.y, it.w, it.h)
+        local px, py, pw, ph = Screen.bb:getPhysicalRect(bx, by, bw, bh)
+        r[i] = { x = px, y = py, w = pw, h = ph }
+    end
+    local x0, y0 = math.min(r[1].x, r[2].x), math.min(r[1].y, r[2].y)
+    local x1 = math.max(r[1].x + r[1].w, r[2].x + r[2].w)
+    local y1 = math.max(r[1].y + r[1].h, r[2].y + r[2].h)
+    return { x = x0, y = y0, w = x1 - x0, h = y1 - y0 }
+end
+
 function Probe:last_arm()
     for i = #shim.ioctls, 1, -1 do
         local rec = shim.ioctls[i]
@@ -706,14 +996,20 @@ function Probe:script()
                nbplugin.path)
     nbplugin.MOUNTINFO = ROOT .. "/mountinfo"
     local washer = ui.idlewasher
-    local charges = 0
-    if self:check(washer ~= nil and type(washer.chargePageTurn) == "function",
-                  "the working-tree idle washer (chargePageTurn) is loaded",
+    local charges, debt = 0, 0
+    if self:check(washer ~= nil and type(washer.chargePageTurn) == "function"
+                  and type(washer.chargeDebt) == "function",
+                  "the working-tree idle washer (chargePageTurn, chargeDebt) is loaded",
                   washer and washer.path) then
         local charge = washer.chargePageTurn
         washer.chargePageTurn = function(w, ...)
             charges = charges + 1
             return charge(w, ...)
+        end
+        local charge_debt = washer.chargeDebt
+        washer.chargeDebt = function(w, n, ...)
+            debt = debt + n
+            return charge_debt(w, n, ...)
         end
     end
 
@@ -771,15 +1067,21 @@ function Probe:script()
     self:check(screen_dark(4) == 0, "the new page is blank on screen")
     self:shot("open-blank")
 
-    -- Stroke A: fine --------------------------------------------------------
+    -- Stroke A: the default brush, Ballpoint M -----------------------------
     local pubs = shim.publishes
     local hooks = input_hooks
     local yA = 0.12 * lh
     pen_stroke(wave(0.08 * lw, 0.92 * lw, yA, 18, 80,
                     function() return 2700 end), "pen")
     drain()
+    -- At lw / 2 the wave is at a trough, so a column cuts the stroke
+    -- square: at 2700, about the median contact pressure, Ballpoint M's
+    -- radius is 2.52 px, 5 px across (~0.56 mm), 6 when the sample's
+    -- fractional px straddles a row.
     local runA = dark_run(lw / 2, yA - 40, yA + 40)
-    self:check(runA > 0, "stroke A (fine) is ink on the framebuffer", runA)
+    self:check(runA >= 5 and runA <= 6,
+               "stroke A (the default Ballpoint) is ink ~0.56 mm wide at the median pressure",
+               runA)
     self:check(page_dark_run(win.page_bb, lw / 2, yA - 40, yA + 40) == runA,
                "stroke A is in the page buffer at the same physical pixels")
     self:check(shim.publishes - pubs >= 70, "ink published once per drawing report",
@@ -793,38 +1095,57 @@ function Probe:script()
                "the pen armed DU (0x00) over the whole physical panel",
                arm and #arm.rects)
     local body = read_file(page_path)
-    self:check(count(body, "\n") == 1 and body:find('"brush":"fine"', 1, true),
-               "one fine stroke record on disk after proximity-out", body)
-    self:shot("stroke-fine")
+    self:check(count(body, "\n") == 1
+               and body:find('"brush":"ballpoint","size":"M"', 1, true),
+               "one Ballpoint M stroke record on disk after proximity-out", body)
+    self:shot("stroke-ballpoint")
 
     -- Long press: the panel ------------------------------------------------
     local n_before = #shim.ioctls
-    self:long_press(0.5 * lw, 0.75 * lh)
+    local au_open = self:audit(win, function() self:long_press(0.5 * lw, 0.75 * lh) end)
     self:check(win.panel_L ~= nil, "a long press opens the panel")
+    if win.panel_L then
+        self:check_repaint(au_open, "panel open: one refresh over the panel, no pixel"
+                           .. " through a third value, no whole-window paint",
+                           on_screen(win.panel_L))
+    end
     local disarmed = false
     for i = n_before + 1, #shim.ioctls do
         if #shim.ioctls[i].rects == 0 then disarmed = true end
     end
     self:check(disarmed and not Device.hint_owner:is_armed(),
                "the panel's paint was preceded by a disarm")
-    self:check(self:item_dark(win, "brush:fine") == true
+    self:check(self:item_dark(win, "brush:ballpoint") == true
                and self:item_dark(win, "brush:marker") == false,
-               "the checked brush (fine) is painted inverted, the others not")
+               "the checked brush (the default Ballpoint) is painted inverted, the others not")
     self:shot("panel-open")
 
     -- Tap Marker, Close ------------------------------------------------------
-    self:tap_item(win, "brush:marker")
+    -- The generation-22 flicker: a selection change must be one refresh
+    -- inside the panel, with only the two buttons changing.
+    local au = self:audit(win, function() self:tap_item(win, "brush:marker") end)
+    self:check_repaint(au, "a selection change: one refresh inside the panel, only the"
+                       .. " two buttons change, no pixel through a third value",
+                       on_screen(win.panel_L),
+                       items_box(panel_item(win, "brush:ballpoint"),
+                                 panel_item(win, "brush:marker")))
     self:check(panel_item(win, "brush:marker") and panel_item(win, "brush:marker").checked,
                "tapping Marker checks it in the panel")
     self:check(self:item_dark(win, "brush:marker") == true
-               and self:item_dark(win, "brush:fine") == false,
-               "Marker is now painted checked and Fine unchecked")
+               and self:item_dark(win, "brush:ballpoint") == false,
+               "Marker is now painted checked and Ballpoint unchecked")
     local prefs = read_file(root .. "/prefs.json")
     self:check(prefs and prefs:find('"brush":"marker"', 1, true), "prefs.json holds marker",
                prefs)
     self:shot("panel-marker")
-    self:tap_item(win, "close")
+    local closing = on_screen(win.panel_L)
+    local au_close = self:audit(win, function() self:tap_item(win, "close") end)
     self:check(win.panel_L == nil, "Close hides the panel")
+    self:check_repaint(au_close, "Close: one refresh over the panel, the page back under"
+                       .. " it, no pixel through a third value", closing)
+    self:check(screen_vs_page(win.page_bb, closing) == 0,
+               "where the panel was, the screen shows the page")
+    self:check(debt == 1, "Close charged the idle washer one unit of ghost debt", debt)
     self:shot("panel-closed")
 
     -- Stroke B: marker -------------------------------------------------------
@@ -833,23 +1154,53 @@ function Probe:script()
                     function() return 2700 end), "pen")
     drain()
     local runB = dark_run(lw / 2, yB - 60, yB + 60)
-    self:check(runB > runA, "the marker stroke is wider than the fine one",
-               string.format("fine %d px, marker %d px", runA, runB))
+    self:check(runB > runA, "the marker stroke is wider than the ballpoint one",
+               string.format("ballpoint %d px, marker %d px", runA, runB))
     self:shot("stroke-marker")
 
-    -- Brush pen through the panel, closed by a flick -------------------------
+    -- Brush pen through the panel, a drag, closed by a flick ----------------
     self:long_press(0.5 * lw, 0.75 * lh)
     self:tap_item(win, "brush:brushpen")
     local L = win.panel_L
-    if self:check(L ~= nil, "the panel is open for the flick") then
+    if self:check(L ~= nil, "the panel is open for the drag and the flick") then
+        -- The title bar dragged 40 px past the tap slop, then one more
+        -- 40 px step, audited on its own; the finger rests before it lifts,
+        -- so the release is no flick.
+        local title = panel_item(win, "title")
+        local tx, ty = title.x + title.w / 2, title.y + title.h / 2
+        touch_down(tx, ty)
+        enqueue(40, touch_frame({ { slot = 0, lx = tx - 40, ly = ty } }))
+        drain(0.1)
+        local old = on_screen(win.panel_L)
+        local au_drag = self:audit(win, function()
+            enqueue(0, touch_frame({ { slot = 0, lx = tx - 80, ly = ty } }))
+            drain(0.1)
+        end)
+        local new = on_screen(win.panel_L)
+        local both = { x = math.min(old.x, new.x), y = math.min(old.y, new.y) }
+        both.w = math.max(old.x + old.w, new.x + new.w) - both.x
+        both.h = math.max(old.y + old.h, new.y + new.h) - both.y
+        self:check(new.x == old.x - 40, "the drag step moved the panel 40 px",
+                   string.format("%d -> %d", old.x, new.x))
+        self:check_repaint(au_drag, "a drag step: one refresh over the old and new rects,"
+                           .. " no pixel through a third value", both)
+        touch_up(300)
+        drain()
+        L = win.panel_L
+        self:check(L ~= nil, "a drag that stops before the lift leaves the panel open")
         -- Land on the panel's bottom padding (no button, not the title
         -- bar, so nothing drags), then 8 moves of 60 px up the panel 12 ms
         -- apart: ~5000 px/s, over flick_min_px_per_s even at twice the
         -- step time.
         local fx, fy = L.x + L.w / 2, L.y + L.h - 6
-        swipe(fx, fy, fx, fy - 480, 8, 12)
-        drain()
+        local flicked = on_screen(L)
+        local au_flick = self:audit(win, function()
+            swipe(fx, fy, fx, fy - 480, 8, 12)
+            drain()
+        end)
         self:check(win.panel_L == nil, "a flick closes the panel")
+        self:check_repaint(au_flick, "a flick: one refresh over the panel, no pixel"
+                           .. " through a third value", flicked)
     end
     local yC = 0.32 * lh
     pen_stroke(wave(0.08 * lw, 0.92 * lw, yC, 0, 80,
@@ -862,9 +1213,24 @@ function Probe:script()
                string.format("end %d px, middle %d px", c_end, c_mid))
     self:shot("stroke-brushpen")
 
-    -- Pencil, three reports per input batch ----------------------------------
+    -- Pencil, chosen with the pen; three reports per input batch ----------
     self:long_press(0.5 * lw, 0.75 * lh)
-    self:tap_item(win, "brush:pencil")
+    do
+        local was, it = panel_item(win, "brush:brushpen"), panel_item(win, "brush:pencil")
+        local P = on_screen(win.panel_L)
+        local pubs0, lines0 = shim.publishes, count(read_file(page_path), "\n")
+        local au_pen = self:audit(win, function()
+            pen_stroke({ { it.x + it.w / 2, it.y + it.h / 2, 2700 } }, "pen")
+            drain()
+        end)
+        self:check_repaint(au_pen, "a pen tap on Pencil: one refresh inside the panel, only"
+                           .. " the two buttons change, no pixel through a third value",
+                           P, items_box(was, it))
+        self:check(panel_item(win, "brush:pencil").checked
+                   and count(read_file(page_path), "\n") == lines0
+                   and shim.publishes == pubs0,
+                   "the pen's tap chose Pencil, and inked and recorded nothing")
+    end
     self:tap_item(win, "close")
     self:check(win.panel_L == nil, "Close hides the panel again")
     local yD = 0.42 * lh
@@ -922,6 +1288,7 @@ function Probe:script()
 
     -- The rubber end: an area erase across stroke A --------------------------
     wait(0.3)
+    local debt_erase = debt
     local xR = 0.5 * lw
     local rub = {}
     for i = 0, 30 do
@@ -932,15 +1299,17 @@ function Probe:script()
     self:check(dark_run(xR, yA - 40, yA + 40) == 0,
                "the rubber end erased stroke A where it crossed",
                dark_run(xR, yA - 40, yA + 40))
+    self:check(debt == debt_erase + 1, "the erase charged one unit, at the pen's leave",
+               debt - debt_erase)
     self:shot("rubber-erase")
 
-    -- Undo: three fingers swiping left ----------------------------------------
-    multi_swipe({ { 0.75 * lw, 0.5 * lh }, { 0.75 * lw, 0.6 * lh },
-                  { 0.75 * lw, 0.7 * lh } }, -0.4 * lw, 0, 8, 40)
+    -- Undo: two fingers swiping left ------------------------------------------
+    multi_swipe({ { 0.75 * lw, 0.5 * lh }, { 0.75 * lw, 0.65 * lh } }, -0.4 * lw, 0, 8, 40)
     drain()
     self:check(dark_run(xR, yA - 40, yA + 40) == runA,
-               "a three-finger left swipe undid the erase",
+               "a two-finger left swipe undid the erase",
                dark_run(xR, yA - 40, yA + 40))
+    self:check(debt == debt_erase + 2, "the undo charged one unit", debt - debt_erase)
     body = read_file(page_path)
     self:check(count(body, '"k":"s"') == 6 and count(body, '"k":"u"') == 1
                and count(body, '"tool":"eraser"') == 1,
@@ -949,6 +1318,70 @@ function Probe:script()
                                       count(body, '"k":"u"'),
                                       count(body, '"tool":"eraser"')))
     self:shot("undo")
+
+    -- Refresh by finger ------------------------------------------------------
+    -- The panel goes and the page is painted where it was (one "ui"
+    -- refresh) and published; a settle wait later, one full refresh of the
+    -- whole screen that repaints no window, with the plane disarmed.
+    self:long_press(0.5 * lw, 0.75 * lh)
+    if self:check(win.panel_L ~= nil, "the panel is open for Refresh") then
+        local P = on_screen(win.panel_L)
+        local debt0 = debt
+        local au_ref = self:audit(win, function()
+            self:tap_item(win, "refresh")
+            wait(0.2)
+        end)
+        marker("note: refresh: " .. au_ref:describe())
+        local pub, ipub = au_ref:first("publish")
+        local ui_r, iui = au_ref:first("refresh", "ui")
+        local full, ifull = au_ref:first("refresh", "full")
+        local W, H = shim.W, shim.H
+        self:check(win.panel_L == nil and screen_vs_page(win.page_bb, P) == 0
+                   and ui_r ~= nil and au_ref:count("refresh", "ui") == 1
+                   and pub ~= nil and ipub < iui,
+                   "Refresh by finger: the panel goes, the page painted where it was is"
+                   .. " published, then refreshed", au_ref:describe())
+        -- The SDL backend takes the rect in the rotated space: compare areas.
+        self:check(full ~= nil and au_ref:count("refresh", "full") == 1
+                   and ifull > iui and full.x == 0 and full.y == 0
+                   and full.w * full.h == W * H and au_ref:count("paint") == 0
+                   and au_ref:count("dirty") == 0,
+                   "Refresh by finger: then one full refresh of the whole screen, and no"
+                   .. " window repainted for it", au_ref:describe())
+        self:check(full ~= nil and pub ~= nil and full.t - pub.t >= 150000,
+                   "Refresh by finger: the wash comes the settle wait after the publish",
+                   full and pub and string.format("%.1f ms", (full.t - pub.t) / 1000))
+        self:check(not Device.hint_owner:is_armed() and debt == debt0,
+                   "Refresh by finger: the plane is disarmed, and nothing is charged")
+    end
+    self:shot("refresh-finger")
+
+    -- Refresh by the pen tip: no wash while it hovers, then one a leave and
+    -- a settle wait after it goes.
+    self:long_press(0.5 * lw, 0.75 * lh)
+    local rit = panel_item(win, "refresh")
+    if self:check(rit ~= nil, "the panel shows Refresh for the pen") then
+        local hovering
+        local au_pen_ref = self:audit(win, function()
+            pen_tap_hover(rit.x + rit.w / 2, rit.y + rit.h / 2)
+            drain(0.4)
+            -- `audit` is the audit in progress (Probe:audit sets it).
+            hovering = audit:count("refresh", "full")
+            pen_hover_out()
+            drain(0.6)
+        end)
+        marker("note: refresh by pen: " .. au_pen_ref:describe())
+        local full = au_pen_ref:first("refresh", "full")
+        self:check(win.panel_L == nil and hovering == 0,
+                   "Refresh by pen: the tap closes the panel, and no wash while the pen hovers",
+                   hovering)
+        self:check(full ~= nil and au_pen_ref:count("refresh", "full") == 1
+                   and shim.pen_out_mono and full.t - shim.pen_out_mono >= 300000,
+                   "Refresh by pen: one wash, the leave and a settle wait after the pen went",
+                   full and shim.pen_out_mono
+                   and string.format("%.1f ms", (full.t - shim.pen_out_mono) / 1000))
+    end
+    self:shot("refresh-pen")
 
     -- Page turns ---------------------------------------------------------------
     local live = ffi.string(win.page_bb.data, win.page_bb.stride * win.page_bb.h)

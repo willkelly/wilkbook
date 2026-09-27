@@ -7,8 +7,8 @@ never printed).
   1. each function's success and errno paths: mkdir_excl and EEXIST,
      ENOENT under a missing parent; append creating the file, appending
      byte for byte with no newline joining, into a directory (EISDIR);
-     truncate, fsync and fsync_dir (ENOTDIR on a file, which is what
-     proves O_DIRECTORY is the right bit for this architecture);
+     truncate, unlink, fsync and fsync_dir (ENOTDIR on a file, which is
+     what proves O_DIRECTORY is the right bit for this architecture);
      listdir without "." and "..", and of a directory bigger than one
      getdents buffer; read of a /proc file stat calls empty;
      write_atomic replacing a file and leaving no temporary, also over a
@@ -16,9 +16,9 @@ never printed).
   2. a permission failure (EACCES) on append and write_atomic, when the
      process is not root;
   3. no fd leaks across a few thousand calls, error paths included;
-  4. nb_journal's Store over this fs: probe, create, open, append,
-     fsync, the torn-tail repair through truncate, list, prefs, and the
-     root's EEXIST on a second probe.
+  4. nb_journal's Store over this fs: probe (which leaves no file),
+     create, open, append, fsync, the torn-tail repair through truncate,
+     list, prefs, and the root's EEXIST on a second probe.
 
 NOT covered: ENOSPC, EROFS and EIO themselves (they need a full or
 failing filesystem; the journal's in-memory fs injects them), and that
@@ -127,6 +127,12 @@ expect("the file is empty and still exists", ",true", Fs.read(f),
        Fs.exists(f))
 expect("truncate of a missing file is ENOENT", "nil,ENOENT",
        Fs.truncate(root .. "/nope", 0))
+
+local gone = d .. "/gone"
+Fs.append(gone, "x\n")
+expect("unlink removes a file", "true", Fs.unlink(gone))
+expect("the unlinked file is gone", "false", Fs.exists(gone))
+expect("unlink of a missing file is ENOENT", "nil,ENOENT", Fs.unlink(gone))
 
 expect("fsync a file", "true", Fs.fsync(f))
 expect("fsync a missing file is ENOENT", "nil,ENOENT",
@@ -238,8 +244,8 @@ local store = J.Store.new{ fs = Fs, root = root .. "/notebooks", cfg = cfg,
                                return seq
                            end }
 expect("Store:probe creates the root and probes it", "true", store:probe())
-expect("the probe file is truncated to empty", "",
-       Fs.read(root .. "/notebooks/.probe"))
+expect("the probe leaves no file behind", "false",
+       Fs.exists(root .. "/notebooks/.probe"))
 local store2 = J.Store.new{ fs = Fs, root = root .. "/notebooks", cfg = cfg }
 expect("a second store's probe takes EEXIST on the root", "true",
        store2:probe())

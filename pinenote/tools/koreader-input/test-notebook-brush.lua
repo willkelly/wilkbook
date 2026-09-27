@@ -260,6 +260,40 @@ do
            and Brush.density(pc, 4095) == 1,
            "pencil density: 0.3 at plo, 1.0 at phi", "")
 end
+do
+    -- Ballpoint M, the default brush, at the median contact pressure: the
+    -- operator judged the ink against scribble.lua's radius-2 square
+    -- brush, 5 px (~0.56 mm).  Rasterized, not just 2r: a horizontal
+    -- segment on a pixel row inks 2 * floor(r) + 1 rows.
+    local bp = Brush.style("ballpoint", "M", "pen", cfg)
+    local r = Brush.radius(bp, 2716)
+    local rows = {}
+    Brush.segment_spans(bp, { x = 100, y = 50, p = 2716 }, { x = 200, y = 50, p = 2716 },
+                        400, 100, function(y, x0, x1)
+                            if x0 <= 150 and x1 >= 150 then rows[#rows + 1] = y end
+                        end)
+    local mm = #rows / PX_PER_MM
+    report(#rows == 5 and mm > 0.5 and mm < 0.6 and abs(2 * r / PX_PER_MM - 0.55) < 0.03,
+           "ballpoint M at median pressure (2716) draws 5 px, ~0.56 mm, as the 2026-09-26"
+           .. " scribble brush did", string.format("r %.3f px, %d rows = %.2f mm", r,
+                                                  #rows, mm))
+    -- And the pressure range around it: the lightest contact the pen window
+    -- admits (pen_p_lo, 100) draws 3 px, a saturated one (4095) 7 px, so
+    -- pressure moves the default line by a pixel either side of the median
+    -- on each edge.  Below the window clamps to the lightest.
+    local function rows_at(p)
+        local n = 0
+        Brush.segment_spans(bp, { x = 100, y = 50, p = p }, { x = 200, y = 50, p = p },
+                            400, 100, function(_, x0, x1)
+                                if x0 <= 150 and x1 >= 150 then n = n + 1 end
+                            end)
+        return n
+    end
+    local lo, hi, below = rows_at(100), rows_at(4095), rows_at(20)
+    report(lo == 3 and hi == 7 and below == 3,
+           "ballpoint M: 3 px at pressure 100, 7 px at 4095, and clamped below the window",
+           string.format("%d / %d / %d rows", lo, hi, below))
+end
 
 ------------------------------------------------------------------------
 -- 3. Masks.

@@ -823,7 +823,12 @@ function Store:_ensure_root()
 end
 
 --- One real append and fsync on the data partition: a read-only or full
--- /data fails here, at open, rather than at the first pen-up.
+-- /data fails here, at open, rather than at the first pen-up.  The probe
+-- file is removed again, so nothing is left in the root but notebooks and
+-- prefs.json.  Its removal is not synced: the probe file a power cut
+-- brings back is harmless, and the next probe removes it.  A failed
+-- removal fails the probe, since a partition that takes the append but
+-- refuses to unlink it is not one to trust with a notebook.
 function Store:probe()
     local ok, err = self:_ensure_root()
     if not ok then return nil, err end
@@ -832,8 +837,7 @@ function Store:probe()
     if not ok then return fail(err, path) end
     ok, err = fs.fsync(path)
     if not ok then return fail(err, path) end
-    -- keep the probe file from growing across opens
-    ok, err = fs.truncate(path, 0)
+    ok, err = fs.unlink(path)
     if not ok then return fail(err, path) end
     return true
 end

@@ -53,8 +53,11 @@ local GROUPS = {
       { "stroke_erase", "Erase strokes" } },
     { radio = "rubber",
       { "area", "Rubber: area" }, { "stroke", "Rubber: strokes" } },
+    -- Refresh washes the page on the glass, so it sits with the page's
+    -- other actions, not beside New or Exit.
     { { "undo", "Undo" }, { "redo", "Redo" },
-      { "page:prev", "< Prev" }, { "page:next", "Next >" } },
+      { "page:prev", "< Prev" }, { "page:next", "Next >" },
+      { "refresh", "Refresh" } },
     { { "nb:new", "New" }, { "nb:open", "Open" }, { "nb:close", "Exit" } },
 }
 

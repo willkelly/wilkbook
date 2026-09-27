@@ -36,6 +36,16 @@ Commands (physical px unless noted; the vocabulary the glue codes to):
   panel {layout}       show or update the panel at layout (LOGICAL
                        px, nb_panel's), or hide it when layout is nil
   washer_charge        IdleWasher:chargePageTurn(), once per page shown
+  washer_debt {n}      IdleWasher:chargeDebt(n): n repaints that leave a
+                       ghost, since the last washer_debt (the ghost debt
+                       rule below)
+  publish              Device:publishNow() for a paint the glue made in
+                       place (the page where the panel was), not ink: never
+                       skipped after a failed write, never timed; then
+                       c:published(now_rt_us) and run what it returns
+  wash                 one full-panel wash that repaints nothing
+                       (UIManager:setDirty(nil, "full")); a disarm comes
+                       first
   activity             one synthetic InputEvent (already rate-limited)
   schedule {delay_us}  call c:on_timer(now_rt_us) after delay_us.  One
                        timer: a newer schedule replaces a pending one,
@@ -111,10 +121,60 @@ Why the rules below are what they are:
     the failure only at the end of the list, where the rendering that
     takes the record back comes after any rendering the list held.
   * The panel's hit test reads the state of its last layout(), so every
-    change of what it shows is laid out at once.  While the pen is in
-    range the visible update waits for the leave (touch cannot reach the
-    panel before then) rather than repainting under the pen; resume shows
-    one a suspend kept.
+    change of what it shows is laid out at once, and shown at once, the
+    pen's own ink included (Undo turning on, Redo off, at its pen-up):
+    the pen taps the panel from a hover, so the panel on the glass must
+    be the one its tap hits.  That costs one panel repaint, and a re-arm
+    at the next stroke, only when Undo or Redo changes.  Suspend and
+    close repaint nothing, so an update they cut short waits; resume or
+    the leave shows it.
+  * The pen on the open panel.  A pen contact that starts inside the
+    panel's rect is a panel contact for its whole life: it never inks,
+    erases or journals, wherever it goes.  If the tip lifts within
+    tap_max_us and tap_slop_px of where it landed, in the same contact
+    (no gap), it is a tap on the item it landed on, exactly as a finger
+    tap.  A contact a proximity dropout cut, at either end, is not a
+    tap: nb_input reports its rest as a new stroke, so a stroke from the
+    canvas cut over a button would otherwise press it at the lift.  (That
+    rest began on the panel, so it inks nothing: a dropout over the panel
+    costs the stroke its tail.)  Anything else it does is ignored: a pen
+    drag from the panel, even from the title bar, moves nothing (the
+    finger drags the panel), and the rubber end activates nothing.  The
+    pen never opens the panel and never turns a page by swiping; a tap on
+    Prev or Next turns it after the tip has lifted.  A contact that
+    starts outside the panel inks as ever, clipped at the panel on the
+    glass.
+  * Ghost debt.  An area erase, a stroke erase that removed strokes, an
+    undo or redo that re-rendered something, and the panel closing each
+    leave a ghost of what was there, and none of them is a page turn, so
+    the idle washer counted none of them: writing and erasing on one page
+    never reached its debt_min.  Each now counts one unit of the
+    washer's debt (washer_debt; IdleWasher:chargeDebt accumulates and never
+    washes by itself).  Ink is not charged: what the operator saw linger
+    on glass (generation 22) was erased ink and the page before, not new
+    ink.  Units wait while the pen is here (in range, or its leave not yet
+    run) and go out as one command at the leave, the fsync's moment, or at
+    suspend and close; so no charge is ever emitted with a stroke down.  A finger's action (palm
+    rejection keeps the pen out of range for it) charges in its own list,
+    at the touch's end.  The Refresh button charges nothing, since it
+    washes, and resets nothing: the washer has no reset, and what the
+    debt left behind costs at most one idle wash, at the next pause.
+  * The Refresh button.  It closes the panel; the glue paints the page
+    where the panel was and publishes that paint (publish), then says when
+    it did (published): the list is built before the glue paints, so a
+    wait counted from the controller's own clock would end short of the
+    publish by the paint's time.  The wash
+    comes cfg.refresh_settle_us later, because hrdl's direct driver starts
+    a GLOBAL_REFRESH without flushing damage in flight, and a page render,
+    repaint, panel change or rotation during the wait starts the wait
+    again.  It
+    never comes with the pen in range: a pen that tapped Refresh is still
+    hovering, and a pen that arrives during the wait holds it, so the wait
+    starts again at the pen's leave (deferred, not cancelled, or a pen tap
+    could never refresh).  A page shown during the wait drops the wash,
+    since a wash must not ride a page turn, and so does anything that
+    takes the screen from the notebook: ink going dead (a widget on top),
+    suspend and close.
 --]]
 
 local Brush = require("nb_brush")
@@ -150,7 +210,12 @@ local VALID = {
     mode = set_of({ "write", "erase", "stroke_erase" }),
     rubber = set_of({ "area", "stroke" }),
 }
-local DEFAULT = { brush = Brush.IDS[1], size = "M", mode = "write",
+-- Ballpoint M, not the fixed-width Fine: at the median contact pressure
+-- (~2716 raw) it draws 5 px, ~0.56 mm, the width of the 2026-09-26
+-- scribble.lua brush the operator compared the notebook with, and
+-- pressure widens or thins it (nb_brush).  A default reaches only users
+-- who never chose on the panel (clean_prefs below).
+local DEFAULT = { brush = "ballpoint", size = "M", mode = "write",
                   rubber = "area" }
 local PREF_KEYS = { "brush", "size", "mode", "rubber" }
 
@@ -242,6 +307,11 @@ function Ctl.new(o)
     self.leave_us = cfg.prox_leave_us or 0
     self.leave_at = nil      -- when a pending leave runs (realtime us)
     self.erased_box = nil    -- a stroke erase's render, waiting for the leave
+    self.ghost_debt = 0      -- units not yet charged to the washer
+    self.wash_us = cfg.refresh_settle_us or 0
+    self.wash_wanted = false -- Refresh was tapped and its wash has not run
+    self.wash_at = nil       -- when it may run (realtime us); nil while the
+                             -- pen is here, and the leave sets it
     return self
 end
 
@@ -265,10 +335,12 @@ function Ctl:open(nb_info, page_n, page)
     self.nb = type(nb_info) == "table" and nb_info or {}
     self.page_n, self.page = page_n, page or J.replay({}, self.cfg)
     self.loading, self.pending_load = nil, nil
-    self.stroke, self.pen_down = nil, false
+    self.stroke, self.pen_down, self.pen_panel = nil, false, nil
+    self.cut_t = nil
     -- The new Input knows no pen until the glue's resync.
     self.in_range = false
     self.leave_at, self.erased_box = nil, nil
+    self:_drop_wash()
     self:_hold(false, out)
     self.dirty = {}
     self.last_append = nil
@@ -290,7 +362,7 @@ function Ctl:open(nb_info, page_n, page)
     local id = self.nb.id
     if J.is_id(id) and self.prefs.last_id ~= id then
         self.prefs.last_id = id
-        out[#out + 1] = { op = "save_prefs", prefs = self:_prefs_copy() }
+        self:_emit_prefs(out)
     end
     return out
 end
@@ -305,12 +377,16 @@ function Ctl:close()
     local out = {}
     if not self.opened then return out end
     if self.stroke then self:_finish(true, out, false) end
+    self.pen_panel = nil
     self.leave_at = nil
+    self:_drop_wash()
     self:_flush(out)
     self:_render_erased(out, false)
     self:_disarm(out)
     self:_hold(false, out)
     self:_save_place(out)
+    self:_flush_prefs(out)
+    self:_flush_debt(out)
     self.pn:close()
     self.panel_drag = nil
     self.loading, self.pending_load = nil, nil
@@ -330,7 +406,10 @@ function Ctl:suspend()
     local out = {}
     if not self.opened then return out end
     if self.stroke then self:_finish(true, out, false) end
+    -- A panel contact the sleep cut short taps nothing.
+    self.pen_panel = nil
     self.suspended = true
+    self:_drop_wash()
     if self.leave_at then
         self:_leave(out, false)
     else
@@ -339,6 +418,8 @@ function Ctl:suspend()
     end
     self:_disarm(out)
     self:_save_place(out)
+    self:_flush_prefs(out)
+    self:_flush_debt(out)
     return out
 end
 
@@ -378,6 +459,10 @@ function Ctl:set_ink_live(live, snap)
         -- repaints the window when it goes, so a stroke erase's render
         -- cannot wait for the pen.
         if self.stroke then self:_finish(true, out, true) end
+        -- The widget now on top owns the screen: a panel contact under it
+        -- taps nothing, and a Refresh would wash that widget.
+        self.pen_panel = nil
+        self:_drop_wash()
         self:_render_erased(out, true)
         self:_disarm(out)
     end
@@ -395,6 +480,8 @@ function Ctl:set_rotation(mode)
     -- set_screen ends a drag and re-clamps; only a real change calls it.
     self.panel_drag = nil
     self.pn:set_screen(G.logical_size(self.r, self.W, self.H))
+    -- The glue repaints the whole window in the new orientation.
+    self:_painted()
     if self.opened and self.pn:is_open() then self:_panel_emit(out) end
     return out
 end
@@ -429,6 +516,17 @@ function Ctl:note_timing(kind, us)
     return {}
 end
 
+--- The glue ran a publish command at now_rt_us, after the paint it
+-- publishes.  A Refresh's wash waiting to run waits from here (the header's
+-- Refresh rule); the command list that asked for the publish also asked
+-- for the timer, and an early timer asks again for the rest.
+function Ctl:published(now_rt_us)
+    if self.wash_at then
+        self.wash_at = (now_rt_us or self.now_rt_us()) + self.wash_us
+    end
+    return {}
+end
+
 function Ctl:pen_in_range() return self.in_range == true end
 function Ctl:any_touch_down()
     return self.inp ~= nil and self.inp:any_touch_down()
@@ -450,12 +548,23 @@ function Ctl:feed(ev)
     return out
 end
 
--- The one timer serves nb_input's long press and the pending leave.  An
--- early call is harmless to both: nb_input asks again for the rest of its
--- wait, and a leave not yet due is asked for again here.
+-- The one timer serves nb_input's long press, the pending leave and the
+-- Refresh's wash.  An early call is harmless to all three: nb_input asks
+-- again for the rest of its wait, and a leave or wash not yet due is asked
+-- for again here.  The wash is checked before the leave: the two are never
+-- pending together (a wash deadline exists only with no leave pending),
+-- and a leave starts the wash's wait from a clock read after now_rt_us, so
+-- a check after it would find more than the whole wait left and take that
+-- for realtime stepping back.
 function Ctl:on_timer(now_rt_us)
     local out = {}
     if not self.opened then return out end
+    local wa = self.wash_at
+    if wa then
+        local left = wa - now_rt_us
+        -- More than the whole wait left means realtime stepped back.
+        if left <= 0 or left > self.wash_us then self:_wash(out) end
+    end
     local la = self.leave_at
     if la then
         local left = la - now_rt_us
@@ -463,12 +572,12 @@ function Ctl:on_timer(now_rt_us)
         if left <= 0 or left > self.leave_us then self:_leave(out, true) end
     end
     self:_run(self.inp:on_timer(now_rt_us), out)
-    if self.leave_at then
+    if self.leave_at or self.wash_at then
         local asked = false
         for i = 1, #out do
             if out[i].op == "schedule" then asked = true end
         end
-        if not asked then self:_schedule(self.leave_us, out) end
+        if not asked then self:_schedule(nil, out) end
     end
     return out
 end
@@ -495,7 +604,7 @@ function Ctl:_run(its, out)
         elseif k == "stroke_begin" then
             self:_begin(it, out)
         elseif k == "stroke_end" then
-            self:_end(it.gap, out)
+            self:_end(it.gap, it.t, out)
         elseif k == "prox" then
             local nxt = its[i + 1]
             if not it.on and nxt and nxt.k == "prox" and nxt.on then
@@ -543,6 +652,8 @@ function Ctl:_prox_in(out)
     -- Back inside prox_leave_us: a dropout, not a leave.  The timer that
     -- was asked for finds nothing to do.
     self.leave_at = nil
+    -- A Refresh waiting to wash now waits for this pen's leave.
+    self.wash_at = nil
     self:_hold(true, out)
     self:_maybe_arm(out)
 end
@@ -561,24 +672,35 @@ end
 function Ctl:_leave(out, visible)
     self.leave_at = nil
     self:_flush(out)
+    self:_flush_prefs(out)
     self:_render_erased(out, visible)
     if visible and self.panel_stale then
         self.panel_stale = false
         if self.pn:is_open() then self:_panel_emit(out) end
     end
     self:_hold(false, out)
+    self:_flush_debt(out)
+    -- A Refresh the pen held waits from here, after what the leave painted.
+    if self.wash_wanted then self:_wait_wash(out) end
 end
 
--- The glue keeps one timer: ask for the sooner of delay_us and the
--- pending leave.
+-- deadline at (realtime us, or nil) as a delay from now, if it comes
+-- sooner than delay (nil: no delay yet).
+local function sooner(delay, at, now)
+    if not at then return delay end
+    local left = at - now
+    if left < 0 then left = 0 end
+    if delay == nil or left < delay then return left end
+    return delay
+end
+
+-- The glue keeps one timer: ask for the sooner of delay_us (nil: none of
+-- the caller's own) and the controller's deadlines, the pending leave and
+-- the Refresh's wash.
 function Ctl:_schedule(delay_us, out)
-    local la = self.leave_at
-    if la then
-        local left = la - self.now_rt_us()
-        if left < 0 then left = 0 end
-        if left < delay_us then delay_us = left end
-    end
-    out[#out + 1] = { op = "schedule", delay_us = delay_us }
+    local now = self.now_rt_us()
+    delay_us = sooner(sooner(delay_us, self.leave_at, now), self.wash_at, now)
+    if delay_us then out[#out + 1] = { op = "schedule", delay_us = delay_us } end
 end
 
 ------------------------------------------------------------------------
@@ -600,8 +722,23 @@ end
 
 function Ctl:_begin(it, out)
     if self.stroke then self:_finish(true, out, true) end
+    -- nb_input ends a contact at a proximity dropout (gap) and starts a
+    -- new stroke where the nib comes back, 22-44 ms later: a stroke that
+    -- begins inside the leave window of a gap is the rest of a contact.
+    local cut_t = self.cut_t
+    self.cut_t = nil
+    self.pen_panel = nil
     self.pen_down = true
-    if self.failed or not self.ink_live or self.suspended then return end
+    if not self.ink_live or self.suspended then return end
+    -- Before the failure check: a panel tap works after a failed write,
+    -- as a finger's does.
+    if self:_hit_test(it.x, it.y) == "panel" then
+        local cut = cut_t ~= nil and it.t - cut_t <= self.leave_us
+        self.pen_panel = { tool = it.tool, x = it.x, y = it.y, t0 = it.t,
+                           d2 = 0, cut = cut }
+        return
+    end
+    if self.failed then return end
     if self.page.next_action > MAX_ACTION then
         if not self.full_warned then
             self.full_warned = true
@@ -639,6 +776,13 @@ function Ctl:_begin(it, out)
 end
 
 function Ctl:_point(it, out)
+    local pp = self.pen_panel
+    if pp then
+        local dx, dy = it.x - pp.x, it.y - pp.y
+        local d2 = dx * dx + dy * dy
+        if d2 > pp.d2 then pp.d2 = d2 end
+        return
+    end
     local s = self.stroke
     if not s then return end
     local prev = s.pts[s.n]
@@ -652,7 +796,7 @@ function Ctl:_point(it, out)
     end
 end
 
-function Ctl:_end(gap, out)
+function Ctl:_end(gap, t, out)
     self.pen_down = false
     if self.stroke then self:_finish(gap, out, true) end
     local pl = self.pending_load
@@ -660,6 +804,20 @@ function Ctl:_end(gap, out)
         self.pending_load = nil
         self:_show_page(pl.n, pl.page, out)
     end
+    -- After the page a load left waiting, so a tap on Prev or Next turns
+    -- from the page on screen.
+    local pp = self.pen_panel
+    if pp then
+        self.pen_panel = nil
+        local slop, dur = self.cfg.tap_slop_px, t - pp.t0
+        -- Realtime can step back mid-tap; nb_input's finger taps clamp too.
+        if dur < 0 then dur = 0 end
+        if pp.tool == "pen" and not gap and not pp.cut
+           and dur <= self.cfg.tap_max_us and pp.d2 <= slop * slop then
+            self:_panel_tap(pp, out)
+        end
+    end
+    self.cut_t = gap and t or nil
 end
 
 -- Loop health for the pen-up log.  A sample stamped no later than the
@@ -790,17 +948,25 @@ function Ctl:_finish(gap, out, repaint)
             rec = nil
         end
     end
-    local waits = false
     if rec and rec.k == "x" then
         -- The picked strokes are already white on the glass; rebuilding
         -- what they overlapped waits for the leave while the pen is in
-        -- range (the header's stroke-eraser rule), and so does the panel.
+        -- range (the header's stroke-eraser rule).
         self.erased_box = grow(self.erased_box, box)
-        waits = repaint and self.in_range
-        if not waits then self:_render_erased(out, repaint) end
+        if not (repaint and self.in_range) then
+            self:_render_erased(out, repaint)
+        end
     end
-    self:_panel_sync(out, rec ~= nil and rec.k == "x" and not waits)
+    -- The panel does not wait: the hovering pen can tap it (the header's
+    -- panel rule).
+    self:_panel_sync(out, repaint)
     self:_log(s, gap, rec, out)
+    -- An area erase leaves a ghost of the ink it whitened, and a stroke
+    -- erase of the strokes it removed; the unit waits for the leave, since
+    -- the pen is still in range here (the ghost debt rule).
+    if s.use == "erase" or (s.use == "strokes" and s.hits > 0) then
+        self:_charge(1, out)
+    end
 end
 
 -- The page render a stroke erase put off, over the page as it now is:
@@ -813,7 +979,10 @@ function Ctl:_render_erased(out, repaint)
     self:_disarm(out)
     out[#out + 1] = { op = "render_page", page = self.page_n,
                       strokes = snapshot(self.page.strokes), region = region }
-    if repaint then out[#out + 1] = { op = "repaint", region = region } end
+    if repaint then
+        out[#out + 1] = { op = "repaint", region = region }
+        self:_painted()
+    end
 end
 
 function Ctl:_log(s, gap, rec, out)
@@ -886,6 +1055,8 @@ function Ctl:_show_page(n, page, out)
     self.loading = nil
     self.page_n, self.page = n, page
     self.full_warned = false
+    -- A wash must not ride a page turn (the header's Refresh rule).
+    self:_drop_wash()
     -- The whole page is rendered below, so a stroke erase's render still
     -- waiting (for the page left) has nothing left to do.
     self.erased_box = nil
@@ -939,10 +1110,16 @@ function Ctl:_undo_redo(kind, out)
                           strokes = snapshot(page.strokes), region = region }
     end
     self:_panel_sync(out, true)
-    if region then out[#out + 1] = { op = "repaint", region = region } end
+    if region then
+        out[#out + 1] = { op = "repaint", region = region }
+        self:_painted()
+    end
     -- Touch drove this, so the pen is out of range and the sync can run
     -- now; the check keeps the fsync rule true whatever the caller.
     if not self.in_range then self:_flush(out) end
+    -- What the render took away or brought back leaves a ghost; a pen's
+    -- tap on Undo or Redo charges at its leave (the ghost debt rule).
+    if region then self:_charge(1, out) end
 end
 
 -- Emit a record's append and apply it to the page in memory now: the
@@ -1021,6 +1198,17 @@ function Ctl:_panel_emit(out)
     self.panel_stale = false
     self:_disarm(out)
     out[#out + 1] = { op = "panel", layout = self.L }
+    self:_painted()
+end
+
+-- The panel closes, and the glue paints the page back where it was, which
+-- leaves a ghost of the panel's buttons: charged, unless the close is the
+-- Refresh's, which washes (the ghost debt rule).
+function Ctl:_close_panel(out, charge)
+    self.panel_drag = nil
+    self.pn:close()
+    self:_panel_emit(out)
+    if charge then self:_charge(1, out) end
 end
 
 -- Lay out again when what the panel shows changed.  now=false defers
@@ -1061,9 +1249,7 @@ end
 -- the refresh guard keeps out of the DU rectangle.
 function Ctl:_long_press_vetoed(out)
     if not self.pn:is_open() then return end
-    self.panel_drag = nil
-    self.pn:close()
-    self:_panel_emit(out)
+    self:_close_panel(out, true)
 end
 
 local ACTIONS = {
@@ -1076,6 +1262,7 @@ local ACTIONS = {
     ["nb:close"] = function(_, out)
         out[#out + 1] = { op = "close_notebook" }
     end,
+    ["refresh"] = function(self, out) self:_refresh(out) end,
 }
 
 function Ctl:_panel_tap(it, out)
@@ -1083,11 +1270,7 @@ function Ctl:_panel_tap(it, out)
     if self.pen_down or not pn:is_open() then return end
     local id = pn:hit(G.to_logical(self.r, self.W, self.H, it.x, it.y))
     if not id then return end
-    if id == "close" then
-        pn:close()
-        self:_panel_emit(out)
-        return
-    end
+    if id == "close" then return self:_close_panel(out, true) end
     local action = ACTIONS[id]
     if action then return action(self, out) end
     local key, value = id:match("^(%a+):(.+)$")
@@ -1098,7 +1281,7 @@ function Ctl:_panel_tap(it, out)
         self.prefs[key] = value
         -- The panel first: the prefs write fsyncs, and the tap should show.
         self:_panel_sync(out, true)
-        out[#out + 1] = { op = "save_prefs", prefs = self:_prefs_copy() }
+        self:_save_prefs(out)
     end
 end
 
@@ -1121,12 +1304,83 @@ function Ctl:_drag_move(it, out)
     end
 end
 
+-- panel_drag exists only for a drag that began on the open panel, and
+-- whatever closes the panel meanwhile clears it, so a flick here closes an
+-- open panel, and is charged as Close is.
 function Ctl:_drag_end(it, out)
     local d = self.panel_drag
     self.panel_drag = nil
     if not d then return end
     local lvx, lvy = G.delta_to_logical(self.r, it.vx, it.vy)
-    if self.pn:drag_end(lvx, lvy) == "flicked" then self:_panel_emit(out) end
+    if self.pn:drag_end(lvx, lvy) == "flicked" then
+        self:_panel_emit(out)
+        self:_charge(1, out)
+    end
+end
+
+------------------------------------------------------------------------
+-- The Refresh button and the washer's ghost debt
+------------------------------------------------------------------------
+
+-- The panel closes, the glue paints the page where it was and publishes
+-- that paint, and the wash waits (the header's Refresh rule).
+function Ctl:_refresh(out)
+    self:_close_panel(out, false)
+    out[#out + 1] = { op = "publish" }
+    self.wash_wanted = true
+    self:_wait_wash(out)
+end
+
+-- Start the wash's wait from now, unless the pen is here: then its leave
+-- starts it.
+function Ctl:_wait_wash(out)
+    if self.in_range or self.pen_down or self.leave_at then
+        self.wash_at = nil
+        return
+    end
+    self.wash_at = self.now_rt_us() + self.wash_us
+    self:_schedule(self.wash_us, out)
+end
+
+-- Something was painted while the wash waits: the wait starts again from
+-- this paint.  The timer asked for the old deadline fires early, and
+-- on_timer asks for the new one.
+function Ctl:_painted()
+    if self.wash_at then self.wash_at = self.now_rt_us() + self.wash_us end
+end
+
+function Ctl:_drop_wash()
+    self.wash_wanted, self.wash_at = false, nil
+end
+
+-- The wait is over.  wash_at is only ever set with the pen out of range
+-- and no leave pending (_wait_wash; _prox_in clears it), so the pen cannot
+-- be here; it is checked anyway, because a wash under the pen is the one
+-- thing this must never do, and the leave would start the wait again.
+function Ctl:_wash(out)
+    self.wash_at = nil
+    if self.in_range or self.pen_down or self.leave_at then return end
+    self.wash_wanted = false
+    self:_disarm(out)
+    out[#out + 1] = { op = "wash" }
+end
+
+-- n units of ghost debt.  They go to the washer now when the pen is away
+-- (a finger's action, at the touch's end), else at the pen's leave.
+function Ctl:_charge(n, out)
+    self.ghost_debt = self.ghost_debt + n
+    if not (self.in_range or self.pen_down or self.leave_at) then
+        self:_flush_debt(out)
+    end
+end
+
+-- The units owed, as one command: the leave, suspend and close.
+function Ctl:_flush_debt(out)
+    local n = self.ghost_debt
+    if n > 0 then
+        self.ghost_debt = 0
+        out[#out + 1] = { op = "washer_debt", n = n }
+    end
 end
 
 ------------------------------------------------------------------------
@@ -1171,6 +1425,31 @@ function Ctl:_hold(on, out)
     out[#out + 1] = { op = "rotation_hold", on = on }
 end
 
+-- save_prefs is a write_atomic, which fsyncs.  A finger tap has the pen
+-- out of range by construction; a pen tap does not, so its choice is
+-- written when the pen leaves, at suspend or at close, as a page's fsync
+-- is (the header's fsync rule).
+function Ctl:_save_prefs(out)
+    if self.in_range then
+        self.prefs_dirty = true
+        return
+    end
+    self:_emit_prefs(out)
+end
+
+-- Every save_prefs writes all of the prefs, so any of them takes a choice
+-- that was waiting with it.
+function Ctl:_emit_prefs(out)
+    self.prefs_dirty = false
+    out[#out + 1] = { op = "save_prefs", prefs = self:_prefs_copy() }
+end
+
+-- A choice a pen tap made, where an fsync is allowed: the leave, suspend
+-- and close.
+function Ctl:_flush_prefs(out)
+    if self.prefs_dirty then self:_emit_prefs(out) end
+end
+
 -- The settings the user chose (absent ones stay absent) and the reopen
 -- place, which is state rather than a setting.
 function Ctl:_prefs_copy()
@@ -1195,7 +1474,7 @@ function Ctl:_save_place(out)
     if p.last_page[id] == n and p.last_id == id then return end
     p.last_page[id] = n
     p.last_id = id
-    out[#out + 1] = { op = "save_prefs", prefs = self:_prefs_copy() }
+    self:_emit_prefs(out)
 end
 
 -- The pixels a stroke has drawn so far: its own box, or for the stroke
@@ -1249,6 +1528,7 @@ function Ctl:_fail(msg, out, dropped, cmd)
                           strokes = snapshot(self.page.strokes),
                           region = region }
         out[#out + 1] = { op = "repaint", region = region }
+        self:_painted()
     end
     self:_panel_sync(out, true)
 end

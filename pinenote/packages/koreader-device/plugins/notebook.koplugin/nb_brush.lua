@@ -54,7 +54,10 @@ local SIZE_MULT = { S = 0.7, M = 1.0, L = 1.6 }
 -- and saturates at 4095 in 9.9 % of reports (the 2026-09-26 captures),
 -- so a linear curve puts ordinary writing at about two thirds of the
 -- range.  The brush pen squares it: median pressure draws ~1.5 mm, and
--- only a firm press spreads toward 3 mm.
+-- only a firm press spreads toward 3 mm.  Ballpoint M, the default brush
+-- (nb_controller), has radius 2.53 px at the median, so a line 5 px
+-- (~0.56 mm) wide: the 2026-09-26 scribble.lua brush the operator judged
+-- the notebook's ink against was a radius-2 square, 5 px (~0.56 mm).
 local DEFS = {
     fine        = { rmin = 1.35, rmax = 1.35 },             -- 0.3 mm
     ballpoint   = { rmin = 1.35, rmax = 3.15 },             -- 0.3-0.7 mm

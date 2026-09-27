@@ -125,12 +125,14 @@ code review — before a single reboot. That's the standard.
   decisions with recommendations, the six steps with their offline
   proofs, and the bail-out. Read before touching anything
   direct-related.
-- `doc/notebook.md` — the pen notebook (2026-09-26, proof of concept
-  built and host-tested, not on glass): paper-and-pen with a floating
-  panel on long press, DU ink through a per-region hint, pressure brushes,
-  multi-finger undo, an append-only stroke journal on `/data`, its module
-  map and offline proofs, and the generation-22 session that first runs
-  it.
+- `doc/notebook.md` — the pen notebook (on glass since generation 22,
+  2026-09-26; generation 23 cold-booted and pinned): paper-and-pen with a
+  floating
+  panel on long press that the stylus can tap, DU ink through a
+  per-region hint, pressure brushes, two-finger undo, Refresh and
+  idle-washer debt for ghosting, an append-only stroke journal on
+  `/data`, its module map, offline proofs, measurements and glass
+  sessions.
 - `doc/driver-findings-report.md` — the community-facing writeup of driver
   bugs the host tools found.
 - `doc/upstream-register.md` — the standing list of what we owe the
@@ -324,7 +326,7 @@ truth is per-device, so never overwrite another operator's entries; add
 your own. Don't commit the per-device waveform, anything under a tool's
 gitignored `build/`, or the reader's static address.
 
-## Where we are (2026-09-05)
+## Where we are (2026-09-05; the device line updated 2026-09-26)
 
 - **Product**: the reader image on os2 — KOReader natively on fbdev with
   pen/finger input, four orientations, publish-on-call single-pass page
@@ -413,12 +415,18 @@ gitignored `build/`, or the reader's static address.
   `[pinned]` in `list`; **proven on glass 2026-09-04 late**: from
   generation 17, `pin 16` and `pin 10`, then `prune --keep 1` deleted
   11–15 and kept both pins and DEFAULT; recipe in
-  `doc/hardware-deploy.md`). The device is on **generation 19**
-  (2026-09-05: the post-tag fixes of PR #77, kexec'd 18→19 and 19→19;
-  the ledger holds 10 `[pinned]`, 16 `[pinned]` = v0.3.0-prealpha, 18
-  and 19 — 10, 16 and 18 cold-booted, 19 not yet). Pause suspend (`enabled=0`) before a session and restore
-  it after; a session that ends with `enabled=1` on battery leaves only
-  the hourly backstop's 20 s ssh windows (`doc/device-access.md`).
+  `doc/hardware-deploy.md`). **wkelly's device is on generation 23**
+  (2026-09-26): the experimental `book-state-device-reader` flavor, on
+  the USER_NS test kernel `334ljs8q`, carrying the pen notebook and the
+  `25cea98` note fixes. It got there by two cable-free kexec trials,
+  21→22 and 22→23, then an operator-run cold boot of 23 without UART
+  (the operator waived it). The ledger holds 10, 16 (= v0.3.0-prealpha),
+  18 and 23 `[pinned]`, all four cold-booted, plus 19–22, which are
+  kexec-only (`doc/status.md` 2026-09-26). The cable-free trial period
+  stands at two successful sessions of three. Pause suspend (`enabled=0`) before a
+  session and restore it after; a session that ends with `enabled=1` on
+  battery leaves only the hourly backstop's 20 s ssh windows
+  (`doc/device-access.md`).
 - **Kernel — read this carefully, the tree and the device differ.**
   `%linux-pinenote-base` is `nongnu:linux-7.1` and `make kernel`
   cross-builds **7.1.8** clean (both DTBs, both modules linked). The
