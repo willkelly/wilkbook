@@ -304,6 +304,83 @@ Results and exact source/model pins: `doc/handwriting-baseline.md`, focused
 selection section. All question contexts, probabilities, answers, labels and
 comparisons remain under private gitignored `build/focused-20260927/`.
 
+### Independent sentence assessment with native Noul and Score
+
+The installed Von and Laya SDKs support **`noul`** (yes/no assessment) and
+**`score`** (ordinal rating) in addition to `choice`. `sentence_scoring.py` uses
+those native APIs to assess each complete transcription separately. Jev is
+TypeSafe's structured-decision model, **not JEPA**; Von and Laya are the local
+implementations used here.
+
+`make-sentence-candidates.py` takes the 32 retained length-adjusted character-LM
+texts per line and recomputes their exact **full-line** CTC forward scores. Its
+input is the saved `predictions.json`, not a labelled results file. It freezes
+relative stroke probabilities over these retained texts, and uses the existing
+`CTC + .5 * character-LM + .5 * character-count` score as the control. Candidate
+generation is unchanged; no reference is injected into the lists.
+
+Each assessment receives one sentence, its relative stroke probability and its
+stroke-score loss from the strongest retained reading. It sees no competing
+sentences, original/rank marker, writing prompt, reference or image. Noul asks
+whether the text reads coherently without obvious recognition corruption;
+Score uses five levels from severely corrupted to coherent. The adapters reject
+input clipping, call the native APIs and preserve raw answers. The checkpoint's
+fixed rubric ordering can still introduce bias; eliminating candidate-list
+position does not establish calibrated confidence.
+
+The fixed comparison combines the control score with `weight * logit(s)`, for
+weights **0.5, 2, 8**, with `s` clipped to `[.0001,.9999]`. Noul supplies `s`
+directly; Score uses its probability-weighted expected level divided by four.
+The latter is an ordinal heuristic, **not a probability**. Both arms also report
+direct ranking by `s`, with the control as tie-breaker. Because stroke evidence
+is in the model input as well as the final score, these are heuristic fusion
+experiments, not independent Bayesian likelihood factors. No weights are fitted.
+
+```sh
+CTC_ENV/bin/python pinenote/tools/handwriting/make-sentence-candidates.py \
+  CHAR_LENGTH_RUN/predictions.json CAPTURE NEW_INPUT
+# Use the existing selector runtime; include the pinned Laya checkout on
+# PYTHONPATH for --selector laya. Run Von and Laya into separate NEW_RUNs.
+HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 LAYA_CPU_AMP= \
+  SELECTOR_ENV/bin/python pinenote/tools/handwriting/evaluate-sentence-scores.py \
+  NEW_INPUT/candidates.json LOCAL_WEIGHTS NEW_RUN --selector laya
+# Only this separate scoring command opens reference transcriptions.
+python3 pinenote/tools/handwriting/summarize-sentence-scores.py \
+  COLLECTION VON_RUN LAYA_RUN --output NEW_COMPARISON
+```
+
+The follow-up **`--evidence text-only`** ablation removes the stroke numbers
+and their explanation from the assessment input, and changes only the
+instruction's evidence sentence. The exact CTC score remains in final fusion.
+This was motivated by the primary run's compressed Von ratings, not included
+in the first prespecified comparison. Rubric, candidates and coefficients stay
+fixed; both evidence modes are retained in the report. Pass all four runs to
+the summarizer to compare them together.
+
+All 608 candidate sentences receive both assessments. Four unrelated synthetic
+sentences provide a clean/corrupted sanity comparison before handwriting
+inference. Output includes an incremental trace, predictions, model/source
+hashes, runtime/memory, and each fixed method's corrected/newly introduced errors.
+The current sheets remain a development set. To personalize further, record
+accepted/rejected predictions and corrected text against immutable ink IDs;
+binary rejection alone does not identify the intended replacement. Keep later
+writing sessions separate when measuring whether adaptation generalizes.
+
+Post-hoc threshold analysis uses the already saved ordinal answers:
+
+```sh
+python3 pinenote/tools/handwriting/analyze-score-thresholds.py \
+  LAYA_RUN COLLECTION NEW_THRESHOLD_OUTPUT
+```
+
+It reports both **fallback** (reject a change and keep the character-LM baseline,
+retaining the full denominator) and **selective** accuracy (omit low-confidence
+lines, reporting coverage). It compares entropy-based `confidence`, maximum
+ordinal-category `answer_confidence`, and the normalized ordinal rating (which
+is not confidence). Every observed cutoff plus a simple fixed grid is saved,
+for fused `score_8` and direct ordinal ranking. Thresholds explored on these
+same lines are development findings, not calibrated acceptance guarantees.
+
 ### Gemma comparison through a local CPU runtime
 
 The same focused evaluator accepts `--selector gemma --llama-server PATH` and

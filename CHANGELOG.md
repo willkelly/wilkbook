@@ -24,6 +24,12 @@ this lineage. **Unreleased** above it collects what has landed since.
 
 ## Unreleased
 
+- **Independent sentence scoring improves the handwriting development set.**
+  Text-only Von Noul assessments fused with stroke and character-LM evidence
+  reach 4.46% character error, down from 5.06%; Laya ordinal fusion reaches
+  4.76%. A separate confidence-gating analysis also finds a small gain, but
+  its threshold was selected on these same sheets. These remain host
+  experiments, not a deployed notebook feature (`doc/handwriting-baseline.md`).
 - **A small character language model improves literal stroke recognition.** A
   6.36 MiB character 6-gram reduces sampler character error to 5.21% (5.06%
   with a length adjustment), versus 7.14% originally. Word fusion still has

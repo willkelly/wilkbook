@@ -93,6 +93,13 @@ A pruned 6.36 MiB character 6-gram then reaches 5.21% CER / 14.62% lexical WER
 literal fidelity and candidate coverage relative to word fusion, but the
 unoptimized Python decoder takes ~0.85 s/line and word fusion still has fewer
 lexical word errors. This remains an offline experiment, not a notebook feature.
+Independent native sentence assessment then reaches **4.46% CER / 13.08%
+lexical WER** with text-only Von Noul fused with stroke/character-LM evidence,
+and **4.76% / 12.31%** with text-only Laya Score. A post-hoc confidence gate on
+the separate stroke-evidence-in-input Laya run also reaches 4.76%, by accepting
+one useful change and falling back elsewhere. These same-sheet results are
+development evidence; no writer-specific model adaptation or device inference
+has run (`doc/handwriting-baseline.md`).
 
 ### Fixed paper and the handwriting sampler (2026-09-26)
 

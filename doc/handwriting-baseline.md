@@ -11,6 +11,38 @@ The following sections record the experiments in order. The initial TrOCR
 finding was **promising word recovery, insufficient literal transcription**:
 Base improved on Small at substantially greater host CPU time and memory.
 
+## Current objective: one writer with a correction loop
+
+Operator direction, 2026-09-27: optimize recognition for **one willing writer**,
+who can supply sheets with known text and accept/reject the resulting readings.
+The immediate stroke-track target is below **5% raw character error**, moving
+toward zero; continue reporting word error, exact lines and introduced errors
+so a small character gain does not conceal worse word recovery. The direct
+Gemma image reference is already below 1% on this development sampler, at the
+larger memory cost recorded above.
+
+Recognition quality is the first experiment gate. CPU is a useful baseline,
+but GPU/NPU deployment is in scope: PineNote has a Mali-G52 GPU and the RK3566
+NPU. Our logs establish Panfrost probing, not neural inference qualification;
+the NPU conversion/runtime/driver path remains untested in this system. No
+on-device latency or energy number is inferred from host measurements.
+
+Native **Noul/Score** sentence assessment with the installed Von and Laya
+checkpoints has now run: text-only Von Noul fused with stroke/character-LM
+evidence reaches **4.46% CER**, while the original evidence-in-input Laya Score
+reaches **4.76% with a post-hoc confidence gate** (details below). Jev names the
+structured-decision model, not JEPA. Earlier runs used `choice`; this comparison
+scores individual sentences rather than presenting competing candidate lists.
+
+For personalization, preserve the ink/sample ID, model version, shown candidate
+and score, accept/reject answer, and any corrected literal text. Acceptance can
+label a full line; rejection provides a negative example but needs a chosen or
+entered correction to supply its positive target. The confirmed sheet labels
+already supply positives, and mistaken recognition alternatives supply hard
+negatives. Keep later sessions/prompt families for checking improvement on new
+writing. These first repeated sheets are development data, not an independent
+test set. No local recognizer or decision-model fine-tuning has run yet.
+
 ## What ran
 
 - 20 ink-only images from production journal replay, including the erased and
@@ -710,6 +742,195 @@ Private evidence: `pinenote/tools/handwriting/build/character-lm-20260927/`.
 Runners: `train-character-lm.py`, `evaluate-character-lm.py`; scoring adapter:
 `character_lm.py`; independent checks: `test-character-lm.py` and saved
 `score-audit.json`.
+
+## Independent native Noul / Score sentence assessment
+
+The operator requested Jev-style **Noul or Score** assessment using the installed
+Von and Laya models. The earlier experiments used `choice`. Here each model
+assesses a **single complete sentence per question**, so competing sentences
+cannot acquire preference from their position in a candidate list. Native
+Noul true/false and ordinal level positions remain fixed inside the SDK; that
+does not establish absence of rubric, polarity or numeric-context bias.
+
+### Frozen candidate set and scoring
+
+- Use the existing **32 length-adjusted character-LM candidates on each of 19
+  lines**, 608 assessments per primitive and model. No reference or synthetic
+  correction is added to the lists. Recompute every candidate's exact full-line
+  CTC forward likelihood; all 19 control predictions remain unchanged at
+  **5.06% CER, 14.62% lexical WER and 5/19 exact lines**.
+- Primary input contains the candidate sentence, its relative stroke probability
+  normalized over the 32 retained readings, and its log-likelihood loss from the
+  strongest retained stroke candidate. No original/rank marker, other candidate,
+  writing prompt, reference or image enters the model.
+- Native **Noul** asks whether the sentence reads coherently without obvious
+  recognition corruption. Native **Score** assesses five ordered levels:
+  severely corrupted; several obvious errors; understandable with an apparent
+  error; plausible with minor uncertainty; coherent without obvious errors.
+- The control is `exact CTC + .5 * character LM + .5 * character count`.
+  Combine it with `weight * logit(s)`, using fixed weights **0.5, 2, 8**, clipping
+  `s` to `[.0001,.9999]`. Noul supplies its API value; Score uses the expected
+  level divided by four, reconstructed from its category probabilities to avoid
+  Von's two-decimal expectation rounding. **Ordinal expectation is not a
+  probability**, and neither SDK is calibrated for handwriting. These are
+  heuristic scoring functions, not independent Bayesian evidence—especially
+  when the model input already contains stroke evidence.
+- Report direct ranking by each scalar too, using the control as tie-breaker.
+  Final ties use text order, never candidate presentation order. No score weight
+  is fitted to the references. Weights/checkpoints are the same as the earlier
+  runs; CPU float32, eight threads, local/offline execution, no fine-tuning.
+- The inference runner has no label-directory argument. Both model runs finish
+  before a separate summarizer opens references. It verifies saved prediction
+  hashes, reconstructs scalar scores and verifies selections after reversing
+  candidate order. This checks the selection rule, not model rubric invariance.
+
+### Primary result: numeric stroke evidence in the assessment input
+
+| Model / primitive | Direct scalar CER | Fusion .5 CER | Fusion 2 CER | Fusion 8 CER |
+|---|---:|---:|---:|---:|
+| Von Noul | 5.65% | 5.21% | 5.06% | 5.21% |
+| Von Score | 6.70% | 5.06% | 5.06% | 5.36% |
+| Laya Noul | 8.33% | 5.21% | 5.36% | 6.55% |
+| Laya Score | 5.95% | 5.06% | 5.21% | 5.06% |
+
+**None beats the 5.06% character-LM control.** Laya Score at weight 8 improves
+three lines and worsens four by character distance, ending with the same 34
+character edits. Lexical WER improves slightly to **13.85%**, raw WER worsens
+to **18.11%**, and exact lines stay at five. It recovers `ogene → opened`,
+`try → Try` and `IS → 15`, but also changes `find → Sind`, loses a correct
+capitalization and damages a previously correct parenthesized phrase.
+
+Sanity controls used two unrelated clean sentences and deliberately corrupted
+versions with identical stroke numbers. Von Noul returns **1.0 on all four**;
+Von Score prefers both clean versions. On the actual candidates, however, Von
+Score's normalized values compress to **0.499925–0.548075**, with a median
+within-line spread of just **0.00435**. Laya's Noul sanity control prefers the
+corrupted version in one of two pairs; its Score prefers both clean versions.
+These diagnostics prompted a text-only assessment ablation, keeping exact
+stroke evidence in final fusion and all candidates/rubrics/coefficients fixed.
+
+Median assessment time per complete line (32 candidates), excluding candidate
+generation and model load: **Von 5.93 s Noul / 6.52 s Score; Laya 6.34 s /
+7.44 s**. Peak process RSS: **3772.5 MiB Von / 3158.9 MiB Laya**. Each reported
+arm needs only its own primitive; the experiment measures both. These are host
+CPU measurements, not PineNote or accelerator measurements.
+
+### Follow-up: text-only assessment, stroke evidence retained in fusion
+
+Both models then ran the same 608 sentences and native primitives again with
+`--evidence text-only`. Remove the stroke numbers and their explanatory note
+from the assessment input; change the instruction's evidence sentence to
+"Use sentence context." Keep the rubric, candidates, fusion coefficients and
+models unchanged. This is a **follow-up motivated by the primary results**,
+not an independently prespecified confirmation run.
+
+| Model / primitive | Direct scalar CER | Fusion .5 CER | Fusion 2 CER | Fusion 8 CER |
+|---|---:|---:|---:|---:|
+| Von Noul | 4.46% | 5.06% | **4.46%** | **4.46%** |
+| Von Score | 7.59% | 5.06% | 4.91% | 5.06% |
+| Laya Noul | 8.18% | 5.21% | 5.36% | 6.10% |
+| Laya Score | 4.91% | 5.06% | 5.06% | **4.76%** |
+
+**Von Noul fusion at weights 2 and 8 gives the same improved transcription:**
+**30/672 character edits (4.46%)**, raw WER **14.96%**, lexical WER **13.08%**,
+**6/19 exact**. It improves two lines and worsens none: `IS → 15` on line 12
+and `boos → box` on line 17. Direct Noul ranking happens to reach the same
+aggregate CER, but with different predictions (three improved lines, one
+worsened); prefer reporting the actual fused result rather than treating
+equal aggregate scores as identical behavior.
+
+Laya Score at weight 8 reaches **32/672 (4.76%)**, raw WER **14.17%**, lexical
+WER **12.31%**, **5/19 exact**. It improves three lines and harms two:
+`morninglight → morning light`, `Close → close`, and improvements to the fox
+sentence; it also lowercases correct `Keep` and changes a numeric `1` to `I`.
+Thus it has better word-content error than Von here, but worse character error.
+
+Text-only median assessment time per line: **Von 4.13 s Noul / 4.90 s Score;
+Laya 4.64 s / 5.70 s**, excluding candidate generation and load. Peak RSS:
+**3770.9 / 3159.6 MiB**. These are sequential single-pass workstation timings.
+This establishes a development-set gain from the tested scoring setup, not a
+general claim that numeric stroke evidence is harmful or that these checkpoints
+understand handwriting. They still never see ink.
+
+### User-requested confidence-threshold analysis
+
+`analyze-score-thresholds.py` reads the frozen Laya answers without any new
+inference. Primary policy: **apply a proposed change only if its selected
+candidate's ordinal confidence meets the threshold; otherwise retain the
+character-LM baseline**. Every full-corpus CER still uses all **672 characters**.
+The script separately reports selective accuracy/coverage when low-confidence
+lines are omitted entirely; those figures must not replace full-corpus results.
+
+Laya exposes two distinct fields:
+
+- `confidence`: **1 minus normalized entropy** of the five ordinal-category
+  probabilities. It measures concentration, not the probability that the
+  transcription is correct. **0.20 does not mean 20% correctness.**
+- `answer_confidence`: the **largest category probability**, which can express
+  confidence that a reading is *corrupted*. The SDK's general calibration claims
+  do not establish calibration for this handwriting task.
+
+For the primary **stroke-evidence-in-input, Score weight 8** run:
+
+| Entropy-confidence cutoff | Accepted changes | Lines improved / harmed | Full-corpus CER |
+|---|---:|---:|---:|
+| 0 (all proposals) | 8 | 3 / 4 | 5.06% |
+| .10 | 7 | 3 / 4 | 5.06% |
+| .15 | 2 | 1 / 1 | 5.06% |
+| **.20** | **1** | **1 / 0** | **4.76%** |
+| .25 | 0 | 0 / 0 | 5.06% |
+
+The .20 gate keeps only line 12's `IS → 15` (confidence **.2070**) and rejects
+all harmful proposals. Its improvement is **34 → 32 character edits**, with
+lexical WER **13.85%**, raw WER **15.75%**, and **5/19 exact**. The gate behaves
+identically for cutoffs **(.1874, .2070]**. If instead we literally omit every
+below-threshold line, only **1/19 lines** remains, with **7.69% CER**: the
+accepted line still has three other character errors. This is useful change
+filtering, not evidence that high-confidence lines are error-free.
+
+Searching the alternative `answer_confidence` thresholds finds **4.61% CER
+(31/672), 6/19 exact**, retaining four changes: three improve and one harms.
+Its best interval is extremely narrow: **(.3643, .3646]**. Rounding to .365
+already loses one improvement. This is a post-hoc development optimum, not a
+recommended magic constant. Thresholding the normalized ordinal *rating*
+(not confidence) at .5 reproduces the one-change 4.76% result.
+
+The text-only Laya follow-up **already reaches 4.76% without gating**. Applying
+the same .20 entropy-confidence cutoff worsens it to **4.91%**; none of the
+tested scalar gates improves that fused result below 4.76%. Direct ordinal
+ranking can reach **4.61%** with a post-hoc gate, but this chooses a different
+ranking policy as well as a threshold. Both full threshold curves are saved.
+
+**Interpretation, including the operator's challenge:** this does **not**
+establish that confidence reliably distinguishes helpful from harmful changes.
+The .20 gate retains one favorable case; the .3646 optimum is particularly
+fragile. Deterministic predictions can still yield chance sample-specific gains
+after many model, input, weight and threshold comparisons. The operator aptly
+challenged this as looking like randomness rather than demonstrated quality.
+No confidence threshold is accepted for automatic correction. Text-only Von
+Noul's 4.46% is the stronger observed stroke-track result, but its four-edit
+gain across two lines is also exploratory rather than independent evidence of
+generalization. Freeze a scoring setup and any development-selected gate before
+testing on a fresh writing session; report harmful and helpful corrections as
+well as net error. No decision model has been personalized yet.
+
+The unchanged candidate-list oracle is **2.38% CER, 11/19 exact references
+available**. That potential remains unachieved. The native decision scores are
+not substitutes for the writer's actual accept/reject labels.
+
+Private evidence: `build/sentence-scores-20260927/` under the handwriting tool,
+including immutable input candidates, per-candidate raw API traces, synthetic
+controls, every fixed method's predictions and comparisons, source snapshots,
+weight hashes and provenance. Runners: `make-sentence-candidates.py`,
+`evaluate-sentence-scores.py`, `summarize-sentence-scores.py`; adapter and pure
+checks: `sentence_scoring.py`, `test-sentence-scoring.py`.
+Threshold checks: `test-score-thresholds.py` verifies baseline fallback and
+separate full/selected denominators. A provenance audit caught an initial hash
+filter that skipped Von's checkpoint because its absolute path included
+`~/.cache`; the runner now filters paths relative to the checkpoint and rejects
+an empty inventory. Original run metadata is preserved, with separate audits
+verifying every current weight hash and SDK source against the earlier pinned
+experiments. This bookkeeping fix does not alter model inputs or predictions.
 
 ## Architecture assessment: recognition, decoding, then personalization
 

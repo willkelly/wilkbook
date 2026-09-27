@@ -17,6 +17,8 @@ candidate-check:
 	python3 test-character-lm.py
 	python3 test-focused-candidates.py
 	python3 test-gemma-selector.py
+	python3 test-sentence-scoring.py
+	python3 test-score-thresholds.py
 
 CTC_PYTHON ?= python3
 pyctcdecode-check:
