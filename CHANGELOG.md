@@ -24,6 +24,89 @@ this lineage. **Unreleased** above it collects what has landed since.
 
 ## Unreleased
 
+- **Recognition design recorded: context first, continual learning later.**
+  Books can contribute vocabulary, symbol examples and Scheme scope/layout
+  hints. The ink-linked correction UI direction is agreed, distinguishing
+  transcription fixes from changes to what was written, with ghosting, flashing
+  and draw speed part of acceptance. Architecture decisions, UI questions
+  and the implementation sequence: `doc/handwriting-design.md`. This is a
+  design record, not a deployed feature.
+- **Handwritten code has an image baseline, and writer adaptation has been tried.**
+  Gemma reads all 16 collected Python lines exactly; the full Python/Guile set
+  has 2.06% character error, with remaining Scheme punctuation/layout errors.
+  The first page-disjoint OnlineHTR fine-tuning pilot does not show a dependable
+  gain: its most repeatable decoder improvement is one character on one line.
+  Methods, all seeds and limitations: `doc/handwriting-baseline.md`.
+- **Hosted Jev tested as a handwriting candidate selector.** On the same prose
+  development sheets, flat-choice probabilities fused with stroke/character-LM
+  evidence reach 3.72% character error and 9/19 exact lines. The API experiment
+  costs about 3.3 cents; it is not deployed recognition or fresh-session accuracy
+  evidence. All fixed scoring comparisons are in `doc/handwriting-baseline.md`.
+- **A code-and-erasing handwriting sampler is collected on device.** The new
+  `code-edits` profile creates Python and Guile Scheme blocks with indentation
+  guides and deliberate erase-and-rewrite tasks. Its final two pages are for
+  a later-session check; intended prompts stay separate from verified labels.
+  Pages 1–4 now supply eight labelled blocks (31 written lines and one confirmed
+  blank); the operator accepts the eraser edits as clean and surviving reopen
+  on generation 25. Collection instructions: `pinenote/tools/handwriting/README.md`.
+- **Independent sentence scoring improves the handwriting development set.**
+  Text-only Von Noul assessments fused with stroke and character-LM evidence
+  reach 4.46% character error, down from 5.06%; Laya ordinal fusion reaches
+  4.76%. A separate confidence-gating analysis also finds a small gain, but
+  its threshold was selected on these same sheets. These remain host
+  experiments, not a deployed notebook feature (`doc/handwriting-baseline.md`).
+- **A small character language model improves literal stroke recognition.** A
+  6.36 MiB character 6-gram reduces sampler character error to 5.21% (5.06%
+  with a length adjustment), versus 7.14% originally. Word fusion still has
+  lower word-content error, and the experimental Python character decoder is
+  slow (~0.85 s/line). Full results: `doc/handwriting-baseline.md`.
+- **Low-cost stroke decoding improves with pyctcdecode and KenLM.** An independent
+  word trigram reduces shared-sampler character error from 7.14% to 5.65% and
+  word-content error from 23.08% to 13.08%, adding 4.35 ms median host decoding.
+  It still introduces some errors; OnlineHTR's weights remain unchanged
+  (`doc/handwriting-baseline.md`).
+- **Gemma vision provides a much stronger handwriting baseline.** Direct local
+  Gemma 4 E2B image transcription reaches 0.85% character error and 15/20 exact
+  lines on the sampler. It costs about 1.18 s/line and 5.0 GiB peak host memory,
+  and still normalizes one confirmed spelling slip. This changes the accuracy
+  reference; it is not a tablet deployment (`doc/handwriting-baseline.md`).
+- **Gemma and the next recognition direction assessed.** A quantized Gemma 4
+  E2B CPU comparison kept every original reading in the focused-choice task.
+  A review of character-level restoration research identifies integrated
+  CTC/language-model decoding and writer adaptation as the next experiments;
+  measurements and limitations are in `doc/handwriting-baseline.md`.
+- **Focused recognition choices tested with Von and Laya.** Both local CPU
+  selectors now receive a word-sized ambiguity, fixed sentence context and
+  stroke probabilities. Laya gives a small accuracy gain in the primary order,
+  but both remain presentation-sensitive; no automatic correction is adopted
+  (`doc/handwriting-baseline.md`).
+- **Recognition alternatives can be evaluated locally.** The host tools retain
+  scored stroke-recognition candidates and test a contextual selector against
+  them. The existing Von model was tested on CPU: its primary selection worsened
+  accuracy and was strongly option-order-sensitive, so the result is recorded
+  rather than adopted (`doc/handwriting-baseline.md`).
+- **Pen trajectories have a measured recognition baseline.** A local OnlineHTR
+  LSTM run on the 19 comparable lines has fewer character errors and lower
+  workstation latency than the image baselines, but more whole-word errors
+  after case/punctuation are ignored. The model has 245,074 parameters;
+  personalization and tablet inference remain untested (`doc/handwriting-baseline.md`).
+- **The first local handwriting baseline is measured.** Microsoft TrOCR Small
+  and Base read the completed sampler's 20 ink-only lines on a workstation,
+  with 11.69% and 9.72% raw character error respectively. Numbers, punctuation
+  and literal spelling remain weaknesses. Reproducible host tooling preserves
+  predictions and reports accuracy, time and memory (`doc/handwriting-baseline.md`).
+- **A copy-and-write handwriting sampler is available in source.** It generates
+  a five-page EPUB and matching notebook paper with 20 prompts and ruled spaces.
+  The notebook gains a separate background layer: erasing restores the printed
+  paper, and ink stays aligned through page changes and rotation in host tests.
+  Native EPUB rendering passes; the operator completed all five pages on
+  generation 25, including an eraser correction. The resulting corpus has 20
+  ink-only line images and 19 trajectory-compatible lines; erasing is preserved.
+  Each writing area can be exported independently for labelled recognition tests.
+- **Handwriting evaluation can use notebook snapshots.** A read-only host tool
+  exports one labelled page as InkML using the notebook's actual undo/erase
+  replay and orientation mapping. It rejects ambiguous or damaged samples.
+  This prepares evaluation data; no recognition model runs on the reader yet.
 - **Update health now requires the real data partition.** A failed `/data`
   mount, a read-only filesystem, or the wrong partition blocks promotion.
   The check uses the mounted device's kernel identity rather than a udev

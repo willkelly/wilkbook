@@ -160,7 +160,7 @@ run_case test-rotation-decision.lua "$tool_dir/test-rotation-decision.lua" \
   "$koreader" "$device_lua"
 
 notebook=$koreader_device/plugins/notebook.koplugin
-for part in geom input journal brush panel controller render fs; do
+for part in geom input journal brush panel controller render background fs; do
   run_case "test-notebook-$part.lua" "$tool_dir/test-notebook-$part.lua" \
     "$koreader" "$notebook"
 done

@@ -1,0 +1,17 @@
+2026-09-27 05:30:35 09/27/26-05:30:35 INFO  [notebook] open 20260927T051718Z-d466ff page 0 
+2026-09-27 05:30:35 09/27/26-05:30:35 INFO  [sampler] opened 20260927T051718Z-d466ff page 0 one-shot patch removed true nil 
+● Status of reader-session:
+  It is running since 05:30:30 AM (70 seconds ago).
+  Main PID: 609
+  Command: /gnu/store/jhzrlpcbw64whvml3zcz9dpxn2jxlkkv-koreader-bin-book-state-device-2026.03/lib/koreader/luajit reader.lua
+  It is enabled.
+  Provides: reader-session
+  Requires: udev user-processes orientation-bridge pinenote-platform-controls pinenote-waveform pinenote-ebc-direct-params pinenote-ebc-clut pinenote-dmc pinenote-library
+  Will be respawned.
+  Log file: /var/log/reader-session.log
+
+Recent messages (use '-n' to view more or less):
+  2026-09-27 05:31:29 09/27/26-05:31:28 INFO  [notebook] pen-up page=0 rec=s40 tool=pen use=ink brush=ballpoint size=L spans=879 n=114 dur=313163us gap=0 hits=0 batch=1 lag=821us drops=0 stamp=114/20609/1026us publish=114/38737/814us append=1/241/241us fsync=- 
+  2026-09-27 05:31:36 09/27/26-05:31:36 INFO  [notebook] pen-up page=0 rec=s41 tool=pen use=ink brush=ballpoint size=L spans=345 n=48 dur=130064us gap=0 hits=0 batch=1 lag=1162us drops=0 stamp=48/8596/274us publish=48/17034/659us append=1/172/172us fsync=1/7174/7174us 
+  2026-09-27 05:31:36 09/27/26-05:31:36 INFO  [notebook] pen-up page=0 rec=s42 tool=pen use=ink brush=ballpoint size=L spans=393 n=59 dur=160950us gap=0 hits=0 batch=1 lag=659us drops=0 stamp=59/13229/1192us publish=59/25846/932us append=1/284/284us fsync=- 
+  2026-09-27 05:31:37 09/27/26-05:31:37 INFO  [notebook] pen-up page=0 rec=s43 tool=pen use=ink brush=ballpoint size=L spans=356 n=47 dur=127503us gap=0 hits=0 batch=1 lag=939us drops=0 stamp=47/8729/329us publish=47/18505/753us append=1/205/205us fsync=- 

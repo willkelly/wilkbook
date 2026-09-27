@@ -1,7 +1,160 @@
 # Hardware status
 
-Last updated: 2026-09-26. Update protocol: add a dated entry at the top
+Last updated: 2026-09-27. Update protocol: add a dated entry at the top
 after every hardware session; entries are per-device/per-operator.
+
+## 2026-09-27 code sampler pages 1–4 collected; eraser/reopen accepted (wkelly PineNote, generation 25)
+
+Operator reported **"I filled out the notebook pages 1-4"**, then confirmed
+Notebook closed and the tablet awake for collection. Same promoted generation
+**25**, system `/gnu/store/yy13ywsn16qa5y6kwbgg1ibhgaxzcxpc-system`, same boot
+`c664cad7-f825-4657-b2b1-b2fffa1af280`. Verified os2 root p6 and real `/data`
+p7 before collection. No reboot, generation change or reader restart.
+
+Copied the complete notebook **`20260927T170521Z-c0a4b7`** without modifying its
+files. Device SHA-256 manifests taken before and after the copy are identical;
+all **12 files** verify on the host. Initial paper/metadata match the installed
+kit. Journal files exist only for pages 0–3: **pages 5–6 remain unwritten** and
+reserved for a later-session check.
+
+Production replay finds **957 records: 945 pen strokes and 12 area erasers**,
+all active, no undo/redo records, no bad/ignored records, no torn tails or
+recorded contact gaps, all writing in mode 1. Page record counts are
+217/218/268/254; eraser counts 0/0/9/3. The four deliberate edit targets survive
+final replay as **1500, River, <=, River**. Asked about on-panel erasing and
+Refresh/close-reopen persistence, the operator explicitly answered **"Clean,
+survived reopen"**. This accepts those tasks on this sampler; it does not add
+rotation or an exhaustive gray-brush erasure qualification.
+
+Prepared eight ink-only code-block crops and reviewed labels, preserving
+indentation geometry and final erasure. The operator confirmed that block 03's
+fourth `(format #t ...)` line was left blank: **31 written lines**, not 32. They
+also confirmed one missing closing parenthesis in block 08's third line, while
+its last-line variable is `notes`; labels preserve the missing parenthesis
+rather than repairing Scheme syntax. Intended prompts remain separate.
+Adjacent lines overlap vertically, so fixed-height line crops/trajectory
+exports are not inferred from the guide boxes. No recognizer or training ran.
+
+Auto-suspend was paused from **`enabled=1`** to **`enabled=0`** for collection,
+then restored to the original **`enabled=1`**, synced and read back by the
+successful collection script. Original journal, archive, before/after hashes,
+replay, cropped images, labels, provenance and checksums remain private under
+`pinenote/tools/handwriting/build/collection-code-20260927/`.
+
+## 2026-09-27 code-and-erasing sampler installed (wkelly PineNote, generation 25)
+
+Operator requested deployment and confirmed **"Ready—Notebook closed"** with
+the device awake. This was a data-file installation on the existing promoted
+generation **25**, system `/gnu/store/yy13ywsn16qa5y6kwbgg1ibhgaxzcxpc-system`,
+kernel **7.1.8**, same boot ID `c664cad7-f825-4657-b2b1-b2fffa1af280`.
+Verified os2 root p6 and the real ext4 `/data` on p7 before writing. No OS
+generation transfer, reader restart or reboot was involved.
+
+Source **`e79f8f2`**, `make-sampler.scm ... code-edits`: six pages, twelve
+four-line Python/Guile blocks, six area-erase-and-rewrite tasks. The last two
+pages are reserved for a later writing session. Host checks validated EPUB/kit
+archives and XML, notebook background geometry, region manifests, all intended
+Python/Guile syntax (parsing only), and refusal to overwrite an existing kit;
+the original prose profile's page images and prompts remain byte-identical.
+
+Installed new notebook **`/data/notebooks/20260927T170521Z-c0a4b7`** and companion
+**`/data/books/handwriting-code-erasing.epub`**. Both destinations were absent.
+Transferred a 1,590,893-byte compressed payload to a fresh staging directory,
+verified all **nine files** there, installed without clobbering existing paths,
+then verified all nine SHA-256 hashes again at their final destinations and
+synced. Installed ownership follows the respective notebook/book parent.
+The operator can select the new notebook through Tools → Notebook → Open.
+Paper appearance, writing, eraser quality and close/reopen persistence on this
+sampler await operator observations; installation alone does not qualify them.
+
+SSH initially stalled at the workstation's GPG-agent signing step; the pinned
+device host key matched, and no device command ran during those failed attempts.
+After the operator unlocked/added the key, preflight and transfer succeeded.
+Auto-suspend was **`enabled=1`**, paused to **`enabled=0`** for installation and
+restored byte-for-byte to **`enabled=1`**, with readback in the successful
+installer's cleanup. Generation 25 remains promoted; pins 10/16/18/23 remain.
+Private transfer manifest, script and log:
+`pinenote/tools/handwriting/build/code-edits-sampler-20260927-v3/deployment/`.
+
+## 2026-09-26 completed handwriting sampler (wkelly PineNote, generation 25, same session)
+
+Operator: **"filled it out. I erased a mistake with the eraser on the last
+page."** No further update, reboot or reader restart. This confirms the
+five-page writing/page-navigation task was usable on glass; no separate
+optical-quality or close/reopen acceptance was reported.
+
+Copied notebook `20260927T051718Z-d466ff` read-only to the host. SHA-256 manifests
+taken before and after transfer match, and all 12 copied files verify. Production
+replay finds 780 records: 777 pen strokes and three area-eraser strokes, with
+zero bad/ignored records or recorded contact gaps. All writing used mode 1.
+The eraser strokes are page 4 actions 132–134, confined to the final line.
+Twenty ink-only line images preserve the actual erasing; 19 trajectory exports
+are usable, with the corrected final line refused rather than resurrecting ink.
+Labels were visually reviewed; the operator confirmed both outstanding
+transcription questions, finalizing the evaluation labels. No recognizer was run.
+
+Private snapshot and derived handwriting remain in gitignored
+`pinenote/tools/handwriting/build/collection-20260927/`. No handwritten sample
+is committed. The on-device originals remain intact. Auto-suspend was read back
+as `enabled=1` and was not changed during collection. The preceding generation
+25 session now has operator completion of its agreed writing task as well as
+target health/promotion and recorded cleanup; specific eraser gray-restoration
+quality and reopen behavior are still unqualified.
+
+## 2026-09-26 sampler deployment (wkelly PineNote, generation 24 → 25, cable-free) — promoted, writable first page open
+
+**Invocation:** the operator requested the update and loading the sampler, then
+directly said **`I invoke the trial!!`**. No UART; pinned time-machine deployer
+environment, 600-second host deadline, normal trial/health/promote machinery.
+Source commit `0a989eb` on `notebook/background-template`. The source is based
+on the recognition-export branch; the separate data-recovery PR is not included.
+
+**Source:** generation 24, promoted and kexec-only,
+`/gnu/store/13cg7sg6waa3ahj3ivxhmkagia0kbwi1-system`, boot
+`7d56208a-02f4-4a1c-9386-ef61cd7d0859`. Verified root p6, real writable data p7,
+source health, DEFAULT 24 and 100% battery. Retained recovery fallback is pinned,
+cold-booted generation 23,
+`/gnu/store/x3qqz8r52pdh7jzghzfj8l44gfrqkncb-system`.
+
+**Target:** generation 25,
+`/gnu/store/yy13ywsn16qa5y6kwbgg1ibhgaxzcxpc-system`, derivation
+`/gnu/store/h19zc0wj9sdcss79iswlhxahs0wy4z5i-system.drv`. Pin gate, full build
+and exact-output closure checks passed. Kernel remains USER_NS test `334ljs8q`
+and gVisor `djgy782a`; Image SHA-256 `5435c84e…` matches generations 24 and 23.
+Full native input suite, background and region-export tests passed; the native
+reader rendered all five EPUB pages. Installed update-helper Lua sources and
+the LuaJIT executable are byte-identical to generation 24 (wrapper paths change
+with the reader package), so existing update-path/QEMU proofs were reused.
+
+**Result:** deploy exit 0; 27/488 closure paths transferred; generation 25 was
+registered with DEFAULT still 24, then health passed and 25 was promoted. A
+separate postflight passed health on boot
+`c664cad7-f825-4657-b2b1-b2fffa1af280`. Reader and note authority are running;
+authority reported ready with its data database. Root and data are writable on
+p6/p7; the checked dmesg signatures show their mounts without journal recovery
+or WARNING/BUG/Oops/unbalanced-runtime-PM messages. This is not proof of clean-root
+kexec. No recovery intervention; no pruning; pins 10/16/18/23 remain. Generation
+25 is **kexec-only and unpinned**, not device-tree qualification.
+
+**Sampler:** checksum-verified new notebook
+`/data/notebooks/20260927T051718Z-d466ff`, pages 0–4, and EPUB
+`/data/books/handwriting-sampler.epub`. A session-only KOReader startup patch
+called the ordinary notebook launch path, opened page 0, captured its blank
+framebuffer, then removed itself. The capture shows all four prompts and ruled
+spaces in portrait. Existing notebooks were not overwritten. Subsequent
+pen-up/append/fsync logs show new writing on page 0; no written content is
+committed. **Operator appearance, erasing, page-turn and persistence acceptance
+has not yet been reported.** This session is not counted as a fully accepted
+cable-free success on automated health alone.
+
+**Cleanup:** prior auto-suspend file restored byte-for-byte to **`enabled=1`**.
+Backup, import archive and prompt/transcription map remain under
+`/data/wilkbook/diagnostic-backups/gen24-before-sampler-20260926/`.
+One preparation query used `readlink` on the regular `gen-default` file; a later
+read-only query corrected it. A postflight service query used the wrong
+authority name; restoration was completed separately and the actual
+`pinenote-book-state-device` service was verified. Neither was a trial failure.
+Evidence: `doc/artifacts/pinenote-gen25-sampler-20260926/`.
 
 ## 2026-09-26 final batch checks (wkelly PineNote, generation 24, same boot) — rotation, night mode, hover, restart persistence and fallback suspend
 
