@@ -67,6 +67,39 @@ Auto-suspend stayed `enabled=1`.
   - p6 and the real `/data` mounted read-write with no journal recovery;
   - only the known boot-time log lines, and all three services running.
 
+**A second os1 visit (2026-09-27, about 00:05–00:31), for the reworked
+rescue script.**
+- **How os2 went down: the power button, held.** The operator says this
+  will be their everyday shutdown.
+  - os2's `/var/log/messages` ends at 00:04:09 with `rfkill: block set for
+    type wifi`, followed by about 2 KB of NUL bytes: the file's size reached
+    the disk, but its last data did not.
+  - Read from os1 without mounting (`dumpe2fs -h`), p6 was `clean` after the
+    script's read-only mount.
+  - p7 (`data`) was mounted read-write by **os1 itself, as its `/home`**.
+    That is stock os1 behaviour, so an os1 boot replays `/data`'s journal.
+- **The reworked script ran on os1, read-only.** It was PR #51 at
+  `0147b1b`, streamed with `ssh <os1> sh -s -- … < script`, and nothing was
+  copied to os1.
+  - `list` showed the ledger, with 23 `[promoted] [pinned]`, and `extlinux
+    DEFAULT: gen-23`.
+  - With no arguments it ran the same list, so dash's bare-`shift` exit is
+    fixed.
+  - `log 4` tailed the log.
+  - `promote` without a number was refused with the usage line, exit 2,
+    before anything was mounted.
+  - p6 was unmounted after every run.
+- **Back on os2:** boot `6caf4f3c…`, generation 23 `[promoted] [booted]
+  [pinned]`, the real `/data`. No journal recovery was needed, since os1 had
+  replayed both. No new kernel errors, and the three services were running.
+- **Everyday shutdown by holding the button.** Every such shutdown cuts
+  power with `/` and `/data` mounted read-write. That is the same crash
+  CLAUDE.md's kexec lesson describes, and there it once left `/data` on the
+  library placeholder. The operator wants a short hold (longer than a tap)
+  to open a shutdown menu instead. An assessment of the hold path is under
+  way (power-key handling, the PMIC's hard cut, boot recovery, data at
+  risk).
+
 **Generation 23 now has two cold boots** (`34742c60…` and `69ac9f1e…`).
 At the operator's word it was pinned on boot `69ac9f1e…` (`wilkbook-generation
 pin 23`, 23:39). The ledger shows 23 `[promoted] [booted] [pinned]` beside
