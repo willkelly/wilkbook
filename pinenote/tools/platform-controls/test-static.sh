@@ -33,3 +33,6 @@ grep -q 'read_line("/sys/module/rockchip_ebc/parameters/refresh_waveform") ~= ni
 ! grep -q 'parameters/no_off_screen") ~= nil' "$broker"
 echo "PASS: broker degrades without physical inputs instead of crash-looping"
 echo "PASS: broker quiesces the EBC by driver capability (barrier or interrupt quiescence, #42)"
+! grep -q 'os.time' "$broker"
+grep -q 'if power_tap_allowed(held) then' "$broker"
+echo "PASS: broker main loop uses the tested power-grace helper and no realtime intervals"

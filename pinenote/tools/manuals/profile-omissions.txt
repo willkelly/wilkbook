@@ -1,0 +1,54 @@
+# Exact reviewed omissions from the generation-23 profile (see README).
+# Service-added OpenSSH and Shepherd, and propagated documentation. These
+# remain product gaps; accepting this list does not declare full coverage.
+man:gc.3
+man:halt.8
+man:herd.1
+man:moduli.5
+man:reboot.8
+man:scp.1
+man:sftp-server.8
+man:sftp.1
+man:shepherd.1
+man:ssh-add.1
+man:ssh-agent.1
+man:ssh-copy-id.1
+man:ssh-keygen.1
+man:ssh-keyscan.1
+man:ssh-keysign.8
+man:ssh-pkcs11-helper.8
+man:ssh-sk-helper.8
+man:ssh.1
+man:ssh_config.5
+man:sshd.8
+man:sshd_config.5
+info:fibers
+info:gnutls-guile
+info:guile-avahi
+info:guile-gcrypt
+info:guile-git
+info:guile-library
+info:guile-ssh
+info:guix
+info:guix-cookbook
+info:libunistring
+info:shepherd
+# Translated Guix books are not filtered by the Info discovery policy:
+# they are missing because their package is outside the shelf input list.
+info:guix-cookbook.de
+info:guix-cookbook.es
+info:guix-cookbook.fr
+info:guix-cookbook.it
+info:guix-cookbook.ko
+info:guix-cookbook.pt_BR
+info:guix-cookbook.ru
+info:guix-cookbook.sk
+info:guix-cookbook.sv
+info:guix-cookbook.zh_CN
+info:guix.de
+info:guix.es
+info:guix.fr
+info:guix.it
+info:guix.pt_BR
+info:guix.ru
+info:guix.zh_CN

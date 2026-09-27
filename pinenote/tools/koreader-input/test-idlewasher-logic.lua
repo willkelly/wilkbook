@@ -675,6 +675,72 @@ report(gd.core == nil and gd_off.core == nil and UIManager:washes() == washes0 +
        and log_grep("[idlewasher] charge 5 ") == 0,
        "chargeDebt: a closed or disabled washer charges nothing, and logs nothing", "")
 
+-- A proximity hold parks both automatic deadlines without impersonating
+-- activity. Removing the owner must wake the parked check, even without
+-- another InputEvent (hover can last past both horizons).
+settings.idlewasher_enabled = nil
+fake_now = 2000
+local held = IdleWasher:new{}
+local owner, prox = {}, true
+held:setHold(owner, function() return prox end)
+held:chargeDebt(60)
+local washes = UIManager:washes()
+fake_now = 2045
+UIManager:fire_due()
+fake_now = 2700
+UIManager:fire_due()
+report(held.held_timer and held.core.debt == 60 and held.core.last_activity == 2000
+       and not held.core.deepclean_done and UIManager:washes() == washes,
+       "hold: idle and deep clean park without advancing the activity clock")
+held:chargePageTurn(2)
+report(held.core.debt == 60 and UIManager:washes() == washes,
+       "hold: page charges cannot bundle a wash under the pen")
+prox = false
+held:holdChanged()
+UIManager:fire_due()
+report(held.core.debt == 0 and UIManager:washes() == washes + 1,
+       "hold: release checks overdue debt without another input")
+held:setHold(owner, nil)
+report(next(held.holds) == nil, "hold: removing the owner drops its reference")
+held:onCloseWidget()
+report(held.holds == nil and held.held_timer == nil,
+       "hold: closing the washer removes predicates and parked state")
+
+-- Receipts separate queuing from successful execution. These invariants
+-- also cover debt charged while UIManager still owns a queued refresh.
+for _, success in ipairs{ false, true } do
+    local c = Core.new{}
+    c:on_charge(60)
+    local receipt = c:begin_external_wash()
+    c:on_charge(3)
+    report(c.debt == 60, "receipt: scheduling retains saturated debt")
+    c:finish_external_wash(receipt, success, 5)
+    local want = success and 3 or 60
+    report(c.debt == want and not c.deepclean_done,
+           "receipt: " .. tostring(success) .. " preserves new charges and deep-clean eligibility")
+    c:on_charge(1)
+    c:finish_external_wash(receipt, true, 6)
+    report(c.debt == math.min(60, want + 1), "receipt: duplicate completion is inert")
+    local action = c:on_timer(45)
+    report((action.wash == "idle") == not success,
+           "receipt: next pause washes retained failure debt, not successfully retired debt")
+end
+do
+    local c, other = Core.new{}, Core.new{}
+    c:on_charge(20)
+    local receipt = c:begin_external_wash()
+    other:on_charge(10)
+    other:finish_external_wash(receipt, true, 1)
+    report(other.debt == 10, "receipt: a replacement core cannot retire its predecessor's debt")
+    c:on_manual_deep_clean(1)
+    c:on_charge(17)
+    c:finish_external_wash(receipt, true, 2)
+    report(c.debt == 17, "receipt: an intervening wash invalidates old debt")
+    receipt = c:begin_external_wash()
+    c:finish_external_wash(receipt, nil, 3)
+    report(c.debt == 17, "receipt: absent acknowledgement is not success")
+end
+
 os.remove(wf_path)
 
 if fail == 0 then

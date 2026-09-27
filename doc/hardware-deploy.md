@@ -324,6 +324,11 @@ The grant covers the agreed session's normal trial/health/promote steps; it
 expires on restart, departure, withdrawal, or failure. `CLAUDE.md` owns the
 scope, exclusions, and three-successful-session review point.
 
+The three-session review was completed after generation 24's acceptance on
+2026-09-26: wkelly approved continuation of the existing policy unchanged.
+That review pause is lifted; each new session still needs its own explicit
+invocation and all the same checks (`doc/status.md`, generation 23 → 24).
+
 Before handoff, pass the offline gates (reuse recorded passes for unchanged
 relevant source, inputs, and output), verify the actual source/target
 identities and os2/data mounts, record the last promoted generation and a
@@ -363,6 +368,16 @@ or persistent activation marker for this conversational grant.
 
 ### Every update
 
+**2026-09-26 source hardening (host-tested; runtime qualification owed):**
+new target helpers stop the optional note authority after stopping KOReader,
+require its runtime cleanup, and refuse handoff unless the mounted `/data`
+is read-only. Root remount remains best-effort; root-writer quiescence is still
+unresolved. Refusal verifies original mounts before restoring services and records
+any incomplete restoration. See `doc/update-path.md`, "Teardown hardening".
+For an older target helper, including rollback, stop the note authority
+manually as before: the target's helper, not the running generation's,
+owns the trial.
+
 ```
 make deploy DEVICE=pinenote-os2 [FLAVOR=reader] [KEEP=5]
 ```
@@ -374,7 +389,8 @@ N+1 (`add`: profile link, `/boot/gen-N+1/{Image,initrd,dtb,append}`,
 the extlinux menu re-rendered with `DEFAULT` unchanged), kexecs into
 it (`trial`: the device-tree notes and the model line first, then the
 reader stopped INT-first, Wi-Fi off, gadget unbound, EBC quiescent,
-root and data partitions remounted read-only, then `kexec -e`; the ssh link dies at the Wi-Fi off, before the kexec
+root read-only remount attempted and mounted data required read-only, then
+`kexec -e`; the ssh link dies at the Wi-Fi off, before the kexec
 — by design, so nothing the helper says after that point reaches the
 deployer live. Since 2026-09-04 the trial's output is captured to a
 temp file and echoed with a `trial>` prefix once the ssh link returns

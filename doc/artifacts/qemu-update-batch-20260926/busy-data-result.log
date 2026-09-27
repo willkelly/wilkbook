@@ -1,0 +1,104 @@
+PASS: staged rootfs-matched boot bundle under /tmp/wilkbook/pinenote-batch-20260926/pinenote-updchk-bundle-20260926-211644
+PASS: extracted Image, matching config, PineNote DTB, initrd, and generated extlinux.conf
+NOTE: run: pinenote/scripts/preflight/inspect-boot-bundle.sh /tmp/wilkbook/pinenote-batch-20260926/pinenote-updchk-bundle-20260926-211644
+PASS: data fixture (update-flow) built: /tmp/wilkbook/pinenote-batch-20260926/pinenote-updchk-data-20260926-211644.img
+PASS:   Debian home present at ./user with 8 visible entries
+PASS: waveform partition left zero-filled (copy-path test only)
+PASS: rootfs written into partition 2 (GPT name os2)
+PASS: data fixture written into partition 3 (GPT name data)
+PASS: synthetic PineNote-layout disk ready: /tmp/wilkbook/pinenote-batch-20260926/pinenote-updchk-disk-20260926-211644.img
+qemu update flow: booting generation A (console -> /tmp/wilkbook/pinenote-virt-update-299930.log, ssh -> 127.0.0.1:2277)
+  PASS  generation A booted: /run/current-system = /gnu/store/x955n2ki52n2v5hgs0cq96md0lrd7ilv-system
+  PASS  guix-daemon is running in the guest
+  PASS  pinenote-grow-root grew the root fs to its partition (4683517952 > image 2684211200 bytes)
+  PASS  the harness signing key is authorized in the guest ACL
+wilkbook-generation: generation 1: payload staged in /boot/gen-1
+  PASS  ledger: gen-1 is the booted generation
+  PASS  transfer set: 13 of 439 closure paths are missing in the guest (a delta, not the whole closure)
+  PASS  guix archive export/import of the missing paths into the guest
+  PASS  B's system is in the guest store
+wilkbook-generation: generation 2: payload staged in /boot/gen-2
+wilkbook-generation: extlinux menu: 2 generation(s), DEFAULT gen-1
+  PASS  add registered generation 2
+  PASS  extlinux DEFAULT is still gen-1 after add (trial-then-promote)
+  PASS  payloads staged for gen-1 (pre-helper generation) and gen-2
+        trial> wilkbook-generation: trial boot of generation 2: DEFAULT is unchanged; a power-cycle returns to it
+        trial> wilkbook-generation: machine model "linux,dummy-virt" -> running device tree reused
+        trial> wilkbook-generation: machine model "linux,dummy-virt": no EBC to quiesce
+        trial> wilkbook-generation: machine model "linux,dummy-virt": console argument rewritten for the PL011
+        trial> wilkbook-generation: trial abandoned: teardown undone; prior services and mounts restored, DEFAULT untouched
+        trial> wilkbook-generation: kexec -l failed for generation 2 (exit 1): Cannot open `/boot/gen-2/Image': No such file or directory
+  PASS  refused trial: the helper exited 1 (a refusal, not a dropped link)
+  PASS  refused trial: the kexec -l failure and the bail-out both reached the caller
+  PASS  refused trial: the guest is reachable on the same boot
+  PASS  refused trial: health passes on A again (the reader was restarted)
+  PASS  refused trial: the record names this boot
+  PASS  refused trial: DEFAULT still gen-1
+        busy-data> wilkbook-generation: trial boot of generation 2: DEFAULT is unchanged; a power-cycle returns to it
+        busy-data> wilkbook-generation: machine model "linux,dummy-virt" -> running device tree reused
+        busy-data> wilkbook-generation: machine model "linux,dummy-virt": no EBC to quiesce
+        busy-data> wilkbook-generation: machine model "linux,dummy-virt": console argument rewritten for the PL011
+        busy-data> wilkbook-generation: root remains read-write: legacy best-effort root remount (exit 32): mount: /: mount point is busy.
+        busy-data>        dmesg(1) may have more information after failed mount system call.; /data must still become read-only
+        busy-data> wilkbook-generation: trial abandoned: teardown undone; prior services and mounts restored, DEFAULT untouched
+        busy-data> wilkbook-generation: /data did not remount read-only (exit 32): mount: /data: mount point is busy.
+        busy-data>        dmesg(1) may have more information after failed mount system call.
+  PASS  busy data: helper refused with exit 1
+  PASS  busy data: real remount refusal and full restoration reported
+  PASS  busy data: same kernel boot survived
+/data/update-busy.txt: OK
+  PASS  busy data: original mount identities/modes and writer preserved
+  PASS  busy data: loaded candidate kernel was unloaded
+  PASS  busy data: reader health restored
+  PASS  busy data: current-boot refusal record names the data gate
+  PASS  busy data: DEFAULT remains A
+        trial> wilkbook-generation: trial boot of generation 2: DEFAULT is unchanged; a power-cycle returns to it
+        trial> wilkbook-generation: machine model "linux,dummy-virt" -> running device tree reused
+        trial> wilkbook-generation: machine model "linux,dummy-virt": no EBC to quiesce
+        trial> wilkbook-generation: machine model "linux,dummy-virt": console argument rewritten for the PL011
+        trial> wilkbook-generation: root remains read-write: legacy best-effort root remount (exit 32): mount: /: mount point is busy.
+        trial>        dmesg(1) may have more information after failed mount system call.; /data must still become read-only
+        trial> wilkbook-generation: kexec -e into generation 2
+        trial> wilkbook-generation: watchdog armed: a trial that never boots resets into U-Boot
+        trial> Timeout, server 127.0.0.1 not responding.
+  PASS  after kexec: /run/current-system = B
+  PASS  after kexec: a new boot id (the kernel really was replaced)
+  PASS  after kexec: hostname is generation B's
+  PASS  after kexec: the earlier refusal record does not pass for this boot
+  PASS  health check passes on B
+  PASS  DEFAULT still gen-1 while B is only on trial
+wilkbook-generation: extlinux menu: 2 generation(s), DEFAULT gen-2
+  PASS  promote 2
+  PASS  DEFAULT is gen-2 after promote
+  PASS  Guix's current profile points at generation 2
+  PASS  pin 1
+  PASS  list shows gen-1 [pinned]
+        prune> wilkbook-generation: generation 1 is pinned; kept
+        prune> nothing to prune
+  PASS  prune --keep 1 with gen-1 pinned: nothing to prune
+  PASS  gen-1's payload, marker and profile link survive the prune
+  PASS  unpin 1
+  PASS  no [pinned] marker after unpin
+        trial> wilkbook-generation: trial boot of generation 1: DEFAULT is unchanged; a power-cycle returns to it
+        trial> wilkbook-generation: machine model "linux,dummy-virt" -> running device tree reused
+        trial> wilkbook-generation: machine model "linux,dummy-virt": no EBC to quiesce
+        trial> wilkbook-generation: machine model "linux,dummy-virt": console argument rewritten for the PL011
+        trial> wilkbook-generation: root remains read-write: legacy best-effort root remount (exit 32): mount: /: mount point is busy.
+        trial>        dmesg(1) may have more information after failed mount system call.; /data must still become read-only
+        trial> wilkbook-generation: kexec -e into generation 1
+        trial> wilkbook-generation: watchdog armed: a trial that never boots resets into U-Boot
+        trial> Timeout, server 127.0.0.1 not responding.
+  PASS  rollback: kexec back into A
+  PASS  rollback: a third boot id
+  PASS  health check passes on A again
+wilkbook-generation: extlinux menu: 2 generation(s), DEFAULT gen-1
+  PASS  promote 1 (rollback complete)
+  PASS  DEFAULT is gen-1 after rollback
+        prune> wilkbook-generation: pruned generation 2
+        prune> wilkbook-generation: extlinux menu: 1 generation(s), DEFAULT gen-1
+        prune> wilkbook-generation: guix gc (roots: the remaining profile links)
+  PASS  prune --keep 0 with nothing pinned: generation 2 pruned
+  PASS  gen-2's payload and profile link are gone, gen-1's stay
+  PASS  DEFAULT is still gen-1 after the prune
+  note  console log shows 3 kernel boot line(s); boot ids: 4fcf6662-7fdc-4e48-bb9c-cd1f8c2f0c2e -> b3307eec-22e3-46c8-8275-0577b5257afa -> 2d815af8-ebdc-40db-bf63-94b9d8f59459
+qemu update flow: OK (log: /tmp/wilkbook/pinenote-virt-update-299930.log)

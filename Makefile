@@ -70,14 +70,14 @@ FIXTURE ?= os1-used
 # EXTRACT_FBS natively.
 FLAVORS = minimal slim networked dev usb-console usb-console-linux-6-6 reader
 
-.PHONY: help packages kernel kernel-drv reader-system-drv qemu-smoke qemu-virt qemu-virt-check qemu-update-check qemu-pageturn-campaign refresh-episodes-check refresh-trigger-check \
+.PHONY: help packages kernel kernel-drv reader-system-drv qemu-smoke qemu-virt qemu-virt-check qemu-update-check qemu-pageturn-campaign refresh-episodes-check refresh-trigger-check refresh-capture-check \
          check-host wbf-check wbf-notice clut-check ebc-logic-check rastersim-check koreader-input-check orientation-check platform-controls-check optics-check optics-audit-dataset power-check rockchip-pm-check activation-positive-check suspend-check \
         battery-dtb-check time-machine-check gexp-modules-check \
         timezone-check kernel-version-check library-check \
-        manuals-check ultra-coupling-check timesync-check \
+        manuals-check manuals-acceptance-check ultra-coupling-check timesync-check \
         settings-check koreader-profile-check ebc-modprobe-options-check \
         ebc-clut-check ebc-card-resolution-check ebc-ioctl-roster-check direct-probe-quirk-check direct-rect-hints-check update-path-check uart-pick-check os1-rescue-check deploy reader-stop-check pen-check ebc-lab-check \
-        check-source book-workbench-check book-workbench-editor-check book-workbench-qemu-drv book-workbench-editor-qemu-drv $(FLAVORS) $(addprefix image-,$(FLAVORS)) $(addprefix rootfs-,$(FLAVORS))
+        check-source book-workbench-check book-workbench-editor-check book-workbench-device-check book-workbench-qemu-drv book-workbench-editor-qemu-drv $(FLAVORS) $(addprefix image-,$(FLAVORS)) $(addprefix rootfs-,$(FLAVORS))
 
 help:
 	@echo "Targets:"
@@ -93,10 +93,13 @@ help:
 	@echo "  qemu-pageturn-campaign  scripted page-turn/menu campaign + [pn-refresh] episode analysis (ROOTFS=..)"
 	@echo "  refresh-episodes-check  self-test of the episode analyser against the issue-#14 fixture"
 	@echo "  refresh-trigger-check   self-test of the trigger analyser against the COMMITTED issue-#14 traces"
+	@echo "  refresh-capture-check   complete log harvest, checked analysis and failure fixtures"
 	@echo "  check-host        every host suite needing no hardware ([WBF=..] adds wbf-check + waveform-gated tests)"
 	@echo "  check-source      finite Book Computer source lane (SOURCE_ROOT=/absolute/fresh-candidate)"
 	@echo "  book-workbench-check  offline workspace, revision, preview and reader checks"
 	@echo "  book-workbench-editor-check  native source-defined editor, grants and successor checks"
+	@echo "  book-workbench-device-check  Guile device-coordinator owner-receipt contract"
+	@echo "  manuals-acceptance-check  installed corpus and native reader (explicit realized inputs)"
 	@echo "  book-workbench-qemu-drv  pinned Workbench ARM64 system/image derivation gate"
 	@echo "  book-workbench-editor-qemu-drv  pinned long-lived sandbox editor QEMU gate"
 	@echo "  wbf-check         waveform parser checks (WBF=..; never committed)"
@@ -152,6 +155,10 @@ book-workbench-check:
 
 book-workbench-editor-check:
 	sh pinenote/tools/book-workbench-editor/run-tests.sh
+
+book-workbench-device-check:
+	$(call guix-shell,guile) guile --no-auto-compile -L pinenote/tools/book-workbench-device \
+	  pinenote/tools/book-workbench-device/test-owner-control.scm
 
 book-workbench-qemu-drv:
 	guix time-machine -C channels.scm -- repl -L . -- pinenote/tools/book-workbench/check-system.scm
@@ -357,7 +364,7 @@ qemu-pageturn-campaign:
 	mkdir -p $(ARTIFACTS); \
 	bundle=$(ARTIFACTS)/pinenote-pageturn-bundle-$$stamp; \
 	disk=$(ARTIFACTS)/pinenote-pageturn-disk-$$stamp.img; \
-	$(call guix-shell,e2fsprogs gptfdisk qemu) sh -c "\
+	$(call guix-shell,e2fsprogs gptfdisk qemu guile python coreutils) sh -c "\
 	  pinenote/scripts/preflight/stage-boot-bundle-from-rootfs.sh '$(ROOTFS)' \"$$bundle\" && \
 	  pinenote/scripts/qemu/make-virt-disk.sh '$(ROOTFS)' \"$$disk\" $(WAVEFORM) && \
 	  CAMPAIGN_TURNS='$(CAMPAIGN_TURNS)' CAMPAIGN_MENU_EVERY='$(CAMPAIGN_MENU_EVERY)' \
@@ -383,6 +390,10 @@ refresh-episodes-check:
 refresh-trigger-check:
 	python3 pinenote/tools/refresh-episodes/test-refresh-triggers.py
 
+refresh-capture-check:
+	$(call guix-shell,guile python coreutils) guile --no-auto-compile \
+	  -s pinenote/tools/refresh-episodes/test-campaign-capture.scm
+
 # Aggregate host gate (doc/testing.md, validation-ladder rung 1): every
 # suite that needs no hardware and no per-device waveform, in one
 # command.  wbf-check hard-requires WBF=, so it joins only when WBF is
@@ -396,7 +407,7 @@ CHECK_HOST_TARGETS = clut-check ebc-logic-check rastersim-check \
         rockchip-pm-check activation-positive-check suspend-check \
         library-check koreader-profile-check manuals-check ultra-coupling-check \
         battery-dtb-check time-machine-check gexp-modules-check \
-        timezone-check refresh-trigger-check timesync-check settings-check \
+        timezone-check refresh-episodes-check refresh-trigger-check refresh-capture-check timesync-check settings-check \
         ebc-modprobe-options-check ebc-clut-check ebc-card-resolution-check ebc-ioctl-roster-check direct-probe-quirk-check direct-rect-hints-check \
         update-path-check uart-pick-check os1-rescue-check reader-stop-check pen-check ebc-lab-check
 
@@ -557,19 +568,27 @@ timesync-check:
 # declared in a Guix record, a Lua `opt' table, a .conf key, an argv flag,
 # a modprobe options string and a host model that claims to mirror the
 # device -- with nothing connecting the copies.  This asserts they still
-# agree.  Pure text analysis over the sources; python3 stdlib only, no
-# guix, no store, no device.
+# agree. Guile source analysis plus Lua broker-config execution; no
+# Guix evaluation, store inputs or device access.
 #
 # EXPECTED OUTPUT -- do not "fix" the DEBT lines: the tree HAS drifted, and
 # #12 step 1 asks for that drift to be pinned rather than repaired here.
 # Each DEBT row is inventory that a later #12 step removes; a divergence
 # NOT in the register fails the build, and so does a register row whose
 # divergence has been paid off.  The second command is the positive
-# control: it breaks one coupling at a time in a scratch copy of the tree
-# and requires the gate to reject it.
+# control: it mutates one extracted observation at a time in memory and
+# requires rejection. The third command executes the broker config parser.
 settings-check:
-	python3 pinenote/tools/settings/check-settings.py
-	python3 pinenote/tools/settings/test-check-settings.py
+	$(call guix-shell,guile) guile --no-auto-compile -s pinenote/tools/settings/check-settings.scm
+	$(call guix-shell,guile) guile --no-auto-compile -s pinenote/tools/settings/test-check-settings.scm
+	$(call guix-shell,luajit) luajit pinenote/tools/settings/test-broker-config.lua
+
+# Optional installed-corpus check: uses realized inputs, never builds them.
+manuals-acceptance-check:
+	@test -n "$(MANUALS_SYSTEM)" -a -n "$(MANUALS_SHELF)" -a -n "$(KOREADER_BUNDLE)" -a -n "$(MANUALS_ACCEPTANCE_OUT)" || \
+	  { echo 'set MANUALS_SYSTEM, MANUALS_SHELF, KOREADER_BUNDLE and new MANUALS_ACCEPTANCE_OUT'; exit 2; }
+	guile --no-auto-compile pinenote/tools/manuals/acceptance.scm \
+	  "$(MANUALS_SYSTEM)" "$(MANUALS_SHELF)" "$(KOREADER_BUNDLE)" "$(MANUALS_ACCEPTANCE_OUT)"
 
 # We now carry TWO rockchip_ebc drivers with almost disjoint module
 # parameters, and the kernel does not protect you from mixing them up:
@@ -629,7 +648,7 @@ direct-rect-hints-check:
 # promote/prune/health) and the structural pins on its imperative halves
 # (the trial boot's teardown order, the deployer's promote-only-after-health).
 update-path-check:
-	$(call guix-shell,luajit) $(MAKE) -C pinenote/tools/update-path check
+	$(call guix-shell,luajit guile) $(MAKE) -C pinenote/tools/update-path check
 
 # The UART slot picker (the deployer's watcher and the hand-run recovery)
 # against a pseudo-terminal replaying the REAL bytes of the 2026-09-04 cold

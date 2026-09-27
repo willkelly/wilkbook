@@ -638,9 +638,7 @@ function PineNote:init()
             tostring(d), sec, usec))
     end
     local function global_refresh()
-        if drm_fd ~= -1 then
-            C.ioctl(drm_fd, DRM_GLOBAL_REFRESH, refresh_arg)
-        end
+        return drm_fd ~= -1 and C.ioctl(drm_fd, DRM_GLOBAL_REFRESH, refresh_arg) == 0
     end
     -- Publish-on-call (doc/refresh-policy.md): fsync on the fbdev fd is
     -- fb_deferred_io_fsync -> flush_delayed_work, i.e. "run the pending
@@ -741,11 +739,8 @@ function PineNote:init()
                 -- wash that follows then paints it a second time.  On glass
                 -- that is the "render, flash, render again" double update
                 -- reported for rotation and for opening the menu
-                -- (2026-08-04).  The ioctl already drains deferred-io all
-                -- the way into ctx->final itself (flush_delayed_work +
-                -- flush_work in ioctl_trigger_global_refresh), so the wash
-                -- provably paints what userspace had written when it
-                -- called.  One intent, one visible pass.
+                -- (2026-08-04, old driver). The direct driver does not
+                -- guarantee that damage drain; see the caveat above.
                 global_refresh()
             else
                 trace(intent, "partial", x, y, w, h, d)
@@ -778,9 +773,12 @@ function PineNote:init()
     self.screen.refreshFullImp = function(_, x, y, w, h, d)
         hint_owner:guard(x, y, w, h)
         trace("full", "global", x, y, w, h, d)
-        -- Same reason as flash_policy's global branch: the ioctl publishes
-        -- for us, and an fsync first costs a whole extra visible pass.
-        global_refresh()
+        -- Same no-publish policy as flash_policy's global branch.
+        local success = global_refresh()
+        -- Acknowledges ioctl acceptance, not physical wash completion.
+        -- The notebook owns this optional one-shot and its timeout/cleanup.
+        local done = self.wilkbook_full_refresh_done
+        if done then done(success) end
     end
 
     self.powerd = require("device/pinenote/powerd"):new{

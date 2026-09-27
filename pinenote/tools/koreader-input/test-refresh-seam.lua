@@ -105,16 +105,11 @@ end
 -- partial-refresh the damage -- a full visible paint -- and then the wash
 -- paints the same content a second time.  On glass that was the "render,
 -- flash, render again" double update on rotation and on opening the menu.
--- The ioctl drains deferred-io into ctx->final itself
--- (flush_delayed_work + flush_work in ioctl_trigger_global_refresh), so
--- the wash still provably paints what userspace had written.
+-- The old driver drained damage in the ioctl; the direct driver does not.
+-- This gate pins userspace ordering, not driver drain or physical completion.
 check(src:find("self%.screen%.refreshFullImp%s*=%s*function[^\n]*\n%s*" ..
-        GUARD .. "\n" ..
-        "%s*trace%([^\n]*\n[^\n]*\n[^\n]*\n%s*global_refresh%(%)") ~= nil
-      or src:find("self%.screen%.refreshFullImp%s*=%s*function[^\n]*\n%s*" ..
-        GUARD .. "\n" ..
-        "%s*trace%([^\n]*\n%s*global_refresh%(%)") ~= nil,
-    "refreshFullImp guards, then reaches global_refresh without an intervening publish()")
+        GUARD .. "\n%s*trace%(") ~= nil,
+    "refreshFullImp guards before tracing and attempting the wash")
 check(src:find("local function flash_policy%(intent%)\n" ..
         "%s*return function%(_, x, y, w, h, d%)\n%s*" .. GUARD) ~= nil,
     "flash_policy guards before either branch")
@@ -144,6 +139,38 @@ no_publish_between('trace%(intent, "global"(.-)global_refresh%(%)',
     "flash_policy global branch")
 no_publish_between('trace%("full", "global"(.-)global_refresh%(%)',
     "refreshFullImp")
+
+-- Execute both production closures. A successful ioctl is the asynchronous
+-- receipt boundary; absent fd and failed ioctl must acknowledge false too.
+local global_body = assert(src:match("    local function global_refresh%(%)\n(.-)\n    end"))
+local full_body = assert(src:match("    self%.screen%.refreshFullImp = function%(_, x, y, w, h, d%)\n(.-)\n    end"))
+for _, case in ipairs({ { -1, 0, false }, { 7, -1, false }, { 7, 0, true } }) do
+    local events, calls, device = {}, 0, { screen = {} }
+    local env = {
+        self = device, drm_fd = case[1], DRM_GLOBAL_REFRESH = 123, refresh_arg = {},
+        C = { ioctl = function(fd, request, arg)
+            assert(fd == 7 and request == 123 and type(arg) == "table")
+            calls = calls + 1; events[#events + 1] = "ioctl"; return case[2]
+        end },
+        hint_owner = { guard = function() events[#events + 1] = "guard" end },
+        trace = function() events[#events + 1] = "trace" end,
+    }
+    local chunk = assert(loadstring("local function global_refresh()\n" .. global_body ..
+        "\nend\nself.screen.refreshFullImp = function(_, x, y, w, h, d)\n" .. full_body .. "\nend"))
+    setfenv(chunk, env); chunk()
+    local receipt
+    device.wilkbook_full_refresh_done = function(success)
+        receipt = success; events[#events + 1] = "ack"
+        device.wilkbook_full_refresh_done = nil
+    end
+    device.screen:refreshFullImp(1, 2, 3, 4, false)
+    check(receipt == case[3], "full refresh acknowledges ioctl outcome for fd/result " .. case[1] .. "/" .. case[2])
+    check(table.concat(events, ",") == (case[1] == -1 and "guard,trace,ack" or "guard,trace,ioctl,ack"),
+        "guard and ioctl precede one-shot acknowledgement")
+    device.screen:refreshFullImp(1, 2, 3, 4, false)
+    check(events[#events] ~= "ack" and calls == (case[1] == -1 and 0 or 2),
+        "full refresh works after observer removes itself")
+end
 
 -- The partial branch still publishes -- that is the whole point of
 -- publish-on-call for pen strokes and page turns.

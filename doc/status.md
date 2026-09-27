@@ -3,6 +3,147 @@
 Last updated: 2026-09-26. Update protocol: add a dated entry at the top
 after every hardware session; entries are per-device/per-operator.
 
+## 2026-09-26 final batch checks (wkelly PineNote, generation 24, same boot) — rotation, night mode, hover, restart persistence and fallback suspend
+
+No additional kexec or cold boot. System remains
+`/gnu/store/13cg7sg6waa3ahj3ivxhmkagia0kbwi1-system`, boot
+`7d56208a-02f4-4a1c-9386-ef61cd7d0859`.
+
+- Operator: "Rotation works and night mode works." They then confirmed the
+  requested pen hover longer than 45 seconds did not trigger an automatic wash.
+- With permission, the agent paused suspend, stopped and restarted
+  `reader-session`; the operator reopened the notebook and confirmed the
+  latest strokes were intact.
+- For fallback, the agent stopped the reader again and restored suspend to
+  its prior `enabled=1`. The operator tapped Power. Broker logs show
+  `fallback=true` at 03:33:17 UTC (2026-09-27), followed by interrupt quiescence,
+  `resumed after 10.925s`, and `transaction complete ok=true detail=button`.
+  A second tap before the acknowledgement deadline was correctly rejected as
+  `request already pending`. This is an actual missed-reader-acknowledgement
+  suspend, not an inferred fallback from a normal sleep.
+- Operator: "slept and woke but banner remains (in notebook, not sure if it
+  matters)". The agent restarted the reader; the operator subsequently said
+  "banner cleared when I opened a book". Record that redraw-dependent result:
+  immediate banner removal on wake was not observed, and readability/clipping
+  was not separately confirmed. The stopped reader could not consume the
+  broker's wake event; a GC16 wash alone does not restore the overwritten pixels.
+- Reader health passed after restoration. The original suspend file was
+  compared byte-for-byte and read back as `enabled=1`. Backup retained under
+  `/data/wilkbook/diagnostic-backups/gen24-final-acceptance-20260926/`.
+
+Remaining targeted observations: contact-dropout tails, debt-ceiling/page
+buttons, full RTC-backstop classification and detailed fallback typography.
+No independent timing measurement was made of the broker's BOOTTIME interval.
+The operator also clarified that the notebook currently contains mostly
+scribbles: useful capture/replay inputs, not a labelled handwriting-recognition
+accuracy corpus. Readable samples with exact transcriptions are still needed.
+Evidence: `doc/artifacts/pinenote-gen24-batch-20260926/final-acceptance.log`.
+
+## 2026-09-26 deployment (wkelly PineNote, generation 23 → 24, cable-free) — batch candidate healthy, promoted and operator-accepted
+
+**Invocation and scope.** The operator requested the PR and deployment, then
+directly said **`I invoke the trial!!`**. This was an attended cable-free trial
+with `WILKBOOK_UART` unset and a 600-second host deadline. PR #87 is open from
+`batch/integration`; source `a24c5e1` includes main through `a7445ad` (the held
+power-button assessment). No recovery intervention was needed.
+
+**Source and fallback:** generation 23, cold-booted and pinned,
+`/gnu/store/x3qqz8r52pdh7jzghzfj8l44gfrqkncb-system`, boot
+`6caf4f3c-4c06-439f-88aa-8acec877a8cf`. DEFAULT was 23 before registration and
+remained 23 after adding the candidate. Pins 10, 16 and 18 were retained too.
+Root was p6, the exact `/data` mount resolved to p7, source health passed,
+and battery was 100%. Auto-suspend was backed up and paused from `enabled=1`
+to `enabled=0`.
+
+**Target:** generation 24,
+`/gnu/store/13cg7sg6waa3ahj3ivxhmkagia0kbwi1-system`. The pinned derivation gate
+and exact-output closure check passed; the newer main merge changed no target
+derivation. Kernel `334ljs8q` and gVisor `djgy782a` stayed at their required
+pins. Target kernel Image SHA-256 `5435c84e…` matched generation 23's staged
+Image. Applicable host/native tests and the 40-check plain-reader QEMU update
+run were reused; the full-log QEMU page-turn campaign also passed. The
+experimental authority's normal handoff is newly exercised below; deliberate
+busy-data refusal remains unrun in a real service composition.
+
+**Trial and result:**
+- The existing deployer, run through the pinned Guix PATH with KEEP=8,
+  transferred **28 of 488 closure paths**, registered 24 and completed the
+  kexec/health/promote flow with exit 0.
+- The target helper stopped the authority automatically: Shepherd logged
+  stopping at 01:58:55 UTC and stopped at 01:59:07; the authority logged
+  `stopped after bounded cleanup` at 01:59:07. It was not manually stopped.
+  Handoff passed the helper's runtime-directory cleanup and strict mounted
+  `/data` read-only gates. Busy-data refusal/recovery was not injected.
+- New boot `7d56208a-02f4-4a1c-9386-ef61cd7d0859` ran the expected system and
+  kernel. Both the deployer's health check and a separate postflight passed.
+  Reader, authority, broker and orientation bridge were running. The authority
+  became ready at 01:59:30 and reopened its writable SQLite database.
+- p6 and p7 mounted read-write; dmesg showed their mount lines without journal
+  recovery or the checked WARNING/BUG/Oops/runtime-PM signatures. This does
+  not establish clean-root kexec: root remount remains best-effort.
+- Both `gen-default` and extlinux DEFAULT now name **24**. Nothing was pruned;
+  generation 23 remains pinned. Generation 24 is **kexec-only and not pinned**;
+  this trial does not qualify its device tree.
+
+**Cleanup and operator checks:** the original auto-suspend file
+was restored byte-for-byte and read back as **`enabled=1`** on the new boot.
+Backup: `/data/wilkbook/diagnostic-backups/gen23-before-batch-gen24-20260926/`.
+The operator then reported all three requested checks passed:
+1. Open a book and turn pages — "Works!"
+2. Open the notebook, check existing strokes, draw, Refresh, close and reopen
+   — "Works!"
+3. Power-button tap suspend/wake and the cover — "works!"
+
+These are operator observations; no cycle count or timing was measured.
+KOReader process-restart persistence, contact-dropout/night-mode/hover edge
+cases, forced fallback rendering, RTC accounting and deliberate busy-data
+refusal remain separate checks; the three answers do not certify those.
+Health/promotion, agreed operator checks and cleanup are now complete:
+**this is the third successful cable-free trial-period session.** The review
+pause was engaged, then the operator explicitly approved the recommendation
+to continue the existing attended, explicit-invocation policy unchanged:
+**"I approve"**. This completes the required review and lifts that pause.
+Each new session still requires its own exact invocation; attendance,
+expiration, recovery, health and evidence requirements remain unchanged.
+No standing invocation or unattended deployment permission was granted.
+Evidence: `doc/artifacts/pinenote-gen24-batch-20260926/`.
+
+## 2026-09-26 later (wkelly PineNote, generation 23, SSH inspection) — idle authority and root writers observed
+
+The operator granted exclusive SSH access; after unlocking the host SSH agent,
+inspection authenticated on the existing cold boot
+`6caf4f3c-4c06-439f-88aa-8acec877a8cf`. No trial, deployment, service restart or
+power cycle ran in this session.
+
+- Root was `/dev/mmcblk0p6`; `/data` was an exact ext4 mount resolving to
+  `/dev/mmcblk0p7`. Both were read-write.
+- Current system remained
+  `/gnu/store/x3qqz8r52pdh7jzghzfj8l44gfrqkncb-system`, kernel release 7.1.8.
+  Generation 23 was `[promoted] [booted] [pinned]`; both `gen-default` and
+  extlinux DEFAULT named 23. Generations 10, 16 and 18 remained pinned.
+- Reader (PID 470), note authority (307), platform broker (428) and orientation
+  bridge (430) were all running. The authority's idle writable fd 15 named
+  `/data/wilkbook/book-state/book-state-v1.sqlite`; its control runtime directory
+  existed. The idle database writer is now observed, not merely source-inferred.
+- Shepherd PID 1 held writable descriptors for the reader, authority, broker,
+  orientation and DDR-boost logs, plus `/var/log/{secure,debug,messages}`.
+  nscd held writable cache descriptors under `/var/db/nscd` and deleted files
+  under `/var/run/nscd`; dhcpcd held its writable PID file. `findmnt -T` mapped
+  representative log, nscd and dhcpcd paths to p6. This was an fd snapshot, not
+  a complete writable-mapping inventory or a remount experiment.
+- The checked dmesg signatures showed no ext4 recovery/error, WARNING, BUG,
+  Oops or unbalanced-runtime-PM match. No panel acceptance was attempted.
+
+**Cleanup:** auto-suspend was paused from `enabled=1` to `enabled=0`, then its
+original configuration was restored byte-for-byte and read back as `enabled=1`
+on the same boot. Backup retained at
+`/data/wilkbook/diagnostic-backups/batch-inspection-20260926/`.
+The batch candidate remains unbooted; this inspection qualifies neither its
+automatic authority teardown nor its refusal recovery. Root-writer quiescence
+remains separate work (`doc/update-path.md`). Local transcripts:
+`/tmp/opencode/wilkbook-batch-live-inspection.log` and
+`/tmp/opencode/wilkbook-batch-live-cleanup.log` (temporary, not committed).
+
 ## 2026-09-26 late (wkelly PineNote, os1 detour, no UART) — the touch controller's config read (#82); the os1 rescue script (PR #51) fixed and run; generation 23 cold-booted twice
 
 **Posture.** The operator ran every power cycle by hand, with UART waived

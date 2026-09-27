@@ -108,10 +108,10 @@ def main():
     # the mechanism.  A full-panel identical repaint at 68 ms is in the
     # same corpus, on the ui path.
     floors = out["identical_repeat_floor_ms"]
-    check("full-panel ui repeat floor is BELOW the 131 ms 'hard floor'",
+    check("full-panel ui observed minimum is below partial/partial",
           floors["full-panel|ui/partial"] < floors["full-panel|partial/partial"],
           True)
-    check("full-panel partial/partial floor (the issue's 131 ms), ms",
+    check("full-panel partial/partial observed minimum, ms",
           round(floors["full-panel|partial/partial"]), 131)
 
     print("\n  -- candidate A: footer promoted to full page --")
@@ -144,7 +144,7 @@ def main():
 
     print("\n  -- candidate C: cadence only, cannot be settled here --")
     c = out["candidate_C"]
-    check("fastest repeat anywhere, ms", c["fastest_repeat_ms"], 131)
+    check("fastest selected partial/partial repeat, ms", c["fastest_repeat_ms"], 131)
     check("episodes with >=3 traces (CV is defined)", len(c["episode_cvs"]), 2)
     check("ordinary-reading control runs", len(c["null_cvs"]), 28)
     check("verdict is 'not separable'",
@@ -198,7 +198,36 @@ def main():
     check("grepped input: brackets vacated",
           g_out["candidate_D"]["brackets"], 0)
     check("grepped input: the tool WARNS instead of reporting a verdict",
-          "WARNING: no marker lines at all" in g_text, True)
+           "WARNING: no marker lines at all" in g_text, True)
+    check("grepped input: D/E verdicts require context",
+          [v["verdict"] for v in g_out["scorecard"] if v["candidate"][0] in "DE"],
+          ["INSUFFICIENT CONTEXT / CLOCK COVERAGE"] * 2)
+    check("no claim of two visible passes", "TWO visible" in text, False)
+    check("conditional statistical interpretation in JSON",
+          "not iid population evidence" in out["statistical_interpretation"], True)
+    check("observed-minimum alias preserves legacy values",
+          out["identical_repeat_min_ms"], out["identical_repeat_floor_ms"])
+
+    # Marker stamps are second-resolution and need a measured relation to
+    # trace t=. A stamp-less input must not silently gain offset=0 certainty.
+    unstamped = os.path.join(tmp, "unstamped.log")
+    with open(unstamped, "w") as fh:
+        fh.write("Inhibiting user input\n")
+        for t in [100.0, 100.2]:
+            fh.write("[pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=%.6f\n" % t)
+        fh.write("Restoring user input handling\n")
+    u_out, u_text = run([unstamped])
+    check("unstamped markers reported as unusable", u_out["coverage"]["unstamped_markers"], 2)
+    check("missing marker clock alignment reported", "alignment is missing or inconsistent" in u_text, True)
+    uncertain = os.path.join(tmp, "clock-step.log")
+    with open(uncertain, "w") as fh:
+        fh.write("2026-08-09 00:00:09 INFO Inhibiting user input\n")
+        for t in [100.0, 101.2]:
+            fh.write("2026-08-09 00:00:10 INFO [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=%.6f\n" % t)
+    u_out, u_text = run([uncertain])
+    r = u_out["coverage"]["clock_offset_range_s"]
+    check("inconsistent stamp/trace offsets retained", r[1] - r[0], 1)
+    check("clock variation warning", "D/E timing is uncertain" in u_text, True)
 
     print()
     if FAILURES:

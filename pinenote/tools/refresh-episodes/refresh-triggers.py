@@ -45,11 +45,10 @@ pinenote/packages/koreader-device:
 
   C. a genuine double input event.
      Nothing in the log records input, so this cannot be confirmed or
-     refuted here.  It can be CHARACTERISED: a machine-paced repeat (a
-     bouncing contact, a driver-level double report) produces runs with
-     a tight internal cadence; two independent human actions do not.
-     Reported as each episode's internal-gap coefficient of variation
-     against the same statistic over ordinary reading.
+      refuted here. Cadence can be characterised but does not distinguish
+      machine repeats from human actions paced by rendering. Reported as
+      each episode's internal-gap coefficient of variation against the
+      same statistic over ordinary reading.
 
   D. a document re-render (ReaderRolling:onUpdatePos).
      Emits a full-panel region-less "partial" (readerrolling.lua:1056)
@@ -166,16 +165,19 @@ def stamp_epoch(line):
     return float(calendar.timegm((y, mo, d, hh, mm, ss, 0, 0, 0)))
 
 
-def parse(paths):
+def parse(paths, diagnostics=None):
     """-> (traces, markers, clock_offset, unparsed)
 
     Marker times carry the +-1 s of a second-resolution stamp; every
     test below is tolerant of that by design (see `in_any_bracket`).
     """
     traces, raw_markers, offsets, unparsed = [], [], [], 0
+    regressions = notebook = 0
     for path in paths:
+        previous = None
         with open(path, "r", errors="replace") as fh:
             for line in fh:
+                notebook += "notebook" in line.lower()
                 stamp = stamp_epoch(line)
                 if "[pn-refresh]" in line:
                     m = TRACE_RE.search(line)
@@ -183,6 +185,8 @@ def parse(paths):
                         unparsed += 1
                         continue
                     tr = Trace(m)
+                    regressions += previous is not None and tr.t < previous
+                    previous = tr.t
                     traces.append(tr)
                     if stamp is not None:
                         offsets.append(math.floor(tr.t) - stamp)
@@ -198,6 +202,15 @@ def parse(paths):
     markers = [(s + offset, tag, line)
                for (s, tag, line) in raw_markers if s is not None]
     markers.sort(key=lambda m: m[0])
+    if diagnostics is not None:
+        diagnostics.update({"clock_samples": len(offsets),
+                            "clock_offset_range_s": [min(offsets), max(offsets)] if offsets else None,
+                            "marker_resolution_s": 1,
+                            "unstamped_markers": sum(s is None for s, _, _ in raw_markers),
+                            "timestamp_regressions": regressions,
+                            "notebook_lines": notebook,
+                            "capture_completeness": "not established by analyzer",
+                            "untraced_notebook_publishes": "not observable"})
     return traces, markers, offset, unparsed
 
 
@@ -391,13 +404,35 @@ def main(argv=None):
     ap.add_argument("--json", type=str, default="")
     args = ap.parse_args(argv)
 
-    traces, markers, offset, unparsed = parse(args.logs)
+    diagnostics = {}
+    traces, markers, offset, unparsed = parse(args.logs, diagnostics)
     out = {"traces": len(traces), "unparsed": unparsed,
-           "clock_offset_s": offset, "marker_lines": len(markers)}
+           "clock_offset_s": offset, "marker_lines": len(markers),
+           "coverage": diagnostics,
+           "semantics": "refresh requests only; not completed or visible panel updates",
+           "statistical_interpretation": "conditional binomial arithmetic; not iid population evidence"}
 
     print("=" * 72)
     print("[pn-refresh] TRIGGER analysis  (issue #14: what asks twice?)")
     print("=" * 72)
+    print("REQUESTS ONLY: no completion or visible double draw is measured.")
+    print("Coverage: log completeness/rotated history is not established by this analyzer.")
+    print("  Untraced notebook ink/Refresh publishing is outside this instrument; %d notebook lines."
+          % diagnostics["notebook_lines"])
+    print("  Source-based exclusions assume the recorded reader context and traced paths.")
+    print("Statistics: all binomial values are conditional arithmetic, not iid population")
+    print("  evidence; overlapping pairs and clustered episodes are not independent samples.")
+    print("Marker clocks: %d alignment samples; offset range %s s; resolution 1 s."
+          % (diagnostics["clock_samples"], diagnostics["clock_offset_range_s"]))
+    print("  %d unstamped markers are unusable. Clock steps/drift and input delivery are unmeasured."
+          % diagnostics["unstamped_markers"])
+    clock_ok = bool(diagnostics["clock_samples"]) and len(set(
+        diagnostics["clock_offset_range_s"] or [])) == 1
+    if not clock_ok:
+        print("  WARNING: marker alignment is missing or inconsistent; D/E timing is uncertain.")
+    if unparsed or diagnostics["timestamp_regressions"]:
+        print("ERROR: malformed traces or backwards timestamps; refusing partial/reordered analysis.")
+        return 1
     if len(traces) < 2:
         print("fewer than two [pn-refresh] traces in %s" % ", ".join(args.logs))
         return 1
@@ -474,9 +509,7 @@ def main(argv=None):
         print("  ... between IDENTICAL rect+kind: n=%d  min %.1f ms"
               % (len(same_rect_gaps), 1000 * min(same_rect_gaps)))
         print("      (these cannot: same drain would have merged them)")
-        print("  => the logger resolves %.1f ms, so any floor above that is a"
-              % (1000 * min(all_gaps)))
-        print("     property of the CALLER, not of the instrument.")
+        print("  Observed minima describe this sample, not a caller or panel timing floor.")
     out["min_gap_ms"] = 1000 * min(all_gaps)
     out["min_disjoint_gap_ms"] = 1000 * min(disj_gaps) if disj_gaps else None
     out["min_identical_gap_ms"] = (1000 * min(same_rect_gaps)
@@ -500,6 +533,8 @@ def main(argv=None):
                  1000 * statistics.median(gs)))
     out["identical_repeat_floor_ms"] = {
         "%s|%s" % k: 1000 * min(v) for k, v in by_bucket.items()}
+    out["identical_repeat_min_ms"] = out["identical_repeat_floor_ms"]
+    print("  Legacy identical_repeat_floor_ms JSON key means observed minimum only.")
 
     # ---------------------------------------------------------------
     hdr("1. EPISODES at T = %.2f s, and what immediately PRECEDES each"
@@ -605,10 +640,8 @@ def main(argv=None):
             print("      %d of %d under 1 s, at %.3f +- %.3f s"
                   % (len(tight), len(lat), statistics.fmean(tight),
                      statistics.pstdev(tight)))
-        print("      A wash plus a second full-screen update is TWO visible")
-        print("      passes for one dismissal.  Reported because it is a")
-        print("      different, far more regular shape than the page-turn")
-        print("      doubling -- not because anything here says it is a defect.")
+        print("      These are TWO requests in a wash-then-ui sequence; the trace")
+        print("      establishes neither one dismissal nor two visible panel passes.")
     out["wash_then_ui_latency_s"] = lat
 
     # ---------------------------------------------------------------
@@ -723,9 +756,9 @@ def main(argv=None):
         print("      CV %.3f: %d of %d ordinary runs are at least this tight"
               % (c, tighter, len(null_cvs)))
     fastest = min((min(d["gaps_ms"]) for d in detail), default=None)
-    print("  fastest repeat anywhere                          : %s ms"
+    print("  fastest selected partial/partial repeat          : %s ms"
           % (fastest if fastest is not None else "-"))
-    print("  NOTE: no input event is logged, so this section cannot confirm")
+    print("  NOTE: no input event is analyzed, so this section cannot confirm")
     print("        or exclude C.  It only says which SHAPE the repeats have,")
     print("        and even that is weak: a repeat rate near the reader's own")
     print("        render+publish cost is what ANY producer faster than the")
@@ -861,6 +894,12 @@ def main(argv=None):
     verdicts = []
 
     def say(name, verdict, why):
+        if not eps and not name.startswith("C."):
+            verdict = "NOT EXERCISED (no selected episodes)"
+        elif name.startswith("D.") and (not spans or not clock_ok or diagnostics["unstamped_markers"]):
+            verdict = "INSUFFICIENT CONTEXT / CLOCK COVERAGE"
+        elif name.startswith("E.") and (not washes or not clock_ok or diagnostics["unstamped_markers"]):
+            verdict = "INSUFFICIENT CONTEXT / CLOCK COVERAGE"
         verdicts.append({"candidate": name, "verdict": verdict,
                          "evidence": why})
         print("  %-42s %s" % (name, verdict))
@@ -888,7 +927,7 @@ def main(argv=None):
 
     say("C. genuine double input",
         "NOT SEPARABLE FROM THIS DATA",
-        ["no input event is logged; a refresh trace cannot see a tap",
+        ["no input event is analyzed; a refresh trace cannot see a tap",
          "episode CVs %s vs ordinary-reading CVs %s (n=%d)"
          % (", ".join("%.3f" % c for c in ep_cvs) or "-",
             ("%.3f-%.3f, median %.3f"
@@ -901,14 +940,14 @@ def main(argv=None):
         ["%d INHIBIT/RESTORE brackets; %d full-panel partials sit inside one"
          % (len(spans), len(inb)),
          "%d episode traces sit inside one" % len(ep_in_b),
-         "so re-renders DO emit page-turn-shaped traces -- but not these"])
+         "timing exclusions require complete context and aligned marker clocks"])
 
     say("E. idle washer",
         "EXCLUDED" if hits == 0 else "OPEN",
         ["%d [idlewasher] action lines; %d episodes have one within %.0f s"
          % (len(washes), hits, args.window),
-         "the washer only ever asks setDirty(\"all\",\"full\") -> a global "
-         "trace, never a partial"])
+         "the traced reader wash uses full/global; direct notebook publishing "
+         "is outside this analysis"])
 
     out["scorecard"] = verdicts
 

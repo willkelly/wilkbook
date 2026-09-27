@@ -13,8 +13,9 @@
 --   prune --keep K       delete generations beyond K (never DEFAULT/booted/pinned), guix gc
 --   last-trial           the record of a trial this boot bailed out of, if any
 --
--- Every write is confined to p6's /boot, /var/guix/profiles and, through
--- guix gc, the store.  Nothing here touches p7, os1 or the partition table.
+-- Persistent file writes are confined to p6's /boot, /var/guix/profiles and,
+-- through guix gc, the store.  Trial also stops /data's writers and remounts
+-- that filesystem; it never edits its contents, os1 or the partition table.
 -- The pin is a marker file in the generation's own payload directory
 -- (/boot/gen-N/pinned): it dies with the generation, never dangles, and
 -- adds nothing to the write set.
@@ -30,10 +31,17 @@ local WIFI = "/run/current-system/profile/bin/pinenote-wifi-control"
 local UDC = "/sys/kernel/config/usb_gadget/pinenote-acm/UDC"
 local DWC3_CONTROL = "/sys/bus/platform/devices/fcc00000.usb/power/control"
 local WATCHDOG = "/dev/watchdog0"
+local AUTHORITY = "pinenote-book-state-device"
+local AUTHORITY_RUNTIME = "/run/wilkbook-book-state"
 local function die(fmt, ...) io.stderr:write("wilkbook-generation: " .. fmt:format(...) .. "\n"); os.exit(1) end
 local function log(fmt, ...) io.stderr:write("wilkbook-generation: " .. fmt:format(...) .. "\n") end
 local function read_file(path) local f = io.open(path, "r"); if not f then return nil end; local s = f:read("*a"); f:close(); return s end
-local function write_file(path, text) local f = assert(io.open(path, "w")); f:write(text); f:close() end
+local function write_file(path, text)
+    local f = assert(io.open(path, "w"))
+    local ok, err = f:write(text)
+    local closed, close_err = f:close()
+    assert(ok and closed, err or close_err)
+end
 local function exists(path) local f = io.open(path, "r"); if f then f:close(); return true end; return false end
 local function run(cmd) return os.execute(cmd) == 0 end
 local function readlink(path)
@@ -52,6 +60,36 @@ local function capture(cmd)
 end
 local function boot_id() return ((read_file("/proc/sys/kernel/random/boot_id") or ""):gsub("%s+$", "")) end
 
+-- Do not confuse a missing optional service with a broken Shepherd connection,
+-- or a stopped service's historical "running" line with its current state.
+local function service_state(name)
+    local ok, _, out = capture("LC_ALL=C timeout 30 herd status " .. name)
+    if ok and out:find("  It is running", 1, true) then return "running" end
+    if ok and out:find("  It is stopped", 1, true) then return "stopped" end
+    if not ok and out:find("service '" .. name .. "' could not be found", 1, true) then return "absent" end
+    return nil, out
+end
+
+-- Exact mount points, not the /data placeholder directory (or findmnt -T,
+-- which returns / for that directory).  Require the superblock to be ro too:
+-- a read-only bind mount alone does not commit an ext4 journal.
+local function mount_state(target)
+    local text = assert(read_file("/proc/self/mountinfo"), "cannot read mountinfo")
+    local found
+    for line in text:gmatch("[^\n]+") do
+        local id, point, options = line:match("^(%d+) %d+ %S+ %S+ (%S+) (%S+)")
+        if point == target then
+            assert(not found, "stacked mounts at " .. target)
+            local super = assert(line:match(" %- %S+ %S+ (%S+)"), "invalid mountinfo")
+            local ro = ("," .. options .. ","):find(",ro,", 1, true) ~= nil
+            local clean = ("," .. super .. ","):find(",ro,", 1, true) ~= nil
+            assert(ro == clean, "mount/superblock read-only flags disagree at " .. target)
+            found = { id = id, readonly = ro }
+        end
+    end
+    return found
+end
+
 -- The trial's teardown, remembered so that a refusal after it can be undone.
 -- Past `pinenote-wifi-control off` the session that ran the helper is on a
 -- dead radio, and until 2026-09-04 every die() there -- an EBC that never
@@ -59,12 +97,12 @@ local function boot_id() return ((read_file("/proc/sys/kernel/random/boot_id") o
 -- stopped, the radio off and the gadget unbound, with no message
 -- deliverable (found by review; doc/hardware-deploy.md).  bail() is what
 -- those sites use now: it writes the refusal record first (so it exists
--- even if a restore hangs), then undoes the teardown in REVERSE -- loaded
--- kernel unloaded, root writable again, watchdog handed back to the kernel,
+-- even if a restore hangs), then undoes the teardown -- first the armed
+-- watchdog handed back to the kernel, kernel unloaded, mounts restored,
 -- PIPE-domain hold released, gadget re-bound the way the broker and the
 -- usb-gadget service do it (the saved UDC name written back into configfs),
--- radio on, reader started -- and only then dies with the message.  The
--- glass-proven teardown order itself is untouched (test-static.sh pins it).
+-- radio on, authority and reader started -- and only then dies with the
+-- message.  Failed restores are retained in the record, not called success.
 --
 -- Nothing in the restore writes to the session: it may be gone (the
 -- deployer's keepalives give up ~15 s after the radio-off), a write there
@@ -81,25 +119,122 @@ local function record_refusal(n, message)
 end
 local function bail(fmt, ...)
     local message = fmt:format(...)
-    if torn.readonly then run("mount -o remount,rw / >/dev/null 2>&1") end
-    if torn.data_readonly then run("mount -o remount,rw /data >/dev/null 2>&1") end
     record_refusal(torn.generation or 0, message)
-    if torn.loaded then run("/run/current-system/profile/sbin/kexec -u >/dev/null 2>&1") end
+    local failures = {}
+    local function restore(label, action)
+        local ok, result = pcall(action)
+        if not ok or not result then failures[#failures + 1] = label; return false end
+        return true
+    end
     -- The magic close: the core stops the dog, or -- the dw_wdt has no
     -- reset line, so it cannot stop -- keeps feeding it from the kernel.
     -- Either way it stops counting down under a system that is staying.
-    if torn.armed then pcall(write_file, WATCHDOG, "V") end
-    if torn.dwc3 then pcall(write_file, DWC3_CONTROL, torn.dwc3) end
-    if torn.udc then
-        pcall(write_file, UDC, torn.udc .. "\n")
-        if not (read_file(UDC) or ""):find(torn.udc, 1, true) then run("herd start pinenote-usb-acm-gadget >/dev/null 2>&1") end
+    if torn.armed then restore("watchdog", function() write_file(WATCHDOG, "V"); return true end) end
+    if torn.loaded then restore("kexec unload", function() return run("/run/current-system/profile/sbin/kexec -u >/dev/null 2>&1") end) end
+    local function restore_mount(target, before, command)
+        local current = mount_state(target)
+        -- Do not remount a replacement filesystem if an external actor changed
+        -- the mount during the trial.  Preserve the failure for the operator.
+        if not current or current.id ~= before.id then return false end
+        if not run(command) then return false end
+        current = mount_state(target)
+        return current and current.id == before.id and current.readonly == before.readonly
     end
-    if torn.wifi then run(WIFI .. " on >/dev/null 2>&1") end
-    if torn.reader then run("herd start reader-session >/dev/null 2>&1") end
-    log("trial abandoned: teardown undone (%s%s%s%s); the running system is unchanged, DEFAULT untouched",
-        torn.udc and "gadget re-bound, " or "", torn.wifi and "radio on, " or "",
-        torn.reader and "reader started" or "reader was not running", torn.armed and ", watchdog handed back" or "")
+    local data_ok, root_ok = true, true
+    if torn.data_readonly then data_ok = restore("/data read-write", function() return restore_mount("/data", torn.data_readonly, "mount -o remount,rw /data >/dev/null 2>&1") end) end
+    if torn.readonly then root_ok = restore("/ read-write", function() return restore_mount("/", torn.readonly, "mount -o remount,rw / >/dev/null 2>&1") end) end
+    -- Snapshot validity is independent of whether we attempted a remount.
+    -- In particular, a vanished/replaced mount refuses before setting the
+    -- remount flag; that must not authorize a writer on the placeholder.
+    local function verify_mount(target, before)
+        if before == nil then return false end -- inspection never completed
+        local current = mount_state(target)
+        if before == false then return current == nil end -- originally absent
+        return current and current.id == before.id and current.readonly == before.readonly
+    end
+    if torn.mount_snapshot_started then
+        local verified = restore("original data mount state", function() return verify_mount("/data", torn.data_mount) end)
+        data_ok = data_ok and verified
+        verified = restore("original root mount state", function() return verify_mount("/", torn.root_mount) end)
+        root_ok = root_ok and verified
+    end
+    if torn.dwc3 then restore("PIPE power control", function() write_file(DWC3_CONTROL, torn.dwc3); return true end) end
+    if torn.udc then
+        restore("USB gadget", function()
+            pcall(write_file, UDC, torn.udc .. "\n")
+            if not (read_file(UDC) or ""):find(torn.udc, 1, true) then run("herd start pinenote-usb-acm-gadget >/dev/null 2>&1") end
+            return (read_file(UDC) or ""):find(torn.udc, 1, true) ~= nil
+        end)
+    end
+    if torn.wifi then restore("Wi-Fi", function() return run(WIFI .. " on >/dev/null 2>&1") end) end
+    local function restart(name)
+        if not root_ok or not data_ok then return false end
+        local state = service_state(name)
+        if state == "running" then return true end -- stop failed before exit
+        if state ~= "stopped" then return false end -- e.g. a timed-out stop still in progress
+        return run("LC_ALL=C timeout 30 herd start " .. name .. " >/dev/null 2>&1") and service_state(name) == "running"
+    end
+    if torn.authority then restore(AUTHORITY, function() return restart(AUTHORITY) end) end
+    if torn.reader then restore("reader-session", function() return restart("reader-session") end) end
+    if #failures > 0 then
+        message = message .. "; restoration incomplete: " .. table.concat(failures, ", ")
+        record_refusal(torn.generation or 0, message)
+        log("trial abandoned: %s; DEFAULT untouched", message)
+    else
+        log("trial abandoned: teardown undone; prior services and mounts restored, DEFAULT untouched")
+    end
     die("%s", message)
+end
+
+local function stop_service(name, key)
+    local state, why = service_state(name)
+    if not state then bail("cannot determine %s state: %s", name, why) end
+    if state ~= "running" then return end
+    -- Remember BEFORE stop: a command can fail after stopping its process.
+    torn[key] = true
+    local ok, rc, out = capture("LC_ALL=C timeout 30 herd stop " .. name)
+    if not ok then bail("could not stop %s (exit %s): %s", name, tostring(rc), out) end
+    if service_state(name) ~= "stopped" then bail("%s did not stop", name) end
+end
+
+local function remount_readonly(target, before, key, best_effort)
+    assert(not best_effort or target == "/", "only the root remount may be best-effort")
+    local current = mount_state(target)
+    if not before then
+        if current then bail("%s appeared during trial teardown", target) end
+        -- QEMU can legitimately have no /data mount.
+        return
+    end
+    if not current or current.id ~= before.id then bail("%s mount changed during trial teardown", target) end
+    local ok, rc, out = true, 0, ""
+    if not before.readonly then
+        -- Even a failed mount command can change state: restore on refusal.
+        torn[key] = before
+        ok, rc, out = capture("mount -o remount,ro " .. target)
+    end
+    -- Inspect even after a nonzero exit: only the observed mount identity and
+    -- flags tell us whether the command changed anything we must undo.
+    current = mount_state(target)
+    if not current or current.id ~= before.id then
+        bail("%s mount changed during remount", target)
+    end
+    if current.readonly == before.readonly then torn[key] = nil end
+    if best_effort and not before.readonly then
+        -- Root still has system service log writers.  Preserve the legacy
+        -- best-effort remount until full reversible root-writer quiescence is
+        -- implemented; /data remains a strict gate below.  This exception
+        -- never accepts an unknown/replaced mount or changes an original ro.
+        if not current.readonly then
+            log("root remains read-write: legacy best-effort root remount (exit %s): %s; /data must still become read-only", tostring(rc), out)
+        elseif not ok then
+            log("root verified read-only despite remount exit %s: %s", tostring(rc), out)
+        end
+        return
+    end
+    if not ok then bail("%s did not remount read-only (exit %s): %s", target, tostring(rc), out) end
+    if not current.readonly then
+        bail("%s is not the original read-only filesystem after remount", target)
+    end
 end
 
 -- ledger from Guix's own profile links
@@ -262,7 +397,7 @@ function commands.trial(n)
     -- when --dtb is omitted.
     local dtb_arg = pinenote and string.format(" --dtb=%s/%s", dir, L.DTB_NAME) or ""
     -- Everything the operator must hear is said HERE, before the teardown.
-    -- The teardown's first act after stopping the reader is the radio, and
+    -- The teardown stops the reader and authority, then the radio, and
     -- an operator watching a trial over ssh (the deployer, or a hand-run
     -- helper) is on that radio: no line logged after it ever arrives.
     -- 2026-09-04: the two device-tree notes below went "uncaptured" through
@@ -293,13 +428,26 @@ function commands.trial(n)
             log("NOTE: the running kernel was kexec'd; its device tree is the last cold boot's, not gen-%d's -- a device-tree change is proven only by a cold boot", booted or 0)
         end
     end
-    -- The same teardown a suspend runs: stop the reader cleanly (INT-first
-    -- destructor), radio off, gadget unbound, panel idle, disk synced.
+    -- Stop the reader cleanly (INT-first destructor), then the authority:
+    -- the reader disconnect releases any live note session; Shepherd's
+    -- authority destructor allows bounded child cleanup and closes SQLite.
+    -- The authority is optional and exits inertly without its opt-in marker.
     -- Each step remembers what it undid, for bail(): only what was up comes
     -- back (a reader that was not running stays stopped, a radio that was
     -- off stays off).
-    torn.reader = run("herd status reader-session 2>/dev/null | grep -q running")
-    run("herd stop reader-session >/dev/null 2>&1")
+    torn.mount_snapshot_started = true
+    -- nil means unverified, false means verified absent.  Retain these even
+    -- when teardown refuses before its first remount attempt.
+    torn.root_mount = mount_state("/") or false
+    torn.data_mount = mount_state("/data") or false
+    local root_mount, data_mount = torn.root_mount, torn.data_mount
+    if not root_mount then bail("root filesystem is not mounted") end
+    stop_service("reader-session", "reader")
+    stop_service(AUTHORITY, "authority")
+    -- A killed authority may be reported stopped while its sandbox children
+    -- or diagnostic mounts survive.  Successful authority cleanup removes
+    -- this directory; never delete it here or conceal its failure by kexec.
+    if exists(AUTHORITY_RUNTIME) then bail("book-state authority cleanup incomplete: %s remains", AUTHORITY_RUNTIME) end
     torn.wifi = run(WIFI .. " status >/dev/null 2>&1")
     run(WIFI .. " off >/dev/null 2>&1")
     local bound = (read_file(UDC) or ""):gsub("%s+$", "")
@@ -348,7 +496,7 @@ function commands.trial(n)
     if not loaded then bail("kexec -l failed for generation %d (exit %s): %s", n, tostring(load_rc), load_said) end
     torn.loaded = true
     run("sync")
-    if run("mount -o remount,ro / 2>/dev/null") then torn.readonly = true end
+    remount_readonly("/", root_mount, "readonly", true)
     -- The data partition too (2026-09-04, generation 18).  Every kexec
     -- had left p7 mounted read-write -- a crash, from ext4's point of
     -- view -- and its journal covered for that until one boot's recovery
@@ -357,8 +505,7 @@ function commands.trial(n)
     -- appeared, and /data fell back to the library's placeholder.  A
     -- read-only remount commits the journal and marks the filesystem
     -- clean, so the next boot mounts it with nothing to recover.
-    if run("mount -o remount,ro /data 2>/dev/null") then torn.data_readonly = true
-    else log("/data did not remount read-only (busy, or not mounted): the next boot recovers its journal") end
+    remount_readonly("/data", data_mount, "data_readonly")
     log("kexec -e into generation %d", n)
     run("sync")
     -- Arm the SoC watchdog last.  A kernel that dies before its drivers
@@ -464,4 +611,14 @@ if not cmd then
     io.stderr:write("usage: wilkbook-generation list|add SYSTEM|render|trial N|promote N|demote|health [--expect S]|pin N|unpin N|prune [--keep K]|last-trial\n")
     os.exit(2)
 end
-cmd(arg[2], arg[3])
+-- I/O errors during teardown (including configfs writes and mount inspection)
+-- need the same recovery as an explicit refusal.
+if arg[1] == "trial" then
+    local ok, err = pcall(cmd, arg[2], arg[3])
+    if not ok then
+        if torn.generation then bail("trial preparation failed: %s", tostring(err)) end
+        die("%s", tostring(err))
+    end
+else
+    cmd(arg[2], arg[3])
+end

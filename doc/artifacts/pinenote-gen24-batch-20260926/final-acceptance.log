@@ -1,0 +1,65 @@
+START
+Service pinenote-ebc-direct-params has been started.
+Service pinenote-waveform has been started.
+pinenote-dmc: mode=off (selector /data/wilkbook/dmc.conf)
+pinenote-dmc: cp=entry irq=7393 thr=I devfreq=absent trans=absent clk=1056000000
+pinenote-dmc: mode=off: leaving the display and the DDR rate alone
+Service pinenote-dmc has been started.
+Service pinenote-library has been started.
+Service user-homes has been started.
+Service pinenote-ebc-clut has been started.
+Service reader-session has been started.
+BROKER RECENT
+2026-09-27 02:05:58 [power-broker] power release ignored held_ms=265.067 grace_remaining=1.992
+2026-09-27 02:06:10 [power-broker] emitting KEY_SLEEP
+2026-09-27 02:06:14 [power-broker] received ready request id=1790474774-2
+2026-09-27 02:06:14 [power-broker] transaction start trigger=cover request=1790474774-2 fallback=false
+2026-09-27 02:06:14 [power-broker] EBC quiesce: no REFRESH_BARRIER on this driver; waiting for interrupt quiescence
+2026-09-27 02:06:14 [power-broker] EBC quiesce: idle (no interrupts for 250 ms, 250 ms total)
+2026-09-27 02:06:32 [power-broker] resumed after 17.550s
+2026-09-27 02:06:32 [power-broker] transaction complete ok=true detail=button
+2026-09-27 02:06:32 [power-broker] emitting KEY_WAKEUP
+2026-09-27 02:06:32 [power-broker] preparation inhibited trigger=cover detail=charging on rk817-charger
+2026-09-27 02:06:32 [power-broker] request rejected before preparation: charging on rk817-charger
+2026-09-27 02:06:32 [power-broker] preparation inhibited trigger=cover detail=charging on rk817-charger
+2026-09-27 02:06:32 [power-broker] request rejected before preparation: charging on rk817-charger
+2026-09-27 02:21:39 [power-broker] received ready request id=1790475699-3
+2026-09-27 02:21:39 [power-broker] transaction start trigger=koreader request=1790475699-3 fallback=false
+2026-09-27 02:21:39 [power-broker] transaction complete ok=false detail=charging on rk817-charger
+2026-09-27 02:21:39 [power-broker] emitting KEY_WAKEUP
+2026-09-27 02:36:46 [power-broker] received ready request id=1790476606-4
+2026-09-27 02:36:46 [power-broker] transaction start trigger=koreader request=1790476606-4 fallback=false
+2026-09-27 02:36:46 [power-broker] transaction complete ok=false detail=charging on rk817-charger
+2026-09-27 02:36:46 [power-broker] emitting KEY_WAKEUP
+2026-09-27 02:51:53 [power-broker] received ready request id=1790477513-5
+2026-09-27 02:51:53 [power-broker] transaction start trigger=koreader request=1790477513-5 fallback=false
+2026-09-27 02:51:53 [power-broker] transaction complete ok=false detail=charging on rk817-charger
+2026-09-27 02:51:53 [power-broker] emitting KEY_WAKEUP
+2026-09-27 03:33:07 [power-broker] power event value=1 timestamp_ms=5615837.928
+2026-09-27 03:33:07 [power-broker] power event value=0 timestamp_ms=5616000.221
+2026-09-27 03:33:07 [power-broker] emitting KEY_SLEEP
+2026-09-27 03:33:07 [power-broker] power tap held_ms=162.293 accepted=true detail=nil
+2026-09-27 03:33:15 [power-broker] power event value=1 timestamp_ms=5624646.333
+2026-09-27 03:33:16 [power-broker] power event value=0 timestamp_ms=5625113.211
+2026-09-27 03:33:16 [power-broker] power tap held_ms=466.878 accepted=false detail=request already pending
+2026-09-27 03:33:17 [power-broker] transaction start trigger=power request=nil fallback=true
+2026-09-27 03:33:17 [power-broker] EBC quiesce: no REFRESH_BARRIER on this driver; waiting for interrupt quiescence
+2026-09-27 03:33:18 [power-broker] EBC quiesce: idle (no interrupts for 250 ms, 825 ms total)
+2026-09-27 03:33:31 [power-broker] resumed after 10.925s
+2026-09-27 03:33:31 [power-broker] transaction complete ok=true detail=button
+2026-09-27 03:33:31 [power-broker] emitting KEY_WAKEUP
+2026-09-27 03:33:31 [power-broker] power event value=1 timestamp_ms=5633986.133
+2026-09-27 03:33:31 [power-broker] power event value=0 timestamp_ms=5634143.380
+2026-09-27 03:33:31 [power-broker] power release ignored held_ms=157.247 grace_remaining=1.998
+2026-09-27 03:34:10 [power-broker] power event value=1 timestamp_ms=5673711.715
+2026-09-27 03:34:10 [power-broker] power event value=0 timestamp_ms=5673854.180
+2026-09-27 03:34:10 [power-broker] emitting KEY_SLEEP
+2026-09-27 03:34:10 [power-broker] power tap held_ms=142.465 accepted=true detail=nil
+HEALTH
+current_system=/gnu/store/13cg7sg6waa3ahj3ivxhmkagia0kbwi1-system
+booted_generation=24
+broker_ready=true
+reader_started=true
+health=ok
+RESTORED enabled=1
+BOOT 7d56208a-02f4-4a1c-9386-ef61cd7d0859

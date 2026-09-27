@@ -212,6 +212,17 @@ pinenote-dist above).
   Authoritative for hardware facts: schematics, board revisions, flashing.
   The schematic is the source for questions like "what net does this
   regulator actually feed", which we have needed repeatedly.
+  The [v1.2 schematic, 2021-08-24](https://files.pine64.org/doc/PineNote/PINENOTE_MAIN-V1R2%20-%20Schematic-20210824.pdf)
+  was reviewed for issues #8/#9 on 2026-09-26:
+  - PDF page 34, sheet 90 (Sensor/HALL): U9004 supplies `VCC_HALL_3V3`
+    from `VCC_SYS` (marked SLEEP ON); the cover circuit also drives
+    `PMIC_SLEEP_PMIC` through pulse shaping and Q9000.
+  - PDF page 22, sheet 21: `PMIC_SLEEP_PMIC` reaches RK817 SLEEP, pin 49.
+  - PDF page 36, sheet 92 (KEY Array+BLE+MIC): R9349 connects
+    `VCC_HALL_3V3` to `VCC_BLE`; `BLE_PC0_PWRKEY` drives `PMIC_PWRON`
+    through Q23021, separately from the BLE GPIO interrupt.
+  These are circuit connections, not measured suspend sequences. Check
+  board revision/population and firmware behavior before generalizing.
 
 ---
 

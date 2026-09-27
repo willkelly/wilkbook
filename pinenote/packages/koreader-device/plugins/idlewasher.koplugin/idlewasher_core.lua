@@ -4,13 +4,13 @@ idlewasher_core -- the pure decision core of the wilkbook idle washer.
 No UIManager, no KOReader, no ffi: plain numbers in, action tables out,
 so the whole debt/idle state machine runs table-driven on any luajit
 (pinenote/tools/koreader-input/test-idlewasher-logic.lua).  main.lua
-owns the wiring: it feeds the three inputs below and executes the
+owns the wiring: it feeds the inputs below and executes the
 returned actions through UIManager.
 
 Inputs (all times monotonic seconds, caller-supplied):
 
-  * on_page_turn(now) -- a page became current (PageUpdate, or a
-    page-changing PosUpdate in rolling scroll mode)
+  * on_page_turn(now, n, held) -- n pages became current (default 1);
+    held suppresses a bundled wash, accumulating at the debt ceiling
   * on_input(now)     -- any user input frame (UIManager's InputEvent
     hook fires once per input batch)
   * on_timer(now)     -- the armed idle timer fired
@@ -22,6 +22,9 @@ Inputs (all times monotonic seconds, caller-supplied):
     charges straight after the user's own action, where a bundled wash
     would interrupt it; the idle wash, or the next page turn once the
     debt is at debt_max, retires it
+  * begin_external_wash() / finish_external_wash(receipt, success, now)
+    -- retire an explicit Refresh's old debt only after its queued ioctl
+    succeeds; preserve charges since the receipt and reject stale receipts
 
 Output: nil (nothing to do), or a table with any of:
 
@@ -84,15 +87,22 @@ function Core.new(cfg)
     self.deepclean_done = false   -- a deep clean ran this idle span
     self.last_wash_at = nil       -- introspection/logging only
     self.last_deepclean_at = nil  -- "last GC16 time"
+    self.wash_epoch = 0
+    self.charged = 0             -- capped increments, including after a receipt
     return self
 end
 
-function Core:on_page_turn(now)
+function Core:on_page_turn(now, n, held)
     if not self.enabled then return nil end
-    self.debt = self.debt + 1
-    if self.debt >= self.debt_max then
+    n = tonumber(n or 1)
+    if not n or n ~= n or n <= 0 or n == math.huge then return nil end
+    self.charged = self.charged + n
+    self.debt = self.debt + n
+    if held then self.debt = math.min(self.debt, self.debt_max) end
+    if self.debt >= self.debt_max and not held then
         local retired = self.debt
         self.debt = 0
+        self.wash_epoch = self.wash_epoch + 1
         self.last_wash_at = now
         return { wash = "bundled", debt = retired }
     end
@@ -104,6 +114,11 @@ function Core:on_charge(n)
     if not self.enabled then return nil end
     n = tonumber(n)
     if not n or n ~= n or n <= 0 then return nil end
+    -- A single charge cannot exceed the ceiling.  Keep the increments
+    -- even when debt saturates, so a pending receipt cannot erase NEW
+    -- debt merely because it was added while the old debt was at the cap.
+    n = math.min(n, self.debt_max)
+    self.charged = self.charged + n
     local debt = self.debt + n
     if debt > self.debt_max then debt = self.debt_max end
     self.debt = debt
@@ -145,6 +160,7 @@ function Core:on_timer(now)
         out.deep_clean = true
         out.debt = self.debt
         self.debt = 0
+        self.wash_epoch = self.wash_epoch + 1
         self.deepclean_done = true
         self.last_wash_at = now
         self.last_deepclean_at = now
@@ -152,6 +168,7 @@ function Core:on_timer(now)
         out.wash = "idle"
         out.debt = self.debt
         self.debt = 0
+        self.wash_epoch = self.wash_epoch + 1
         self.last_wash_at = now
     end
     if not self.deepclean_done then
@@ -169,10 +186,33 @@ function Core:on_manual_deep_clean(now)
     if not self.enabled then return nil end
     local retired = self.debt
     self.debt = 0
+    self.wash_epoch = self.wash_epoch + 1
     self.deepclean_done = true
     self.last_wash_at = now
     self.last_deepclean_at = now
     return { debt = retired }
+end
+
+-- Explicit Refresh is asynchronous.  Retire only the request's debt,
+-- only on a confirmed successful ioctl, and only once.  Other washes
+-- invalidate the receipt; later charges (including saturated ones) stay.
+function Core:begin_external_wash()
+    if not self.enabled then return nil end
+    return { core = self, epoch = self.wash_epoch, charged = self.charged }
+end
+
+function Core:finish_external_wash(receipt, success, now)
+    if not receipt or receipt.core ~= self or receipt.done then return nil end
+    receipt.done = true
+    if not self.enabled or success ~= true or receipt.epoch ~= self.wash_epoch then
+        return nil
+    end
+    local before = self.debt
+    self.debt = math.min(self.debt, self.charged - receipt.charged)
+    self.wash_epoch = self.wash_epoch + 1
+    self.last_wash_at = now
+    -- This is a normal full wash, not a GC16 deep-clean qualification.
+    return { debt = before - self.debt }
 end
 
 return Core

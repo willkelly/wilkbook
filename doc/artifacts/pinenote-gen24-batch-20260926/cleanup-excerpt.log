@@ -1,0 +1,7 @@
+/var/log/book-state-device.log:2026-09-27 01:59:07 BOOK_STATE_DEVICE: stopped after bounded cleanup
+/var/log/book-state-device.log:2026-09-27 01:59:30 BOOK_STATE_DEVICE: ready socket=/run/wilkbook-book-state/control.sock database=/data/wilkbook/book-state/book-state-v1.sqlite
+AUTHORITY WRITABLE DATABASE
+pid=538 fd=15 path=/data/wilkbook/book-state/book-state-v1.sqlite flags:	02500002
+RESTORED enabled=1
+BOOT 7d56208a-02f4-4a1c-9386-ef61cd7d0859
+DEFAULT 24

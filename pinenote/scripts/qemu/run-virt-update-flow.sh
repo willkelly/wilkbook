@@ -161,6 +161,58 @@ vm "wilkbook-generation last-trial" | grep -q '^result=refused$' && pass "refuse
 dflt=$(vm 'sed -n "s/^DEFAULT gen-//p" /boot/extlinux/extlinux.conf')
 [ "$dflt" = "1" ] && pass "refused trial: DEFAULT still gen-1" || fail "DEFAULT after the refused trial: $dflt"
 
+# 3c. Exercise the real kernel's EBUSY remount path, not a mocked mount
+# command. An unrelated process keeps an ordinary data file open writable
+# after reader teardown. The helper must refuse, unload B and restore the
+# original guest before we release that writer and proceed to the good trial.
+vm 'sh -s' <<'EOF'
+set -eu
+mountpoint -q /data
+awk '$5 == "/" || $5 == "/data" { print $1, $3, $5, $6 }' /proc/self/mountinfo > /run/update-mounts-before
+printf 'busy-data refusal fixture\n' > /data/update-busy.txt
+sha256sum /data/update-busy.txt > /run/update-busy.sha256
+nohup sh -c 'exec 9>>/data/update-busy.txt; echo $$ > /run/update-busy.pid; exec sleep 300' </dev/null >/run/update-busy.log 2>&1 &
+i=0
+until test -s /run/update-busy.pid; do
+  i=$((i + 1)); test "$i" -lt 50; sleep 0.1
+done
+pid=$(cat /run/update-busy.pid)
+test "$(readlink /proc/$pid/fd/9)" = /data/update-busy.txt
+sync
+EOF
+busy_rc=0
+vm_trial "wilkbook-generation trial $n" >"$log.trial-$n-busy-data" 2>&1 || busy_rc=$?
+sed 's/^/        busy-data> /' "$log.trial-$n-busy-data"
+[ "$busy_rc" -eq 1 ] && pass "busy data: helper refused with exit 1" || fail "busy data: exit $busy_rc"
+grep -q '/data did not remount read-only' "$log.trial-$n-busy-data" \
+  && grep -q 'trial abandoned: teardown undone; prior services and mounts restored' "$log.trial-$n-busy-data" \
+  && pass "busy data: real remount refusal and full restoration reported" || fail "busy data: missing refusal/restoration diagnostics"
+[ "$(vm cat /proc/sys/kernel/random/boot_id)" = "$boot_a1" ] \
+  && pass "busy data: same kernel boot survived" || fail "busy data: boot changed"
+vm 'sh -s' <<'EOF' && pass "busy data: original mount identities/modes and writer preserved" || fail "busy data: mount/writer state changed"
+set -eu
+awk '$5 == "/" || $5 == "/data" { print $1, $3, $5, $6 }' /proc/self/mountinfo > /run/update-mounts-after
+cmp /run/update-mounts-before /run/update-mounts-after
+pid=$(cat /run/update-busy.pid)
+kill -0 "$pid"
+test "$(readlink /proc/$pid/fd/9)" = /data/update-busy.txt
+sha256sum -c /run/update-busy.sha256
+EOF
+vm 'test "$(cat /sys/kernel/kexec_loaded)" = 0' \
+  && pass "busy data: loaded candidate kernel was unloaded" || fail "busy data: candidate still loaded"
+vm "wilkbook-generation health --expect $sys_a" >/dev/null \
+  && pass "busy data: reader health restored" || fail "busy data: reader health failed"
+vm wilkbook-generation last-trial > "$log.busy-data-record"
+grep -q '^result=refused$' "$log.busy-data-record" \
+  && grep -q '^reason=/data did not remount read-only' "$log.busy-data-record" \
+  && pass "busy data: current-boot refusal record names the data gate" || fail "busy data: incorrect refusal record"
+[ "$(vm 'sed -n "s/^DEFAULT gen-//p" /boot/extlinux/extlinux.conf')" = 1 ] \
+  && pass "busy data: DEFAULT remains A" || fail "busy data: DEFAULT changed"
+vm 'kill "$(cat /run/update-busy.pid)"; rm -f /data/update-busy.txt /run/update-busy.pid'
+# Do not kexec onward after a failed refusal assertion: retain this state in
+# the logs and stop the VM at the first broken gate.
+[ "$fails" -eq 0 ] || { printf 'qemu update flow: FAILED before successful trial (%d)\n' "$fails"; exit 1; }
+
 # 4. trial: kexec into B
 vm_trial "wilkbook-generation trial $n" >"$log.trial-$n" 2>&1 || true
 sed "s/^/        trial> /" "$log.trial-$n"

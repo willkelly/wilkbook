@@ -292,7 +292,7 @@ local Device = {
 function Device:publishNow()
     self.publishes = self.publishes + 1
     tr("publish")
-    return true
+    return not self.fail_publish
 end
 function Device:isPineNote() return true end
 package.preload["device"] = function() return Device end
@@ -423,6 +423,9 @@ function UIManager:repaint()
         self.refreshes[#self.refreshes + 1] = {
             mode = q.mode, region = q.region, fb = self.watch and self.watch(),
         }
+        if q.mode == "full" and Device.wilkbook_full_refresh_done and not self.no_ack then
+            Device.wilkbook_full_refresh_done(self.full_result ~= false)
+        end
     end
     self.refresh_q = {}
 end
@@ -2379,9 +2382,9 @@ do
     local IdleWasher = dofile(washer_dir .. "/main.lua")
     local Core = require("idlewasher_core")
 
-    local w = H15.reopen()
     local real = IdleWasher:new{}
     ui.idlewasher = real
+    local w = H15.reopen()
     local charged = {}
     real.chargeDebt = function(this, n)
         charged[#charged + 1] = n
@@ -2505,6 +2508,109 @@ do
            trace_from(t0 + 1))
     pen_up()
     pen_leave()
+
+    -- Hover suppresses both automatic washes without emitting activity.
+    -- The debt must still be serviced when the deferred leave completes.
+    UIManager:fire_due()
+    real:chargeDebt(15)
+    local activity = input_events
+    local last = real.core.last_activity
+    pen_enter(700, 700)
+    local d0 = #UIManager.dirty
+    advance_ms(700000)
+    UIManager:fire_due()
+    report(real.core.debt == 15 and real.held_timer and H15.dirties(d0, "all", "full") == 0
+           and real.core.last_activity == last and input_events == activity,
+           "real washer: long hover holds idle/deep wash without AutoSuspend activity")
+    pen_leave()
+    UIManager:fire_due()
+    report(real.core.debt == 0 and H15.dirties(d0, "all", "full") == 1,
+           "real washer: the leave releases an overdue wash without another input")
+    UIManager:repaint()
+
+    -- Page turns tapped with the pen reach debt_max only on the leave.
+    advance_ms(1000)
+    H15.long_press()
+    real:chargeDebt(59)
+    local px, py = center_phys(item("page:next"))
+    pen_enter(px, py)
+    pen_down(px, py)
+    pen_up()
+    d0 = #UIManager.dirty
+    report(real.core.debt == 59 and w.c.turn_debt == 1,
+           "real washer: panel pen Next defers the threshold charge while hovering")
+    pen_leave()
+    report(real.core.debt == 0 and w.c.turn_debt == 0 and H15.dirties(d0, "all", "full") == 1,
+           "real washer: Next's threshold wash is charged once at the leave")
+    UIManager:repaint()
+
+    for _, result in ipairs{ "success", "failure", "missing", "publish failure" } do
+        advance_ms(1000)
+        H15.long_press()
+        real:chargeDebt(20)
+        advance_ms(1000)
+        Device.fail_publish = result == "publish failure"
+        tap(center_phys(item("refresh")))
+        Device.fail_publish = nil
+        advance_ms(200)
+        UIManager:fire_due()
+        local before = real.core.debt
+        report(before >= 20 and (w.pending_wash ~= nil) == (result ~= "publish failure"),
+               "Refresh " .. result .. ": queued full has not retired debt")
+        real:chargeDebt(3)
+        UIManager.full_result = result ~= "failure"
+        UIManager.no_ack = result == "missing"
+        UIManager:repaint()
+        if result == "missing" then
+            advance_ms(1100)
+            UIManager:fire_due()
+        end
+        local expected = result == "success" and 3 or math.min(60, before + 3)
+        report(real.core.debt == expected and not w.pending_wash
+               and Device.wilkbook_full_refresh_done == nil,
+               "Refresh " .. result .. ": only acknowledged old debt retired; observer released",
+               "debt=" .. real.core.debt)
+        UIManager.full_result, UIManager.no_ack = nil, nil
+    end
+
+    -- A dialog cancelling Refresh releases its hold without a pen
+    -- proximity transition; otherwise a timer parked in the settle wait
+    -- would never run again until another contact.
+    H15.long_press()
+    advance_ms(1000)
+    tap(center_phys(item("refresh")))
+    real.timer_task()
+    report(real.held_timer, "Refresh settle wait holds an automatic wash")
+    w:_run(w.c:set_ink_live(false))
+    UIManager:fire_due()
+    report(not real.held_timer and not w.c.wash_wanted,
+           "cancelling Refresh releases a parked timer without changing proximity")
+    w:_run(w.c:set_ink_live(true))
+
+    -- Even a controller close that throws cannot retain a hold/receipt.
+    H15.long_press()
+    advance_ms(1000)
+    tap(center_phys(item("refresh")))
+    advance_ms(200)
+    UIManager:fire_due()
+    pen_enter(700, 700)
+    local close = w.c.close
+    w.c.close = function() error("injected close failure") end
+    UIManager:close(w)
+    report(next(real.holds) == nil and Device.wilkbook_full_refresh_done == nil
+           and not w.pending_wash, "close error releases wash hold and pending receipt")
+    w.c.close = close
+    w = H15.reopen()
+    pen_enter(700, 700)
+    w:_fault("test", "injected input failure")
+    report(next(real.holds) == nil and Device.wilkbook_full_refresh_done == nil,
+           "input error releases wash hold immediately, before deferred close")
+    UIManager:fire_due()
+    UIManager:close(shown_messages[#shown_messages])
+    w = H15.reopen()
+    advance_ms(1000)
+    H15.stroke(500, 600)
+    UIManager:fire_due()
     real:onCloseWidget()
 
     -- The lookup is nil-guarded: no washer at all, an older copy without

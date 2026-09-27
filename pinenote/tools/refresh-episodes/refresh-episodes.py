@@ -18,18 +18,18 @@ re-analysis established has to be reported:
     within 15 s of BOTH a flash*/global wash and a full-panel ui/partial
     repaint — the signature of opening and dismissing a KOReader menu —
     against a 7.2 % base rate over all full-panel partial traces
-    (binomial P(>=4 of 5) ~ 1e-4).  This tool recomputes that
-    association, and its base rate, on whatever log it is given.
+    (conditional binomial P(>=4 of 5) ~ 1e-4, not iid population
+    inference). This tool recomputes the association and base rate.
 
 Nothing here is specific to the harness: the same numbers come out of a
 device log, which is the point — an offline run is only meaningful if it
 is scored the same way the field data was.
 
-This script answers "how often, how big, how clustered".  Its sibling
+This script answers "how often, how big, how clustered" for requests. Its sibling
 `refresh-triggers.py` answers "what asks twice", and needs the WHOLE
 session log rather than the trace lines alone.  Two of its findings bear
 on the numbers below and are recorded in `doc/pageturn-program.md` §6.1:
-the 131 ms figure this script reports as a "hard floor" is the low end of
+the observed 131 ms minimum is the low end of
 one intent's tail, not a floor of the mechanism (identical full-panel
 `ui` repaints occur 68 ms apart in the same corpus); and restricting the
 population to `partial`/`partial`, as this script does by design, hides
@@ -73,9 +73,9 @@ HIST_EDGES = [0.0, 0.10, 0.15, 0.20, 0.30, 0.40, 0.50, 0.70, 1.00,
               1.50, 2.00, 3.00, 5.00, 10.00, 30.00, float("inf")]
 
 # The field rates from the issue-#14 re-analysis, as (threshold_s, k, n)
-# over its 399 adjacent full-panel pairs.  Used only to ask "would this
-# log have shown the defect if it occurred at the field rate?" — which is
-# the only honest thing a NON-reproduction can report.  Counts come from
+# over its 399 adjacent full-panel pairs. Conditional binomial arithmetic
+# only: overlapping pairs and clustered runs are not iid population samples,
+# and a request count is not a visible-defect rate. Counts come from
 # the published sorted low tail:
 #   <0.5 s : 131 184 214 232 277 298 307 322 322 391          = 10
 #   <1.0 s : the same plus 503 746 933                        = 13
@@ -185,7 +185,8 @@ def antecedents(t0, traces, extent, window):
     full-panel ui/partial repaint, both within `window` before t0.  The
     conjunction matters — a wash alone is also what the every-N-pages
     full refresh produces, and a full-panel ui/partial alone is also
-    what a footer promotion produces; only together are they a menu.
+    what a footer promotion produces. Together they are the selected menu
+    signature, not proof of a particular UI interaction.
 
     The components are returned separately as well because a harness
     does not necessarily reproduce both halves.  On qemu-virt the
@@ -236,8 +237,8 @@ def load_ledger(path, clock_offset):
     Secondary evidence only.  The primary antecedent test reads the
     trace stream itself, exactly as the field analysis did, so that an
     offline result and a device result are the same measurement.  The
-    ledger answers a different question the field data cannot: which tap
-    the harness actually issued before an episode.
+    ledger records host commands, not guest input or handling times.
+    Attribution is nominal and conditional on clock alignment.
     """
     actions = []
     with open(path, "r", errors="replace") as fh:
@@ -265,6 +266,33 @@ def preceding_action(t0, actions, window):
     return best
 
 
+def input_coverage(paths, window):
+    """Conservative coverage diagnostics; log presence cannot prove tracing coverage."""
+    context = notebook = boundary = backwards = 0
+    for path in paths:
+        first = previous = None
+        with open(path, errors="replace") as fh:
+            for line in fh:
+                if "[pn-refresh]" not in line and line.strip():
+                    context += 1
+                if "notebook" in line.lower():
+                    notebook += 1
+                m = TRACE_RE.search(line)
+                if not m:
+                    continue
+                t = float(m.group("t"))
+                if first is None:
+                    first = t
+                boundary += t - first < window
+                backwards += previous is not None and t < previous
+                previous = t
+    return {"context_lines": context, "notebook_lines": notebook,
+            "leading_lookback_unverified_traces": boundary,
+            "timestamp_regressions": backwards,
+            "capture_completeness": "not established by analyzer",
+            "untraced_notebook_publishes": "not observable"}
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -278,8 +306,10 @@ def main(argv=None):
     ap.add_argument("--report-threshold", type=float, default=1.0,
                     help="threshold whose episodes get the detailed table (default 1.0)")
     ap.add_argument("--ledger", type=str, default="")
-    ap.add_argument("--clock-offset", type=float, default=0.0,
+    ap.add_argument("--clock-offset", type=float, default=None,
                     help="seconds to ADD to ledger host timestamps to reach guest clock")
+    ap.add_argument("--clock-uncertainty", type=float, default=None,
+                    help="upper offset minus --clock-offset, seconds; harvest-only bound")
     ap.add_argument("--json", type=str, default="")
     ap.add_argument("--no-field-bound", action="store_true",
                     help="skip the comparison against the issue-#14 field rates")
@@ -287,13 +317,56 @@ def main(argv=None):
 
     thresholds = ([float(v) for v in args.thresholds.split(",") if v.strip()]
                   if args.thresholds else DEFAULT_THRESHOLDS)
+    if any(not math.isfinite(v) or v <= 0 for v in
+           [args.window, args.pair_cap, args.report_threshold] + thresholds):
+        ap.error("windows and thresholds must be finite and positive")
+    if args.clock_offset is not None and not math.isfinite(args.clock_offset):
+        ap.error("clock offset must be finite")
+    if args.clock_uncertainty is not None and (
+            args.clock_offset is None or not math.isfinite(args.clock_uncertainty)
+            or args.clock_uncertainty < 0):
+        ap.error("clock uncertainty requires an offset and a finite nonnegative width")
 
     traces, unparsed = parse(args.traces)
     out = {"traces": len(traces), "unparsed": unparsed}
+    coverage = input_coverage(args.traces, args.window)
+    out["coverage"] = coverage
+    out["semantics"] = "refresh requests only; not completed or visible panel updates"
+    out["statistical_interpretation"] = "conditional binomial arithmetic; not iid population evidence"
+    out["clock_alignment"] = {
+        "ledger_supplied": bool(args.ledger), "offset_s": args.clock_offset,
+        "offset_upper_s": (args.clock_offset + args.clock_uncertainty
+                           if args.clock_uncertainty is not None else None),
+        "uncertainty": "harvest exchange only; campaign drift and input delivery unmeasured"}
 
     print("=" * 72)
     print("[pn-refresh] episode analysis  (issue #14 signature logic)")
     print("=" * 72)
+    print("REQUESTS ONLY: no completion, optical double draw, or visible-defect rate is measured.")
+    print("Context: %d non-trace lines; %d notebook lines." %
+          (coverage["context_lines"], coverage["notebook_lines"]))
+    if not coverage["context_lines"]:
+        print("WARNING: trace-only input; context-dependent trigger exclusions are unavailable.")
+    print("Coverage: %d traces have unverified leading %.0f s antecedent windows;"
+          % (coverage["leading_lookback_unverified_traces"], args.window))
+    print("  rotation/history loss and untraced notebook publishes cannot be ruled out.")
+    print("  Notebook ink/Refresh may bypass this trace; missing requests do not mean no activity.")
+    print("Statistics: conditional binomial arithmetic only; overlapping pairs, clustered")
+    print("  episodes and this selected operator/session sample are not iid population evidence.")
+    if args.ledger:
+        if args.clock_offset is None:
+            print("Clock alignment: UNKNOWN (no offset); ledger attribution disabled.")
+        elif args.clock_uncertainty is None:
+            print("Clock alignment: offset %+.6f s; uncertainty UNKNOWN." % args.clock_offset)
+        else:
+            print("Clock alignment: harvest offset interval [%+.6f, %+.6f] s."
+                  % (args.clock_offset, args.clock_offset + args.clock_uncertainty))
+        print("  Host command times are not guest input timestamps; delivery/handling latency,")
+        print("  wall-clock steps and drift during the campaign remain unmeasured.")
+        print("  Any preceding MARK is nominal and conditional on clock alignment.")
+    if unparsed or coverage["timestamp_regressions"]:
+        print("ERROR: malformed traces or backwards timestamps; refusing partial/reordered analysis.")
+        return 1
     if not traces:
         print("no [pn-refresh] traces found in %s" % ", ".join(args.traces))
         return 1
@@ -343,7 +416,7 @@ def main(argv=None):
     print("distribution is a continuum with no valley at 1 s)")
     print("-" * 72)
     print("%8s %8s %9s %9s %8s   %s"
-          % ("thresh", "gaps<T", "episodes", "max run", "hits", "P(>=hits | base)"))
+          % ("thresh", "gaps<T", "episodes", "max run", "hits", "conditional P(>=hits | base)"))
     # Base rate is a property of the log, not of the threshold — computing
     # it inside the sweep re-walks every trace once per threshold.
     base_hits = sum(1 for tr in fullpart
@@ -385,18 +458,19 @@ def main(argv=None):
           % (100.0 * n_flash / len(fullpart), 100.0 * n_ui / len(fullpart)))
     out["component_base_rates"] = {"flash_global": n_flash / len(fullpart),
                                    "ui_fullpanel": n_ui / len(fullpart)}
-    if n_ui == 0:
-        print("  NOTE: no full-panel ui/partial occurs anywhere in this log, so the")
-        print("        conjunction CANNOT fire — read the flash*/global column instead.")
+    out["antecedent_coverage"] = {"partials_with_flash": n_flash,
+                                  "partials_with_ui": n_ui,
+                                  "partials_with_both": base_hits}
+    if n_flash == 0 or n_ui == 0:
+        print("  MISSING ANTECEDENT COVERAGE: %s has no eligible lookback hits."
+              % ", ".join(name for name, n in
+                          [("flash*/global", n_flash), ("full-panel ui/partial", n_ui)] if not n))
+        print("  The conjunction is unexercised; zero hits cannot exclude a menu-related trigger.")
 
-    # ---- power: would the field rate have shown up in this log? ----
-    #
-    # A non-reproduction is only worth anything with a bound attached.
-    # "We saw none" is compatible with both "it does not happen here"
-    # and "we did not look long enough"; the binomial separates them.
+    # Keep the published arithmetic for compatibility, with its assumptions explicit.
     if not args.no_field_bound:
         print("\n" + "-" * 72)
-        print("BOUND vs the field rate  (what a NON-reproduction is worth)")
+        print("CONDITIONAL FIELD COMPARISON  (request gaps; not iid population evidence)")
         print("-" * 72)
         bounds = []
         for T, k, n in FIELD_RATES:
@@ -407,11 +481,12 @@ def main(argv=None):
             bounds.append({"threshold_s": T, "field_rate": rate,
                            "observed": obs, "pairs": len(capped), "p_le": p_le})
             print("  gaps < %.2f s: field %d/%d = %.2f %%; here %d/%d.  "
-                  "P(<=%d | field rate) = %.3g"
+                   "conditional P(<=%d | field rate) = %.3g"
                   % (T, k, n, 100 * rate, obs, len(capped), obs, p_le))
         out["field_bound"] = bounds
-        print("  (this compares RATES PER ADJACENT PAIR only; it does not")
-        print("   claim the two logs sampled the same reading behaviour)")
+        print("  Legacy field_bound JSON values assume independent pairs and a shared rate.")
+        print("  Those assumptions are unverified: this is not a confidence bound on")
+        print("  non-reproduction, a population defect rate, or a visible-double-draw rate.")
 
     # ---- low tail, as ratios: is there a boundary at all? ----
     print("\n" + "-" * 72)
@@ -436,7 +511,8 @@ def main(argv=None):
             print("  largest step in the low tail: x%.2f at %d -> %d ms"
                   % (biggest[0], round(biggest[1] * 1000), round(biggest[2] * 1000)))
             out["largest_low_tail_step"] = biggest[0]
-        print("  hard floor (fastest gap ever seen): %d ms" % round(gv[0] * 1000))
+        print("  observed minimum in selected partial/partial pairs: %d ms (not a mechanism floor)"
+              % round(gv[0] * 1000))
 
     # ---- histogram ----
     print("\n" + "-" * 72)
@@ -458,7 +534,8 @@ def main(argv=None):
     print("EPISODES at T = %.2f s  (runs of >=2; >2 is the structure the" % T)
     print("field data showed and 'two-step page turn' misses)")
     print("-" * 72)
-    actions = load_ledger(args.ledger, args.clock_offset) if args.ledger else []
+    actions = (load_ledger(args.ledger, args.clock_offset)
+               if args.ledger and args.clock_offset is not None else [])
     detail = []
     if not eps:
         print("  none.")
@@ -477,8 +554,12 @@ def main(argv=None):
         if actions:
             pa = preceding_action(e[0].t, actions, args.window)
             if pa:
-                line += "  [last MARK %.2fs before: %s]" % pa
-                rec["preceding_mark"] = {"dt": pa[0], "label": pa[1]}
+                line += "  [nominal last MARK %.2fs before: %s; alignment conditional]" % pa
+                rec["preceding_mark"] = {"dt": pa[0], "label": pa[1], "conditional": True}
+                if args.clock_uncertainty is not None:
+                    rec["preceding_mark"]["dt_interval_s"] = [pa[0] - args.clock_uncertainty, pa[0]]
+                    if pa[0] <= args.clock_uncertainty:
+                        line += " [order uncertain within harvest clock interval]"
         print(line)
         detail.append(rec)
     out["episodes_at_report_threshold"] = {"threshold_s": T, "episodes": detail}

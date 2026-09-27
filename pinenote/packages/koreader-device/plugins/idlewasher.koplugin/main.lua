@@ -151,7 +151,17 @@ function IdleWasher:init()
 
     -- Instance-specific closures so unschedule() from THIS instance
     -- never touches another instance's tasks (the autosuspend pattern).
-    self.timer_task = function() self:_apply(self.core:on_timer(now_s())) end
+    self.timer_task = function()
+        if self:_held() then
+            -- Park until the owner releases; hover is not InputEvent and
+            -- must not reset AutoSuspend or the washer's activity clock.
+            self.held_timer = true
+        else
+            self.held_timer = nil
+            self:_apply(self.core:on_timer(now_s()))
+        end
+    end
+    self.holds = {}
     self.restore_task = function() self:_restore_waveform() end
     self._restore_pending = nil
     self._last_page = nil
@@ -212,7 +222,7 @@ end
 -- number changes -- the statistics plugin's pattern.
 function IdleWasher:_onPageUpdate(pageno)
     self._last_page = pageno
-    self:_apply(self.core:on_page_turn(now_s()))
+    self:chargePageTurn()
 end
 
 function IdleWasher:_onPosUpdate(pos, pageno)
@@ -226,8 +236,50 @@ end
 -- bundled wash at debt_max, and _apply is what fires it.  A class method,
 -- not an event handler, so it exists on a disabled washer too, where there
 -- is no core and a turn costs nothing.
-function IdleWasher:chargePageTurn()
-    if self.core then self:_apply(self.core:on_page_turn(now_s())) end
+function IdleWasher:chargePageTurn(n)
+    if not self.core then return end
+    local actions = self.core:on_page_turn(now_s(), n, self:_held())
+    logger.info(string.format("[idlewasher] page-turn charge %s (debt=%s)",
+                              tostring(n or 1), tostring(self.core.debt)))
+    self:_apply(actions)
+end
+
+-- Holds suppress automatic washes only.  An owner must remove its
+-- predicate on close, including error teardown.  A parked timer resumes
+-- after the current command list, so deferred charges reach it first.
+function IdleWasher:_held()
+    for _, predicate in pairs(self.holds or {}) do
+        if predicate() then return true end
+    end
+    return false
+end
+
+function IdleWasher:setHold(owner, predicate)
+    if not self.core then return end
+    self.holds[owner] = predicate
+    self:holdChanged()
+end
+
+function IdleWasher:holdChanged()
+    if self.core and self.held_timer and not self:_held() then
+        UIManager:unschedule(self.timer_task)
+        UIManager:scheduleIn(0, self.timer_task)
+    end
+end
+
+-- A receipt belongs to this core and to the debt present at the request.
+-- UIManager queues full refreshes; scheduling one is not its success.
+function IdleWasher:beginExternalWash()
+    return self.core and self.core:begin_external_wash()
+end
+
+function IdleWasher:finishExternalWash(receipt, success)
+    if not self.core then return end
+    local result = self.core:finish_external_wash(receipt, success, now_s())
+    if result then
+        logger.info(string.format("[idlewasher] explicit wash retired %s (debt=%s)",
+                                  tostring(result.debt), tostring(self.core.debt)))
+    end
 end
 
 -- Ghosting that is not a page turn (the notebook's erases, undos and panel
@@ -303,6 +355,7 @@ function IdleWasher:onCloseWidget()
         self:_restore_waveform()
     end
     self.core = nil
+    self.holds, self.held_timer = nil, nil
 end
 
 return IdleWasher

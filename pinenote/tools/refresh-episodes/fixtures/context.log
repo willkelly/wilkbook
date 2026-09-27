@@ -1,0 +1,8 @@
+2026-08-09 00:00:08 INFO Current time: fixture
+2026-08-09 00:00:09 INFO opening file /books/Épreuve.epub
+2026-08-09 00:00:09 INFO Inhibiting user input
+2026-08-09 00:00:10 INFO [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=100.000000
+2026-08-09 00:00:10 INFO [pn-refresh] partial partial rect=0,0,1404,1872 dither=nil t=100.200000
+2026-08-09 00:00:11 INFO Restoring user input handling
+2026-08-09 00:00:12 INFO notebook: pen stroke published outside pn-refresh
+2026-08-09 00:00:13 WARN fixture warning retained with full context

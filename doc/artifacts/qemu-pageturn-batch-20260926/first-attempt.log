@@ -1,0 +1,43 @@
+WARNING: (gnu packages linux): `libcamera-minimal' imported from both (gnu packages networking) and (gnu packages photo)
+The following derivation will be built:
+  /gnu/store/5b6acfkdqjim7lr8izsa92w26jj0h96x-profile.drv
+
+building CA certificate bundle...
+listing Emacs sub-directories...
+building fonts directory...
+generating GdkPixbuf loaders cache...
+generating GLib schema cache...
+creating GTK+ icon theme cache...
+building cache files for GTK+ input methods...
+building directory of Info manuals...
+building XDG desktop file cache...
+building XDG MIME database...
+building profile with 6 packages...
+PASS: staged rootfs-matched boot bundle under /tmp/wilkbook/pinenote-batch-20260926/pinenote-pageturn-bundle-20260926-192831
+PASS: extracted Image, matching config, PineNote DTB, initrd, and generated extlinux.conf
+NOTE: run: pinenote/scripts/preflight/inspect-boot-bundle.sh /tmp/wilkbook/pinenote-batch-20260926/pinenote-pageturn-bundle-20260926-192831
+PASS: waveform partition left zero-filled (copy-path test only)
+PASS: rootfs written into partition 2 (GPT name os2)
+PASS: synthetic PineNote-layout disk ready: /tmp/wilkbook/pinenote-batch-20260926/pinenote-pageturn-disk-20260926-192831.img
+qemu-virt page-turn campaign: booting (out -> /tmp/wilkbook/pinenote-virt-pageturn-218460)
+  plan: /tmp/wilkbook/pinenote-virt-pageturn-218460/plan.txt (198 actions)
+  login prompt (or wait expired) at 12s
+  (shot at 17s: 640x480 VARIED; waiting for KOReader paint)
+  (shot at 37s: 640x480 VARIED; waiting for KOReader paint)
+  (shot at 57s: 640x480 VARIED; waiting for KOReader paint)
+  (shot at 77s: 640x480 VARIED; waiting for KOReader paint)
+  (shot at 97s: 640x480 VARIED; waiting for KOReader paint)
+  (shot at 117s: 640x480 VARIED; waiting for KOReader paint)
+  (shot at 137s: 640x480 VARIED; waiting for KOReader paint)
+  (shot at 157s: 640x480 VARIED; waiting for KOReader paint)
+  (shot at 177s: 640x480 VARIED; waiting for KOReader paint)
+  (shot at 197s: 640x480 VARIED; waiting for KOReader paint)
+  (shot at 217s: 640x480 VARIED; waiting for KOReader paint)
+  (shot at 237s: 640x480 VARIED; waiting for KOReader paint)
+  (shot at 257s: 640x480 VARIED; waiting for KOReader paint)
+  (shot at 277s: 640x480 VARIED; waiting for KOReader paint)
+  (shot at 297s: 640x480 VARIED; waiting for KOReader paint)
+  (shot at 317s: 640x480 VARIED; waiting for KOReader paint)
+  first painted shot at 337s
+  FAIL  require  KOReader painted the fb
+make: *** [Makefile:362: qemu-pageturn-campaign] Error 1

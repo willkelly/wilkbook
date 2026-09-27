@@ -1,0 +1,208 @@
+# September 26 parallel implementation batch
+
+Baseline: `1f36e77` (generation 23's operator cold-boot record). Integration
+branch: `batch/integration`. Seven independent workers used separate worktrees;
+the parent integrated their commits and shared entrypoints. This is an offline
+engineering record, not a new hardware-status entry.
+
+## Delivered scope
+
+| Task | Result | Remaining boundary |
+| --- | --- | --- |
+| Update teardown | Stop the optional note authority, require runtime cleanup and data read-only remount, verify original mounts before restoring writers on refusal; executable failure-path tests | Root remount remains best-effort; root-writer quiescence and updated QEMU/device qualification remain |
+| Notebook | Persistent panel-contact ownership, one-pass inverted framebuffer paint, hover-aware washer hold, deferred page charges, acknowledged Refresh debt receipts, richer pen-up logs | Panel behavior and backlog cause |
+| Platform broker | Validated RGB565/XRGB8888 fallback rendering; MONOTONIC deadlines/evdev, BOOTTIME suspend duration; cancel RTC alarm on deep-mode refusal | Physical fallback appearance, evdev clock selection and ultra-suspend accounting; RTC writer serialization remains open |
+| Settings | Guile coupling audit, mutation checks and real Lua configuration parser fixtures; proposed durable enumerable API | General settings backend/schema migration/UI remain proposed |
+| Manuals | Installed-profile census plus real native KOReader rendering, TOC/link/Back navigation and negative controls | 49 recorded corpus omissions; command-example display hyphens; device check |
+| Refresh diagnostics | Full-log transport validated by length/hash; checked analyzers; context and clock uncertainty explicit; 198-tap QEMU campaign | Missing flash/global menu antecedent; future field evidence |
+| Workbench device | Guile coordinator composition plan and owner-receipt gate | Coordinator/service implementation and qualification; no device launcher yet |
+
+Python remains available. New system/build scripts in this batch use Guile;
+KOReader work uses Lua. Focused fixes to existing Lua/shell/Python code preserve
+their interfaces without combining them with unrelated migrations.
+
+## Offline evidence
+
+Worker checks were reused where sources and inputs were unchanged. Parent
+integration also ran:
+
+- `update-path-check`: 267 executable trial assertions, ledger and structural
+  checks. The worker additionally passed `reader-stop-check`, `uart-pick-check`
+  and the existing authority control-structure test.
+- `platform-controls-check`, including byte-exact framebuffer, clock-step and
+  deep-suspend refusal tests; `timesync-check`.
+- `settings-check`: shipping defaults/debt inventory, 303 mutation/extraction
+  checks and 52 Lua broker-parser checks.
+- `koreader-input-check` with native bundle
+  `/gnu/store/11jrzxbvx4cn4m4ryhllr5a1w93zr1a0-koreader-bin-2026.03`.
+  The integrated device seam tests execute the actual global-refresh and
+  full-refresh closures for missing fd, failed ioctl and successful ioctl.
+- `refresh-episodes-check`, `refresh-trigger-check`, `refresh-capture-check`
+  (22 capture/report checks). The field corpus still has 764 traces,
+  412 full-panel partials, five episodes and four menu hits.
+- `book-workbench-device-check`: 88 receipt-ordering assertions.
+- `pinenote/tools/book-state-device/run-tests.sh`: source, authority lifecycle,
+  service composition and real native reader checks.
+- Source-capsule export and preparation from a fresh explicit candidate, with
+  hashes updated for the changed KOReader files and root Makefile.
+
+The manuals worker passed both `manuals-check` and installed/native acceptance.
+Replay identities, corpus exceptions, assertion output and representative
+screenshots are committed under `pinenote/tools/manuals/evidence/2026-09-26/`.
+
+The ambient derivation check refused kernel 7.1.13 as intended. Repeating with
+`guix time-machine -C channels.scm -- repl -L .
+pinenote/tools/book-state-device/derive-system.scm` passed the exact kernel
+`334ljs8q` and gVisor `djgy782a` pins and lowered
+`/gnu/store/9b3clfd0pxfrdz1s5dbr8miqjfpc10ww-system.drv` after the teardown
+review corrections.
+These initial gates were derivation evidence; the later experimental-system
+realization and closure check are recorded under main reconciliation below.
+The shipping flavor also lowers successfully with
+`make TIME_MACHINE=1 reader-system-drv` to
+`/gnu/store/nnkw30n7hqc7mx40jsp5sj6yag7brwml-system.drv`.
+
+At initial batch completion, QEMU update-flow could not reuse cached systems:
+they contained older helpers and the harness requires exact-current helpers.
+Matching A/B inputs were subsequently built and the run passed, as recorded
+below. No device was deployed or rebooted for this batch.
+
+## Review
+
+Three independent adversarial reviewers examine project fit, exhaustive logic
+and performance. The first-slice review found no new blockers and produced two
+corrections: narrower language-policy wording, and an executable fix for the
+pre-existing RTC alarm left armed when deep suspend is unavailable. Parent
+review also required terminal socket EOF before Workbench preview eligibility.
+The final project-fit review confirmed the scope and evidence boundaries. It
+found a stale root Makefile hash (caught and fixed by parent capsule preparation
+too), a hardcoded test temporary-directory parent (changed to honor `TMPDIR`),
+and two stale statements (updated). The final performance/clarity review found
+no blockers. It confirmed that night-mode conversion is repaint-only (about
+5 MiB temporary storage for a full RGB565 page), washer holds park rather than
+poll, and neither broker nor teardown adds steady-state polling. These are
+source/host-test conclusions, not measured ARM performance.
+
+The final logic review found two update-path defects: a new mandatory root
+remount left normal root log writers active, and a changed/missing data mount
+could be rejected before recovery bookkeeping was set, allowing writer restart
+and a false restoration-success message. The agreed correction keeps the
+approved strict `/data` scope, retains the baseline best-effort root remount
+with explicit diagnostics, and independently verifies original mount snapshots
+before restarting writers. Root-writer quiescence is a separate concrete
+follow-up in `doc/update-path.md`. A focused independent review of `7e561d6`
+executed disappearance/replacement, busy-root/busy-data, nonzero-remount with
+actual mode change, and originally-read-only fixtures. **Both findings are
+resolved; no new blocker remains in the scoped correction.** The initial
+snapshot was not a no-blocker result, and the final verdict retains the stated
+baseline root risk and QEMU/device qualification limits.
+
+## Next acceptance sequence
+
+### Main reconciliation after PRs #51 and #84
+
+Merged `main` at `6e8a19a` into the batch after its initial completion.
+Generation 23 is now pinned, Refresh and KOReader restart have passed, and
+the cable-free record stands at two successful sessions of three. The os1
+recovery script is merged: the earlier version exercised demote/promote on
+os1; the reviewed version's read-only commands ran there, with its write
+paths host-tested. The stored touchscreen configuration confirms two contacts.
+
+The merged delta changes recovery tooling, check wiring and hardware records;
+it does not change the batch's notebook or generation-helper implementation.
+Both sets of Makefile targets and changelog entries were retained, and the
+root Makefile's source-map hash was recomputed. `os1-rescue-check` passed 75
+cases across sh/dash/bash; `update-path-check` and `time-machine-check` passed;
+a fresh source-capsule export and preparation passed.
+
+Continuation at merge `08510ff`: the pinned device derivation still resolves
+to `9b3clfd0…` above, and the experimental reader was then **built** as
+`/gnu/store/13cg7sg6waa3ahj3ivxhmkagia0kbwi1-system`.
+`pinenote/tools/book-state-device/check-system-closure.sh` passed on that exact
+output. The kernel and gVisor remained the pinned existing outputs; the build
+assembled updated KOReader, helpers, manuals and service/profile objects.
+At this point the candidate was not yet a numbered generation. It was later
+trialled and promoted as generation 24; see the deployment entry below.
+
+The new hardware record also identifies held-button power cuts with writable
+filesystems and a requested short-hold shutdown menu under assessment. That
+is separate from the batch's kexec data-writer fix; os1's journal replay is
+recovery evidence, not evidence of orderly shutdown.
+
+### Remaining qualification
+
+The next continuation built matching plain-reader QEMU A/B inputs and passed
+the existing update-flow suite: **40 checks**, including load refusal/recovery,
+trial/health/promotion, rollback and pin/prune. Both kexecs reproduced the busy
+root remount and passed the strict mounted-data gate. Evidence and proof limits:
+`doc/artifacts/qemu-update-batch-20260926/`. The initial device inspection was
+blocked at host SSH-agent signing. After the operator unlocked the agent, SSH
+inspection confirmed generation 23's idle writable authority database and
+root log/cache writers. Auto-suspend was paused and restored byte-for-byte to
+`enabled=1`; no deployment or service restart ran. The per-device record is in
+`doc/status.md`.
+
+The full-log QEMU campaign subsequently passed after correcting two stale
+harness assumptions: the device's absent-fb1 mapping left virtio-gpu scanout
+inactive, and the shipping startup policy opens the file manager, not a book.
+The VM now uses fb0 and explicitly opens a deterministic text fixture through
+the supervised reader. The run issued 198 taps, captured 158 refresh traces
+(89 full-panel partial/partial), validated the complete 57,045-byte log by
+SHA-256, and completed both analyzers. The separate visual smoke test passed
+after its menu tap was corrected to the campaign's measured coordinates.
+The flash/global menu antecedent was unexercised; this is no issue-#14
+clearance. Replay evidence: `doc/artifacts/qemu-pageturn-batch-20260926/`.
+
+PR #87 was opened and main's docs-only PR #85 merged as `a24c5e1`, without
+changing the candidate derivation. On the operator's explicit trial invocation,
+the experimental candidate then became **generation 24**: 28/488 paths moved,
+the target helper automatically stopped the authority (bounded cleanup logged),
+passed its runtime/data gates, kexec'd, passed health and promoted. Postflight
+found the real data mount and all four services running, with no journal
+recovery in dmesg. Generation 23 remains the pinned recovery target;
+auto-suspend was restored to `enabled=1`. The operator subsequently accepted
+reading/page turns, existing notebook strokes, drawing/Refresh/close/reopen,
+and power-button/cover suspend/wake. This completes the third trial-period
+session. The operator then approved continuing the existing policy unchanged,
+completing its review and lifting the pause; new sessions still require the
+explicit invocation and existing checks. Hardware truth and
+identities: `doc/status.md`; evidence: `doc/artifacts/pinenote-gen24-batch-20260926/`.
+
+1. Plain-reader QEMU update-flow and full-log page-turn capture have passed.
+   A menu-trigger experiment still needs the antecedent coverage absent from
+   this campaign.
+2. The actual authority composition's normal handoff passed on 23 → 24.
+   The final QEMU run added a real writable data-file holder: the helper refused
+   Linux's busy-data remount, unloaded the kernel, retained original mount
+   identities/modes and the holder, restored health and kept DEFAULT. Releasing
+   the holder allowed the good trial and rollback; **48 checks passed**.
+   This uses the plain-reader composition, alongside the actual authority's
+   successful hardware shutdown. Older rollback targets retain the manual-stop
+   requirement. Evidence: `doc/artifacts/qemu-update-batch-20260926/busy-data-result.log`.
+3. Notebook drawing, Refresh, close/reopen, rotation, night mode, a >45 s hover
+   without automatic wash, and process-restart persistence passed on generation
+   24 by operator report. Remaining: panel-owned contact/dropout tails,
+   page buttons near the debt ceiling, successful Refresh followed by new ink
+   and targeted suspend/resume edge cases. Log brush/size/span/backlog
+   observations; ioctl acceptance alone does not prove wash completion.
+4. Power-button/cover suspend/wake passed by operator report. A later stopped-
+   reader test logged `fallback=true`, slept and woke successfully; the banner
+   remained until the operator opened a book after reader restoration. Immediate
+   cleanup is not claimed. Detailed clipping/typography and full RTC-backstop
+   accounting remain unqualified; the logged short suspend interval was 10.925 s.
+   Active RTC writes still require separate race coordination; monotonic timers
+   do not solve that race.
+5. Open representative man and Info pages, use TOC/link/Back on the tablet and
+   inspect long examples. Record omissions and typography separately from
+   navigation success.
+
+Workbench W1 (the Guile authority-channel slice) and the durable settings
+backend are subsequent implementation tasks, not part of panel acceptance for
+this batch. Cover electrical measurements remain deferred until tied to a
+specific wake-control or suspend change.
+
+The normal hardware path and actual-kernel busy-data refusal are now covered.
+With green full host CI and the existing reviews, the batch can merge with
+the remaining narrow observations above tracked as follow-up qualification.
+Shutdown/data-mount changes, notebook polish and handwriting-recognition
+experiments proceed in subsequent branches rather than expanding this PR.

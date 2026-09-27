@@ -1,0 +1,309 @@
+PASS: staged rootfs-matched boot bundle under /tmp/wilkbook/pinenote-batch-20260926/pinenote-pageturn-bundle-20260926-193922
+PASS: extracted Image, matching config, PineNote DTB, initrd, and generated extlinux.conf
+NOTE: run: pinenote/scripts/preflight/inspect-boot-bundle.sh /tmp/wilkbook/pinenote-batch-20260926/pinenote-pageturn-bundle-20260926-193922
+PASS: waveform partition left zero-filled (copy-path test only)
+PASS: rootfs written into partition 2 (GPT name os2)
+PASS: synthetic PineNote-layout disk ready: /tmp/wilkbook/pinenote-batch-20260926/pinenote-pageturn-disk-20260926-193922.img
+qemu-virt page-turn campaign: booting (out -> /tmp/wilkbook/pinenote-virt-pageturn-228291)
+  plan: /tmp/wilkbook/pinenote-virt-pageturn-228291/plan.txt (198 actions)
+  login prompt (or wait expired) at 12s
+  (shot at 17s: 1872x1404 UNIFORM; waiting for KOReader paint)
+  first painted shot at 37s
+  opening the deterministic campaign book...
+  baseline settled at 94s (1 retries)
+  campaign starting at 94s
+  campaign done at 535s
+  harvesting complete reader-session log over the console...
+
+Campaign summary:
+  taps issued          : 198
+
+Campaign assertions:
+  PASS  require  boot reached login prompt
+  PASS  require  virtio-gpu DRM bound
+  PASS  require  KOReader painted the fb
+  PASS  require  taps were issued
+  PASS  require  QMP plan completed
+Complete snapshot: 57045 bytes; SHA-256 4e33edba1e4aa7ec5547cf5d494af31f85cd855e8ec2acdfbd59182ca6acd83c
+Guest-minus-host offset interval at harvest: [0.151191, 0.344387] s
+Clock interval assumes no wall-clock steps; campaign drift is unmeasured.
+Ledger timestamps are host command times, not guest input/gesture times.
+Completeness covers the current log snapshot, not rotated history or untraced notebook publishing.
+========================================================================
+[pn-refresh] episode analysis  (issue #14 signature logic)
+========================================================================
+REQUESTS ONLY: no completion, optical double draw, or visible-defect rate is measured.
+Context: 601 non-trace lines; 0 notebook lines.
+Coverage: 1 traces have unverified leading 15 s antecedent windows;
+  rotation/history loss and untraced notebook publishes cannot be ruled out.
+  Notebook ink/Refresh may bypass this trace; missing requests do not mean no activity.
+Statistics: conditional binomial arithmetic only; overlapping pairs, clustered
+  episodes and this selected operator/session sample are not iid population evidence.
+Clock alignment: harvest offset interval [+0.151191, +0.344387] s.
+  Host command times are not guest input timestamps; delivery/handling latency,
+  wall-clock steps and drift during the campaign remain unmeasured.
+  Any preceding MARK is nominal and conditional on clock alignment.
+traces            : 158  (0 unparsed)
+span              : 505.6 s (0.14 h)
+panel extent      : 1404x1872  (discovered from the traces)
+trace kinds       : partial/partial=89, ui/partial=66, full/global=3
+full-panel partial/partial : 89
+adjacent pairs     : 88 total, 88 within the 30 s cap
+gap median         : 3.525 s   p10 2.303 s   min 0.955 s
+
+------------------------------------------------------------------------
+GAP-THRESHOLD SWEEP  (a single cut would be arbitrary: the field
+distribution is a continuum with no valley at 1 s)
+------------------------------------------------------------------------
+  thresh   gaps<T  episodes   max run     hits   conditional P(>=hits | base)
+    0.10        0         0         0        -   -
+    0.15        0         0         0        -   -
+    0.20        0         0         0        -   -
+    0.25        0         0         0        -   -
+    0.30        0         0         0        -   -
+    0.40        0         0         0        -   -
+    0.50        0         0         0        -   -
+    0.70        0         0         0        -   -
+    1.00        3         2         3      0/2   1
+    1.25        4         1         5      0/1   1
+    1.50        4         1         5      0/1   1
+    2.00        4         1         5      0/1   1
+    3.00       44        22         5     0/22   1
+
+menu-antecedent base rate over all 89 full-panel partials: 0.0 %
+(antecedent = a flash*/global wash AND a full-panel ui/partial,
+ both within 15 s before — the menu open/dismiss signature)
+  component base rates: flash*/global 0.0 %   full-panel ui/partial 84.3 %
+  MISSING ANTECEDENT COVERAGE: flash*/global has no eligible lookback hits.
+  The conjunction is unexercised; zero hits cannot exclude a menu-related trigger.
+
+------------------------------------------------------------------------
+CONDITIONAL FIELD COMPARISON  (request gaps; not iid population evidence)
+------------------------------------------------------------------------
+  gaps < 0.50 s: field 10/399 = 2.51 %; here 0/88.  conditional P(<=0 | field rate) = 0.107
+  gaps < 1.00 s: field 13/399 = 3.26 %; here 3/88.  conditional P(<=3 | field rate) = 0.677
+  Legacy field_bound JSON values assume independent pairs and a shared rate.
+  Those assumptions are unverified: this is not a confidence bound on
+  non-reproduction, a population defect rate, or a visible-double-draw rate.
+
+------------------------------------------------------------------------
+LOW TAIL, each gap as a ratio of the previous (a real boundary
+would show as a large multiplicative step)
+------------------------------------------------------------------------
+  955  961(x1.01)  985(x1.03)  1022(x1.04)  2222(x2.17)  2230(x1.00)  
+  2243(x1.01)  2303(x1.03)  2339(x1.02)  2356(x1.01)  2394(x1.02)  
+  2411(x1.01)  2415(x1.00)  2416(x1.00)  2444(x1.01)  2450(x1.00)  
+  2459(x1.00)  2460(x1.00)  2465(x1.00)  2465(x1.00)  2506(x1.02)  
+  2506(x1.00)  2507(x1.00)  2514(x1.00)  
+  largest step in the low tail: x2.17 at 1022 -> 2222 ms
+  observed minimum in selected partial/partial pairs: 955 ms (not a mechanism floor)
+
+------------------------------------------------------------------------
+HISTOGRAM of all 88 adjacent gaps within the 30 s cap
+------------------------------------------------------------------------
+  [ 0.00,  0.10)     0 
+  [ 0.10,  0.15)     0 
+  [ 0.15,  0.20)     0 
+  [ 0.20,  0.30)     0 
+  [ 0.30,  0.40)     0 
+  [ 0.40,  0.50)     0 
+  [ 0.50,  0.70)     0 
+  [ 0.70,  1.00)     3 ###
+  [ 1.00,  1.50)     1 #
+  [ 1.50,  2.00)     0 
+  [ 2.00,  3.00)    40 ########################################
+  [ 3.00,  5.00)    20 ####################
+  [ 5.00, 10.00)    14 ##############
+  [10.00, 30.00)    10 ##########
+  [30.00,   inf)     0 
+
+------------------------------------------------------------------------
+EPISODES at T = 1.00 s  (runs of >=2; >2 is the structure the
+field data showed and 'two-step page turn' misses)
+------------------------------------------------------------------------
+  t=1790473683.267  n=2  gaps=961 ms  miss  (flash_global --, ui_fullpanel 1.07s)  [nominal last MARK 0.66s before: postmenu-back; alignment conditional]
+  t=1790473685.251  n=3  gaps=985,955 ms  miss  (flash_global --, ui_fullpanel 3.06s)  [nominal last MARK 0.67s before: postmenu-back; alignment conditional]
+
+  episodes with more than 2 refreshes: 1
+  menu antecedent: 0 of 2 episodes (base rate 0.0 %), P(>=0) = 1
+
+  repeated global washes < 2 s apart: 0  
+
+json -> /tmp/wilkbook/pinenote-virt-pageturn-228291/episodes.json
+========================================================================
+[pn-refresh] TRIGGER analysis  (issue #14: what asks twice?)
+========================================================================
+REQUESTS ONLY: no completion or visible double draw is measured.
+Coverage: log completeness/rotated history is not established by this analyzer.
+  Untraced notebook ink/Refresh publishing is outside this instrument; 0 notebook lines.
+  Source-based exclusions assume the recorded reader context and traced paths.
+Statistics: all binomial values are conditional arithmetic, not iid population
+  evidence; overlapping pairs and clustered episodes are not independent samples.
+Marker clocks: 158 alignment samples; offset range [0.0, 0.0] s; resolution 1 s.
+  0 unstamped markers are unusable. Clock steps/drift and input delivery are unmeasured.
+traces           : 158  (0 unparsed)
+marker lines     : 32  (non-[pn-refresh] KOReader INFO/WARN)
+span             : 505.6 s (0.01 d)
+panel extent     : 1404x1872  (discovered)
+stamp->trace clock offset: +0 s
+trace kinds      : partial/partial=89, ui/partial=66, full/global=3
+rect classes     : full-panel=124, over-panel=24, small-box=8, large-box=2
+markers          : WARN=23, LAUNCH=2, IDLEWASHER_ON=2, BUNDLEDWASH=2, OPEN=1, INHIBIT=1, RESTORE=1
+
+------------------------------------------------------------------------
+0. MERGE SEMANTICS: two identical full-panel traces cannot come
+   from one repaint drain, so the second request is genuinely later
+------------------------------------------------------------------------
+  adjacent trace gaps            : n=157  min 3.0 ms
+  ... between DISJOINT rects     : n=1  min 3.0 ms
+      (these legitimately share one repaint drain)
+  ... between IDENTICAL rect+kind: n=70  min 955.5 ms
+      (these cannot: same drain would have merged them)
+  Observed minima describe this sample, not a caller or panel timing floor.
+
+  fastest IDENTICAL repeat, by rect class and intent:
+    full-panel   partial/partial  n=55   min   955.5 ms   median   2555.2 ms
+    full-panel   ui/partial       n=4    min  2321.0 ms   median   2519.2 ms
+    over-panel   ui/partial       n=10   min  2472.7 ms   median   2728.4 ms
+    large-box    ui/partial       n=1    min  3005.3 ms   median   3005.3 ms
+  Legacy identical_repeat_floor_ms JSON key means observed minimum only.
+
+------------------------------------------------------------------------
+1. EPISODES at T = 1.00 s, and what immediately PRECEDES each
+------------------------------------------------------------------------
+  2026-09-27 01:48:03  n=2  gaps=961 ms  CV=-
+      predecessor: ui/partial over-panel  1.07 s before
+  2026-09-27 01:48:05  n=3  gaps=985,955 ms  CV=0.015
+      predecessor: partial/partial full-panel 1.02 s before
+
+  predecessor census -- all full-panel partial/partial (n=89)
+    partial/partial full-panel         55   61.8 %
+    ui/partial full-panel              26   29.2 %
+    ui/partial small-box                5    5.6 %
+    full/global full-panel              2    2.2 %
+    ui/partial over-panel               1    1.1 %
+
+  predecessor census -- traces belonging to an episode (n=5)
+    partial/partial full-panel          4   80.0 %
+    ui/partial over-panel               1   20.0 %
+
+  predecessor census -- EPISODE STARTS only (n=2)
+    ui/partial over-panel               1   50.0 %
+    partial/partial full-panel          1   50.0 %
+    enrichment vs the population base rate:
+      ui/partial over-panel            1/2  base  1.12 %  P(>=1) = 0.0223
+      partial/partial full-panel       1/2  base 61.80 %  P(>=1) = 0.854
+
+------------------------------------------------------------------------
+1b. THE WIDER POPULATION: runs of full-panel repaints of ANY intent
+    (restricting to partial/partial hides that the same thing
+     happens on the ui and flash* paths)
+------------------------------------------------------------------------
+  full-panel repaints of any intent : 146
+  runs of >=2 within 1.00 s          : 3  (vs 2 restricted to partial/partial)
+    2026-09-27 01:46:40 n=2 gaps=[530]
+        full/global+partial/partial
+    2026-09-27 01:48:03 n=2 gaps=[961]
+        partial/partial+partial/partial
+    2026-09-27 01:48:05 n=3 gaps=[985, 955]
+        partial/partial+partial/partial+partial/partial
+
+  flash*/global washes                        : 0
+  ... followed by a full-panel ui repaint <3 s: 0
+
+------------------------------------------------------------------------
+A. footer / progress-bar repaint promoted to full page
+------------------------------------------------------------------------
+  bottom-strip repaints in the log : 0
+  bottom-strip repaints INSIDE an episode : 0
+  ... within 2 s of an episode start      : 0
+  full-panel partials with a bottom-strip repaint within 0.5 s:
+    0 of 89 (0.0 %)
+
+------------------------------------------------------------------------
+B. a second paint from the page-turn / animation path
+------------------------------------------------------------------------
+  fast/a2 traces anywhere in the log : 0
+  ... within 15 s of an episode start: 0
+  distinct corner-icon ui/partial rects: 0
+  ... seen >=3 times (the crengine rerendering-automation
+      status-icon signature)          : 0
+
+------------------------------------------------------------------------
+C. a genuine double input event  (cadence characterisation only)
+------------------------------------------------------------------------
+  ordinary-reading runs (>=4 turns, 1.00-30 s gaps): n=2
+      CV range 0.014-0.675, median 0.344
+  episodes with >=3 traces                         : n=1, CVs 0.015
+      CV 0.015: 1 of 2 ordinary runs are at least this tight
+  fastest selected partial/partial repeat          : 955 ms
+  NOTE: no input event is analyzed, so this section cannot confirm
+        or exclude C.  It only says which SHAPE the repeats have,
+        and even that is weak: a repeat rate near the reader's own
+        render+publish cost is what ANY producer faster than the
+        reader looks like, human or not.
+
+------------------------------------------------------------------------
+D. a document re-render (ReaderRolling:onUpdatePos)
+------------------------------------------------------------------------
+  INHIBIT/RESTORE brackets in the log : 1
+    bracket duration: median 2.0 s, max 2.0 s
+  full-panel partials INSIDE a bracket: 0 of 89 (0.0 %)
+  full-panel partials per bracket     : min 0, max 0;
+    brackets holding more than one    : 0
+  EPISODE traces inside a bracket     : 0 of 5
+
+------------------------------------------------------------------------
+E. the wilkbook idle washer
+------------------------------------------------------------------------
+  [idlewasher] action lines          : 2
+  episodes with an [idlewasher] line within 15 s: 0 of 2
+  global (wash) traces               : 3, of which 1 land
+    within 2 s of an [idlewasher] line -- the rest are KOReader's
+    own promotion and menu washes, not the plugin's
+
+------------------------------------------------------------------------
+2. CLUSTERING: orientation, time of day, preceding gap, session
+------------------------------------------------------------------------
+  full-panel traces by orientation: portrait=146
+  orientations represented among episode traces: portrait
+  hour of day (device clock), turns/episode-starts:
+    01:89/2
+    (2 episode starts over 1 hours with any reading: too few
+     for a time-of-day claim either way -- reported, not read)
+  gap BEFORE an episode start : 1.1, 1.0 s
+  ordinary inter-turn gap     : median 3.6 s (n=85)
+  reading sessions (a gap >900 s splits): 1, of which 1 contain
+    an episode
+  sessions containing a flash* (menu) trace: 0 of 1
+  episode-bearing sessions that also had menu activity:
+    0 of 1 (base rate 0.0 %, P(>=0) = 1)
+
+------------------------------------------------------------------------
+SCORECARD  (measurement -> verdict; nothing here is hardware-proven)
+------------------------------------------------------------------------
+  A. footer promoted to full page            EXCLUDED
+      0 bottom-strip repaints exist; every one traces at its own rect
+      0 fall inside an episode; 0 full-panel partials have one within 0.5 s
+      source: the footer's repaint paths always pass a region and mode ui/fast; its one region-less partial is guarded on a non-crengine document
+  B. second paint from the animation path    EXCLUDED
+      0 fast/a2 traces in the whole log; 0 within 15 s of an episode
+      0 repeated corner-icon ui rects (the rerendering-automation icon signature)
+      the image also seeds cre_partial_rerendering=false (pinenote/services/reader-session.scm)
+  C. genuine double input                    NOT SEPARABLE FROM THIS DATA
+      no input event is analyzed; a refresh trace cannot see a tap
+      episode CVs 0.015 vs ordinary-reading CVs 0.014-0.675, median 0.344 (n=2)
+      settling it needs an input-side trace, not a refresh-side one
+  D. document re-render (onUpdatePos)        EXCLUDED for these episodes
+      1 INHIBIT/RESTORE brackets; 0 full-panel partials sit inside one
+      0 episode traces sit inside one
+      timing exclusions require complete context and aligned marker clocks
+  E. idle washer                             EXCLUDED
+      2 [idlewasher] action lines; 0 episodes have one within 15 s
+      the traced reader wash uses full/global; direct notebook publishing is outside this analysis
+
+json -> /tmp/wilkbook/pinenote-virt-pageturn-228291/triggers.json
+  PASS  require  campaign book opened in the guest
+  PASS  require  page-turn refreshes were recorded
+
+qemu-virt page-turn campaign: OK (artifacts in /tmp/wilkbook/pinenote-virt-pageturn-228291)

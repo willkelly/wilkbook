@@ -133,6 +133,9 @@ code review — before a single reboot. That's the standard.
   idle-washer debt for ghosting, an append-only stroke journal on
   `/data`, its module map, offline proofs, measurements and glass
   sessions.
+- `doc/workbench-device-integration.md` — the opt-in Workbench device
+  composition plan: Guile coordinator migration, existing Lua renderer,
+  workspace ownership, lifecycle contracts and qualification still owed.
 - `doc/driver-findings-report.md` — the community-facing writeup of driver
   bugs the host tools found.
 - `doc/upstream-register.md` — the standing list of what we owe the
@@ -184,6 +187,15 @@ quality frontier.
 the kernel derivation (seconds) before `make kernel` (a real cross-build).
 Cross-builds target `aarch64-linux-gnu`; everything writes only to the
 Guix store and `$(ARTIFACTS)`.
+
+**Language direction (operator decision, 2026-09-26).** Keep Python
+available, including as a sandboxed book language. Prefer Guile and Guix
+for build tooling and system scripts, and Lua for KOReader integration.
+Prefer these languages for new build/system scripts and KOReader
+integration. Existing Python, shell and Lua
+system tools are migration work, not a reason to remove Python from the
+image or to combine a focused bug fix with an unrelated rewrite. When
+replacing a tool, preserve its executable checks and documented interface.
 
 **Prove it offline, in ladder order** (`doc/testing.md`): host tool suites
 → static Guix builds → source inspection → QEMU virt → mock helpers →
@@ -294,6 +306,14 @@ point, not automatic permanent permission; pause new cable-free sessions until
 the operator reviews the record and decides whether to continue or revise this
 policy. No trial-period session is counted merely because these rules were
 added. Procedure: `doc/hardware-deploy.md`, "Cable-free trial period".
+
+**Three-session review completed (2026-09-26).** After generation 24 passed
+health/promotion, the agreed operator checks and cleanup, wkelly explicitly
+approved continuing this existing attended, explicit-invocation policy
+unchanged ("I approve"). The three-session review pause is lifted. All
+per-session invocation, expiration, recovery and evidence requirements above
+remain in force; this approval is not a standing invocation or unattended
+deployment grant. Record: `doc/status.md`, generation 23 → 24 session.
 
 ## Committing
 
@@ -415,15 +435,21 @@ gitignored `build/`, or the reader's static address.
   `[pinned]` in `list`; **proven on glass 2026-09-04 late**: from
   generation 17, `pin 16` and `pin 10`, then `prune --keep 1` deleted
   11–15 and kept both pins and DEFAULT; recipe in
-  `doc/hardware-deploy.md`). **wkelly's device is on generation 23**
+  `doc/hardware-deploy.md`). **wkelly's device is on generation 24**
   (2026-09-26): the experimental `book-state-device-reader` flavor, on
-  the USER_NS test kernel `334ljs8q`, carrying the pen notebook and the
-  `25cea98` note fixes. It got there by two cable-free kexec trials,
-  21→22 and 22→23, then an operator-run cold boot of 23 without UART
-  (the operator waived it). The ledger holds 10, 16 (= v0.3.0-prealpha),
+  the USER_NS test kernel `334ljs8q`, carrying PR #87's batch notebook,
+  broker and update-teardown fixes. The cable-free 23→24 trial passed health
+  and promoted; the target helper stopped the authority automatically.
+  The operator accepted reading/page turns, notebook existing/new strokes,
+  Refresh and close/reopen, and power-button/cover suspend/wake. Generation 23 remains the
+  cold-booted, pinned recovery target. The ledger holds 10, 16 (= v0.3.0-prealpha),
   18 and 23 `[pinned]`, all four cold-booted, plus 19–22, which are
-  kexec-only (`doc/status.md` 2026-09-26). The cable-free trial period
-  stands at two successful sessions of three. Pause suspend (`enabled=0`) before a
+  kexec-only, and 24 (also kexec-only, not pinned; `doc/status.md` 2026-09-26).
+  Suspend was restored to `enabled=1`. The cable-free trial period stands at
+  three completed successful sessions. The operator completed the policy
+  review and approved continuation unchanged; the review pause is lifted,
+  with explicit invocation still required for each new session.
+  Pause suspend (`enabled=0`) before a
   session and restore it after; a session that ends with `enabled=1` on
   battery leaves only the hourly backstop's 20 s ssh windows
   (`doc/device-access.md`).
@@ -506,9 +532,11 @@ gitignored `build/`, or the reader's static address.
   always-on fixed regulators, with no PMIC involvement. `vcc_3v3_pmu`
   really is off-in-suspend; it simply never had any bearing on this
   sensor. The old contradiction came from conflating the GPIO pad's
-  supply with the supply of the thing driving it. Still open, and now
-  the only surviving candidate: whether the PMU can latch the edge with
-  `pmuio1`/`pmuio2` down (alive-domain detection).
+  supply with the supply of the thing driving it. The electrical sequence
+  remains open: the 2026-09-26 schematic review also found a cover-driven
+  path to the PMIC SLEEP pin, so rail restoration before GPIO detection
+  is an alternative to alive-domain detection with the pad rails down.
+  Neither sequence is measured (`doc/power-management.md`).
   `doc/artifacts/pinenote-input-clocks-20260824/`. Auto-suspend makes
   **SSH to the reader intermittent** — write `enabled=0` to
   **`/data/wilkbook/autosuspend.conf`** before working on it
@@ -611,7 +639,7 @@ gitignored `build/`, or the reader's static address.
   with the reader running, and the deployer said refused
   (`doc/update-path.md`).
 - **A kexec is a crash for every filesystem still mounted read-write**
-  (2026-09-04 night): the trial remounted `/` read-only before `kexec
+  (2026-09-04 night): the trial attempted to remount `/` read-only before `kexec
   -e` but left `/data` alone, so the next boot's journal recovery raced
   udev's probe (`incorrect ext4 checksum on /dev/mmcblk0p7`), `/data`
   came up on the library placeholder, and Wi-Fi never returned after a
@@ -619,16 +647,18 @@ gitignored `build/`, or the reader's static address.
   `wlan0.conf`. The teardown now remounts `/data` read-only after `/`
   (the bail-out puts it back) — proven by two kexecs on generation 19.
   When a kexec'd boot loses something only a sleep reveals, check what
-  was mounted where before suspecting the radio. **The remount fails if
-  anything still holds `/data` open for writing, and the teardown only
-  logs that failure, after Wi-Fi is off.** The teardown stops only
-  `reader-session`. On the `book-state-device-reader` flavor, once the
-  note feature is activated (its marker present), the authority keeps its
-  SQLite database open read-write while idle, so the remount is expected
-  to fail there. That is inferred from the source, not observed: the
-  2026-09-11 session stopped the authority by hand first. Do the same
-  before every trial on that flavor until the teardown handles it
-  (`doc/notebook.md`, housekeeping).
+  was mounted where before suspecting the radio. **Older helpers only log
+  a failed data remount and stop only `reader-session`.** The opt-in note
+  authority keeps SQLite writable while idle, so the September 11/26
+  sessions stopped it manually. The 2026-09-26 source helper now stops that
+  authority, checks its runtime cleanup, and refuses unless the mounted
+  `/data` becomes read-only; failure verifies original mounts before restoring
+  prior services. Root remount remains best-effort: other root log writers
+  remain active, so clean-root quiescence is separate unresolved work. Recovery
+  records incomplete restoration. This is host-tested, with runtime
+  qualification owed. A trial uses the TARGET's helper, so keep manually
+  stopping the authority for older targets, including rollback
+  (`doc/update-path.md`, "Teardown hardening").
 - **The UART capture drops ~25 bytes every 150–250 at 1.5 Mbaud, and it
   is the adapter, not termios** (2026-09-04, measured from the two
   generation-16 captures): `uboot-pick-slot.sh` has always set the port

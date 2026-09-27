@@ -37,8 +37,11 @@ shell can know:
     closing charge the idle washer's debt (IdleWasher:chargeDebt), which
     never washes by itself: the washer's own idle wash then comes at the
     next pause, repainting the whole window first.  Page turns charge
-    chargePageTurn as before.  The washer is looked up per charge, and a
-    missing or disabled one costs nothing.
+    chargePageTurn at the leave when tapped by pen. A proximity predicate
+    holds automatic washes without reporting hover as input. A successful
+    queued Refresh retires only its receipt's debt, not subsequent charges.
+    The washer is looked up per charge; the window owns and releases its
+    registered hold even when close fails.
   * Failure.  On the first failed append or fsync in a command list the
     rest of the list runs without its writes and ink, then c:io_error
     gets the failed command table (nb_controller's header).
@@ -121,6 +124,7 @@ local BTN_TOOL_PEN, BTN_TOOL_RUBBER, BTN_TOUCH = 320, 321, 330
 local PEN_KEYS = { BTN_TOOL_PEN, BTN_TOOL_RUBBER, BTN_TOUCH }
 
 local TOAST_S = 3
+local WASH_ACK_TIMEOUT_S = 1 -- missing device acknowledgement retains the debt
 local PANEL_BORDER = 3
 local BUTTON_BORDER = 2
 local C_WHITE, C_BLACK = Blitbuffer.COLOR_WHITE, Blitbuffer.COLOR_BLACK
@@ -304,6 +308,13 @@ function NotebookWindow:init()
     self._hold_pred = function()
         return self.hold == true or (self.touch_consumed and self.kdown_n > 0)
     end
+    self._wash_hold_pred = function()
+        return self.shown and not self.suspended and not self.faulted
+            and (self.hold == true or (self.c and self.c.wash_wanted)
+                 or self.pending_wash ~= nil)
+    end
+    self._wash_done = function(success) self:_finish_wash(success) end
+    self._wash_timeout = function() self:_finish_wash(false) end
     self._timer_task = function()
         if self.shown then self:_guard("timer", self._on_timer) end
     end
@@ -329,6 +340,10 @@ function NotebookWindow:onShow()
     local input = Device.input
     input.wilkbook_consumer = self._consumer
     input.wilkbook_hold_rotation = self._hold_pred
+    self.washer = self:_washer()
+    if self.washer and self.washer.setHold then
+        self.washer:setHold(self, self._wash_hold_pred)
+    end
     -- KOReader may be holding a pen or finger contact it will never see
     -- end; a clean slate means nothing fires later (a hold, a pinned
     -- rotation deferral).
@@ -526,6 +541,7 @@ function NotebookWindow:_fault(where, err)
     logger.err("[notebook] " .. where .. " error:", err)
     if self.faulted then return end
     self.faulted = true
+    self:_release_washer()
     local input = Device.input
     if input.wilkbook_consumer == self._consumer then
         input.wilkbook_consumer = nil
@@ -577,6 +593,10 @@ function NotebookWindow:_run(cmds)
         end
     end
     if failed then self:_run(self.c:io_error(failed_err, failed)) end
+    -- A cancelled Refresh (a dialog, page change, suspend) can release a
+    -- wash hold without changing pen proximity. Wake a parked timer then
+    -- too; never manufacture an InputEvent for this bookkeeping.
+    if self.washer and self.washer.held_timer then self.washer:holdChanged() end
 end
 
 function EXEC.arm(self, cmd)
@@ -624,7 +644,7 @@ end
 -- _show), whose "ui" refresh publishes it a few ms into the wait, and this
 -- publish finds nothing to flush.
 function EXEC.publish(self)
-    if Device.publishNow then Device:publishNow() end
+    self.wash_publish_ok = Device.publishNow and Device:publishNow() == true
     self:_run(self.c:published(now_rt_us()))
 end
 
@@ -635,8 +655,42 @@ end
 -- refreshFullImp guards the hint plane first; the controller has disarmed
 -- anyway.
 function EXEC.wash(self)
+    self:_finish_wash(false)
+    local w = self:_washer()
+    -- device.lua calls this one-shot observer from refreshFullImp with
+    -- the ioctl result (true only on success).  setDirty merely queues
+    -- the refresh.  Older device targets never acknowledge, so retain
+    -- the debt; a timeout and teardown remove the observer either way.
+    if self.wash_publish_ok and w and w.beginExternalWash
+       and not Device.wilkbook_full_refresh_done then
+        local receipt = w:beginExternalWash()
+        if receipt then
+            self.pending_wash = { washer = w, receipt = receipt }
+            Device.wilkbook_full_refresh_done = self._wash_done
+            UIManager:scheduleIn(WASH_ACK_TIMEOUT_S, self._wash_timeout)
+        end
+    end
     UIManager:setDirty(nil, "full")
     logger.info("[notebook] refresh: one full wash")
+end
+
+function NotebookWindow:_finish_wash(success)
+    UIManager:unschedule(self._wash_timeout)
+    if Device.wilkbook_full_refresh_done == self._wash_done then
+        Device.wilkbook_full_refresh_done = nil
+    end
+    local pending = self.pending_wash
+    self.pending_wash = nil
+    if pending then
+        pending.washer:finishExternalWash(pending.receipt, success)
+    end
+    if self.washer and self.washer.holdChanged then self.washer:holdChanged() end
+end
+
+function NotebookWindow:_release_washer()
+    self:_finish_wash(false)
+    if self.washer and self.washer.setHold then self.washer:setHold(self, nil) end
+    self.washer = nil
 end
 
 function EXEC.append(self, cmd)
@@ -731,9 +785,9 @@ function NotebookWindow:_washer()
     return w
 end
 
-function EXEC.washer_charge(self)
+function EXEC.washer_charge(self, cmd)
     local w = self:_washer()
-    if w and w.chargePageTurn then w:chargePageTurn() end
+    if w and w.chargePageTurn then w:chargePageTurn(cmd.n) end
 end
 
 -- An older washer (a copy pushed to KO_HOME) may lack chargeDebt.
@@ -762,6 +816,7 @@ end
 
 function EXEC.rotation_hold(self, cmd)
     self.hold = cmd.on == true
+    if self.washer and self.washer.holdChanged then self.washer:holdChanged() end
     if not self.hold then self:_replay_rotation() end
 end
 
@@ -1055,6 +1110,8 @@ end
 function NotebookWindow:onSuspend()
     if not self.shown then return end
     self.suspended = true
+    self:_finish_wash(false)
+    if self.washer and self.washer.holdChanged then self.washer:holdChanged() end
     self:_guard("suspend", self._suspend)
 end
 
@@ -1086,6 +1143,7 @@ function NotebookWindow:onCloseWidget()
     self.closed = true
     local was_shown = self.shown
     self.shown = false
+    self:_release_washer()
     if current == self then current = nil end
     if was_shown then
         -- The close is the fsync.  A failed write goes through _run's

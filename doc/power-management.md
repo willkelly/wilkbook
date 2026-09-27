@@ -280,9 +280,10 @@ pen does not wake it. **That result carries no information**, because
 the pen is not an armed wake source in the first place: only two nodes
 in `rk3566-pinenote.dtsi` carry `wakeup-source` — the cover switch and
 the rk817 PMIC — and this repo's own suspend gate pins exactly that
-(`expected_wake_paths`). The pen could never have woken the device
-regardless of any rail. The premise was not checked before the test was
-proposed.
+(`expected_wake_paths`). That does not exercise an armed Linux pen-IRQ
+path, so the negative result cannot isolate pad power. The premise was
+not checked before the test was proposed; the schematic review below
+also identifies a separate possible PMIC path.
 
 **Current is not a discriminator either.** R11's rails-ON ultra
 estimated ~3 mA (wide error bars, boot cost subtracted) and R12's
@@ -290,18 +291,35 @@ rails-OFF ultra measured 4.64 mA. Those overlap, and the rails-off
 figure is nominally the *higher* of the two, so suspend draw cannot
 separate "rail dropped" from "rail stayed up".
 
-**What would actually discriminate** (all need a test image, hence
-issue #8):
+**Mechanism correction, 2026-09-26 (#8/#9 review).** The hall sensor's
+battery-backed supply is already established by the 2026-08-24 live-DT
+capture: `vcc_hall_3v3 → vcc_sys → vcc_bat`. The v1.2 schematic adds a
+second relevant path: the cover circuit's pulse shaping and Q9000 connect
+to `PMIC_SLEEP_PMIC`, which reaches the RK817 SLEEP pin. See the exact
+sheet references in `doc/reference-register.md`. The cover could therefore
+cause rail restoration before GPIO detection; alive-domain detection with
+the pad supply still down is not the only remaining explanation.
+Connectivity is established by the schematic; the timing and behavior on
+the suspended board are not measured. IRQ 63 identifies Linux's recorded
+wake interrupt, not the electrical sequence preceding it.
 
-- Add `wakeup-source` to the pen node in a bench image. If the pen then
-  wakes the device from ultra, `vcc_3v3_pmu` is up and explanation 1 is
-  confirmed; if it still does not while the cover does, explanation 2
-  (alive-domain level detection specific to the hall switch) survives.
-- Instrument bl31's own PMIC readback further: the banner reports
-  `POWER_SLP_EN` (intent). What is missing is the rail's *actual* state
-  during suspend, which nothing in the current stack reports.
-- A hardware measurement across `vcc_3v3_pmu` during suspend would
-  settle it outright, and needs no software at all — just probe access.
+Pen wake is not a binary discriminator, even after Linux wake arming is
+implemented. The schematic supplies the WS8100 from `VCC_BLE`, connected
+to `VCC_HALL_3V3`, and shows a separate BLE-to-PMIC power-on path. Its
+firmware, host-state signaling and trigger choice also affect the result.
+Neither successful nor unsuccessful pen wake proves the GPIO pad voltage.
+
+**What would discriminate:** an attended, board-revision-confirmed capture
+of `HALL_INT`, `PMIC_SLEEP_PMIC` and `VCC3V3_PMU` through suspend and cover
+wake. It needs probe access, not necessarily a new image. Post-resume
+regulator state sees restored operation; DT sleep properties and bl31's
+`POWER_SLP_EN` readback describe configuration, not the in-suspend voltage.
+
+**Priority:** defer that measurement until it supports a concrete change,
+such as cover-wake suppression, unwanted-wake diagnosis or a suspend-stack
+migration. Cover wake already works. Explaining it alone does not improve
+standby or establish pen wake; a controlled enable/disable experiment can
+qualify a useful cover setting before the whole mechanism is understood.
 
 ## Hibernation (suspend-to-disk) — scoped 2026-08-07, not built
 

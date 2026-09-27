@@ -24,6 +24,53 @@ this lineage. **Unreleased** above it collects what has landed since.
 
 ## Unreleased
 
+- **The QEMU page-turn campaign works with the current reader image again.**
+  It activates the virtual display, opens a deterministic test book rather
+  than tapping the file manager, and validates the complete reader log.
+  A 198-tap run passed capture and analysis; the missing flash/global menu
+  antecedent remains explicit, so this is not a double-refresh clearance.
+- **Notebook edge cases are fixed in source.** Panel taps cannot turn into ink
+  across a proximity dropout, night-mode pages use one framebuffer pass, and
+  automatic washes wait while the pen hovers without keeping AutoSuspend
+  awake. Refresh retires only its acknowledged debt; later charges survive.
+  Native-reader and interaction tests pass; panel validation remains owed.
+  Pen-up logs now identify brush, size and span count for backlog diagnosis.
+- **Manuals now have installed-corpus and real-reader acceptance.** Native
+  KOReader renders and navigates representative man and Info content. The
+  generation-23 shelf covers 711 of 732 untranslated man identities and 25 of
+  53 Info manuals; omissions are recorded explicitly. Long Info command lines
+  can still wrap with display hyphens, so code-example fidelity is not signed
+  off. The converter is unchanged.
+- **Generation trials protect writable notebook data.** The target helper stops
+  the optional note authority and requires its runtime cleanup, then verifies
+  mounted `/data` is read-only. Root remount remains best-effort because other
+  services retain writable logs; root-writer quiescence is still unresolved.
+  Refusals restore and verify original mounts before restarting services,
+  and record incomplete recovery. Executable host tests pass;
+  QEMU and device qualification remain. Older targets still need the manual
+  authority stop, including rollback.
+- **Configuration checks cover the current reader.** The audit now runs in
+  Guile and checks the shipping broker and direct-display defaults, with
+  mutation tests and executable Lua parser fixtures. The proposed durable
+  settings API is documented; the general backend and settings UI remain work.
+- **Page-turn campaigns retain complete evidence.** Full reader logs are
+  transported with size/hash checks, and failed capture or analysis fails the
+  campaign. Reports distinguish refresh requests from visible results and
+  identify missing context and clock uncertainty.
+- **The emergency sleep banner understands the direct reader's framebuffer.**
+  When KOReader misses suspend preparation, the broker now reads the pixel
+  format and stride instead of assuming four bytes per pixel. Host tests cover
+  RGB565 and XRGB8888, clipping and failed writes; the fallback appearance still
+  needs a device check. Broker acknowledgement, grace and settle timers also
+  use monotonic time, so a system-clock correction cannot expire or extend
+  them. Suspend duration uses a clock that includes time asleep. The separate
+  race between RTC synchronization and backstop-alarm writes remains open.
+- **The device Workbench has a scoped integration plan.** It specifies the
+  Guile coordinator port, existing Lua reader interface, durable workspace and
+  suspend/update lifecycle. A small Guile owner-receipt gate starts that work;
+  there is no device Workbench launcher yet. See
+  `doc/workbench-device-integration.md`.
+
 - **Recovery from os1 without the cable.** If the reader's default
   generation is one that should not boot, you can now change it from the
   stock Debian slot (os1) over ssh, with no debug cable:
