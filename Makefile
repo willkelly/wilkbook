@@ -381,6 +381,10 @@ qemu-pageturn-campaign:
 refresh-episodes-check:
 	python3 pinenote/tools/refresh-episodes/test-refresh-episodes.py
 
+.PHONY: handwriting-check
+handwriting-check:
+	$(call guix-shell,luajit guile) $(MAKE) -C pinenote/tools/handwriting check
+
 # Self-test of the TRIGGER analyser, and the only suite in the roster
 # whose input is committed field evidence rather than a fixture: it runs
 # over doc/artifacts/pinenote-refresh-traces-20260815/ and requires the
@@ -402,7 +406,7 @@ refresh-capture-check:
 # The rung-1 roster.  Single source of truth: CI shards it with SKIP_CHECKS=
 # rather than restating it, so a suite added here is picked up automatically
 # instead of quietly missing from CI.
-CHECK_HOST_TARGETS = clut-check ebc-logic-check rastersim-check \
+CHECK_HOST_TARGETS = clut-check ebc-logic-check rastersim-check handwriting-check \
         koreader-input-check orientation-check platform-controls-check optics-check power-check \
         rockchip-pm-check activation-positive-check suspend-check \
         library-check koreader-profile-check manuals-check ultra-coupling-check \

@@ -21,6 +21,46 @@
 This is ROADMAP §5's first stage ("continuous note-taking") and the
 capture and storage half of stroke capture #20.
 
+## Next polish: operator priorities (2026-09-26, after generation 24)
+
+The operator finds ink responsiveness good and current ghosting/refresh
+acceptable; charcoal (#83) can bring its own performance investigation.
+They want a **GL16 finishing phase after writing**, with an attended feel
+comparison, and consider durability important. Navigation and refresh changes
+are recommendations for discussion, not an approved redesign.
+
+- **Finishing proposal:** retain DU for live ink; after a confirmed pen leave,
+  generate antialiased grayscale edges for the changed region and publish under
+  GL16. First scope: solid Fine/Ball/Brush strokes. New proximity cancels pending
+  work; page/rotation/suspend/close changes invalidate it. Keep the canonical
+  strokes, eraser/undo semantics and journal independent of this derived render.
+  Before device testing, prove replay consistency, clipping/overlap, night mode,
+  cancellation and bounded host cost. A canceled pass must leave correct binary
+  ink. The ordinary driver scheduler compares target with next; switching the
+  hint while repainting identical binary pixels is not itself a finishing pass
+  (`linux-pinenote-7.1-hrdl-direct-mode.patch`, `q8_start_scheduled` and
+  `q8_start_redraw`). Its redraw hint also requires a changed target. This is
+  source inspection, not an optical result. No finishing pass is implemented.
+- **Navigation recommendations:** distinguish hiding the floating controls
+  from returning to the reader; give notebooks human-readable names instead
+  of only UTC creation times; add a picker of pages containing ink. Keep
+  gestures stable in normal writing. Charcoal finger-smudge mode needs an
+  explicit navigation choice because it would consume the one-finger swipe.
+- **Refresh recommendations:** retain explicit Refresh, hover protection and
+  debt acknowledgement. Measure redundant publishes/charges on panel close,
+  page changes and finishing before adjusting washer thresholds. GL16 finishing
+  is an appearance change, not proof that GC16 wash debt has been paid.
+- **Durability:** pen-up appends are not fsynced until leave/close/suspend.
+  A clean shutdown needs a confirmed notebook flush before services stop.
+  Extended hover still has a hard-cut exposure; per-stroke blocking fsync would
+  risk overflowing input. Bounded asynchronous persistence is a separate design,
+  with errors and acknowledgements, rather than silently increasing pen latency.
+
+Handwriting recognition begins with a small **labelled evaluation corpus**;
+the current scribbles are not accuracy evidence. The read-only host exporter
+and collection recipe are in `pinenote/tools/handwriting/README.md`. No model
+has been selected, and recognition is not in the drawing path.
+
 ## What it is
 
 The operator's brief, 2026-09-26:

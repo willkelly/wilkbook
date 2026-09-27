@@ -24,6 +24,10 @@ this lineage. **Unreleased** above it collects what has landed since.
 
 ## Unreleased
 
+- **Handwriting evaluation can use notebook snapshots.** A read-only host tool
+  exports one labelled page as InkML using the notebook's actual undo/erase
+  replay and orientation mapping. It rejects ambiguous or damaged samples.
+  This prepares evaluation data; no recognition model runs on the reader yet.
 - **The QEMU page-turn campaign works with the current reader image again.**
   It activates the virtual display, opens a deterministic test book rather
   than tapping the file manager, and validates the complete reader log.
