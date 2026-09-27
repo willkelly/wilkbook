@@ -1,4 +1,4 @@
-.PHONY: check image-metrics-check trajectory-input-check candidate-check
+.PHONY: check image-metrics-check trajectory-input-check candidate-check pyctcdecode-check
 check:
 	luajit -e 'assert(loadfile("export-line.lua"))'
 	luajit test-sample.lua
@@ -16,3 +16,7 @@ candidate-check:
 	python3 test-ctc-candidates.py
 	python3 test-focused-candidates.py
 	python3 test-gemma-selector.py
+
+CTC_PYTHON ?= python3
+pyctcdecode-check:
+	$(CTC_PYTHON) test-pyctcdecode.py

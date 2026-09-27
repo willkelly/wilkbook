@@ -83,6 +83,11 @@ Direct Gemma vision was then tested on the ink images and is much stronger:
 slip. Gemma is now the quality reference; OnlineHTR remains the small stroke
 model proposed for adaptation. These remain host experiments
 (`doc/handwriting-baseline.md`).
+Integrated pyctcdecode/KenLM word decoding subsequently improves the frozen
+stroke model to 5.65% CER / 13.08% lexical WER on the shared 19 lines, at
+4.35 ms median decoder-only host time and 124 MiB decoder-process peak RSS.
+It helps eight lines and harms four by character error; adaptation and
+on-device qualification remain unrun.
 
 ### Fixed paper and the handwriting sampler (2026-09-26)
 

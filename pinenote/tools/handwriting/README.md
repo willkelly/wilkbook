@@ -127,6 +127,55 @@ high-water mark. No cloud recognizer or training is involved.
 
 ## Retaining alternatives and testing a contextual selector
 
+### Integrated word-language-model decoding with pyctcdecode
+
+`evaluate-pyctcdecode.py` applies **pyctcdecode 0.5.0 + KenLM 0.3.0** to the
+saved full-line CTC emissions. The labels are `[''] + alphabet`: blank is column
+zero, with case and punctuation kept in their original columns. It checks the
+decoder's normalized alphabet and reconstructs the frozen greedy prediction
+before decoding. It never trains or reruns OnlineHTR.
+
+Unlike finished-list selection, the language model contributes during search,
+including word boundaries. This package's standard KenLM integration is
+**word-based**, even for a character CTC alphabet; it is not a character LM.
+The runner saves 32-best output where available and scores labels only after
+all predictions have been written. No sampler-derived hotwords are supplied.
+
+```sh
+# Use an isolated environment; no Torch installation is needed for decoding.
+python3 -m venv CTC_ENV
+CTC_ENV/bin/python -m pip install \
+  pyctcdecode==0.5.0 kenlm==0.3.0 pyarrow==19.0.1 sacremoses==0.1.1
+# Build KenLM's lmplz/build_binary tools from source commit
+# 4cb443e60b7bf2c0ddf3c745378f76cb59e254e5 (CMake Release, ENABLE_PYTHON=OFF).
+# Download Salesforce/wikitext, revision b08601e04326c79dfdd32d625aee71d232d685c3,
+# wikitext-2-raw-v1/train-00000-of-00001.parquet. Training takes no handwriting.
+CTC_ENV/bin/python pinenote/tools/handwriting/train-ctc-word-lm.py \
+  WIKITEXT_TRAIN.parquet KENLM/build/bin NEW_LM_OUTPUT
+CTC_ENV/bin/python pinenote/tools/handwriting/evaluate-pyctcdecode.py \
+  EMISSION_CAPTURE COLLECTION NEW_DECODER_OUTPUT --mode default --lm NEW_LM_OUTPUT
+# Repeat into new directories with --mode none and --mode conservative.
+make -C pinenote/tools/handwriting pyctcdecode-check CTC_PYTHON=/absolute/path/CTC_ENV/bin/python
+```
+
+On the Guix host, the wheel environment additionally needs zlib's `lib/` on
+`LD_LIBRARY_PATH`; the recorded path is in private provenance. LM training
+detokenizes WikiText-2 training paragraphs using Moses, preserving case, and
+builds an unpruned modified-Kneser-Ney trigram plus a binary trie. Corpus/model
+hashes and parameters are recorded. The source corpus retains Unicode outside
+OnlineHTR's alphabet, triggering pyctcdecode's vocabulary-coverage warning;
+that is investigated in `doc/handwriting-baseline.md`.
+
+The primary run uses library LM defaults (`alpha=.5`, `beta=1.5`, unknown offset
+`-10`); a separately reported conservative setting uses `.2`, `0`, `-2`.
+Both use width 128, beam prune `-10`, token prune `-5`, and no history pruning.
+These were fixed before the runs rather than searched for the best label score.
+Times are **decoder-only**, and RSS belongs to that process, excluding the
+separate recognizer. The comparison script prints those times in its usual
+column, so retain this qualification when quoting the generated table.
+
+### Plain CTC candidates and contextual selectors
+
 The trajectory runner's optional `--save-emissions` stores per-frame log
 probabilities under `emissions/`. `evaluate-candidates.py` verifies that the
 new greedy predictions and source hashes match the frozen baseline, then

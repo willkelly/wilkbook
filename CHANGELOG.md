@@ -24,6 +24,11 @@ this lineage. **Unreleased** above it collects what has landed since.
 
 ## Unreleased
 
+- **Low-cost stroke decoding improves with pyctcdecode and KenLM.** An independent
+  word trigram reduces shared-sampler character error from 7.14% to 5.65% and
+  word-content error from 23.08% to 13.08%, adding 4.35 ms median host decoding.
+  It still introduces some errors; OnlineHTR's weights remain unchanged
+  (`doc/handwriting-baseline.md`).
 - **Gemma vision provides a much stronger handwriting baseline.** Direct local
   Gemma 4 E2B image transcription reaches 0.85% character error and 15/20 exact
   lines on the sampler. It costs about 1.18 s/line and 5.0 GiB peak host memory,

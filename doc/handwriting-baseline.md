@@ -526,6 +526,100 @@ including full 20-line and shared 19-line comparisons, model/projector hashes,
 requests, predictions, timings and server logs. Runner:
 `pinenote/tools/handwriting/evaluate-gemma-images.py`.
 
+## pyctcdecode + word KenLM: first integrated-decoder measurement
+
+The operator suggested [pyctcdecode](https://github.com/kensho-technologies/pyctcdecode).
+It is a good implementation match for the proposed search experiment: although
+marketed for speech, it consumes CTC frame distributions, so our saved OnlineHTR
+emissions work directly. Its standard KenLM integration scores **words**, not
+characters; a character-CTC alphabet does not make its language model character
+based. Language evidence and partial-word vocabulary scores participate before
+beam pruning, rather than selecting from a final short list.
+
+### Fixed setup
+
+- pyctcdecode **0.5.0**, KenLM Python **0.3.0**, NumPy **1.26.4** in a fresh
+  environment. KenLM builder source:
+  `4cb443e60b7bf2c0ddf3c745378f76cb59e254e5`, CMake Release.
+- Frozen 19-line emissions, original mixed-case/punctuation alphabet and blank
+  at index zero. Each emission file reproduces its saved greedy text before
+  decoding. No recognizer weights, input preprocessing or labels are changed.
+- A small independent word trigram is trained on **WikiText-2 raw training
+  split**, from [`Salesforce/wikitext`](https://huggingface.co/datasets/Salesforce/wikitext),
+  revision `b08601e04326c79dfdd32d625aee71d232d685c3`. Input parquet SHA-256:
+  `e83889baabc497075506f91975be5fac0d45c5290b6b20582c8cd1e853d0c9f7`.
+  Omit blank/header records, undo WikiText placeholders, Moses-detokenize
+  (sacremoses 0.1.1), preserve case. This gives **17,556 paragraphs / 1,705,812
+  whitespace tokens**. No handwriting labels or prompts enter training.
+- Unpruned modified Kneser-Ney 3-gram, binary trie **24,245,941 bytes**
+  (23.1 MiB); 149,482 unigrams, 841,503 bigrams, 1,402,930 trigrams. Training and
+  binary conversion took 1.51 s, excluding corpus preparation. The public
+  WikiText source is CC-BY-SA; the trained artifacts remain under `build/`.
+- Fixed search: beam width 128, beam pruning log gap 10, token minimum log
+  probability -5, `prune_history=False`, retain up to 32 final hypotheses.
+  No hotwords. The primary LM settings are the library defaults: **alpha=.5,
+  beta=1.5, unknown-word offset=-10**, sentence-boundary scoring on. A separately
+  named conservative run uses **alpha=.2, beta=0, unknown offset=-2**. Both
+  settings were defined before scoring; no weight search or best-score tuning.
+- Run the no-LM control, default LM, then conservative LM sequentially in
+  separate processes. Save predictions before labels. Metrics and image/label
+  hashes match the existing shared-line comparison.
+
+### Results on the shared 19 lines
+
+| Decoder | Raw CER | Raw WER | Lexical WER | Exact lines | Median decode time | Decoder-process peak RSS |
+|---|---:|---:|---:|---:|---:|---:|
+| pyctcdecode, no LM | 7.14% | 26.77% | 23.08% | 2/19 | 35.1 ms | 48.7 MiB |
+| **Word LM, default weights** | **5.65%** | **22.83%** | **13.08%** | **4/19** | **4.35 ms** | **124.1 MiB** |
+| Word LM, conservative weights | 6.70% | 25.20% | 20.77% | 0/19 | 18.4 ms | 124.6 MiB |
+
+The no-LM result matches the original greedy and our earlier beam top-1 on
+every line. Default LM reduces **48 → 38 character edits** and **30 → 17
+lexical word edits**: character error improves on eight lines, worsens on four,
+and is unchanged on seven. It recovers some full word sequences and changes
+boundaries; it also damages case/punctuation and some numerical text. One
+formerly exact line loses its initial capital. The conservative run is not
+uniformly safer and loses both previously exact lines.
+
+The LM run is faster here because scoring/pruning can leave a smaller active
+search set; beam width is a maximum, not a fixed amount of work. This is not a
+general claim that adding an LM accelerates decoding. Times are one host pass,
+**decoder only**, excluding the recognizer's separately measured ~30 ms/line
+and LM loading. RSS excludes the recognizer too; these are not measured
+end-to-end latency/memory or tablet qualifications.
+
+Default LM's retained-list oracle improves from **4.46% to 3.57% CER**
+(30 → 24 edits), with seven exact references available versus five without
+the LM. This demonstrates improved candidate coverage under integrated search,
+not an achieved 3.57% recognizer. The unchanged alphabet still cannot emit `$`.
+
+### Corpus and interpretation checks
+
+The SDK warns **"Unigrams and labels don't seem to agree."** Its check triggers
+when more than 20% of *distinct characters* in the LM vocabulary are outside
+the decoder alphabet. Inspection finds 931/1011 distinct LM characters outside
+our 81-character alphabet, spread over only 3860/149482 unigram entries; the
+public corpus includes Unicode names and additional punctuation. The warning
+does not indicate shuffled frame columns: label equality and synthetic
+blank/repeat/case tests pass. Keep it visible; an alphabet-aware corpus and
+punctuation/OOV policy remain future comparisons, not silently applied fixes.
+
+A post-scoring corpus audit finds **zero exact reference lines** in training
+text. This is not proof against phrase overlap or an independent validation
+claim. These 19 handwritten lines remain development evidence.
+
+**Conclusion:** this is the most useful low-cost stroke-decoding improvement
+measured so far. It substantially outperforms the Von/Laya/Gemma text-choice
+setups while leaving OnlineHTR unchanged. It remains well behind direct Gemma
+vision (0.74% CER / 3.08% lexical WER), but its cost is much more compatible with
+the device track. Next priorities are better-matched language modeling,
+held-out tuning/fidelity checks, and writer adaptation of the **stroke model**;
+the word trigram trained here is not recognizer fine-tuning.
+
+Private evidence: `pinenote/tools/handwriting/build/pyctcdecode-20260927/`.
+Runners: `train-ctc-word-lm.py`, `evaluate-pyctcdecode.py`; tests include a real
+package CTC check against exhaustive tiny alignment probabilities.
+
 ## Architecture assessment: recognition, decoding, then personalization
 
 At the operator's request, three independent agent reviews examined the linked
@@ -535,6 +629,9 @@ recommendation, not a measured new recognizer or a hardware qualification.
 The assessment preceded the direct-vision experiment above; that result makes
 Gemma the accuracy reference while leaving the small-model recommendations as
 the CPU/memory-constrained device track.
+The subsequent pyctcdecode experiment now supplies an initial positive
+measurement for integrated word-LM decoding; the character-LM variant and
+writer adaptation remain proposals.
 
 ### What the linked paper establishes
 
