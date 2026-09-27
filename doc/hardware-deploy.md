@@ -345,6 +345,9 @@ button/menu recovery. Before promotion, selecting os2 reaches the previous
 extlinux DEFAULT. After promotion, failed operator checks or a lost connection
 can leave the candidate as DEFAULT: inspect the actual default and coordinate
 selection of the recorded fallback, using UART if menu access requires it.
+Without UART, boot os1 and make the fallback DEFAULT from there
+(`rescue-generation.sh promote <fallback>`, "Recovery from os1, no cable"
+below), then pick os2 at the U-Boot menu.
 Verify the actual recovered slot and generation over the appropriate
 key-pinned SSH alias. Do not interpret an answering rescue system as the
 target's success, force promotion, or issue blind/repeated reboots. The
@@ -500,10 +503,46 @@ notes"):**
   drives the menu back to os2 itself and reports the device back on the
   previous `DEFAULT`; without the cable, a failed trial ends on stock
   os1 with SSH — change the default from there if you want
-  (`rescue-generation.sh`, PR #51 — open against main, not in this
-  tree, never run), and pick os2 at the on-device menu. Before
-  the watchdog resets it (or if it doesn't): the power button, then
-  `uboot-pick-slot.sh --slot os2`.
+  (`rescue-generation.sh`, next item), and pick os2 at the on-device
+  menu. Before the watchdog resets it (or if it doesn't): the power
+  button, then `uboot-pick-slot.sh --slot os2`.
+- **Recovery from os1, no cable:** use this when os2's DEFAULT names a
+  generation that should not boot and os2 cannot fix it: a candidate
+  promoted on health before the operator's checks failed, or a kexec-only
+  generation whose device tree fails its first cold boot. A trial that
+  fails before promotion leaves DEFAULT alone; picking os2 at the menu is
+  enough. From os1, the ledger on p6 is one chroot away. Nothing is copied
+  to os1:
+  `ssh <os1> sh -s -- list < pinenote/scripts/os1/rescue-generation.sh`.
+  The commands are `list`, `promote N`, `demote` and `log [LINES]`.
+  - **Refusals:** unless `/` is p5 and p6 is unmounted, and for any other
+    command, before anything is mounted.
+  - **What it runs:** it mounts p6, plain read-only for `list` and `log`.
+    Never `noload`: a boot that hung or was reset can leave its last
+    committed writes only in the journal. It then runs the helper that
+    ships in os2's promoted system inside a chroot, with that profile as
+    PATH, and unmounts.
+  - **`list` also prints the DEFAULT extlinux will boot.** If a write was cut
+    short, the ledger and extlinux disagree. `list` then reports a
+    MISMATCH, and running the same `promote` again puts them back in step.
+  - **After a write**, it says so when the new DEFAULT is not `[pinned]`, and
+    so may never have cold-booted.
+  - **Interruptions:** a HUP, INT or TERM still unmounts. A run killed
+    outright leaves p6 mounted, and the next run refuses and says how to
+    unmount it.
+  - Then reboot and choose "Boot OS2 (part 6)" at the U-Boot menu. extlinux
+    boots the new DEFAULT with no further key.
+  - **Run on os1 2026-09-26** (wkelly's device): `list`, `log`, then `demote`
+    and `promote 23`, which left `extlinux.conf` byte-identical
+    (`doc/status.md`). The script was then reworked after reviews of that
+    run, and `make os1-rescue-check` pins it. The reworked version then ran
+    on os1 read-only on 2026-09-27, through `sh -s`: `list`, the
+    no-argument default, `log`, and `promote` without a number refused
+    before mounting. Its `promote` and `demote` have run only against the
+    check.
+  - kdump is not the tool for our hangs: a core stalled in a bus access
+    never panics, so no crash kernel would fire. The watchdog reset plus
+    os1 is the failsafe on this SoC.
 - Anything that changes early boot (kernel, DTB, command line) wants
   both proofs: the kexec trial and a cold boot from the menu — then
   `pin` it.

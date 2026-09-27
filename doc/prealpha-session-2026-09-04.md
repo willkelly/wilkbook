@@ -177,7 +177,9 @@ reader restart or boot lands in the library by design.
    way on generation 10; 15's tree is 14's, i.e. 10's plus nothing).
 6. **The os1 rescue (#51)**: let a boot land on os1, run
    `rescue-generation.sh` (PR #51 — open against main, not in this
-   tree, never run) `list` and `log` read-only, then `promote` of
+   tree, never run [run on os1 2026-09-26: `list`, `log`, and a
+   `demote`/`promote 23` round trip, after two fixes; `doc/status.md`])
+   `list` and `log` read-only, then `promote` of
    the already-promoted generation (a no-op), pick os2 at the menu,
    confirm the reader returns. Only then is it a recovery path.
 7. R1 (clock reads local), R2 (open the manuals book, time the first
